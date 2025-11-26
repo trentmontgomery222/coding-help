@@ -1,0 +1,79 @@
+<!-- ===================================================================
+     WORDPRESS CONTACT BAR WITH HOVER EFFECT
+     Use this on multiple pages with consistent styling
+     =================================================================== -->
+
+<!--
+STEP 1: Add this CSS to WordPress
+Go to: Appearance → Customize → Additional CSS
+Copy and paste the CSS below:
+-->
+
+<style>
+/* Phone Link Hover Effect */
+.contact-phone {
+  font-family: helvetica;
+  font-size: 18px;
+  color: inherit;
+  transition: color 0.3s ease;
+  text-decoration: none;
+}
+
+.contact-phone:hover {
+  color: #ffffff !important;
+}
+
+/* Optional: Style the span inside if needed */
+.contact-phone span {
+  font-family: helvetica;
+  font-size: 18px;
+}
+</style>
+
+<!--
+STEP 2: Use this HTML code on any page/post
+Copy and paste this in the Text/HTML editor:
+-->
+
+<a class="contact-phone" href="tel:13017592053">301-759-2053</a>
+
+<!--
+Alternative with span (if you need the span for specific formatting):
+-->
+
+<a class="contact-phone" href="tel:13017592053">
+  <span>301-759-2053</span>
+</a>
+
+<!--
+===================================================================
+FULL CONTACT BAR EXAMPLE
+If you're building a complete contact bar with multiple elements:
+===================================================================
+-->
+
+<div style="display: flex; gap: 20px; align-items: center; padding: 10px;">
+  <a class="contact-phone" href="tel:13017592053">📞 301-759-2053</a>
+  <a class="contact-phone" href="mailto:info@example.com">✉️ info@example.com</a>
+</div>
+
+<!--
+===================================================================
+CUSTOMIZATION OPTIONS
+===================================================================
+
+Change hover color:
+  .contact-phone:hover { color: #ff0000 !important; }  /* Red */
+  .contact-phone:hover { color: #00ff00 !important; }  /* Green */
+  .contact-phone:hover { color: #0066cc !important; }  /* Blue */
+
+Change transition speed:
+  transition: color 0.5s ease;  /* Slower */
+  transition: color 0.1s ease;  /* Faster */
+
+Add underline on hover:
+  .contact-phone:hover { text-decoration: underline; }
+
+Change default color:
+  .contact-phone { color: #333333; }  /* Instead of inherit */
+-->
