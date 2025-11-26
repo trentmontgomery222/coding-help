@@ -77,3 +77,95 @@ Add underline on hover:
 Change default color:
   .contact-phone { color: #333333; }  /* Instead of inherit */
 -->
+
+<!--
+===================================================================
+BREADCRUMB NAVIGATION STYLING (Breadcrumb NavXT Plugin)
+===================================================================
+-->
+
+<style>
+/* ===== BREADCRUMB NavXT STYLING ===== */
+.breadcrumbs,
+.breadcrumb-trail {
+  font-family: helvetica;
+  font-size: 16px;
+  margin-bottom: 20px;
+  color: #000000 !important; /* Default text color BLACK for current page */
+}
+
+/* Parent page links - BLUE with underline */
+.breadcrumbs a,
+.breadcrumb-trail a {
+  color: #4488d6 !important;
+  text-decoration: underline;
+  transition: color 0.3s ease;
+}
+
+/* Hover effect - DARKER BLUE */
+.breadcrumbs a:hover,
+.breadcrumb-trail a:hover {
+  color: #17406d !important;
+}
+</style>
+
+<!--
+BREADCRUMB CUSTOMIZATION OPTIONS:
+
+Change parent link color:
+  color: #0066cc !important;  /* Different blue */
+  color: #000000 !important;  /* Black */
+
+Change current page color:
+  .breadcrumbs, .breadcrumb-trail { color: #ffffff !important; }  /* White */
+
+Remove underline:
+  text-decoration: none;
+
+Hide current page completely:
+  .breadcrumbs, .breadcrumb-trail { color: transparent !important; }
+-->
+
+<!--
+===================================================================
+COMPLETE CUSTOM CSS FOR WORDPRESS
+Add all of this to: Appearance → Customize → Additional CSS
+===================================================================
+-->
+
+<style>
+/* Contact Links (Phone & Email) */
+.contact-phone {
+  font-family: helvetica;
+  font-size: 18px;
+  color: inherit;
+  transition: color 0.3s ease;
+  text-decoration: none;
+}
+
+.contact-phone:hover {
+  color: #ffffff !important;
+}
+
+/* Breadcrumb Navigation */
+.breadcrumbs,
+.breadcrumb-trail {
+  font-family: helvetica;
+  font-size: 16px;
+  margin-bottom: 20px;
+  color: #000000 !important;
+}
+
+.breadcrumbs a,
+.breadcrumb-trail a {
+  color: #4488d6 !important;
+  text-decoration: underline;
+  transition: color 0.3s ease;
+}
+
+.breadcrumbs a:hover,
+.breadcrumb-trail a:hover {
+  color: #17406d !important;
+}
+</style>
+-->
