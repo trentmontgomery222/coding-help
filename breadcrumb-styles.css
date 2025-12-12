@@ -1,0 +1,36 @@
+/* ===== YOAST SEO BREADCRUMB STYLING ===== */
+.yoast-breadcrumb,
+#breadcrumbs {
+  font-family: helvetica;
+  font-size: 16px;
+  margin-bottom: 20px;
+  color: #17406d !important; /* Default text color for non-links */
+}
+
+/* Parent page links - BLUE */
+.yoast-breadcrumb a,
+#breadcrumbs a {
+  color: #041A2F !important;
+  font-weight: bold;
+  text-decoration: underline;
+  transition: color 0.3s ease;
+}
+
+.yoast-breadcrumb a:hover,
+#breadcrumbs a:hover {
+  color: #17406d !important;
+}
+
+/* Current page (last breadcrumb item - no link) */
+.yoast-breadcrumb .breadcrumb_last,
+#breadcrumbs .breadcrumb_last {
+  color: #17406d !important;
+  font-weight: normal;
+}
+
+/* Breadcrumb separator styling */
+.yoast-breadcrumb .breadcrumb_sep,
+#breadcrumbs span:not(.breadcrumb_last):not(:first-child)::before {
+  color: #17406d;
+  padding: 0 5px;
+}
