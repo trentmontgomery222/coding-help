@@ -1,53 +1,29 @@
 /* ===== YOAST SEO BREADCRUMB STYLING (Beaver Builder) ===== */
 /* For [wpseo_breadcrumb] shortcode in Beaver Builder HTML module */
 
-.fl-html .wpseo-breadcrumb,
-.fl-module-html .wpseo-breadcrumb,
-.wpseo-breadcrumb,
-.yoast-breadcrumb,
-#breadcrumbs {
+/* Container styling */
+.fl-module-html > span {
   font-family: helvetica;
   font-size: 16px;
   margin-bottom: 20px;
+  display: block;
   color: #17406d !important; /* Default text color for non-links */
 }
 
 /* Parent page links - BLUE */
-.fl-html .wpseo-breadcrumb a,
-.fl-module-html .wpseo-breadcrumb a,
-.wpseo-breadcrumb a,
-.yoast-breadcrumb a,
-#breadcrumbs a {
+.fl-module-html > span a {
   color: #041A2F !important;
   font-weight: bold;
   text-decoration: underline;
   transition: color 0.3s ease;
 }
 
-.fl-html .wpseo-breadcrumb a:hover,
-.fl-module-html .wpseo-breadcrumb a:hover,
-.wpseo-breadcrumb a:hover,
-.yoast-breadcrumb a:hover,
-#breadcrumbs a:hover {
+.fl-module-html > span a:hover {
   color: #17406d !important;
 }
 
 /* Current page (last breadcrumb item - no link) */
-.fl-html .wpseo-breadcrumb .breadcrumb_last,
-.fl-module-html .wpseo-breadcrumb .breadcrumb_last,
-.wpseo-breadcrumb .breadcrumb_last,
-.yoast-breadcrumb .breadcrumb_last,
-#breadcrumbs .breadcrumb_last {
+.fl-module-html .breadcrumb_last {
   color: #17406d !important;
   font-weight: normal;
-}
-
-/* Breadcrumb separator styling */
-.fl-html .wpseo-breadcrumb .breadcrumb_sep,
-.fl-module-html .wpseo-breadcrumb .breadcrumb_sep,
-.wpseo-breadcrumb .breadcrumb_sep,
-.yoast-breadcrumb .breadcrumb_sep,
-#breadcrumbs .breadcrumb_sep {
-  color: #17406d;
-  padding: 0 5px;
 }
