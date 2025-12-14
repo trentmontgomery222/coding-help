@@ -1,8 +1,5 @@
 /* ===== YOAST SEO BREADCRUMB STYLING ===== */
-div.yoast-breadcrumb,
-div.wpseo-breadcrumbs,
 .yoast-breadcrumb,
-.wpseo-breadcrumbs,
 #breadcrumbs {
   font-family: helvetica;
   font-size: 16px;
@@ -11,10 +8,7 @@ div.wpseo-breadcrumbs,
 }
 
 /* Parent page links - BLUE */
-div.yoast-breadcrumb a,
-div.wpseo-breadcrumbs a,
 .yoast-breadcrumb a,
-.wpseo-breadcrumbs a,
 #breadcrumbs a {
   color: #041A2F !important;
   font-weight: bold;
@@ -22,29 +16,20 @@ div.wpseo-breadcrumbs a,
   transition: color 0.3s ease;
 }
 
-div.yoast-breadcrumb a:hover,
-div.wpseo-breadcrumbs a:hover,
 .yoast-breadcrumb a:hover,
-.wpseo-breadcrumbs a:hover,
 #breadcrumbs a:hover {
   color: #17406d !important;
 }
 
 /* Current page (last breadcrumb item - no link) */
-div.yoast-breadcrumb .breadcrumb_last,
-div.wpseo-breadcrumbs .breadcrumb_last,
 .yoast-breadcrumb .breadcrumb_last,
-.wpseo-breadcrumbs .breadcrumb_last,
 #breadcrumbs .breadcrumb_last {
   color: #17406d !important;
   font-weight: normal;
 }
 
 /* Breadcrumb separator styling */
-div.yoast-breadcrumb .breadcrumb_sep,
-div.wpseo-breadcrumbs .breadcrumb_sep,
 .yoast-breadcrumb .breadcrumb_sep,
-.wpseo-breadcrumbs .breadcrumb_sep,
 #breadcrumbs .breadcrumb_sep {
   color: #17406d;
   padding: 0 5px;
