@@ -650,6 +650,145 @@ if (!function_exists('fix_post_featured_image_alt')) {
     add_action('wp_footer', 'fix_post_featured_image_alt');
 }
 
+// ============================================================================
+// FIX #13: Placeholder Image Alt Text (Team/Staff Pages)
+// ============================================================================
+
+if (!function_exists('fix_placeholder_image_alt')) {
+    function fix_placeholder_image_alt() {
+        ?>
+        <script>
+        (function() {
+            function fixPlaceholderAlt() {
+                try {
+                    // Find all images that are likely placeholders
+                    var allImages = document.querySelectorAll('img');
+
+                    allImages.forEach(function(img) {
+                        var src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+                        var alt = img.getAttribute('alt') || '';
+                        var filename = src.toLowerCase();
+
+                        // Check if this is a placeholder image
+                        var isPlaceholder =
+                            filename.includes('placeholder') ||
+                            filename.includes('user-icon') ||
+                            filename.includes('avatar') ||
+                            filename.includes('default-user') ||
+                            filename.includes('profile-placeholder') ||
+                            alt.toLowerCase().includes('placeholder');
+
+                        // Check if alt text is generic
+                        var hasGenericAlt =
+                            alt.toLowerCase().includes('placeholder') ||
+                            alt.toLowerCase().includes('user icon') ||
+                            alt.toLowerCase() === 'avatar' ||
+                            alt.toLowerCase() === 'profile image' ||
+                            alt === '';
+
+                        if (isPlaceholder && hasGenericAlt) {
+                            var newAlt = '';
+
+                            // Strategy 1: Look for person name in nearby heading
+                            var container = img.closest('.fl-module, .fl-col, .fl-photo, article, .team-member, .staff-member, div');
+                            if (container) {
+                                // Look for headings with person names
+                                var heading = container.querySelector('h1, h2, h3, h4, h5, h6, .fl-heading-text, .name, .person-name');
+                                if (heading) {
+                                    var headingText = heading.textContent.trim();
+                                    // Only use if it looks like a person name (not too long, not generic)
+                                    if (headingText.length > 0 && headingText.length < 60 &&
+                                        !headingText.toLowerCase().includes('our team') &&
+                                        !headingText.toLowerCase().includes('staff') &&
+                                        !headingText.toLowerCase().includes('about')) {
+                                        newAlt = headingText;
+                                    }
+                                }
+
+                                // Strategy 2: Look for title/position text
+                                if (newAlt) {
+                                    var titleElement = container.querySelector('.fl-heading-text:not(:first-child), .title, .position, .job-title, p');
+                                    if (titleElement) {
+                                        var titleText = titleElement.textContent.trim();
+                                        // Add title if it's reasonable length
+                                        if (titleText.length > 0 && titleText.length < 80 && titleText !== newAlt) {
+                                            // Check if it's likely a job title
+                                            if (titleText.toLowerCase().includes('director') ||
+                                                titleText.toLowerCase().includes('superintendent') ||
+                                                titleText.toLowerCase().includes('principal') ||
+                                                titleText.toLowerCase().includes('teacher') ||
+                                                titleText.toLowerCase().includes('coordinator') ||
+                                                titleText.toLowerCase().includes('assistant') ||
+                                                titleText.toLowerCase().includes('secretary') ||
+                                                titleText.toLowerCase().includes('specialist') ||
+                                                titleText.split(' ').length <= 5) {
+                                                newAlt = newAlt + ', ' + titleText;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Strategy 3: Check parent link or figure caption
+                            if (!newAlt) {
+                                var parentLink = img.closest('a');
+                                if (parentLink) {
+                                    var linkTitle = parentLink.getAttribute('title');
+                                    if (linkTitle && linkTitle.trim() && !linkTitle.toLowerCase().includes('placeholder')) {
+                                        newAlt = linkTitle;
+                                    }
+                                }
+                            }
+
+                            // Strategy 4: Check for figcaption
+                            if (!newAlt) {
+                                var figure = img.closest('figure');
+                                if (figure) {
+                                    var figcaption = figure.querySelector('figcaption');
+                                    if (figcaption) {
+                                        newAlt = figcaption.textContent.trim();
+                                    }
+                                }
+                            }
+
+                            // Apply the improved alt text
+                            if (newAlt) {
+                                img.setAttribute('alt', newAlt);
+                                console.log('Fixed placeholder alt text:', newAlt);
+                            } else {
+                                // Fallback: Better than "placeholder graphic"
+                                img.setAttribute('alt', 'Staff member photo not available');
+                                console.log('Fixed placeholder alt text: Staff member photo not available');
+                            }
+
+                            // Remove redundant title attribute if it matches the old generic alt
+                            var titleAttr = img.getAttribute('title');
+                            if (titleAttr && titleAttr.toLowerCase().includes('placeholder')) {
+                                img.removeAttribute('title');
+                            }
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('Placeholder image alt text fix error:', e);
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixPlaceholderAlt);
+            } else {
+                fixPlaceholderAlt();
+            }
+
+            // Re-run after images load
+            window.addEventListener('load', fixPlaceholderAlt);
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_placeholder_image_alt');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -669,7 +808,8 @@ if (!function_exists('fix_post_featured_image_alt')) {
  * 9. "Click Here" and "Read More" Link Text
  * 10. Focus Visible Styles
  * 11. Heading Contrast Over Image Backgrounds
- * 12. Featured Image Alt Text for Post Modules ⭐ NEW!
+ * 12. Featured Image Alt Text for Post Modules
+ * 13. Placeholder Image Alt Text (Team/Staff Pages) ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
