@@ -540,6 +540,116 @@ if (!function_exists('fix_heading_contrast_over_images')) {
     add_action('wp_footer', 'fix_heading_contrast_over_images');
 }
 
+// ============================================================================
+// FIX #12: Featured Image Alt Text for Post Modules
+// ============================================================================
+
+if (!function_exists('fix_post_featured_image_alt')) {
+    function fix_post_featured_image_alt() {
+        ?>
+        <script>
+        (function() {
+            function fixFeaturedImageAlt() {
+                try {
+                    // Find all WordPress featured images (post thumbnails)
+                    var postImages = document.querySelectorAll('.wp-post-image, .fl-post-image, img.attachment-large, img.attachment-medium');
+
+                    postImages.forEach(function(img) {
+                        var currentAlt = img.getAttribute('alt');
+
+                        // If alt is missing or empty
+                        if (!currentAlt || currentAlt.trim() === '') {
+                            var newAlt = '';
+
+                            // Strategy 1: Try to get from data-alt attribute
+                            if (img.getAttribute('data-alt')) {
+                                newAlt = img.getAttribute('data-alt');
+                            }
+
+                            // Strategy 2: Try to get post title from nearby heading or link
+                            if (!newAlt) {
+                                var postContainer = img.closest('.fl-post, .post, article, .fl-post-feed-post');
+                                if (postContainer) {
+                                    var postTitle = postContainer.querySelector('.fl-post-title, .entry-title, h2, h3');
+                                    if (postTitle) {
+                                        newAlt = postTitle.textContent.trim();
+                                    }
+                                }
+                            }
+
+                            // Strategy 3: Get from parent link title
+                            if (!newAlt) {
+                                var parentLink = img.closest('a');
+                                if (parentLink) {
+                                    var linkTitle = parentLink.getAttribute('title');
+                                    if (linkTitle) {
+                                        newAlt = linkTitle;
+                                    }
+                                }
+                            }
+
+                            // Strategy 4: Extract from filename (last resort)
+                            if (!newAlt) {
+                                var src = img.getAttribute('src') || img.getAttribute('data-src');
+                                if (src) {
+                                    // Get filename without extension
+                                    var filename = src.split('/').pop().split('.')[0];
+                                    // Clean up filename: replace hyphens/underscores with spaces
+                                    newAlt = filename.replace(/[-_]/g, ' ');
+                                    // Capitalize first letter of each word
+                                    newAlt = newAlt.replace(/\b\w/g, function(char) {
+                                        return char.toUpperCase();
+                                    });
+                                }
+                            }
+
+                            // Apply the alt text if we found something
+                            if (newAlt) {
+                                img.setAttribute('alt', newAlt);
+                                console.log('Fixed missing alt text for image:', newAlt);
+                            } else {
+                                // Absolute fallback
+                                img.setAttribute('alt', 'Featured image');
+                            }
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('Post image alt text fix error:', e);
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixFeaturedImageAlt);
+            } else {
+                fixFeaturedImageAlt();
+            }
+
+            // Re-run after lazy load images are loaded
+            window.addEventListener('load', fixFeaturedImageAlt);
+
+            // Watch for dynamically loaded images (infinite scroll, ajax)
+            if (window.MutationObserver) {
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                            setTimeout(fixFeaturedImageAlt, 100);
+                        }
+                    });
+                });
+
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_post_featured_image_alt');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -558,7 +668,8 @@ if (!function_exists('fix_heading_contrast_over_images')) {
  * 8. UserFeedback Form Accessibility
  * 9. "Click Here" and "Read More" Link Text
  * 10. Focus Visible Styles
- * 11. Heading Contrast Over Image Backgrounds ⭐ NEW!
+ * 11. Heading Contrast Over Image Backgrounds
+ * 12. Featured Image Alt Text for Post Modules ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
