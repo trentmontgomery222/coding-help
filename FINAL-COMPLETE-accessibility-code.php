@@ -436,12 +436,129 @@ if (!function_exists('add_focus_styles')) {
     add_action('wp_head', 'add_focus_styles', 100);
 }
 
+// ============================================================================
+// FIX #11: Heading Contrast Over Image Backgrounds
+// ============================================================================
+
+if (!function_exists('fix_heading_contrast_over_images')) {
+    function fix_heading_contrast_over_images() {
+        ?>
+        <script>
+        (function() {
+            function fixHeadingContrast() {
+                try {
+                    // Find all headings
+                    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+
+                    headings.forEach(function(heading) {
+                        var computedStyle = window.getComputedStyle(heading);
+                        var textColor = computedStyle.color;
+                        var bgColor = computedStyle.backgroundColor;
+
+                        // Check if heading has white/light text
+                        var isLightText = isColorLight(textColor);
+                        var isLightBg = isColorLight(bgColor);
+
+                        // If both are light (white text on white bg = bad contrast)
+                        if (isLightText && isLightBg) {
+                            // Check if heading is over an image background
+                            var hasImageBackground = hasImageBg(heading);
+
+                            if (hasImageBackground) {
+                                // Add dark semi-transparent background for fallback
+                                heading.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                                heading.style.padding = '10px 15px';
+                                heading.style.display = 'inline-block';
+                                heading.style.maxWidth = '100%';
+                            } else {
+                                // No image background, ensure proper contrast
+                                // Change background to dark
+                                heading.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+                                heading.style.padding = '10px 15px';
+                            }
+
+                            // Also add text-shadow as extra insurance
+                            heading.style.textShadow = '2px 2px 4px rgba(0, 0, 0, 0.9)';
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('Heading contrast fix error:', e);
+                }
+            }
+
+            // Helper: Check if color is light
+            function isColorLight(color) {
+                // Convert rgb(r,g,b) or rgba to brightness
+                var rgb = color.match(/\d+/g);
+                if (!rgb || rgb.length < 3) return false;
+
+                var r = parseInt(rgb[0]);
+                var g = parseInt(rgb[1]);
+                var b = parseInt(rgb[2]);
+
+                // Calculate brightness (perceived luminance)
+                var brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+                // If brightness > 200, consider it light
+                return brightness > 200;
+            }
+
+            // Helper: Check if element or parent has background image
+            function hasImageBg(element) {
+                var el = element;
+                var maxDepth = 5; // Check up to 5 parents
+                var depth = 0;
+
+                while (el && depth < maxDepth) {
+                    var style = window.getComputedStyle(el);
+                    var bgImage = style.backgroundImage;
+
+                    if (bgImage && bgImage !== 'none') {
+                        return true;
+                    }
+
+                    el = el.parentElement;
+                    depth++;
+                }
+
+                return false;
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixHeadingContrast);
+            } else {
+                fixHeadingContrast();
+            }
+
+            // Re-run after images load
+            window.addEventListener('load', fixHeadingContrast);
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_heading_contrast_over_images');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
  * ============================================================================
  *
  * Your site is now WCAG 2.2 AA compliant.
+ *
+ * ALL FIXES INCLUDED:
+ * 1. ARIA Landmarks (banner, navigation, main, contentinfo)
+ * 2. Skip Navigation Link
+ * 3. Language Attribute
+ * 4. Search Widget Accessibility
+ * 5. Silent Video Accessibility
+ * 6. Smart Slider Accessibility
+ * 7. Callout Button Accessibility (Duplicate Links)
+ * 8. UserFeedback Form Accessibility
+ * 9. "Click Here" and "Read More" Link Text
+ * 10. Focus Visible Styles
+ * 11. Heading Contrast Over Image Backgrounds ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
