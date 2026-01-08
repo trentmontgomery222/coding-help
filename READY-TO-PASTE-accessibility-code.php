@@ -5,11 +5,9 @@
  * Tested with WAVE, JAWS, NVDA
  *
  * INSTALLATION:
- * Copy everything in this file and paste at the END of your child theme's functions.php
+ * Copy everything below and paste at the END of your child theme's functions.php
  *
  * Location: wp-content/themes/bb-theme-child/functions.php
- *
- * IMPORTANT: Do NOT include the opening <?php tag - your functions.php already has one!
  */
 
 // ============================================================================
@@ -907,6 +905,111 @@ if (!function_exists('fix_pdf_link_accessibility')) {
     add_action('wp_footer', 'fix_pdf_link_accessibility');
 }
 
+// ============================================================================
+// FIX #15: Remove Redundant Title Attributes
+// ============================================================================
+
+if (!function_exists('remove_redundant_title_attributes')) {
+    function remove_redundant_title_attributes() {
+        ?>
+        <script>
+        (function() {
+            function removeRedundantTitles() {
+                try {
+                    // Find all links with title attributes
+                    var linksWithTitles = document.querySelectorAll('a[title]');
+
+                    linksWithTitles.forEach(function(link) {
+                        var titleAttr = link.getAttribute('title');
+                        if (!titleAttr || titleAttr.trim() === '') {
+                            return; // Skip if title is empty
+                        }
+
+                        // Get the visible text content of the link
+                        var linkText = link.textContent.trim();
+
+                        // Normalize both for comparison (case-insensitive, whitespace normalized)
+                        var normalizedTitle = titleAttr.trim().toLowerCase().replace(/\s+/g, ' ');
+                        var normalizedLinkText = linkText.toLowerCase().replace(/\s+/g, ' ');
+
+                        // Check if they're identical or very similar
+                        if (normalizedTitle === normalizedLinkText) {
+                            // Remove the redundant title attribute
+                            link.removeAttribute('title');
+                            console.log('Removed redundant title attribute from:', linkText);
+                        } else {
+                            // Check if title is just a substring of link text or vice versa
+                            // This catches cases where title is slightly different but adds no value
+                            var titleWords = normalizedTitle.split(' ').filter(function(w) { return w.length > 0; });
+                            var linkWords = normalizedLinkText.split(' ').filter(function(w) { return w.length > 0; });
+
+                            // If all words in title are in link text, it's likely redundant
+                            var allWordsMatch = titleWords.every(function(word) {
+                                return linkWords.includes(word);
+                            });
+
+                            // Also check if they're the same length (same number of words)
+                            if (allWordsMatch && titleWords.length === linkWords.length) {
+                                link.removeAttribute('title');
+                                console.log('Removed redundant title attribute from:', linkText);
+                            }
+                        }
+                    });
+
+                    // Also check buttons and other interactive elements
+                    var buttonsWithTitles = document.querySelectorAll('button[title]');
+                    buttonsWithTitles.forEach(function(button) {
+                        var titleAttr = button.getAttribute('title');
+                        if (!titleAttr || titleAttr.trim() === '') {
+                            return;
+                        }
+
+                        var buttonText = button.textContent.trim();
+                        var normalizedTitle = titleAttr.trim().toLowerCase().replace(/\s+/g, ' ');
+                        var normalizedButtonText = buttonText.toLowerCase().replace(/\s+/g, ' ');
+
+                        if (normalizedTitle === normalizedButtonText) {
+                            button.removeAttribute('title');
+                            console.log('Removed redundant title attribute from button:', buttonText);
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('Redundant title removal error:', e);
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', removeRedundantTitles);
+            } else {
+                removeRedundantTitles();
+            }
+
+            // Re-run after page fully loads
+            window.addEventListener('load', removeRedundantTitles);
+
+            // Watch for dynamically added elements
+            if (window.MutationObserver) {
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                            setTimeout(removeRedundantTitles, 100);
+                        }
+                    });
+                });
+
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'remove_redundant_title_attributes');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -929,6 +1032,7 @@ if (!function_exists('fix_pdf_link_accessibility')) {
  * 12. Featured Image Alt Text for Post Modules
  * 13. Placeholder Image Alt Text (Team/Staff Pages)
  * 14. PDF Link Accessibility
+ * 15. Remove Redundant Title Attributes ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
