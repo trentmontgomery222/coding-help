@@ -789,6 +789,123 @@ if (!function_exists('fix_placeholder_image_alt')) {
     add_action('wp_footer', 'fix_placeholder_image_alt');
 }
 
+// ============================================================================
+// FIX #14: PDF Link Accessibility
+// ============================================================================
+
+if (!function_exists('fix_pdf_link_accessibility')) {
+    function fix_pdf_link_accessibility() {
+        ?>
+        <script>
+        (function() {
+            function fixPDFLinks() {
+                try {
+                    // Find all links
+                    var allLinks = document.querySelectorAll('a[href]');
+
+                    allLinks.forEach(function(link) {
+                        var href = link.getAttribute('href') || '';
+
+                        // Check if link points to a PDF file
+                        if (href.toLowerCase().endsWith('.pdf')) {
+                            // Get the link text (including text in child elements like spans)
+                            var linkText = link.textContent.trim();
+
+                            // Check if PDF indicator is already present
+                            var hasPDFIndicator =
+                                linkText.toLowerCase().includes('(pdf)') ||
+                                linkText.toLowerCase().includes('[pdf]') ||
+                                linkText.toLowerCase().endsWith('.pdf') ||
+                                link.getAttribute('aria-label') &&
+                                link.getAttribute('aria-label').toLowerCase().includes('pdf');
+
+                            if (!hasPDFIndicator && linkText) {
+                                // Find the innermost text node or span to append to
+                                var textContainer = link.querySelector('.fl-button-text, span, .link-text');
+
+                                if (textContainer) {
+                                    // Append to existing span/container
+                                    textContainer.textContent = textContainer.textContent.trim() + ' (PDF)';
+                                } else {
+                                    // No container, append directly to link
+                                    // Get all text nodes
+                                    var textNodes = getTextNodes(link);
+                                    if (textNodes.length > 0) {
+                                        // Append to last text node
+                                        var lastTextNode = textNodes[textNodes.length - 1];
+                                        lastTextNode.nodeValue = lastTextNode.nodeValue.trim() + ' (PDF)';
+                                    } else {
+                                        // Fallback: create a text node
+                                        link.appendChild(document.createTextNode(' (PDF)'));
+                                    }
+                                }
+
+                                console.log('Added PDF indicator to link:', linkText);
+                            }
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('PDF link fix error:', e);
+                }
+            }
+
+            // Helper: Get all text nodes within an element
+            function getTextNodes(element) {
+                var textNodes = [];
+                var walker = document.createTreeWalker(
+                    element,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode: function(node) {
+                            // Only accept text nodes with actual content
+                            if (node.nodeValue.trim().length > 0) {
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                    }
+                );
+
+                var node;
+                while (node = walker.nextNode()) {
+                    textNodes.push(node);
+                }
+
+                return textNodes;
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixPDFLinks);
+            } else {
+                fixPDFLinks();
+            }
+
+            // Re-run after page fully loads (for dynamic content)
+            window.addEventListener('load', fixPDFLinks);
+
+            // Watch for dynamically added links
+            if (window.MutationObserver) {
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                            setTimeout(fixPDFLinks, 100);
+                        }
+                    });
+                });
+
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_pdf_link_accessibility');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -809,7 +926,8 @@ if (!function_exists('fix_placeholder_image_alt')) {
  * 10. Focus Visible Styles
  * 11. Heading Contrast Over Image Backgrounds
  * 12. Featured Image Alt Text for Post Modules
- * 13. Placeholder Image Alt Text (Team/Staff Pages) ⭐ NEW!
+ * 13. Placeholder Image Alt Text (Team/Staff Pages)
+ * 14. PDF Link Accessibility ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
