@@ -1025,11 +1025,13 @@ if (!function_exists('fix_event_calendar_accessibility')) {
                     var dateFrom = document.querySelector('input[name="tribe_datefrom"]');
                     if (dateFrom && !dateFrom.getAttribute('aria-label')) {
                         dateFrom.setAttribute('aria-label', 'Filter events from date');
+                        console.log('FIX #16: Added aria-label to date from input');
                     }
 
                     var dateTo = document.querySelector('input[name="tribe_dateto"]');
                     if (dateTo && !dateTo.getAttribute('aria-label')) {
                         dateTo.setAttribute('aria-label', 'Filter events to date');
+                        console.log('FIX #16: Added aria-label to date to input');
                     }
 
                     // 2. Fix broken ARIA references
@@ -1038,48 +1040,71 @@ if (!function_exists('fix_event_calendar_accessibility')) {
                         var id = link.getAttribute('aria-describedby');
                         if (id && !document.getElementById(id)) {
                             link.removeAttribute('aria-describedby');
+                            console.log('FIX #16: Removed broken ARIA reference');
                         }
                     });
 
-                    // 3. Fix missing h1 heading
+                    // 3. Fix missing h1 heading - place BEFORE calendar, not inside
                     if (document.querySelector('.tribe-events') && !document.querySelector('h1')) {
                         var h1 = document.createElement('h1');
                         h1.textContent = 'District Calendar';
-                        h1.style.cssText = 'font-size: 2em; font-weight: bold; margin: 20px 0;';
+                        h1.style.cssText = 'font-size: 2em; font-weight: bold; margin: 0 0 20px 0;';
+                        h1.id = 'calendar-page-heading';
 
-                        var main = document.querySelector('main') ||
-                                  document.querySelector('.fl-content') ||
-                                  document.querySelector('article');
+                        // Find the calendar container
+                        var calendarWrapper = document.querySelector('#tribe-events-pg-template') ||
+                                            document.querySelector('.tribe-events-pg-template');
 
-                        if (main && main.firstChild) {
-                            main.insertBefore(h1, main.firstChild);
+                        if (calendarWrapper) {
+                            // Insert BEFORE the calendar wrapper
+                            calendarWrapper.parentNode.insertBefore(h1, calendarWrapper);
+                            console.log('FIX #16: Added h1 before calendar');
+                        } else {
+                            // Fallback
+                            var main = document.querySelector('.fl-content') || document.querySelector('main');
+                            if (main) {
+                                main.insertBefore(h1, main.firstChild);
+                                console.log('FIX #16: Added h1 at top of main');
+                            }
                         }
                     }
 
-                    // 4. Hide orphaned form labels
-                    document.querySelectorAll('label[for]').forEach(function(label) {
-                        var id = label.getAttribute('for');
-                        if (id && !document.getElementById(id)) {
-                            label.style.display = 'none';
+                    // 4. Hide orphaned form labels - use !important
+                    document.querySelectorAll('label.tribe-common-a11y-visual-hide[for], label.tribe-events-c-top-bar__datepicker-label').forEach(function(label) {
+                        var forAttr = label.getAttribute('for');
+                        if (forAttr && !document.getElementById(forAttr)) {
+                            label.style.setProperty('display', 'none', 'important');
+                            label.setAttribute('aria-hidden', 'true');
+                            console.log('FIX #16: Hid orphaned label:', forAttr);
                         }
                     });
 
-                    // 5. Fix Find Events button contrast
-                    var btn = document.querySelector('.tribe-events-c-search__button');
-                    if (btn) {
+                    // 5. Fix Find Events button contrast - check all buttons
+                    var buttons = document.querySelectorAll('.tribe-events-c-search__button, button[name="submit-bar"], .tribe-common-c-btn');
+                    buttons.forEach(function(btn) {
                         var style = window.getComputedStyle(btn);
-                        if (style.backgroundColor.includes('51, 74, 255') &&
-                            style.color.includes('0, 0, 0')) {
-                            btn.style.setProperty('color', '#ffffff', 'important');
-                        }
-                    }
+                        var bgColor = style.backgroundColor;
+                        var textColor = style.color;
 
-                    // 6. Remove redundant title attributes on event links
-                    document.querySelectorAll('.tribe-events-calendar-month__calendar-event-tooltip-title-link').forEach(function(link) {
-                        var title = link.getAttribute('title');
-                        var text = link.textContent.trim();
-                        if (title && text && title.trim() === text) {
-                            link.removeAttribute('title');
+                        console.log('FIX #16: Button colors - BG:', bgColor, 'Text:', textColor);
+
+                        // Check for blue background with black text
+                        if ((bgColor.includes('51') || bgColor.includes('74') || bgColor.includes('255')) &&
+                            (textColor.includes('0, 0, 0') || textColor === 'rgb(0, 0, 0)')) {
+                            btn.style.setProperty('color', '#ffffff', 'important');
+                            console.log('FIX #16: Fixed button contrast to white text');
+                        }
+                    });
+
+                    // 6. Remove redundant title attributes on all calendar event links
+                    document.querySelectorAll('a[title]').forEach(function(link) {
+                        if (link.closest('.tribe-events')) {
+                            var title = link.getAttribute('title');
+                            var text = link.textContent.trim();
+                            if (title && text && title.trim() === text) {
+                                link.removeAttribute('title');
+                                console.log('FIX #16: Removed redundant title');
+                            }
                         }
                     });
 
