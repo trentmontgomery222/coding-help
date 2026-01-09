@@ -1010,6 +1010,106 @@ if (!function_exists('remove_redundant_title_attributes')) {
     add_action('wp_footer', 'remove_redundant_title_attributes');
 }
 
+// ============================================================================
+// FIX #16: Event Calendar Accessibility
+// ============================================================================
+
+if (!function_exists('fix_event_calendar_accessibility')) {
+    function fix_event_calendar_accessibility() {
+        ?>
+        <script>
+        (function() {
+            function fixCalendar() {
+                try {
+                    // 1. Fix missing form labels on date inputs
+                    var dateFrom = document.querySelector('input[name="tribe_datefrom"]');
+                    if (dateFrom && !dateFrom.getAttribute('aria-label')) {
+                        dateFrom.setAttribute('aria-label', 'Filter events from date');
+                    }
+
+                    var dateTo = document.querySelector('input[name="tribe_dateto"]');
+                    if (dateTo && !dateTo.getAttribute('aria-label')) {
+                        dateTo.setAttribute('aria-label', 'Filter events to date');
+                    }
+
+                    // 2. Fix broken ARIA references
+                    var linksWithAria = document.querySelectorAll('a[aria-describedby^="tribe-events-tooltip"]');
+                    linksWithAria.forEach(function(link) {
+                        var id = link.getAttribute('aria-describedby');
+                        if (id && !document.getElementById(id)) {
+                            link.removeAttribute('aria-describedby');
+                        }
+                    });
+
+                    // 3. Fix missing h1 heading
+                    if (document.querySelector('.tribe-events') && !document.querySelector('h1')) {
+                        var h1 = document.createElement('h1');
+                        h1.textContent = 'District Calendar';
+                        h1.style.cssText = 'font-size: 2em; font-weight: bold; margin: 20px 0;';
+
+                        var main = document.querySelector('main') ||
+                                  document.querySelector('.fl-content') ||
+                                  document.querySelector('article');
+
+                        if (main && main.firstChild) {
+                            main.insertBefore(h1, main.firstChild);
+                        }
+                    }
+
+                    // 4. Hide orphaned form labels
+                    document.querySelectorAll('label[for]').forEach(function(label) {
+                        var id = label.getAttribute('for');
+                        if (id && !document.getElementById(id)) {
+                            label.style.display = 'none';
+                        }
+                    });
+
+                    // 5. Fix Find Events button contrast
+                    var btn = document.querySelector('.tribe-events-c-search__button');
+                    if (btn) {
+                        var style = window.getComputedStyle(btn);
+                        if (style.backgroundColor.includes('51, 74, 255') &&
+                            style.color.includes('0, 0, 0')) {
+                            btn.style.setProperty('color', '#ffffff', 'important');
+                        }
+                    }
+
+                    // 6. Remove redundant title attributes on event links
+                    document.querySelectorAll('.tribe-events-calendar-month__calendar-event-tooltip-title-link').forEach(function(link) {
+                        var title = link.getAttribute('title');
+                        var text = link.textContent.trim();
+                        if (title && text && title.trim() === text) {
+                            link.removeAttribute('title');
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('Calendar accessibility error:', e);
+                }
+            }
+
+            // Run on load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixCalendar);
+            } else {
+                fixCalendar();
+            }
+            window.addEventListener('load', fixCalendar);
+
+            // Watch for AJAX updates
+            if (window.MutationObserver) {
+                var observer = new MutationObserver(function() {
+                    setTimeout(fixCalendar, 100);
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_event_calendar_accessibility');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -1032,7 +1132,8 @@ if (!function_exists('remove_redundant_title_attributes')) {
  * 12. Featured Image Alt Text for Post Modules
  * 13. Placeholder Image Alt Text (Team/Staff Pages)
  * 14. PDF Link Accessibility
- * 15. Remove Redundant Title Attributes ⭐ NEW!
+ * 15. Remove Redundant Title Attributes
+ * 16. Event Calendar Accessibility ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
