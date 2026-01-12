@@ -118,6 +118,27 @@ if (!function_exists('add_skip_navigation_fallback')) {
                 skipLink.textContent = 'Skip to main content';
                 skipLink.style.cssText = 'position: absolute; top: -40px; left: 0; background: #000; color: #fff; padding: 8px 16px; text-decoration: none; z-index: 100000; font-size: 14px;';
 
+                // Handle click to skip to main content
+                skipLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+
+                    // Try to find main content area in order of preference
+                    var mainContent = document.querySelector('#main-content') ||
+                                     document.querySelector('main') ||
+                                     document.querySelector('[role="main"]') ||
+                                     document.querySelector('.fl-page-content') ||
+                                     document.querySelector('.site-content') ||
+                                     document.querySelector('#content');
+
+                    if (mainContent) {
+                        // Make it focusable
+                        mainContent.setAttribute('tabindex', '-1');
+                        mainContent.focus();
+                        mainContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        console.log('FIX #2: Skipped to main content');
+                    }
+                });
+
                 skipLink.addEventListener('focus', function() {
                     this.style.top = '0';
                     this.style.outline = '2px solid #fff';
