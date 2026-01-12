@@ -1788,68 +1788,67 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
 }
 
 // ============================================================================
-// FIX #22: Remove Inappropriate ARIA Menu Roles from Website Navigation
+// FIX #22: Fix ARIA Menu Structure for Website Navigation
 // ============================================================================
 // WCAG Reference: 4.1.2 Name, Role, Value (Level A)
-// Issue: Beaver Builder adds role="menu" and role="menuitem" to navigation
-// These roles are for APPLICATION menus (File/Edit/View), NOT website navigation
-// Website navigation should use semantic HTML only: <nav><ul><li><a>
+// Issue: Beaver Builder uses role="menu" but missing proper child roles
+// When using role="menu", <li> elements need role="none" or role="presentation"
+// This completes the ARIA menu structure without breaking theme CSS
 // ============================================================================
 
-if (!function_exists('remove_incorrect_menu_roles')) {
-    function remove_incorrect_menu_roles() {
+if (!function_exists('fix_menu_aria_structure')) {
+    function fix_menu_aria_structure() {
         ?>
         <script>
         (function() {
-            function removeIncorrectMenuRoles() {
+            function fixMenuStructure() {
                 try {
-                    // Find all navigation menus
-                    var navElements = document.querySelectorAll('nav, .fl-page-nav, .site-navigation, [role="navigation"]');
+                    // Find all menus with role="menu"
+                    var menus = document.querySelectorAll('ul[role="menu"], ul[role="menubar"]');
 
-                    navElements.forEach(function(nav) {
-                        // Remove role="menu" from navigation UL elements
-                        // Website navigation should NOT use role="menu" (that's for application menus)
-                        var menuLists = nav.querySelectorAll('ul[role="menu"], ul[role="menubar"]');
-                        menuLists.forEach(function(ul) {
-                            ul.removeAttribute('role');
-                            console.log('FIX #22: Removed inappropriate role="menu" from navigation');
+                    menus.forEach(function(menu) {
+                        // Add role="none" to all direct <li> children
+                        // This removes list semantics which is required for role="menu"
+                        var listItems = menu.querySelectorAll(':scope > li');
+                        listItems.forEach(function(li) {
+                            if (!li.getAttribute('role')) {
+                                li.setAttribute('role', 'none');
+                                console.log('FIX #22: Added role="none" to menu list item');
+                            }
                         });
 
-                        // Remove role="menuitem" from navigation links
-                        var menuItems = nav.querySelectorAll('a[role="menuitem"]');
-                        menuItems.forEach(function(link) {
-                            link.removeAttribute('role');
-                            console.log('FIX #22: Removed role="menuitem" from navigation link');
-                        });
-
-                        // Remove aria-haspopup="menu" (website navigation should use aria-haspopup="true" or omit it)
-                        var hasPopupLinks = nav.querySelectorAll('[aria-haspopup="menu"]');
-                        hasPopupLinks.forEach(function(link) {
-                            link.setAttribute('aria-haspopup', 'true');
-                            console.log('FIX #22: Fixed aria-haspopup on navigation link');
+                        // Fix submenu list items too
+                        var submenus = menu.querySelectorAll('ul');
+                        submenus.forEach(function(submenu) {
+                            var subItems = submenu.querySelectorAll(':scope > li');
+                            subItems.forEach(function(li) {
+                                if (!li.getAttribute('role')) {
+                                    li.setAttribute('role', 'none');
+                                }
+                            });
                         });
                     });
 
-                    console.log('FIX #22: Removed inappropriate ARIA menu roles from navigation');
+                    console.log('FIX #22: Fixed ARIA menu structure');
 
                 } catch (e) {
-                    console.error('Remove menu roles error:', e);
+                    console.error('Fix menu structure error:', e);
                 }
             }
 
             if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', removeIncorrectMenuRoles);
+                document.addEventListener('DOMContentLoaded', fixMenuStructure);
             } else {
-                removeIncorrectMenuRoles();
+                fixMenuStructure();
             }
 
             // Re-run after page fully loads
-            window.addEventListener('load', removeIncorrectMenuRoles);
+            window.addEventListener('load', fixMenuStructure);
         })();
         </script>
         <?php
     }
-    add_action('wp_footer', 'remove_inappropriate_menu_roles');
+    add_action('wp_footer', 'fix_menu_aria_structure');
 }
 
 /**
@@ -1881,7 +1880,7 @@ if (!function_exists('remove_incorrect_menu_roles')) {
  * 19. Button Group Keyboard Navigation (All Pages)
  * 20. Community Schools Page Graphic Accessibility
  * 21. Keyboard-Accessible Dropdown Menus with Arrow Key Support
- * 22. Remove Inappropriate ARIA Menu Roles ⭐ NEW!
+ * 22. Fix ARIA Menu Structure (Add role="none" to list items) ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
