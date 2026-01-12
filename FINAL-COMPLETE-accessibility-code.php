@@ -1395,30 +1395,21 @@ if (!function_exists('fix_google_map_accessibility')) {
 }
 
 // ============================================================================
-// FIX #19: HR Page Button Group Keyboard Navigation
+// FIX #19: Button Group Keyboard Navigation (All Pages)
 // ============================================================================
 
-if (!function_exists('fix_hr_button_group_navigation')) {
-    function fix_hr_button_group_navigation() {
+if (!function_exists('fix_button_group_navigation')) {
+    function fix_button_group_navigation() {
         ?>
         <script>
         (function() {
             function fixButtonGroupNav() {
                 try {
-                    // Only run on HR page (check URL or page title)
-                    var isHRPage = window.location.href.toLowerCase().includes('human-resource') ||
-                                  window.location.href.toLowerCase().includes('hr') ||
-                                  document.title.toLowerCase().includes('human resource');
-
-                    if (!isHRPage) {
-                        return; // Exit if not HR page
-                    }
-
-                    // Find button group modules on HR page
+                    // Find all button group modules on any page
                     var buttonGroups = document.querySelectorAll('.fl-module-button-group, .fl-button-group, [class*="button-group"]');
 
                     buttonGroups.forEach(function(group) {
-                        // Add proper ARIA role for screen readers
+                        // Add proper ARIA role for screen readers (no visual changes)
                         if (!group.getAttribute('role')) {
                             group.setAttribute('role', 'group');
                             group.setAttribute('aria-label', 'Button group');
@@ -1427,12 +1418,12 @@ if (!function_exists('fix_hr_button_group_navigation')) {
                         // Make sure all buttons are keyboard accessible
                         var buttons = group.querySelectorAll('a, button, .fl-button');
                         buttons.forEach(function(btn, index) {
-                            // Ensure proper tab order
+                            // Ensure proper tab order (no visual changes)
                             if (!btn.getAttribute('tabindex') || btn.getAttribute('tabindex') === '-1') {
                                 btn.setAttribute('tabindex', '0');
                             }
 
-                            // Add aria-label if button only has icon
+                            // Add aria-label if button only has icon (no visual changes)
                             if (!btn.getAttribute('aria-label') && btn.textContent.trim() === '') {
                                 var icon = btn.querySelector('[class*="fa-"], [class*="icon-"], i');
                                 if (icon) {
@@ -1460,7 +1451,7 @@ if (!function_exists('fix_hr_button_group_navigation')) {
         </script>
         <?php
     }
-    add_action('wp_footer', 'fix_hr_button_group_navigation');
+    add_action('wp_footer', 'fix_button_group_navigation');
 }
 
 // ============================================================================
@@ -1605,7 +1596,7 @@ if (!function_exists('fix_community_schools_graphics')) {
  * 16. Event Calendar Accessibility
  * 17. Enhanced Skip Navigation with Multiple Options ⭐ NEW!
  * 18. Google Map Footer Accessibility ⭐ NEW!
- * 19. HR Page Button Group Keyboard Navigation ⭐ NEW!
+ * 19. Button Group Keyboard Navigation (All Pages) ⭐ NEW!
  * 20. Community Schools Page Graphic Accessibility ⭐ NEW!
  *
  * TESTING:
