@@ -21,57 +21,34 @@ if (!function_exists('add_accessibility_landmarks')) {
         (function() {
             function addLandmarks() {
                 try {
-                    // Add main landmark to primary content area
-                    var contentArea = document.querySelector('.fl-page-content') ||
-                                     document.querySelector('.site-content') ||
-                                     document.querySelector('#content') ||
-                                     document.querySelector('.content') ||
-                                     document.querySelector('article') ||
-                                     document.querySelector('.entry-content');
+                    // Add main landmark to primary content area ONLY if no main element exists
+                    if (!document.querySelector('main') && !document.querySelector('[role="main"]')) {
+                        var contentArea = document.querySelector('.fl-page-content') ||
+                                         document.querySelector('.site-content') ||
+                                         document.querySelector('#content') ||
+                                         document.querySelector('.content');
 
-                    if (contentArea && !document.querySelector('main')) {
-                        var mainWrapper = document.createElement('main');
-                        mainWrapper.id = 'main-content';
-                        mainWrapper.setAttribute('role', 'main');
-                        var parent = contentArea.closest('.fl-page') || contentArea.parentNode;
-                        parent.insertBefore(mainWrapper, parent.firstChild);
-                        while (parent.firstChild && parent.firstChild !== mainWrapper) {
-                            mainWrapper.appendChild(parent.firstChild);
+                        if (contentArea) {
+                            var mainWrapper = document.createElement('main');
+                            mainWrapper.id = 'main-content';
+                            mainWrapper.setAttribute('role', 'main');
+                            var parent = contentArea.closest('.fl-page') || contentArea.parentNode;
+                            parent.insertBefore(mainWrapper, parent.firstChild);
+                            while (parent.firstChild && parent.firstChild !== mainWrapper) {
+                                mainWrapper.appendChild(parent.firstChild);
+                            }
+                            console.log('FIX #1: Added main landmark');
                         }
                     }
 
-                    // Add banner to header
-                    var header = document.querySelector('.fl-page-header') ||
-                                document.querySelector('.site-header') ||
-                                document.querySelector('#masthead') ||
-                                document.querySelector('header') ||
-                                document.querySelector('.header');
+                    // DON'T add banner/navigation roles to avoid triggering theme CSS
+                    // Semantic HTML5 elements (header, nav, footer) are already accessible
 
-                    if (header && !header.getAttribute('role') && header.tagName !== 'HEADER') {
-                        header.setAttribute('role', 'banner');
-                    }
-
-                    // Add navigation
-                    var nav = document.querySelector('.fl-page-nav') ||
-                             document.querySelector('.site-navigation') ||
-                             document.querySelector('#site-navigation') ||
-                             document.querySelector('nav') ||
-                             document.querySelector('.nav');
-
-                    if (nav && !nav.getAttribute('role') && nav.tagName !== 'NAV') {
-                        nav.setAttribute('role', 'navigation');
-                        nav.setAttribute('aria-label', 'Main Navigation');
-                    }
-
-                    // Add contentinfo to footer
-                    var footer = document.querySelector('.fl-page-footer') ||
-                                document.querySelector('.site-footer') ||
-                                document.querySelector('#colophon') ||
-                                document.querySelector('footer') ||
-                                document.querySelector('.footer');
-
-                    if (footer && !footer.getAttribute('role') && footer.tagName !== 'FOOTER') {
+                    // Add contentinfo to footer ONLY if it's not a semantic footer element
+                    var footer = document.querySelector('.fl-page-footer, .site-footer, #colophon, .footer');
+                    if (footer && footer.tagName !== 'FOOTER' && !footer.getAttribute('role')) {
                         footer.setAttribute('role', 'contentinfo');
+                        console.log('FIX #1: Added contentinfo to footer');
                     }
 
                 } catch (e) {
