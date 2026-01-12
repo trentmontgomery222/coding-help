@@ -1787,6 +1787,71 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
     add_action('wp_footer', 'fix_dropdown_keyboard_navigation');
 }
 
+// ============================================================================
+// FIX #22: Remove Inappropriate ARIA Menu Roles from Website Navigation
+// ============================================================================
+// WCAG Reference: 4.1.2 Name, Role, Value (Level A)
+// Issue: Beaver Builder adds role="menu" and role="menuitem" to navigation
+// These roles are for APPLICATION menus (File/Edit/View), NOT website navigation
+// Website navigation should use semantic HTML only: <nav><ul><li><a>
+// ============================================================================
+
+if (!function_exists('remove_incorrect_menu_roles')) {
+    function remove_incorrect_menu_roles() {
+        ?>
+        <script>
+        (function() {
+            function removeIncorrectMenuRoles() {
+                try {
+                    // Find all navigation menus
+                    var navElements = document.querySelectorAll('nav, .fl-page-nav, .site-navigation, [role="navigation"]');
+
+                    navElements.forEach(function(nav) {
+                        // Remove role="menu" from navigation UL elements
+                        // Website navigation should NOT use role="menu" (that's for application menus)
+                        var menuLists = nav.querySelectorAll('ul[role="menu"], ul[role="menubar"]');
+                        menuLists.forEach(function(ul) {
+                            ul.removeAttribute('role');
+                            console.log('FIX #22: Removed inappropriate role="menu" from navigation');
+                        });
+
+                        // Remove role="menuitem" from navigation links
+                        var menuItems = nav.querySelectorAll('a[role="menuitem"]');
+                        menuItems.forEach(function(link) {
+                            link.removeAttribute('role');
+                            console.log('FIX #22: Removed role="menuitem" from navigation link');
+                        });
+
+                        // Remove aria-haspopup="menu" (website navigation should use aria-haspopup="true" or omit it)
+                        var hasPopupLinks = nav.querySelectorAll('[aria-haspopup="menu"]');
+                        hasPopupLinks.forEach(function(link) {
+                            link.setAttribute('aria-haspopup', 'true');
+                            console.log('FIX #22: Fixed aria-haspopup on navigation link');
+                        });
+                    });
+
+                    console.log('FIX #22: Removed inappropriate ARIA menu roles from navigation');
+
+                } catch (e) {
+                    console.error('Remove menu roles error:', e);
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', removeIncorrectMenuRoles);
+            } else {
+                removeIncorrectMenuRoles();
+            }
+
+            // Re-run after page fully loads
+            window.addEventListener('load', removeIncorrectMenuRoles);
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'remove_inappropriate_menu_roles');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -1815,7 +1880,8 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
  * 18. Google Map Footer Accessibility
  * 19. Button Group Keyboard Navigation (All Pages)
  * 20. Community Schools Page Graphic Accessibility
- * 21. Keyboard-Accessible Dropdown Menus ⭐ NEW!
+ * 21. Keyboard-Accessible Dropdown Menus with Arrow Key Support
+ * 22. Remove Inappropriate ARIA Menu Roles ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
