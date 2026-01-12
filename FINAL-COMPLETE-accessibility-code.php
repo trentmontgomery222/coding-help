@@ -93,7 +93,7 @@ if (!function_exists('add_accessibility_landmarks')) {
 }
 
 // ============================================================================
-// FIX #2: Skip Navigation Link
+// FIX #2: Skip Navigation Link (Enhanced)
 // ============================================================================
 
 if (!function_exists('add_skip_navigation')) {
@@ -121,6 +121,56 @@ if (!function_exists('add_skip_navigation')) {
         <?php
     }
     add_action('wp_body_open', 'add_skip_navigation');
+}
+
+// Fallback if wp_body_open doesn't work
+if (!function_exists('add_skip_navigation_fallback')) {
+    function add_skip_navigation_fallback() {
+        ?>
+        <script>
+        (function() {
+            function addSkipLink() {
+                // Check if skip link already exists
+                if (document.querySelector('.skip-link')) {
+                    return;
+                }
+
+                var skipLink = document.createElement('a');
+                skipLink.href = '#main-content';
+                skipLink.className = 'skip-link';
+                skipLink.textContent = 'Skip to main content';
+                skipLink.style.cssText = 'position: absolute; top: -40px; left: 0; background: #000; color: #fff; padding: 8px 16px; text-decoration: none; z-index: 100000; font-size: 14px;';
+
+                skipLink.addEventListener('focus', function() {
+                    this.style.top = '0';
+                    this.style.outline = '2px solid #fff';
+                    this.style.outlineOffset = '2px';
+                });
+
+                skipLink.addEventListener('blur', function() {
+                    this.style.top = '-40px';
+                });
+
+                // Insert at the very beginning of body
+                if (document.body.firstChild) {
+                    document.body.insertBefore(skipLink, document.body.firstChild);
+                } else {
+                    document.body.appendChild(skipLink);
+                }
+
+                console.log('FIX #2: Added skip navigation link');
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', addSkipLink);
+            } else {
+                addSkipLink();
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'add_skip_navigation_fallback', 1);
 }
 
 // ============================================================================
@@ -1136,6 +1186,426 @@ if (!function_exists('fix_event_calendar_accessibility')) {
     add_action('wp_footer', 'fix_event_calendar_accessibility');
 }
 
+// ============================================================================
+// FIX #17: Enhanced Skip Navigation with Multiple Options
+// ============================================================================
+
+if (!function_exists('add_enhanced_skip_navigation')) {
+    function add_enhanced_skip_navigation() {
+        ?>
+        <script>
+        (function() {
+            function addEnhancedSkipLinks() {
+                try {
+                    // Check if skip links already exist
+                    if (document.querySelector('.skip-links-container')) {
+                        return;
+                    }
+
+                    // Create container for multiple skip links
+                    var container = document.createElement('div');
+                    container.className = 'skip-links-container';
+                    container.style.cssText = 'position: absolute; top: -200px; left: 0; z-index: 100001;';
+
+                    // Skip to main content
+                    var skipMain = createSkipLink('#main-content', 'Skip to main content');
+                    container.appendChild(skipMain);
+
+                    // Skip to navigation (if exists)
+                    if (document.querySelector('nav, [role="navigation"]')) {
+                        var skipNav = createSkipLink('nav, [role="navigation"]', 'Skip to navigation');
+                        container.appendChild(skipNav);
+                    }
+
+                    // Skip past header (if header exists)
+                    var header = document.querySelector('header, [role="banner"], .fl-page-header, .site-header');
+                    if (header) {
+                        var skipHeader = createSkipLink(null, 'Skip past header');
+                        skipHeader.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            var main = document.querySelector('main, [role="main"], #main-content');
+                            if (main) {
+                                main.setAttribute('tabindex', '-1');
+                                main.focus();
+                                main.scrollIntoView({ behavior: 'smooth' });
+                            }
+                        });
+                        container.appendChild(skipHeader);
+                    }
+
+                    // Insert at the very beginning of body
+                    if (document.body.firstChild) {
+                        document.body.insertBefore(container, document.body.firstChild);
+                    } else {
+                        document.body.appendChild(container);
+                    }
+
+                    console.log('FIX #17: Added enhanced skip navigation links');
+
+                } catch (e) {
+                    console.error('Enhanced skip navigation error:', e);
+                }
+            }
+
+            function createSkipLink(target, text) {
+                var link = document.createElement('a');
+                link.className = 'skip-link-enhanced';
+                link.textContent = text;
+
+                if (target) {
+                    link.href = typeof target === 'string' && target.startsWith('#') ? target : '#';
+                }
+
+                link.style.cssText = 'display: block; position: absolute; top: -100px; left: 0; background: #000; color: #fff; padding: 10px 20px; text-decoration: none; font-size: 16px; font-weight: bold; border: 2px solid #fff;';
+
+                link.addEventListener('focus', function() {
+                    this.style.top = '0';
+                    this.style.outline = '3px solid #ff0';
+                    this.style.outlineOffset = '2px';
+                    this.style.zIndex = '100002';
+                });
+
+                link.addEventListener('blur', function() {
+                    this.style.top = '-100px';
+                });
+
+                if (target && !target.startsWith('#')) {
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        var targetElement = document.querySelector(target);
+                        if (targetElement) {
+                            targetElement.setAttribute('tabindex', '-1');
+                            targetElement.focus();
+                            targetElement.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    });
+                }
+
+                return link;
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', addEnhancedSkipLinks);
+            } else {
+                addEnhancedSkipLinks();
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'add_enhanced_skip_navigation', 1);
+}
+
+// ============================================================================
+// FIX #18: Google Map Footer Accessibility
+// ============================================================================
+
+if (!function_exists('fix_google_map_accessibility')) {
+    function fix_google_map_accessibility() {
+        ?>
+        <script>
+        (function() {
+            function fixGoogleMaps() {
+                try {
+                    // Find all iframes that contain Google Maps
+                    var iframes = document.querySelectorAll('iframe');
+
+                    iframes.forEach(function(iframe) {
+                        var src = iframe.getAttribute('src') || '';
+
+                        // Check if it's a Google Map
+                        if (src.includes('google.com/maps') || src.includes('maps.google.com')) {
+                            // Check if iframe already has proper accessibility attributes
+                            if (!iframe.getAttribute('title') && !iframe.getAttribute('aria-label')) {
+                                // Try to find context from nearby elements
+                                var mapLabel = 'Google Map';
+
+                                // Look for address or location info near the map
+                                var footer = iframe.closest('footer, .footer, .fl-page-footer, [role="contentinfo"]');
+                                if (footer) {
+                                    // Look for address info
+                                    var addressLink = footer.querySelector('a[href*="maps.google.com"], a[href*="google.com/maps"]');
+                                    if (addressLink) {
+                                        var addressText = addressLink.textContent.trim();
+                                        if (addressText) {
+                                            mapLabel = 'Google Map showing ' + addressText;
+                                        }
+                                    }
+
+                                    // Look for any nearby text that might describe location
+                                    if (mapLabel === 'Google Map') {
+                                        var nearbyText = footer.querySelector('p, .address, .location');
+                                        if (nearbyText) {
+                                            var locationText = nearbyText.textContent.trim();
+                                            if (locationText && locationText.length < 150) {
+                                                mapLabel = 'Google Map showing ' + locationText.split('\n')[0];
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Add accessibility attributes
+                                iframe.setAttribute('title', mapLabel);
+                                iframe.setAttribute('aria-label', mapLabel);
+
+                                // Make it properly focusable
+                                if (!iframe.getAttribute('tabindex')) {
+                                    iframe.setAttribute('tabindex', '0');
+                                }
+
+                                console.log('FIX #18: Added accessibility to Google Map:', mapLabel);
+                            }
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('Google Map accessibility error:', e);
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixGoogleMaps);
+            } else {
+                fixGoogleMaps();
+            }
+
+            // Re-run after page fully loads
+            window.addEventListener('load', fixGoogleMaps);
+
+            // Watch for dynamically loaded maps
+            if (window.MutationObserver) {
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                            setTimeout(fixGoogleMaps, 500);
+                        }
+                    });
+                });
+
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_google_map_accessibility');
+}
+
+// ============================================================================
+// FIX #19: HR Page Button Group Keyboard Navigation
+// ============================================================================
+
+if (!function_exists('fix_hr_button_group_navigation')) {
+    function fix_hr_button_group_navigation() {
+        ?>
+        <script>
+        (function() {
+            function fixButtonGroupNav() {
+                try {
+                    // Find button group modules on HR page
+                    var buttonGroups = document.querySelectorAll('.fl-module-button-group, .fl-button-group, [class*="button-group"]');
+
+                    buttonGroups.forEach(function(group) {
+                        // Add proper ARIA role
+                        if (!group.getAttribute('role')) {
+                            group.setAttribute('role', 'group');
+                            group.setAttribute('aria-label', 'Button group');
+                        }
+
+                        // Ensure button group is properly separated from content
+                        // Add a landmark region if it's at the top of the page
+                        var isNearTop = group.getBoundingClientRect().top < window.innerHeight / 2;
+
+                        if (isNearTop && !group.closest('[role="navigation"]')) {
+                            // Wrap in navigation landmark if not already in one
+                            var nav = document.createElement('nav');
+                            nav.setAttribute('aria-label', 'Page navigation');
+                            nav.style.cssText = 'margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0;';
+
+                            // Move button group into nav
+                            group.parentNode.insertBefore(nav, group);
+                            nav.appendChild(group);
+
+                            console.log('FIX #19: Wrapped button group in navigation landmark');
+                        }
+
+                        // Make sure all buttons are keyboard accessible
+                        var buttons = group.querySelectorAll('a, button, .fl-button');
+                        buttons.forEach(function(btn, index) {
+                            // Ensure proper tab order
+                            if (!btn.getAttribute('tabindex') || btn.getAttribute('tabindex') === '-1') {
+                                btn.setAttribute('tabindex', '0');
+                            }
+
+                            // Add aria-label if button only has icon
+                            if (!btn.getAttribute('aria-label') && btn.textContent.trim() === '') {
+                                var icon = btn.querySelector('[class*="fa-"], [class*="icon-"], i');
+                                if (icon) {
+                                    btn.setAttribute('aria-label', 'Button ' + (index + 1));
+                                }
+                            }
+                        });
+
+                        // Add visual separation marker for keyboard users
+                        var separator = document.createElement('div');
+                        separator.setAttribute('role', 'separator');
+                        separator.style.cssText = 'height: 2px; background: transparent; margin: 20px 0; outline: none;';
+                        separator.setAttribute('tabindex', '-1');
+
+                        if (group.nextSibling) {
+                            group.parentNode.insertBefore(separator, group.nextSibling);
+                        } else {
+                            group.parentNode.appendChild(separator);
+                        }
+
+                        console.log('FIX #19: Enhanced button group keyboard navigation');
+                    });
+
+                } catch (e) {
+                    console.error('Button group navigation error:', e);
+                }
+            }
+
+            // Only run on HR page (check URL or page title)
+            var isHRPage = window.location.href.toLowerCase().includes('human-resource') ||
+                          window.location.href.toLowerCase().includes('hr') ||
+                          document.title.toLowerCase().includes('human resource');
+
+            if (isHRPage || document.querySelector('.fl-module-button-group')) {
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', fixButtonGroupNav);
+                } else {
+                    fixButtonGroupNav();
+                }
+
+                window.addEventListener('load', fixButtonGroupNav);
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_hr_button_group_navigation');
+}
+
+// ============================================================================
+// FIX #20: Community Schools Page Graphic Accessibility
+// ============================================================================
+
+if (!function_exists('fix_community_schools_graphics')) {
+    function fix_community_schools_graphics() {
+        ?>
+        <script>
+        (function() {
+            function fixCommunitySchoolsGraphics() {
+                try {
+                    // Check if we're on Community Schools page
+                    var isCommunityPage = window.location.href.toLowerCase().includes('community-school') ||
+                                         document.title.toLowerCase().includes('community school');
+
+                    if (!isCommunityPage && !document.querySelector('.fl-row-content-wrap')) {
+                        return; // Not the right page
+                    }
+
+                    // Find all two-column rows
+                    var rows = document.querySelectorAll('.fl-row, .fl-row-content-wrap');
+
+                    rows.forEach(function(row) {
+                        // Check if this is a two-column layout
+                        var columns = row.querySelectorAll('.fl-col, .fl-module-content');
+
+                        if (columns.length >= 2) {
+                            // Find graphics in any column
+                            columns.forEach(function(column, colIndex) {
+                                // Look for images, icons, or photo modules without proper alt text
+                                var graphics = column.querySelectorAll('img, .fl-photo, .fl-module-photo, svg, [role="img"]');
+
+                                graphics.forEach(function(graphic) {
+                                    // Check if it's purely decorative or needs description
+                                    var hasAlt = false;
+
+                                    if (graphic.tagName === 'IMG') {
+                                        hasAlt = graphic.getAttribute('alt') && graphic.getAttribute('alt').trim() !== '';
+                                    } else if (graphic.tagName === 'SVG') {
+                                        hasAlt = graphic.getAttribute('aria-label') || graphic.querySelector('title');
+                                    }
+
+                                    if (!hasAlt) {
+                                        // Try to find context from nearby text
+                                        var context = '';
+
+                                        // Look in same column
+                                        var textInColumn = column.querySelector('h1, h2, h3, p, .fl-heading-text');
+                                        if (textInColumn) {
+                                            context = textInColumn.textContent.trim().substring(0, 100);
+                                        }
+
+                                        // Look in adjacent column
+                                        if (!context && colIndex === 1) {
+                                            // This is right column, look in left
+                                            var leftCol = columns[0];
+                                            var leftText = leftCol.querySelector('h1, h2, h3, p, .fl-heading-text');
+                                            if (leftText) {
+                                                context = leftText.textContent.trim().substring(0, 100);
+                                            }
+                                        } else if (!context && colIndex === 0) {
+                                            // This is left column, look in right
+                                            var rightCol = columns[1];
+                                            var rightText = rightCol.querySelector('h1, h2, h3, p, .fl-heading-text');
+                                            if (rightText) {
+                                                context = rightText.textContent.trim().substring(0, 100);
+                                            }
+                                        }
+
+                                        // Add appropriate alt text based on context
+                                        var altText = context ?
+                                            'Graphic related to: ' + context :
+                                            'Community Schools graphic';
+
+                                        if (graphic.tagName === 'IMG') {
+                                            graphic.setAttribute('alt', altText);
+                                            console.log('FIX #20: Added alt text to graphic:', altText);
+                                        } else if (graphic.tagName === 'SVG') {
+                                            graphic.setAttribute('role', 'img');
+                                            graphic.setAttribute('aria-label', altText);
+                                            console.log('FIX #20: Added aria-label to SVG:', altText);
+                                        } else {
+                                            // For other elements, add aria-label
+                                            graphic.setAttribute('aria-label', altText);
+                                            console.log('FIX #20: Added aria-label to graphic element:', altText);
+                                        }
+
+                                        // Make sure screen readers announce it
+                                        if (graphic.getAttribute('aria-hidden') === 'true') {
+                                            graphic.removeAttribute('aria-hidden');
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('Community Schools graphics error:', e);
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixCommunitySchoolsGraphics);
+            } else {
+                fixCommunitySchoolsGraphics();
+            }
+
+            window.addEventListener('load', fixCommunitySchoolsGraphics);
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_community_schools_graphics');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -1145,7 +1615,7 @@ if (!function_exists('fix_event_calendar_accessibility')) {
  *
  * ALL FIXES INCLUDED:
  * 1. ARIA Landmarks (banner, navigation, main, contentinfo)
- * 2. Skip Navigation Link
+ * 2. Skip Navigation Link (Enhanced with fallback)
  * 3. Language Attribute
  * 4. Search Widget Accessibility
  * 5. Silent Video Accessibility
@@ -1159,7 +1629,11 @@ if (!function_exists('fix_event_calendar_accessibility')) {
  * 13. Placeholder Image Alt Text (Team/Staff Pages)
  * 14. PDF Link Accessibility
  * 15. Remove Redundant Title Attributes
- * 16. Event Calendar Accessibility ⭐ NEW!
+ * 16. Event Calendar Accessibility
+ * 17. Enhanced Skip Navigation with Multiple Options ⭐ NEW!
+ * 18. Google Map Footer Accessibility ⭐ NEW!
+ * 19. HR Page Button Group Keyboard Navigation ⭐ NEW!
+ * 20. Community Schools Page Graphic Accessibility ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
