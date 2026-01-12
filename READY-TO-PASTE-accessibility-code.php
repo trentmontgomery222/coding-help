@@ -122,22 +122,33 @@ if (!function_exists('add_skip_navigation_fallback')) {
                     e.preventDefault();
 
                     // Try to find main content area in order of preference
-                    // Breadcrumbs are a great skip target - they're at the start of main content
-                    var mainContent = document.querySelector('.breadcrumb, .breadcrumbs, .fl-breadcrumb, [aria-label*="readcrumb"]') ||
-                                     document.querySelector('#main-content') ||
+                    var mainContent = document.querySelector('.fl-page-content') ||
+                                     document.querySelector('.site-content') ||
                                      document.querySelector('main') ||
                                      document.querySelector('[role="main"]') ||
-                                     document.querySelector('.fl-page-content') ||
-                                     document.querySelector('.site-content') ||
+                                     document.querySelector('#main-content') ||
                                      document.querySelector('#content') ||
                                      document.querySelector('article') ||
-                                     document.querySelector('.entry-content');
+                                     document.querySelector('.entry-content') ||
+                                     document.querySelector('.page-content');
 
                     if (mainContent) {
-                        // Make it focusable
+                        // Make it focusable and scroll to it
                         mainContent.setAttribute('tabindex', '-1');
+
+                        // Force focus
                         mainContent.focus();
-                        mainContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                        // Scroll into view
+                        var rect = mainContent.getBoundingClientRect();
+                        var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                        var targetPosition = rect.top + scrollTop - 20; // 20px offset from top
+
+                        window.scrollTo({
+                            top: targetPosition,
+                            behavior: 'smooth'
+                        });
+
                         console.log('FIX #2: Skipped to main content at', mainContent.className || mainContent.tagName);
                     } else {
                         console.warn('FIX #2: Could not find main content area to skip to');
@@ -1226,15 +1237,22 @@ if (!function_exists('add_enhanced_skip_navigation')) {
                         var skipHeader = createSkipLink(null, 'Skip past header');
                         skipHeader.addEventListener('click', function(e) {
                             e.preventDefault();
-                            // Try breadcrumbs first, then main content areas
-                            var main = document.querySelector('.breadcrumb, .breadcrumbs, .fl-breadcrumb, [aria-label*="readcrumb"]') ||
+                            var main = document.querySelector('.fl-page-content') ||
+                                      document.querySelector('.site-content') ||
                                       document.querySelector('main, [role="main"], #main-content') ||
-                                      document.querySelector('.fl-page-content') ||
                                       document.querySelector('article');
                             if (main) {
                                 main.setAttribute('tabindex', '-1');
                                 main.focus();
-                                main.scrollIntoView({ behavior: 'smooth' });
+
+                                var rect = main.getBoundingClientRect();
+                                var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                                var targetPosition = rect.top + scrollTop - 20;
+
+                                window.scrollTo({
+                                    top: targetPosition,
+                                    behavior: 'smooth'
+                                });
                             }
                         });
                         container.appendChild(skipHeader);
@@ -1615,11 +1633,81 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
                                     console.log('FIX #21: Opened dropdown on keyboard focus');
                                 });
 
+                                // Arrow key navigation for main menu items
+                                link.addEventListener('keydown', function(e) {
+                                    var allTopLinks = Array.from(nav.querySelectorAll(':scope > ul > li > a, :scope > li > a'));
+                                    var currentIndex = allTopLinks.indexOf(link);
+
+                                    if (e.key === 'ArrowRight') {
+                                        e.preventDefault();
+                                        // Move to next menu item
+                                        var nextIndex = (currentIndex + 1) % allTopLinks.length;
+                                        allTopLinks[nextIndex].focus();
+                                    } else if (e.key === 'ArrowLeft') {
+                                        e.preventDefault();
+                                        // Move to previous menu item
+                                        var prevIndex = (currentIndex - 1 + allTopLinks.length) % allTopLinks.length;
+                                        allTopLinks[prevIndex].focus();
+                                    } else if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        // Open dropdown and focus first item
+                                        menuItem.classList.add('keyboard-focus');
+                                        var firstSubmenuLink = submenu.querySelector('a');
+                                        if (firstSubmenuLink) {
+                                            firstSubmenuLink.focus();
+                                        }
+                                    } else if (e.key === 'Escape') {
+                                        menuItem.classList.remove('keyboard-focus');
+                                    }
+                                });
+
                                 // Keep dropdown open when focusing on submenu items
                                 var submenuLinks = submenu.querySelectorAll('a');
-                                submenuLinks.forEach(function(sublink) {
+                                submenuLinks.forEach(function(sublink, index) {
                                     sublink.addEventListener('focus', function() {
                                         menuItem.classList.add('keyboard-focus');
+                                    });
+
+                                    // Arrow key navigation within submenus
+                                    sublink.addEventListener('keydown', function(e) {
+                                        var submenuLinksArray = Array.from(submenuLinks);
+
+                                        if (e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            // Move to next submenu item
+                                            if (index < submenuLinksArray.length - 1) {
+                                                submenuLinksArray[index + 1].focus();
+                                            }
+                                        } else if (e.key === 'ArrowUp') {
+                                            e.preventDefault();
+                                            // Move to previous submenu item or back to parent
+                                            if (index > 0) {
+                                                submenuLinksArray[index - 1].focus();
+                                            } else {
+                                                link.focus();
+                                                menuItem.classList.remove('keyboard-focus');
+                                            }
+                                        } else if (e.key === 'Escape') {
+                                            e.preventDefault();
+                                            link.focus();
+                                            menuItem.classList.remove('keyboard-focus');
+                                        } else if (e.key === 'ArrowRight') {
+                                            e.preventDefault();
+                                            // Close this dropdown and move to next top-level item
+                                            menuItem.classList.remove('keyboard-focus');
+                                            var allTopLinks = Array.from(nav.querySelectorAll(':scope > ul > li > a, :scope > li > a'));
+                                            var parentIndex = allTopLinks.indexOf(link);
+                                            var nextIndex = (parentIndex + 1) % allTopLinks.length;
+                                            allTopLinks[nextIndex].focus();
+                                        } else if (e.key === 'ArrowLeft') {
+                                            e.preventDefault();
+                                            // Close this dropdown and move to previous top-level item
+                                            menuItem.classList.remove('keyboard-focus');
+                                            var allTopLinks = Array.from(nav.querySelectorAll(':scope > ul > li > a, :scope > li > a'));
+                                            var parentIndex = allTopLinks.indexOf(link);
+                                            var prevIndex = (parentIndex - 1 + allTopLinks.length) % allTopLinks.length;
+                                            allTopLinks[prevIndex].focus();
+                                        }
                                     });
 
                                     sublink.addEventListener('blur', function() {
