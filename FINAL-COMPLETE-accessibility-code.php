@@ -1,4 +1,3 @@
-<?php
 /**
  * COMPLETE WordPress Accessibility Fixes - FINAL VERSION
  *
@@ -123,19 +122,25 @@ if (!function_exists('add_skip_navigation_fallback')) {
                     e.preventDefault();
 
                     // Try to find main content area in order of preference
-                    var mainContent = document.querySelector('#main-content') ||
+                    // Breadcrumbs are a great skip target - they're at the start of main content
+                    var mainContent = document.querySelector('.breadcrumb, .breadcrumbs, .fl-breadcrumb, [aria-label*="readcrumb"]') ||
+                                     document.querySelector('#main-content') ||
                                      document.querySelector('main') ||
                                      document.querySelector('[role="main"]') ||
                                      document.querySelector('.fl-page-content') ||
                                      document.querySelector('.site-content') ||
-                                     document.querySelector('#content');
+                                     document.querySelector('#content') ||
+                                     document.querySelector('article') ||
+                                     document.querySelector('.entry-content');
 
                     if (mainContent) {
                         // Make it focusable
                         mainContent.setAttribute('tabindex', '-1');
                         mainContent.focus();
                         mainContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        console.log('FIX #2: Skipped to main content');
+                        console.log('FIX #2: Skipped to main content at', mainContent.className || mainContent.tagName);
+                    } else {
+                        console.warn('FIX #2: Could not find main content area to skip to');
                     }
                 });
 
@@ -1221,7 +1226,11 @@ if (!function_exists('add_enhanced_skip_navigation')) {
                         var skipHeader = createSkipLink(null, 'Skip past header');
                         skipHeader.addEventListener('click', function(e) {
                             e.preventDefault();
-                            var main = document.querySelector('main, [role="main"], #main-content');
+                            // Try breadcrumbs first, then main content areas
+                            var main = document.querySelector('.breadcrumb, .breadcrumbs, .fl-breadcrumb, [aria-label*="readcrumb"]') ||
+                                      document.querySelector('main, [role="main"], #main-content') ||
+                                      document.querySelector('.fl-page-content') ||
+                                      document.querySelector('article');
                             if (main) {
                                 main.setAttribute('tabindex', '-1');
                                 main.focus();
