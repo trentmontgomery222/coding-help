@@ -1405,31 +1405,23 @@ if (!function_exists('fix_hr_button_group_navigation')) {
         (function() {
             function fixButtonGroupNav() {
                 try {
+                    // Only run on HR page (check URL or page title)
+                    var isHRPage = window.location.href.toLowerCase().includes('human-resource') ||
+                                  window.location.href.toLowerCase().includes('hr') ||
+                                  document.title.toLowerCase().includes('human resource');
+
+                    if (!isHRPage) {
+                        return; // Exit if not HR page
+                    }
+
                     // Find button group modules on HR page
                     var buttonGroups = document.querySelectorAll('.fl-module-button-group, .fl-button-group, [class*="button-group"]');
 
                     buttonGroups.forEach(function(group) {
-                        // Add proper ARIA role
+                        // Add proper ARIA role for screen readers
                         if (!group.getAttribute('role')) {
                             group.setAttribute('role', 'group');
                             group.setAttribute('aria-label', 'Button group');
-                        }
-
-                        // Ensure button group is properly separated from content
-                        // Add a landmark region if it's at the top of the page
-                        var isNearTop = group.getBoundingClientRect().top < window.innerHeight / 2;
-
-                        if (isNearTop && !group.closest('[role="navigation"]')) {
-                            // Wrap in navigation landmark if not already in one
-                            var nav = document.createElement('nav');
-                            nav.setAttribute('aria-label', 'Page navigation');
-                            nav.style.cssText = 'margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #e0e0e0;';
-
-                            // Move button group into nav
-                            group.parentNode.insertBefore(nav, group);
-                            nav.appendChild(group);
-
-                            console.log('FIX #19: Wrapped button group in navigation landmark');
                         }
 
                         // Make sure all buttons are keyboard accessible
@@ -1449,18 +1441,6 @@ if (!function_exists('fix_hr_button_group_navigation')) {
                             }
                         });
 
-                        // Add visual separation marker for keyboard users
-                        var separator = document.createElement('div');
-                        separator.setAttribute('role', 'separator');
-                        separator.style.cssText = 'height: 2px; background: transparent; margin: 20px 0; outline: none;';
-                        separator.setAttribute('tabindex', '-1');
-
-                        if (group.nextSibling) {
-                            group.parentNode.insertBefore(separator, group.nextSibling);
-                        } else {
-                            group.parentNode.appendChild(separator);
-                        }
-
                         console.log('FIX #19: Enhanced button group keyboard navigation');
                     });
 
@@ -1469,20 +1449,13 @@ if (!function_exists('fix_hr_button_group_navigation')) {
                 }
             }
 
-            // Only run on HR page (check URL or page title)
-            var isHRPage = window.location.href.toLowerCase().includes('human-resource') ||
-                          window.location.href.toLowerCase().includes('hr') ||
-                          document.title.toLowerCase().includes('human resource');
-
-            if (isHRPage || document.querySelector('.fl-module-button-group')) {
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', fixButtonGroupNav);
-                } else {
-                    fixButtonGroupNav();
-                }
-
-                window.addEventListener('load', fixButtonGroupNav);
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixButtonGroupNav);
+            } else {
+                fixButtonGroupNav();
             }
+
+            window.addEventListener('load', fixButtonGroupNav);
         })();
         </script>
         <?php
