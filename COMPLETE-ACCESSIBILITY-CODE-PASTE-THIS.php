@@ -1567,6 +1567,128 @@ if (!function_exists('fix_community_schools_graphics')) {
     add_action('wp_footer', 'fix_community_schools_graphics');
 }
 
+// ============================================================================
+// FIX #21: Keyboard-Accessible Dropdown Menus
+// ============================================================================
+
+if (!function_exists('fix_dropdown_keyboard_navigation')) {
+    function fix_dropdown_keyboard_navigation() {
+        ?>
+        <script>
+        (function() {
+            function fixDropdownMenus() {
+                try {
+                    // Find all navigation menus
+                    var navMenus = document.querySelectorAll('nav, .fl-page-nav, .site-navigation, [role="navigation"], .menu, ul.navbar-nav');
+
+                    navMenus.forEach(function(nav) {
+                        // Find menu items with dropdowns/submenus
+                        var menuItems = nav.querySelectorAll('li.menu-item-has-children, li.fl-has-submenu, li.dropdown, li:has(> ul), li:has(> .sub-menu)');
+
+                        menuItems.forEach(function(menuItem) {
+                            var link = menuItem.querySelector('a');
+                            var submenu = menuItem.querySelector('ul, .sub-menu, .dropdown-menu');
+
+                            if (link && submenu) {
+                                // Show dropdown on focus
+                                link.addEventListener('focus', function() {
+                                    // Close other open dropdowns
+                                    var openMenus = nav.querySelectorAll('li.menu-item-has-children.keyboard-focus, li.fl-has-submenu.keyboard-focus, li.dropdown.keyboard-focus');
+                                    openMenus.forEach(function(item) {
+                                        if (item !== menuItem) {
+                                            item.classList.remove('keyboard-focus');
+                                        }
+                                    });
+
+                                    // Open this dropdown
+                                    menuItem.classList.add('keyboard-focus');
+                                    console.log('FIX #21: Opened dropdown on keyboard focus');
+                                });
+
+                                // Keep dropdown open when focusing on submenu items
+                                var submenuLinks = submenu.querySelectorAll('a');
+                                submenuLinks.forEach(function(sublink) {
+                                    sublink.addEventListener('focus', function() {
+                                        menuItem.classList.add('keyboard-focus');
+                                    });
+
+                                    sublink.addEventListener('blur', function() {
+                                        // Delay to check if focus moved to another submenu item
+                                        setTimeout(function() {
+                                            if (!menuItem.contains(document.activeElement)) {
+                                                menuItem.classList.remove('keyboard-focus');
+                                            }
+                                        }, 100);
+                                    });
+                                });
+
+                                // Close dropdown when focus leaves
+                                link.addEventListener('blur', function() {
+                                    setTimeout(function() {
+                                        // Only close if focus didn't move to submenu
+                                        if (!menuItem.contains(document.activeElement)) {
+                                            menuItem.classList.remove('keyboard-focus');
+                                        }
+                                    }, 100);
+                                });
+                            }
+                        });
+                    });
+
+                    console.log('FIX #21: Enhanced dropdown menu keyboard navigation');
+
+                } catch (e) {
+                    console.error('Dropdown keyboard navigation error:', e);
+                }
+            }
+
+            // Add CSS to show dropdown when keyboard-focus class is added
+            function addDropdownFocusCSS() {
+                var style = document.createElement('style');
+                style.textContent = `
+                    /* Show dropdown menus on keyboard focus */
+                    li.menu-item-has-children.keyboard-focus > ul,
+                    li.menu-item-has-children.keyboard-focus > .sub-menu,
+                    li.fl-has-submenu.keyboard-focus > ul,
+                    li.fl-has-submenu.keyboard-focus > .sub-menu,
+                    li.dropdown.keyboard-focus > .dropdown-menu,
+                    li.keyboard-focus > ul,
+                    li.keyboard-focus > .sub-menu {
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        pointer-events: auto !important;
+                    }
+
+                    /* Ensure proper z-index for dropdowns */
+                    li.keyboard-focus {
+                        position: relative;
+                        z-index: 9999;
+                    }
+                `;
+                document.head.appendChild(style);
+                console.log('FIX #21: Added dropdown focus CSS');
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    addDropdownFocusCSS();
+                    fixDropdownMenus();
+                });
+            } else {
+                addDropdownFocusCSS();
+                fixDropdownMenus();
+            }
+
+            // Re-run after page fully loads (for dynamically loaded menus)
+            window.addEventListener('load', fixDropdownMenus);
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'fix_dropdown_keyboard_navigation');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -1591,10 +1713,11 @@ if (!function_exists('fix_community_schools_graphics')) {
  * 14. PDF Link Accessibility
  * 15. Remove Redundant Title Attributes
  * 16. Event Calendar Accessibility
- * 17. Enhanced Skip Navigation with Multiple Options ⭐ NEW!
- * 18. Google Map Footer Accessibility ⭐ NEW!
- * 19. Button Group Keyboard Navigation (All Pages) ⭐ NEW!
- * 20. Community Schools Page Graphic Accessibility ⭐ NEW!
+ * 17. Enhanced Skip Navigation with Multiple Options
+ * 18. Google Map Footer Accessibility
+ * 19. Button Group Keyboard Navigation (All Pages)
+ * 20. Community Schools Page Graphic Accessibility
+ * 21. Keyboard-Accessible Dropdown Menus ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
