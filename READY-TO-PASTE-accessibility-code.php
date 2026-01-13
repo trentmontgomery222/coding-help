@@ -1806,70 +1806,6 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
     add_action('wp_footer', 'fix_dropdown_keyboard_navigation');
 }
 
-// ============================================================================
-// FIX #22: Fix ARIA Menu Structure for Website Navigation
-// ============================================================================
-// WCAG Reference: 4.1.2 Name, Role, Value (Level A)
-// Issue: Beaver Builder uses role="menu" but missing proper child roles
-// When using role="menu", <li> elements need role="none" or role="presentation"
-// This completes the ARIA menu structure without breaking theme CSS
-// ============================================================================
-
-if (!function_exists('fix_menu_aria_structure')) {
-    function fix_menu_aria_structure() {
-        ?>
-        <script>
-        (function() {
-            function fixMenuStructure() {
-                try {
-                    // Find all menus with role="menu"
-                    var menus = document.querySelectorAll('ul[role="menu"], ul[role="menubar"]');
-
-                    menus.forEach(function(menu) {
-                        // Add role="none" to all direct <li> children
-                        // This removes list semantics which is required for role="menu"
-                        var listItems = menu.querySelectorAll(':scope > li');
-                        listItems.forEach(function(li) {
-                            if (!li.getAttribute('role')) {
-                                li.setAttribute('role', 'none');
-                                console.log('FIX #22: Added role="none" to menu list item');
-                            }
-                        });
-
-                        // Fix submenu list items too
-                        var submenus = menu.querySelectorAll('ul');
-                        submenus.forEach(function(submenu) {
-                            var subItems = submenu.querySelectorAll(':scope > li');
-                            subItems.forEach(function(li) {
-                                if (!li.getAttribute('role')) {
-                                    li.setAttribute('role', 'none');
-                                }
-                            });
-                        });
-                    });
-
-                    console.log('FIX #22: Fixed ARIA menu structure');
-
-                } catch (e) {
-                    console.error('Fix menu structure error:', e);
-                }
-            }
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', fixMenuStructure);
-            } else {
-                fixMenuStructure();
-            }
-
-            // Re-run after page fully loads
-            window.addEventListener('load', fixMenuStructure);
-        })();
-        </script>
-        <?php
-    }
-    add_action('wp_footer', 'fix_menu_aria_structure');
-}
-
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -1899,7 +1835,6 @@ if (!function_exists('fix_menu_aria_structure')) {
  * 19. Button Group Keyboard Navigation (All Pages)
  * 20. Community Schools Page Graphic Accessibility
  * 21. Keyboard-Accessible Dropdown Menus with Arrow Key Support
- * 22. Fix ARIA Menu Structure (Add role="none" to list items) ⭐ NEW!
  *
  * TESTING:
  * - WAVE: Should show 0 errors (alerts are false positives)
