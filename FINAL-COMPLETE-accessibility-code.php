@@ -264,8 +264,12 @@ if (!function_exists('fix_silent_video_accessibility')) {
                             var description = video.getAttribute('data-title') ||
                                             video.getAttribute('data-description') ||
                                             'Background video (no audio)';
-                            video.setAttribute('aria-label', description);
-                            video.setAttribute('title', description);
+
+                            // Only add aria-label to actual video elements, not wrapper divs
+                            if (video.tagName === 'VIDEO') {
+                                video.setAttribute('aria-label', description);
+                                video.setAttribute('title', description);
+                            }
                         }
                     });
                 } catch (e) {
@@ -312,6 +316,10 @@ if (!function_exists('fix_smart_slider_accessibility')) {
                         if (slide.getAttribute('aria-hidden') === 'true') {
                             var sliderContainer = slide.closest('.n2-ss-slider, .smartslider');
                             if (sliderContainer && !sliderContainer.getAttribute('aria-label')) {
+                                // Add role="region" so aria-label is allowed
+                                if (!sliderContainer.getAttribute('role')) {
+                                    sliderContainer.setAttribute('role', 'region');
+                                }
                                 sliderContainer.setAttribute('aria-label', 'Image slider');
                             }
                         }
