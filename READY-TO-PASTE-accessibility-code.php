@@ -21,8 +21,11 @@ if (!function_exists('add_accessibility_landmarks')) {
         (function() {
             function addLandmarks() {
                 try {
-                    // Add main landmark to primary content area ONLY if no main element exists
-                    if (!document.querySelector('main') && !document.querySelector('[role="main"]')) {
+                    // Check for existing main landmark (element or role)
+                    var existingMain = document.querySelector('main, [role="main"]');
+
+                    if (!existingMain) {
+                        // No main landmark exists, create one
                         var contentArea = document.querySelector('.fl-page-content') ||
                                          document.querySelector('.site-content') ||
                                          document.querySelector('#content') ||
@@ -38,6 +41,14 @@ if (!function_exists('add_accessibility_landmarks')) {
                                 mainWrapper.appendChild(parent.firstChild);
                             }
                             console.log('FIX #1: Added main landmark');
+                        }
+                    } else {
+                        // Main landmark already exists, ensure it has an ID for skip navigation
+                        if (!existingMain.id) {
+                            existingMain.id = 'main-content';
+                            console.log('FIX #1: Added ID to existing main landmark');
+                        } else {
+                            console.log('FIX #1: Main landmark already exists with ID:', existingMain.id);
                         }
                     }
 
@@ -65,7 +76,7 @@ if (!function_exists('add_accessibility_landmarks')) {
         </script>
         <?php
     }
-    add_action('wp_head', 'add_accessibility_landmarks', 999);
+    add_action('wp_footer', 'add_accessibility_landmarks', 1);
 }
 
 // ============================================================================
