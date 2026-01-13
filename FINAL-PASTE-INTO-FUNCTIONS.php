@@ -345,16 +345,27 @@ if (!function_exists('fix_silent_video_accessibility')) {
                 try {
                     var videos = document.querySelectorAll('video[muted]');
                     videos.forEach(function(video) {
-                        if (!video.getAttribute('aria-label')) {
+                        // Background videos are decorative - hide from screen readers
+                        if (video.classList.contains('background-video') ||
+                            video.classList.contains('n2-ss-slide-background-video') ||
+                            video.hasAttribute('data-mode')) {
+                            // Mark as decorative
+                            video.setAttribute('aria-hidden', 'true');
+                            video.setAttribute('role', 'presentation');
+                            // Remove any aria-label (not allowed on role="presentation")
+                            video.removeAttribute('aria-label');
+                            // Keep title for tooltip only
+                            if (!video.getAttribute('title')) {
+                                video.setAttribute('title', 'Background video (no audio)');
+                            }
+                            console.log('FIX #5: Marked background video as decorative');
+                        } else if (video.tagName === 'VIDEO' && !video.getAttribute('aria-label')) {
+                            // Non-background videos - these might need labels
                             var description = video.getAttribute('data-title') ||
                                             video.getAttribute('data-description') ||
-                                            'Background video (no audio)';
-
-                            // Only add aria-label to actual video elements, not wrapper divs
-                            if (video.tagName === 'VIDEO') {
-                                video.setAttribute('aria-label', description);
-                                video.setAttribute('title', description);
-                            }
+                                            'Video (no audio)';
+                            video.setAttribute('title', description);
+                            console.log('FIX #5: Added title to video');
                         }
                     });
                 } catch (e) {
@@ -1433,6 +1444,12 @@ if (!function_exists('fix_google_map_accessibility')) {
 
                         // Check if it's a Google Map
                         if (src.includes('google.com/maps') || src.includes('maps.google.com')) {
+                            // Remove aria-hidden if present (conflicts with focusable iframe)
+                            if (iframe.getAttribute('aria-hidden') === 'true') {
+                                iframe.removeAttribute('aria-hidden');
+                                console.log('FIX #18: Removed aria-hidden from focusable Google Map');
+                            }
+
                             // Check if iframe already has proper accessibility attributes
                             if (!iframe.getAttribute('title') && !iframe.getAttribute('aria-label')) {
                                 // Try to find context from nearby elements
