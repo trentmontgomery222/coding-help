@@ -1026,27 +1026,38 @@ if (!function_exists('fix_event_calendar_accessibility')) {
                         }
                     });
 
-                    // 3. Fix missing h1 heading - place BEFORE calendar, not inside
+                    // 3. Fix missing h1 heading - place directly above calendar filter bar
                     if (document.querySelector('.tribe-events') && !document.querySelector('h1')) {
                         var h1 = document.createElement('h1');
                         h1.textContent = 'District Calendar';
-                        h1.style.cssText = 'font-size: 2em; font-weight: bold; margin: 0 0 20px 0;';
+                        h1.style.cssText = 'font-size: 2em; font-weight: bold; margin: 0 0 20px 0; padding: 0;';
                         h1.id = 'calendar-page-heading';
 
-                        // Find the calendar container
-                        var calendarWrapper = document.querySelector('#tribe-events-pg-template') ||
-                                            document.querySelector('.tribe-events-pg-template');
+                        // Try to find the filter bar (top bar with search/filters)
+                        var filterBar = document.querySelector('.tribe-events-c-top-bar') ||
+                                       document.querySelector('.tribe-events-c-search') ||
+                                       document.querySelector('.tribe-events-header') ||
+                                       document.querySelector('.tribe-events-filters');
 
-                        if (calendarWrapper) {
-                            // Insert BEFORE the calendar wrapper
-                            calendarWrapper.parentNode.insertBefore(h1, calendarWrapper);
-                            console.log('FIX #16: Added h1 before calendar');
+                        if (filterBar) {
+                            // Insert DIRECTLY BEFORE the filter bar
+                            filterBar.parentNode.insertBefore(h1, filterBar);
+                            console.log('FIX #16: Added "District Calendar" h1 directly above filter bar');
                         } else {
-                            // Fallback
-                            var main = document.querySelector('.fl-content') || document.querySelector('main');
-                            if (main) {
-                                main.insertBefore(h1, main.firstChild);
-                                console.log('FIX #16: Added h1 at top of main');
+                            // Fallback: insert before calendar wrapper
+                            var calendarWrapper = document.querySelector('#tribe-events-pg-template') ||
+                                                document.querySelector('.tribe-events-pg-template');
+
+                            if (calendarWrapper) {
+                                calendarWrapper.parentNode.insertBefore(h1, calendarWrapper);
+                                console.log('FIX #16: Added "District Calendar" h1 before calendar wrapper');
+                            } else {
+                                // Final fallback: top of main content area
+                                var main = document.querySelector('.fl-content') || document.querySelector('main');
+                                if (main) {
+                                    main.insertBefore(h1, main.firstChild);
+                                    console.log('FIX #16: Added "District Calendar" h1 at top of main');
+                                }
                             }
                         }
                     }
