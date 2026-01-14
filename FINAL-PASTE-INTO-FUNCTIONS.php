@@ -1395,10 +1395,18 @@ if (!function_exists('fix_google_map_accessibility')) {
             // Re-run after page fully loads
             window.addEventListener('load', fixGoogleMaps);
 
-            // Run again after a delay to catch Smush lazy loading changes
-            setTimeout(fixGoogleMaps, 1000);
-            setTimeout(fixGoogleMaps, 2000);
-            setTimeout(fixGoogleMaps, 3000);
+            // Aggressive retry strategy - run every 500ms for the first 10 seconds
+            // This catches Smush lazy loading no matter when it runs
+            var retryCount = 0;
+            var maxRetries = 20; // 20 retries × 500ms = 10 seconds
+            var retryInterval = setInterval(function() {
+                fixGoogleMaps();
+                retryCount++;
+                if (retryCount >= maxRetries) {
+                    clearInterval(retryInterval);
+                    console.log('FIX #18: Stopped continuous monitoring after 10 seconds');
+                }
+            }, 500);
 
             // Watch for dynamically loaded maps AND attribute changes
             if (window.MutationObserver) {
@@ -1411,11 +1419,17 @@ if (!function_exists('fix_google_map_accessibility')) {
                         }
                         // Check for attribute changes on iframes
                         if (mutation.type === 'attributes' && mutation.target.tagName === 'IFRAME') {
-                            shouldRerun = true;
+                            var iframe = mutation.target;
+                            var src = iframe.getAttribute('src') || iframe.getAttribute('data-src') || '';
+                            // Only trigger for Google Maps iframes
+                            if (src.includes('google.com/maps') || src.includes('maps.google.com')) {
+                                console.log('FIX #18: Detected Google Maps iframe attribute change');
+                                shouldRerun = true;
+                            }
                         }
                     });
                     if (shouldRerun) {
-                        setTimeout(fixGoogleMaps, 500);
+                        setTimeout(fixGoogleMaps, 100);
                     }
                 });
 
@@ -1423,7 +1437,7 @@ if (!function_exists('fix_google_map_accessibility')) {
                     childList: true,
                     subtree: true,
                     attributes: true,
-                    attributeFilter: ['aria-hidden', 'src', 'data-src']
+                    attributeFilter: ['aria-hidden', 'src', 'data-src', 'class']
                 });
             }
         })();
