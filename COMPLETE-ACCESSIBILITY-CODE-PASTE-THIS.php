@@ -1321,19 +1321,35 @@ if (!function_exists('fix_google_map_accessibility')) {
             // Re-run after page fully loads
             window.addEventListener('load', fixGoogleMaps);
 
-            // Watch for dynamically loaded maps
+            // Run again after a delay to catch Smush lazy loading changes
+            setTimeout(fixGoogleMaps, 1000);
+            setTimeout(fixGoogleMaps, 2000);
+            setTimeout(fixGoogleMaps, 3000);
+
+            // Watch for dynamically loaded maps AND attribute changes
             if (window.MutationObserver) {
                 var observer = new MutationObserver(function(mutations) {
+                    var shouldRerun = false;
                     mutations.forEach(function(mutation) {
+                        // Check for new nodes
                         if (mutation.addedNodes && mutation.addedNodes.length > 0) {
-                            setTimeout(fixGoogleMaps, 500);
+                            shouldRerun = true;
+                        }
+                        // Check for attribute changes on iframes
+                        if (mutation.type === 'attributes' && mutation.target.tagName === 'IFRAME') {
+                            shouldRerun = true;
                         }
                     });
+                    if (shouldRerun) {
+                        setTimeout(fixGoogleMaps, 500);
+                    }
                 });
 
                 observer.observe(document.body, {
                     childList: true,
-                    subtree: true
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['aria-hidden', 'src', 'data-src']
                 });
             }
         })();
