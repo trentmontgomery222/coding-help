@@ -1366,7 +1366,8 @@ if (!function_exists('fix_google_map_accessibility')) {
                     var iframes = document.querySelectorAll('iframe');
 
                     iframes.forEach(function(iframe) {
-                        var src = iframe.getAttribute('src') || '';
+                        // Check both src and data-src (for lazy-loaded iframes)
+                        var src = iframe.getAttribute('src') || iframe.getAttribute('data-src') || '';
 
                         // Check if it's a Google Map
                         if (src.includes('google.com/maps') || src.includes('maps.google.com')) {
@@ -1597,9 +1598,10 @@ if (!function_exists('fix_community_schools_graphics')) {
                                             graphic.setAttribute('aria-label', altText);
                                             console.log('FIX #20: Added aria-label to SVG:', altText);
                                         } else {
-                                            // For other elements, add aria-label
+                                            // For other elements (divs, etc), add role="img" first, then aria-label
+                                            graphic.setAttribute('role', 'img');
                                             graphic.setAttribute('aria-label', altText);
-                                            console.log('FIX #20: Added aria-label to graphic element:', altText);
+                                            console.log('FIX #20: Added role="img" and aria-label to graphic element:', altText);
                                         }
 
                                         // Make sure screen readers announce it
