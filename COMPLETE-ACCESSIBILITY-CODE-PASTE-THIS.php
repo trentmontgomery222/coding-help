@@ -80,123 +80,10 @@ if (!function_exists('add_accessibility_landmarks')) {
 }
 
 // ============================================================================
-// FIX #2: Skip Navigation Link (Enhanced)
+// FIX #2: Skip Navigation Link - REMOVED (Replaced by FIX #17)
 // ============================================================================
-
-if (!function_exists('add_skip_navigation')) {
-    function add_skip_navigation() {
-        ?>
-        <style>
-        .skip-link {
-            position: absolute;
-            top: -40px;
-            left: 0;
-            background: #000;
-            color: #fff;
-            padding: 8px 16px;
-            text-decoration: none;
-            z-index: 100000;
-            font-size: 14px;
-        }
-        .skip-link:focus {
-            top: 0;
-            outline: 2px solid #fff;
-            outline-offset: 2px;
-        }
-        </style>
-        <a href="#main-content" class="skip-link">Skip to main content</a>
-        <?php
-    }
-    add_action('wp_body_open', 'add_skip_navigation');
-}
-
-// Fallback if wp_body_open doesn't work
-if (!function_exists('add_skip_navigation_fallback')) {
-    function add_skip_navigation_fallback() {
-        ?>
-        <script>
-        (function() {
-            function addSkipLink() {
-                // Check if skip link already exists
-                if (document.querySelector('.skip-link')) {
-                    return;
-                }
-
-                var skipLink = document.createElement('a');
-                skipLink.href = '#main-content';
-                skipLink.className = 'skip-link';
-                skipLink.textContent = 'Skip to main content';
-                skipLink.style.cssText = 'position: absolute; top: -40px; left: 0; background: #000; color: #fff; padding: 8px 16px; text-decoration: none; z-index: 100000; font-size: 14px;';
-
-                // Handle click to skip to main content
-                skipLink.addEventListener('click', function(e) {
-                    e.preventDefault();
-
-                    // Try to find main content area in order of preference
-                    var mainContent = document.querySelector('.fl-page-content') ||
-                                     document.querySelector('.site-content') ||
-                                     document.querySelector('main') ||
-                                     document.querySelector('[role="main"]') ||
-                                     document.querySelector('#main-content') ||
-                                     document.querySelector('#content') ||
-                                     document.querySelector('article') ||
-                                     document.querySelector('.entry-content') ||
-                                     document.querySelector('.page-content');
-
-                    if (mainContent) {
-                        // Make it focusable and scroll to it
-                        mainContent.setAttribute('tabindex', '-1');
-
-                        // Force focus
-                        mainContent.focus();
-
-                        // Scroll into view
-                        var rect = mainContent.getBoundingClientRect();
-                        var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                        var targetPosition = rect.top + scrollTop - 20; // 20px offset from top
-
-                        window.scrollTo({
-                            top: targetPosition,
-                            behavior: 'smooth'
-                        });
-
-                        console.log('FIX #2: Skipped to main content at', mainContent.className || mainContent.tagName);
-                    } else {
-                        console.warn('FIX #2: Could not find main content area to skip to');
-                    }
-                });
-
-                skipLink.addEventListener('focus', function() {
-                    this.style.top = '0';
-                    this.style.outline = '2px solid #fff';
-                    this.style.outlineOffset = '2px';
-                });
-
-                skipLink.addEventListener('blur', function() {
-                    this.style.top = '-40px';
-                });
-
-                // Insert at the very beginning of body
-                if (document.body.firstChild) {
-                    document.body.insertBefore(skipLink, document.body.firstChild);
-                } else {
-                    document.body.appendChild(skipLink);
-                }
-
-                console.log('FIX #2: Added skip navigation link');
-            }
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', addSkipLink);
-            } else {
-                addSkipLink();
-            }
-        })();
-        </script>
-        <?php
-    }
-    add_action('wp_footer', 'add_skip_navigation_fallback', 1);
-}
+// FIX #17 provides enhanced skip navigation with multiple options
+// This fix was creating duplicate skip links, so it has been removed
 
 // ============================================================================
 // FIX #3: Language Attribute
@@ -1834,7 +1721,7 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
  *
  * ALL FIXES INCLUDED:
  * 1. ARIA Landmarks (banner, navigation, main, contentinfo)
- * 2. Skip Navigation Link (Enhanced with fallback)
+ * 2. Skip Navigation Link - REMOVED (consolidated into FIX #17)
  * 3. Language Attribute
  * 4. Search Widget Accessibility
  * 5. Silent Video Accessibility
