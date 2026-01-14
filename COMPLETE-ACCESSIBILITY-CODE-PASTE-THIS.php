@@ -1485,10 +1485,19 @@ if (!function_exists('fix_community_schools_graphics')) {
                                             graphic.setAttribute('aria-label', altText);
                                             console.log('FIX #20: Added aria-label to SVG:', altText);
                                         } else {
-                                            // For other elements (divs, etc), add role="img" first, then aria-label
-                                            graphic.setAttribute('role', 'img');
-                                            graphic.setAttribute('aria-label', altText);
-                                            console.log('FIX #20: Added role="img" and aria-label to graphic element:', altText);
+                                            // For other elements (divs, etc), check if they contain focusable children
+                                            var hasFocusableChildren = graphic.querySelector('a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+
+                                            if (hasFocusableChildren) {
+                                                // Don't add role="img" to elements with focusable children
+                                                // This would violate WCAG 4.1.2 (focusable element within presentational children)
+                                                console.log('FIX #20: Skipped adding role="img" - element contains focusable children');
+                                            } else {
+                                                // Safe to add role="img" and aria-label
+                                                graphic.setAttribute('role', 'img');
+                                                graphic.setAttribute('aria-label', altText);
+                                                console.log('FIX #20: Added role="img" and aria-label to graphic element:', altText);
+                                            }
                                         }
 
                                         // Make sure screen readers announce it
