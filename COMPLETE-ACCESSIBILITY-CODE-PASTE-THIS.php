@@ -1258,7 +1258,13 @@ if (!function_exists('fix_google_map_accessibility')) {
         ?>
         <script>
         (function() {
+            var isFixing = false; // Prevent recursive calls
+            var mapIframesTracked = new WeakSet(); // Track which iframes we've processed
+
             function fixGoogleMaps() {
+                if (isFixing) return; // Prevent recursive calls
+                isFixing = true;
+
                 try {
                     // Find all iframes that contain Google Maps
                     var iframes = document.querySelectorAll('iframe');
@@ -1269,10 +1275,18 @@ if (!function_exists('fix_google_map_accessibility')) {
 
                         // Check if it's a Google Map
                         if (src.includes('google.com/maps') || src.includes('maps.google.com')) {
+                            var wasFixed = false;
+
                             // Remove aria-hidden if present (conflicts with focusable iframe)
                             if (iframe.getAttribute('aria-hidden') === 'true') {
                                 iframe.removeAttribute('aria-hidden');
-                                console.log('FIX #18: Removed aria-hidden from focusable Google Map');
+                                wasFixed = true;
+
+                                // Mark this iframe as one we're actively fixing
+                                if (!mapIframesTracked.has(iframe)) {
+                                    mapIframesTracked.add(iframe);
+                                    console.log('FIX #18: Removed aria-hidden from focusable Google Map (first time)');
+                                }
                             }
 
                             // Check if iframe already has proper accessibility attributes
@@ -1320,9 +1334,12 @@ if (!function_exists('fix_google_map_accessibility')) {
 
                 } catch (e) {
                     console.error('Google Map accessibility error:', e);
+                } finally {
+                    isFixing = false;
                 }
             }
 
+            // Initial run
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', fixGoogleMaps);
             } else {
@@ -1332,65 +1349,54 @@ if (!function_exists('fix_google_map_accessibility')) {
             // Re-run after page fully loads
             window.addEventListener('load', fixGoogleMaps);
 
-            // Extended retry strategy - run every 1000ms for the first 30 seconds
-            // This catches Smush lazy loading even when it's very delayed
-            var retryCount = 0;
-            var maxRetries = 30; // 30 retries × 1000ms = 30 seconds
-            var retryInterval = setInterval(function() {
-                var hadAria = false;
-                var iframes = document.querySelectorAll('iframe');
-                iframes.forEach(function(iframe) {
-                    var src = iframe.getAttribute('src') || iframe.getAttribute('data-src') || '';
-                    if ((src.includes('google.com/maps') || src.includes('maps.google.com')) && iframe.getAttribute('aria-hidden') === 'true') {
-                        hadAria = true;
-                    }
-                });
-
+            // SUPER AGGRESSIVE: Check every 100ms for the first 30 seconds
+            // This catches Smush no matter when it adds aria-hidden
+            var fastCheckCount = 0;
+            var maxFastChecks = 300; // 300 × 100ms = 30 seconds
+            var fastInterval = setInterval(function() {
                 fixGoogleMaps();
-                retryCount++;
+                fastCheckCount++;
 
-                if (hadAria) {
-                    console.log('FIX #18: Retry ' + retryCount + ' - Found Google Map with aria-hidden, attempting fix...');
+                if (fastCheckCount >= maxFastChecks) {
+                    clearInterval(fastInterval);
+                    console.log('FIX #18: Stopped fast checking after 30 seconds');
+
+                    // Continue with slower checks indefinitely (every 2 seconds)
+                    setInterval(fixGoogleMaps, 2000);
                 }
+            }, 100); // Check every 100ms
 
-                if (retryCount >= maxRetries) {
-                    clearInterval(retryInterval);
-                    console.log('FIX #18: Stopped continuous monitoring after 30 seconds');
-                }
-            }, 1000);
-
-            // Watch for dynamically loaded maps AND attribute changes
+            // Watch for new iframes being added
             if (window.MutationObserver) {
                 var observer = new MutationObserver(function(mutations) {
-                    var shouldRerun = false;
                     mutations.forEach(function(mutation) {
-                        // Check for new nodes
+                        // Only watch for new nodes, not attribute changes (we handle that with setInterval)
                         if (mutation.addedNodes && mutation.addedNodes.length > 0) {
-                            shouldRerun = true;
-                        }
-                        // Check for attribute changes on iframes
-                        if (mutation.type === 'attributes' && mutation.target.tagName === 'IFRAME') {
-                            var iframe = mutation.target;
-                            var src = iframe.getAttribute('src') || iframe.getAttribute('data-src') || '';
-                            // Only trigger for Google Maps iframes
-                            if (src.includes('google.com/maps') || src.includes('maps.google.com')) {
-                                console.log('FIX #18: Detected Google Maps iframe attribute change');
-                                shouldRerun = true;
-                            }
+                            mutation.addedNodes.forEach(function(node) {
+                                if (node.nodeType === 1) { // Element node
+                                    if (node.tagName === 'IFRAME') {
+                                        // New iframe added - check it immediately
+                                        setTimeout(fixGoogleMaps, 50);
+                                    } else if (node.querySelectorAll) {
+                                        // Check if new node contains iframes
+                                        var iframes = node.querySelectorAll('iframe');
+                                        if (iframes.length > 0) {
+                                            setTimeout(fixGoogleMaps, 50);
+                                        }
+                                    }
+                                }
+                            });
                         }
                     });
-                    if (shouldRerun) {
-                        setTimeout(fixGoogleMaps, 100);
-                    }
                 });
 
                 observer.observe(document.body, {
                     childList: true,
-                    subtree: true,
-                    attributes: true,
-                    attributeFilter: ['aria-hidden', 'src', 'data-src', 'class']
+                    subtree: true
                 });
             }
+
+            console.log('FIX #18: Aggressive aria-hidden removal active (checking every 100ms for 30 seconds, then every 2 seconds)');
         })();
         </script>
         <?php
