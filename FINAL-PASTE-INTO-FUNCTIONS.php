@@ -1395,18 +1395,32 @@ if (!function_exists('fix_google_map_accessibility')) {
             // Re-run after page fully loads
             window.addEventListener('load', fixGoogleMaps);
 
-            // Aggressive retry strategy - run every 500ms for the first 10 seconds
-            // This catches Smush lazy loading no matter when it runs
+            // Extended retry strategy - run every 1000ms for the first 30 seconds
+            // This catches Smush lazy loading even when it's very delayed
             var retryCount = 0;
-            var maxRetries = 20; // 20 retries × 500ms = 10 seconds
+            var maxRetries = 30; // 30 retries × 1000ms = 30 seconds
             var retryInterval = setInterval(function() {
+                var hadAria = false;
+                var iframes = document.querySelectorAll('iframe');
+                iframes.forEach(function(iframe) {
+                    var src = iframe.getAttribute('src') || iframe.getAttribute('data-src') || '';
+                    if ((src.includes('google.com/maps') || src.includes('maps.google.com')) && iframe.getAttribute('aria-hidden') === 'true') {
+                        hadAria = true;
+                    }
+                });
+
                 fixGoogleMaps();
                 retryCount++;
+
+                if (hadAria) {
+                    console.log('FIX #18: Retry ' + retryCount + ' - Found Google Map with aria-hidden, attempting fix...');
+                }
+
                 if (retryCount >= maxRetries) {
                     clearInterval(retryInterval);
-                    console.log('FIX #18: Stopped continuous monitoring after 10 seconds');
+                    console.log('FIX #18: Stopped continuous monitoring after 30 seconds');
                 }
-            }, 500);
+            }, 1000);
 
             // Watch for dynamically loaded maps AND attribute changes
             if (window.MutationObserver) {
