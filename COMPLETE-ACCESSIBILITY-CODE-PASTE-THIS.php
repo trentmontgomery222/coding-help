@@ -1344,6 +1344,7 @@ if (!function_exists('fix_google_map_accessibility')) {
                                 // Add accessibility attributes
                                 iframe.setAttribute('title', mapLabel);
                                 iframe.setAttribute('aria-label', mapLabel);
+                                iframe.setAttribute('lang', 'en');
 
                                 // Make it properly focusable
                                 if (!iframe.getAttribute('tabindex')) {
