@@ -1805,6 +1805,102 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
     add_action('wp_footer', 'fix_dropdown_keyboard_navigation');
 }
 
+// ============================================================================
+// FIX #23: Remove Duplicate Main Landmarks (Events Calendar)
+// ============================================================================
+
+if (!function_exists('remove_duplicate_main_landmarks')) {
+    function remove_duplicate_main_landmarks() {
+        ?>
+        <script>
+        (function() {
+            function fixDuplicateMainLandmarks() {
+                try {
+                    // Find all elements with main role or main tag
+                    var mainElements = document.querySelectorAll('main, [role="main"]');
+
+                    if (mainElements.length > 1) {
+                        console.log('FIX #23: Found ' + mainElements.length + ' main landmarks, fixing...');
+
+                        // Keep the first main (fl-main-content), remove role from others
+                        mainElements.forEach(function(main, index) {
+                            if (index > 0) {
+                                // This is a duplicate - check if it's the Events Calendar
+                                var isEventsCalendar = main.classList.contains('tribe-events') ||
+                                                      main.classList.contains('tribe-common');
+
+                                if (isEventsCalendar) {
+                                    // Remove main role/tag from Events Calendar container
+                                    if (main.hasAttribute('role') && main.getAttribute('role') === 'main') {
+                                        main.removeAttribute('role');
+                                        console.log('FIX #23: Removed role="main" from Events Calendar container');
+                                    }
+
+                                    // If it's a <main> tag, change role to "region" with label
+                                    if (main.tagName === 'MAIN') {
+                                        main.setAttribute('role', 'region');
+                                        main.setAttribute('aria-label', 'Events Calendar');
+                                        console.log('FIX #23: Changed <main> to role="region" for Events Calendar');
+                                    }
+                                } else {
+                                    // Generic duplicate - remove role
+                                    if (main.hasAttribute('role')) {
+                                        main.removeAttribute('role');
+                                        console.log('FIX #23: Removed duplicate main role from element #' + (index + 1));
+                                    }
+                                }
+                            }
+                        });
+
+                        console.log('FIX #23: Fixed duplicate main landmarks');
+                    }
+                } catch (e) {
+                    console.error('FIX #23 error:', e);
+                }
+            }
+
+            // Run on load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fixDuplicateMainLandmarks);
+            } else {
+                fixDuplicateMainLandmarks();
+            }
+
+            // Re-run after page fully loads (for AJAX content)
+            window.addEventListener('load', fixDuplicateMainLandmarks);
+
+            // Watch for dynamically added content
+            if (window.MutationObserver) {
+                var observer = new MutationObserver(function(mutations) {
+                    var shouldRerun = false;
+                    mutations.forEach(function(mutation) {
+                        if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                            mutation.addedNodes.forEach(function(node) {
+                                if (node.nodeType === 1) {
+                                    if (node.tagName === 'MAIN' || (node.getAttribute && node.getAttribute('role') === 'main')) {
+                                        shouldRerun = true;
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    if (shouldRerun) {
+                        setTimeout(fixDuplicateMainLandmarks, 100);
+                    }
+                });
+
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'remove_duplicate_main_landmarks');
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
