@@ -86,7 +86,7 @@ if (!function_exists('add_accessibility_landmarks')) {
 // This fix was creating duplicate skip links, so it has been removed
 
 // ============================================================================
-// FIX #3: Language Attribute
+// FIX #3: Language Attribute (Enhanced with JavaScript Fallback)
 // ============================================================================
 
 if (!function_exists('ensure_language_attribute')) {
@@ -101,6 +101,29 @@ if (!function_exists('ensure_language_attribute')) {
         return $output;
     }
     add_filter('language_attributes', 'ensure_language_attribute');
+}
+
+// JavaScript fallback to ensure lang attribute is always present
+if (!function_exists('add_lang_attribute_fallback')) {
+    function add_lang_attribute_fallback() {
+        $lang = get_bloginfo('language');
+        if (empty($lang)) {
+            $lang = 'en-US';
+        }
+        ?>
+        <script>
+        // WCAG 3.1.1: Page must have lang attribute
+        (function() {
+            var html = document.documentElement;
+            if (!html.hasAttribute('lang')) {
+                html.setAttribute('lang', '<?php echo esc_js($lang); ?>');
+                console.log('FIX #3: Added lang attribute to <html>');
+            }
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_head', 'add_lang_attribute_fallback', 1);
 }
 
 // ============================================================================
@@ -1782,6 +1805,93 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
     add_action('wp_footer', 'fix_dropdown_keyboard_navigation');
 }
 
+// ============================================================================
+// FIX #22: WCAG 1.4.12 Text Spacing Compliance
+// ============================================================================
+
+if (!function_exists('ensure_text_spacing_support')) {
+    function ensure_text_spacing_support() {
+        ?>
+        <style id="wcag-text-spacing-support">
+        /* WCAG 1.4.12 Level AA: Text Spacing
+         * Ensures the site supports user-applied text spacing without breaking.
+         * These values represent the MINIMUM that must be supported.
+         */
+
+        /* Apply to all text elements */
+        * {
+            /* Line height: at least 1.5× font size */
+            line-height: 1.5 !important;
+        }
+
+        /* Paragraph spacing: at least 2× font size after paragraphs */
+        p {
+            margin-bottom: 2em !important;
+        }
+
+        /* Letter spacing: at least 0.12× font size */
+        * {
+            letter-spacing: 0.12em !important;
+        }
+
+        /* Word spacing: at least 0.16× font size */
+        * {
+            word-spacing: 0.16em !important;
+        }
+
+        /* Ensure headings maintain proper spacing */
+        h1, h2, h3, h4, h5, h6 {
+            line-height: 1.5 !important;
+            margin-bottom: 2em !important;
+            letter-spacing: 0.12em !important;
+            word-spacing: 0.16em !important;
+        }
+
+        /* Ensure buttons, links, and navigation remain functional */
+        a, button, input, select, textarea {
+            line-height: 1.5 !important;
+            letter-spacing: 0.12em !important;
+            word-spacing: 0.16em !important;
+        }
+
+        /* Lists maintain spacing */
+        li {
+            margin-bottom: 1em !important;
+            line-height: 1.5 !important;
+        }
+
+        /* Ensure layout doesn't break with increased spacing */
+        /* Allow containers to expand naturally */
+        .fl-row, .fl-col, .fl-module, div, section, article {
+            overflow: visible !important;
+            min-height: auto !important;
+        }
+
+        /* Prevent text from overlapping or getting cut off */
+        body, html {
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        /* Ensure menus remain usable */
+        nav, .menu, .nav {
+            white-space: normal !important;
+        }
+
+        /* Fix any potential breaking in cards/boxes */
+        .card, .box, .panel, .widget {
+            overflow: visible !important;
+            height: auto !important;
+        }
+        </style>
+        <script>
+        console.log('FIX #22: WCAG 1.4.12 text spacing compliance CSS loaded');
+        </script>
+        <?php
+    }
+    add_action('wp_head', 'ensure_text_spacing_support', 999); // Load late to override theme styles
+}
+
 /**
  * ============================================================================
  * INSTALLATION COMPLETE!
@@ -1792,7 +1902,7 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
  * ALL FIXES INCLUDED:
  * 1. ARIA Landmarks (banner, navigation, main, contentinfo)
  * 2. Skip Navigation Link - REMOVED (consolidated into FIX #17)
- * 3. Language Attribute
+ * 3. Language Attribute (Enhanced with JavaScript Fallback)
  * 4. Search Widget Accessibility
  * 5. Silent Video Accessibility
  * 6. Smart Slider Accessibility
