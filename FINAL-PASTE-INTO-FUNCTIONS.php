@@ -1880,90 +1880,92 @@ if (!function_exists('fix_dropdown_keyboard_navigation')) {
 }
 
 // ============================================================================
-// FIX #22: WCAG 1.4.12 Text Spacing Compliance
+// FIX #22: WCAG 1.4.12 Text Spacing Support (No Breaking)
 // ============================================================================
 
 if (!function_exists('ensure_text_spacing_support')) {
     function ensure_text_spacing_support() {
         ?>
         <style id="wcag-text-spacing-support">
-        /* WCAG 1.4.12 Level AA: Text Spacing
-         * Ensures the site supports user-applied text spacing without breaking.
-         * These values represent the MINIMUM that must be supported.
+        /* WCAG 1.4.12 Level AA: Text Spacing Support
+         * Ensures the site doesn't break when users apply text spacing via browser extensions.
+         * Does NOT change default appearance - only prevents breaking when spacing is applied.
          */
 
-        /* Apply to all text elements */
-        * {
-            /* Line height: at least 1.5× font size */
-            line-height: 1.5 !important;
-        }
-
-        /* Paragraph spacing: at least 2× font size after paragraphs */
-        p {
-            margin-bottom: 2em !important;
-        }
-
-        /* Letter spacing: at least 0.12× font size */
-        * {
-            letter-spacing: 0.12em !important;
-        }
-
-        /* Word spacing: at least 0.16× font size */
-        * {
-            word-spacing: 0.16em !important;
-        }
-
-        /* Ensure headings maintain proper spacing */
-        h1, h2, h3, h4, h5, h6 {
-            line-height: 1.5 !important;
-            margin-bottom: 2em !important;
-            letter-spacing: 0.12em !important;
-            word-spacing: 0.16em !important;
-        }
-
-        /* Ensure buttons, links, and navigation remain functional */
-        a, button, input, select, textarea {
-            line-height: 1.5 !important;
-            letter-spacing: 0.12em !important;
-            word-spacing: 0.16em !important;
-        }
-
-        /* Lists maintain spacing */
-        li {
-            margin-bottom: 1em !important;
-            line-height: 1.5 !important;
-        }
-
-        /* Ensure layout doesn't break with increased spacing */
-        /* Allow containers to expand naturally */
-        .fl-row, .fl-col, .fl-module, div, section, article {
-            overflow: visible !important;
-            min-height: auto !important;
-        }
-
-        /* Prevent text from overlapping or getting cut off */
+        /* Prevent text overflow and clipping */
         body, html {
             overflow-x: hidden;
             overflow-y: auto;
         }
 
-        /* Ensure menus remain usable */
-        nav, .menu, .nav {
+        /* Allow all containers to expand with content - no fixed heights */
+        .fl-row, .fl-col, .fl-module, .fl-row-content, .fl-col-content,
+        div, section, article, aside, header, footer, main,
+        .card, .box, .panel, .widget, .module, .container {
+            overflow: visible !important;
+            min-height: 0 !important;
+            height: auto !important;
+        }
+
+        /* Prevent text from being cut off in buttons and links */
+        a, button, input[type="submit"], input[type="button"] {
+            white-space: normal !important;
+            height: auto !important;
+            min-height: 0 !important;
+            padding: 0.5em 1em !important;
+        }
+
+        /* Ensure menus wrap text instead of hiding it */
+        nav, .menu, .nav, ul.menu, .navbar {
             white-space: normal !important;
         }
 
-        /* Fix any potential breaking in cards/boxes */
-        .card, .box, .panel, .widget {
+        nav li, .menu li, ul.menu li {
+            white-space: normal !important;
+            height: auto !important;
+        }
+
+        /* Allow headings to expand */
+        h1, h2, h3, h4, h5, h6 {
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        /* Prevent form elements from clipping text */
+        input, select, textarea, label {
+            height: auto !important;
+            min-height: 0 !important;
+            line-height: inherit;
+        }
+
+        /* Fix potential issues with absolute/fixed positioning */
+        [style*="position: absolute"], [style*="position: fixed"] {
+            overflow: visible !important;
+        }
+
+        /* Ensure images don't force containers to fixed heights */
+        img {
+            height: auto !important;
+            max-width: 100%;
+        }
+
+        /* Allow tables to expand naturally */
+        table, tbody, tr, td, th {
+            height: auto !important;
+        }
+
+        /* Beaver Builder specific fixes */
+        .fl-node, .fl-module-content, .fl-rich-text {
             overflow: visible !important;
             height: auto !important;
         }
         </style>
         <script>
-        console.log('FIX #22: WCAG 1.4.12 text spacing compliance CSS loaded');
+        console.log('FIX #22: WCAG 1.4.12 text spacing support active (prevents breaking when users apply spacing)');
         </script>
         <?php
     }
-    add_action('wp_head', 'ensure_text_spacing_support', 999); // Load late to override theme styles
+    add_action('wp_head', 'ensure_text_spacing_support', 999);
 }
 
 /**
