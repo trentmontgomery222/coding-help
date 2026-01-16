@@ -1167,46 +1167,41 @@ if (!function_exists('add_enhanced_skip_navigation')) {
                         return;
                     }
 
-                    // Create container for multiple skip links
+                    // Ensure main content has an ID
+                    var main = document.querySelector('#main-content') ||
+                              document.querySelector('.fl-page-content') ||
+                              document.querySelector('.site-content') ||
+                              document.querySelector('main, [role="main"]') ||
+                              document.querySelector('article');
+
+                    if (main && !main.id) {
+                        main.id = 'main-content';
+                    }
+
+                    // Ensure navigation has an ID
+                    var nav = document.querySelector('#main-navigation') ||
+                             document.querySelector('nav') ||
+                             document.querySelector('[role="navigation"]');
+
+                    if (nav && !nav.id) {
+                        nav.id = 'main-navigation';
+                    }
+
+                    // Create container for skip links
                     var container = document.createElement('div');
                     container.className = 'skip-links-container';
                     container.style.cssText = 'position: absolute; top: -200px; left: 0; z-index: 100001;';
 
-                    // Skip to main content
-                    var skipMain = createSkipLink('#main-content', 'Skip to main content');
-                    container.appendChild(skipMain);
-
-                    // Skip to navigation (if exists)
-                    if (document.querySelector('nav, [role="navigation"]')) {
-                        var skipNav = createSkipLink('nav, [role="navigation"]', 'Skip to navigation');
-                        container.appendChild(skipNav);
+                    // Always create "Skip to main content" link
+                    if (main) {
+                        var skipMain = createSkipLink('#' + main.id, 'Skip to main content');
+                        container.appendChild(skipMain);
                     }
 
-                    // Skip past header (if header exists)
-                    var header = document.querySelector('header, [role="banner"], .fl-page-header, .site-header');
-                    if (header) {
-                        var skipHeader = createSkipLink(null, 'Skip past header');
-                        skipHeader.addEventListener('click', function(e) {
-                            e.preventDefault();
-                            var main = document.querySelector('.fl-page-content') ||
-                                      document.querySelector('.site-content') ||
-                                      document.querySelector('main, [role="main"], #main-content') ||
-                                      document.querySelector('article');
-                            if (main) {
-                                main.setAttribute('tabindex', '-1');
-                                main.focus();
-
-                                var rect = main.getBoundingClientRect();
-                                var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                                var targetPosition = rect.top + scrollTop - 20;
-
-                                window.scrollTo({
-                                    top: targetPosition,
-                                    behavior: 'smooth'
-                                });
-                            }
-                        });
-                        container.appendChild(skipHeader);
+                    // Create "Skip to navigation" link if nav exists
+                    if (nav) {
+                        var skipNav = createSkipLink('#' + nav.id, 'Skip to navigation');
+                        container.appendChild(skipNav);
                     }
 
                     // Insert at the very beginning of body
@@ -1216,25 +1211,18 @@ if (!function_exists('add_enhanced_skip_navigation')) {
                         document.body.appendChild(container);
                     }
 
-                    console.log('FIX #17: Added enhanced skip navigation links');
+                    console.log('FIX #17: Added enhanced skip navigation links with proper href targets');
 
                 } catch (e) {
                     console.error('Enhanced skip navigation error:', e);
                 }
             }
 
-            function createSkipLink(target, text) {
+            function createSkipLink(targetId, text) {
                 var link = document.createElement('a');
                 link.className = 'skip-link-enhanced';
                 link.textContent = text;
-
-                // Always set href to make it a valid link
-                if (target) {
-                    link.href = typeof target === 'string' && target.startsWith('#') ? target : '#';
-                } else {
-                    // If no target specified, use # with JavaScript handler
-                    link.href = '#';
-                }
+                link.href = targetId; // Always a valid #id
 
                 link.style.cssText = 'display: block; position: absolute; top: -100px; left: 0; background: #000; color: #fff; padding: 10px 20px; text-decoration: none; font-size: 16px; font-weight: bold; border: 2px solid #fff;';
 
@@ -1249,17 +1237,16 @@ if (!function_exists('add_enhanced_skip_navigation')) {
                     this.style.top = '-100px';
                 });
 
-                if (target && !target.startsWith('#')) {
-                    link.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        var targetElement = document.querySelector(target);
-                        if (targetElement) {
-                            targetElement.setAttribute('tabindex', '-1');
-                            targetElement.focus();
-                            targetElement.scrollIntoView({ behavior: 'smooth' });
-                        }
-                    });
-                }
+                // Enhance with smooth scrolling and focus management
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var target = document.querySelector(targetId);
+                    if (target) {
+                        target.setAttribute('tabindex', '-1');
+                        target.focus();
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                });
 
                 return link;
             }
