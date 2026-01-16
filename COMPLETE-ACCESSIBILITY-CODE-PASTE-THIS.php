@@ -1228,8 +1228,12 @@ if (!function_exists('add_enhanced_skip_navigation')) {
                 link.className = 'skip-link-enhanced';
                 link.textContent = text;
 
+                // Always set href to make it a valid link
                 if (target) {
                     link.href = typeof target === 'string' && target.startsWith('#') ? target : '#';
+                } else {
+                    // If no target specified, use # with JavaScript handler
+                    link.href = '#';
                 }
 
                 link.style.cssText = 'display: block; position: absolute; top: -100px; left: 0; background: #000; color: #fff; padding: 10px 20px; text-decoration: none; font-size: 16px; font-weight: bold; border: 2px solid #fff;';
