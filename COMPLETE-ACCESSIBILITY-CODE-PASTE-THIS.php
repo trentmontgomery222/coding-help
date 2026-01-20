@@ -1263,6 +1263,190 @@ if (!function_exists('add_enhanced_skip_navigation')) {
     add_action('wp_footer', 'add_enhanced_skip_navigation', 1);
 }
 
+// FIX #24: Accessible GTranslate Enhancement
+// Adds ARIA attributes and keyboard support to GTranslate language selector
+if (!function_exists('add_accessible_gtranslate_enhancement')) {
+    function add_accessible_gtranslate_enhancement() {
+        ?>
+        <script>
+        (function() {
+            'use strict';
+
+            function enhanceGTranslateAccessibility() {
+                try {
+                    // Wait for GTranslate to load
+                    var checkInterval = setInterval(function() {
+                        // Look for GTranslate elements
+                        var gtranslateSelectors = [
+                            '.gtranslate_wrapper',
+                            '#google_translate_element',
+                            '.gt_selector',
+                            '.gt-current-lang',
+                            '[class*="gtranslate"]'
+                        ];
+
+                        var gtElement = null;
+                        for (var i = 0; i < gtranslateSelectors.length; i++) {
+                            gtElement = document.querySelector(gtranslateSelectors[i]);
+                            if (gtElement) break;
+                        }
+
+                        if (gtElement) {
+                            clearInterval(checkInterval);
+                            applyAccessibilityEnhancements(gtElement);
+                        }
+                    }, 500);
+
+                    // Stop checking after 10 seconds
+                    setTimeout(function() {
+                        clearInterval(checkInterval);
+                    }, 10000);
+
+                } catch (e) {
+                    console.error('GTranslate accessibility enhancement error:', e);
+                }
+            }
+
+            function applyAccessibilityEnhancements(gtElement) {
+                try {
+                    // Add ARIA label to main container
+                    if (!gtElement.getAttribute('aria-label')) {
+                        gtElement.setAttribute('aria-label', 'Language selector');
+                        gtElement.setAttribute('role', 'navigation');
+                    }
+
+                    // Enhance dropdown trigger button
+                    var trigger = gtElement.querySelector('a, button, .gt-current-lang');
+                    if (trigger) {
+                        if (!trigger.getAttribute('aria-label')) {
+                            trigger.setAttribute('aria-label', 'Select language');
+                        }
+                        if (!trigger.getAttribute('aria-haspopup')) {
+                            trigger.setAttribute('aria-haspopup', 'true');
+                            trigger.setAttribute('aria-expanded', 'false');
+                        }
+
+                        // Add keyboard support
+                        if (!trigger.hasAttribute('tabindex')) {
+                            trigger.setAttribute('tabindex', '0');
+                        }
+
+                        // Handle keyboard interaction
+                        trigger.addEventListener('keydown', function(e) {
+                            // Space or Enter to open
+                            if (e.key === ' ' || e.key === 'Enter') {
+                                e.preventDefault();
+                                this.click();
+                            }
+                        });
+
+                        // Track expanded state
+                        trigger.addEventListener('click', function() {
+                            var expanded = this.getAttribute('aria-expanded') === 'true';
+                            this.setAttribute('aria-expanded', !expanded);
+                        });
+                    }
+
+                    // Enhance language options
+                    var languageLinks = gtElement.querySelectorAll('a[data-gt-lang], a[onclick*="doGTranslate"], .gt-option a');
+                    languageLinks.forEach(function(link) {
+                        // Add lang attribute if not present
+                        var langCode = link.getAttribute('data-gt-lang') ||
+                                      (link.getAttribute('onclick') || '').match(/\|([a-z]{2})/);
+
+                        if (langCode && !link.getAttribute('lang')) {
+                            var code = typeof langCode === 'string' ? langCode : langCode[1];
+                            link.setAttribute('lang', code);
+                        }
+
+                        // Ensure link has proper label
+                        if (!link.getAttribute('aria-label') && link.textContent.trim()) {
+                            link.setAttribute('aria-label', 'Switch to ' + link.textContent.trim());
+                        }
+
+                        // Add role if needed
+                        if (!link.getAttribute('role')) {
+                            link.setAttribute('role', 'menuitem');
+                        }
+                    });
+
+                    // Enhance dropdown menu
+                    var dropdown = gtElement.querySelector('.gt-selected, .gt_options, [class*="dropdown"]');
+                    if (dropdown) {
+                        if (!dropdown.getAttribute('role')) {
+                            dropdown.setAttribute('role', 'menu');
+                        }
+                        if (!dropdown.getAttribute('aria-label')) {
+                            dropdown.setAttribute('aria-label', 'Available languages');
+                        }
+                    }
+
+                    // Add focus visible styles for keyboard users
+                    var style = document.createElement('style');
+                    style.textContent = `
+                        .gtranslate_wrapper a:focus,
+                        .gt-current-lang:focus,
+                        .gt_selector a:focus,
+                        #google_translate_element a:focus {
+                            outline: 3px solid #005fcc !important;
+                            outline-offset: 2px !important;
+                        }
+
+                        .gtranslate_wrapper a:focus-visible,
+                        .gt-current-lang:focus-visible,
+                        .gt_selector a:focus-visible,
+                        #google_translate_element a:focus-visible {
+                            outline: 3px solid #005fcc !important;
+                            outline-offset: 2px !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+
+                    console.log('FIX #24: Enhanced GTranslate accessibility with ARIA attributes and keyboard support');
+
+                } catch (e) {
+                    console.error('Error applying GTranslate enhancements:', e);
+                }
+            }
+
+            // Run on page load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', enhanceGTranslateAccessibility);
+            } else {
+                enhanceGTranslateAccessibility();
+            }
+
+            // Also run when new content is added (for AJAX/dynamic loading)
+            if (typeof MutationObserver !== 'undefined') {
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.addedNodes.length > 0) {
+                            mutation.addedNodes.forEach(function(node) {
+                                if (node.nodeType === 1) { // Element node
+                                    var gtElement = node.querySelector ?
+                                        node.querySelector('[class*="gtranslate"]') : null;
+                                    if (gtElement || (node.className && node.className.indexOf('gtranslate') > -1)) {
+                                        enhanceGTranslateAccessibility();
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+
+                observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+
+        })();
+        </script>
+        <?php
+    }
+    add_action('wp_footer', 'add_accessible_gtranslate_enhancement', 20);
+}
+
 // ============================================================================
 // FIX #18: Google Map Footer Accessibility
 // ============================================================================
