@@ -1447,6 +1447,127 @@ if (!function_exists('add_accessible_gtranslate_enhancement')) {
     add_action('wp_footer', 'add_accessible_gtranslate_enhancement', 20);
 }
 
+// FIX #25: GTranslate Menu Bar Styling
+// Styles GTranslate dropdown to fit in top menu bar and match site design
+if (!function_exists('add_gtranslate_menu_styling')) {
+    function add_gtranslate_menu_styling() {
+        ?>
+        <style>
+        /* Make GTranslate compact dropdown for menu bar */
+        #mega-menu-wrap .gtranslate_wrapper,
+        .mega-menu .gtranslate_wrapper,
+        nav .gtranslate_wrapper,
+        .gtranslate_wrapper {
+            display: inline-block !important;
+            margin: 0 10px !important;
+            vertical-align: middle !important;
+            position: relative !important;
+        }
+
+        /* Hide the inline flags list - force dropdown mode */
+        .gtranslate_wrapper a[href*="google.com/translate"]:not(.gt-current-lang) {
+            display: none !important;
+        }
+
+        /* Show only when dropdown is opened */
+        .gtranslate_wrapper.gt-open a[href*="google.com/translate"],
+        .gtranslate_wrapper:hover .gt_options a,
+        .gtranslate_wrapper:focus-within .gt_options a {
+            display: block !important;
+        }
+
+        /* Style the dropdown trigger to match blue menu bar */
+        .gtranslate_wrapper select,
+        .gtranslate_wrapper a.gt-current-lang,
+        .gtranslate_wrapper .gt_switcher {
+            padding: 8px 15px !important;
+            background: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: #ffffff !important;
+            font-size: 14px !important;
+            font-family: inherit !important;
+            border-radius: 3px !important;
+            cursor: pointer !important;
+            display: inline-block !important;
+            text-decoration: none !important;
+            transition: all 0.3s ease !important;
+            white-space: nowrap !important;
+        }
+
+        /* Hover effect to match menu items */
+        .gtranslate_wrapper select:hover,
+        .gtranslate_wrapper a.gt-current-lang:hover,
+        .gtranslate_wrapper .gt_switcher:hover {
+            background: rgba(255, 255, 255, 0.2) !important;
+            border-color: rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Dropdown menu container */
+        .gtranslate_wrapper .gt_options,
+        .gtranslate_wrapper .gt-selected,
+        .gtranslate_wrapper select {
+            position: absolute !important;
+            top: 100% !important;
+            left: 0 !important;
+            background: #ffffff !important;
+            border: 1px solid #ddd !important;
+            border-radius: 4px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+            max-height: 400px !important;
+            overflow-y: auto !important;
+            z-index: 99999 !important;
+            margin-top: 5px !important;
+            min-width: 200px !important;
+        }
+
+        /* Individual language options in dropdown */
+        .gtranslate_wrapper .gt_options a,
+        .gtranslate_wrapper option {
+            display: block !important;
+            padding: 10px 15px !important;
+            color: #333 !important;
+            text-decoration: none !important;
+            border-bottom: 1px solid #f0f0f0 !important;
+            transition: background 0.2s ease !important;
+        }
+
+        .gtranslate_wrapper .gt_options a:hover,
+        .gtranslate_wrapper option:hover {
+            background: #f5f5f5 !important;
+        }
+
+        /* Flag sizing */
+        .gtranslate_wrapper img {
+            max-width: 24px !important;
+            height: auto !important;
+            vertical-align: middle !important;
+            margin-right: 8px !important;
+        }
+
+        /* Fix for Max Mega Menu integration */
+        #mega-menu-wrap .gtranslate_wrapper {
+            line-height: normal !important;
+        }
+
+        /* Ensure dropdown doesn't cause horizontal scroll */
+        .gtranslate_wrapper,
+        .gtranslate_wrapper * {
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Focus styles for accessibility */
+        .gtranslate_wrapper a:focus,
+        .gtranslate_wrapper select:focus {
+            outline: 3px solid #ffcc00 !important;
+            outline-offset: 2px !important;
+        }
+        </style>
+        <?php
+    }
+    add_action('wp_head', 'add_gtranslate_menu_styling', 100);
+}
+
 // ============================================================================
 // FIX #18: Google Map Footer Accessibility
 // ============================================================================
