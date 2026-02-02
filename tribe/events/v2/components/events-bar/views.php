@@ -31,14 +31,11 @@ $view_selector_classes = [
 		<?php printf( esc_html__( '%s Views Navigation', 'the-events-calendar' ), tribe_get_event_label_singular() ); ?>
 	</h3>
 	<div <?php tec_classes( $view_selector_classes ); ?> data-js="tribe-events-view-selector">
-		<span id="tribe-events-view-selector-description" class="tribe-common-a11y-visual-hide">
-			<?php echo esc_html__( 'Select Calendar View', 'the-events-calendar' ); ?>
-		</span>
 		<button
 			class="tribe-events-c-view-selector__button tribe-common-c-btn__clear"
 			data-js="tribe-events-view-selector-button"
 			aria-current="true"
-			aria-describedby="tribe-events-view-selector-description"
+			aria-label="<?php echo esc_attr__( 'Select Calendar View', 'the-events-calendar' ); ?>"
 		>
 			<span class="tribe-events-c-view-selector__button-icon">
 				<?php $this->template( 'components/icons/' . esc_attr( $view_slug ), [ 'classes' => [ 'tribe-events-c-view-selector__button-icon-svg' ] ] ); ?>
