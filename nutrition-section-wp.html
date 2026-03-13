@@ -10,9 +10,9 @@
     align-items: flex-start;
   }
 
-  .nutr-text { flex: 1 1 55%; min-width: 280px; }
+  .nutr-text { flex: 1 1 55%; min-width: 0; }
 
-  .nutr-graphic { flex: 0 1 280px; min-width: 220px; }
+  .nutr-graphic { flex: 0 1 280px; min-width: 0; }
 
   .nutr-text h2 {
     font-size: clamp(1.2rem, 2.5vw, 1.6rem);
@@ -53,6 +53,14 @@
   @media (max-width: 660px) {
     .nutr-layout { flex-direction: column; }
     .nutr-graphic { flex-basis: auto; width: 100%; max-width: 340px; margin: 0 auto; }
+  }
+
+  @media (max-width: 320px) {
+    .nutr-section { padding: 0.75rem; }
+    .nutr-layout { gap: 1rem; align-items: center; }
+    .nutr-text { text-align: center; width: 100%; }
+    .nutr-text ul { text-align: left; }
+    .nutr-graphic { max-width: 100%; }
   }
 
   @media (min-width: 661px) and (max-width: 900px) {
