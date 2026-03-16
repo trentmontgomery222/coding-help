@@ -3,8 +3,10 @@
 
 **Project Start:** March 16, 2026
 **Compliance Deadline:** April 24, 2027
-**Total Documents:** ~600
+**Total Documents:** ~276
 **Regulatory Standard:** WCAG 2.1 Level AA (ADA Title II, 28 CFR Part 35)
+
+> Note: The full document inventory totals approximately 600 documents. A parallel remediation effort by a separate team is covering roughly 324 of those documents. This timeline covers the remaining ~276.
 
 ---
 
@@ -12,10 +14,10 @@
 
 | Document Type | Estimated Count | Remediation Approach |
 |---|---|---|
-| PDFs — Remediate in Place | ~250 | Tag, add alt text, reading order, bookmarks |
-| PDFs — Convert to Word | ~200 | Convert to .docx, apply accessible formatting |
-| PowerPoint Files | ~150 | Add alt text, slide titles, reading order, captions |
-| **Total** | **~600** | |
+| PDFs — Remediate in Place | ~115 | Tag, add alt text, reading order, bookmarks |
+| PDFs — Convert to Word | ~92 | Convert to .docx, apply accessible formatting |
+| PowerPoint Files | ~69 | Add alt text, slide titles, reading order, captions |
+| **Total** | **~276** | |
 
 > Note: Exact counts per category will be confirmed during Phase 1 audit.
 
@@ -26,9 +28,9 @@
 | Phase | Dates | Documents Targeted | Cumulative |
 |---|---|---|---|
 | Phase 1: Assessment & Setup | Mar 16 – Apr 30, 2026 | — | — |
-| Phase 2: High-Priority Remediation | May 1 – Aug 31, 2026 | ~200 | ~200 |
-| Phase 3: Mid-Priority Remediation | Sep 1 – Dec 31, 2026 | ~220 | ~420 |
-| Phase 4: Final Remediation & QA | Jan 1 – Apr 24, 2027 | ~180 | ~600 |
+| Phase 2: High-Priority Remediation | May 1 – Aug 31, 2026 | ~92 | ~92 |
+| Phase 3: Mid-Priority Remediation | Sep 1 – Dec 31, 2026 | ~100 | ~192 |
+| Phase 4: Final Remediation & QA | Jan 1 – Apr 24, 2027 | ~84 | ~276 |
 
 ---
 
@@ -36,8 +38,9 @@
 **March 16 – April 30, 2026 (6 weeks)**
 
 ### Goals
-- Establish a complete inventory of all ~600 documents
+- Establish a complete inventory of all ~276 assigned documents
 - Categorize and prioritize documents by type and public usage
+- Coordinate with the parallel remediation team to confirm scope split
 - Stand up workflows, tools, and team roles
 
 ### Milestones
@@ -60,152 +63,153 @@
 ---
 
 ## Phase 2: High-Priority Document Remediation
-**May 1 – August 31, 2026 (~4 months | Target: ~200 documents)**
+**May 1 – August 31, 2026 (~4 months | Target: ~92 documents)**
 
 Focus on Tier 1 documents: forms, public notices, meeting agendas/minutes, frequently downloaded content.
 
-**Target Rate:** ~50 documents/month
+**Target Rate:** ~23 documents/month
 
 ### Monthly Breakdown
 
-#### May 2026 — Target: 50 documents
+#### May 2026 — Target: 23 documents
 - Begin PDF-to-Word conversions for high-priority forms and reports
 - Begin PDF in-place remediation: add tags, alt text, document title, reading order
 - Begin PowerPoint remediation: slide titles, alt text for images, logical reading order
 
 | Date | Milestone |
 |---|---|
-| May 15, 2026 | 25 documents remediated (first mid-month check) |
-| May 31, 2026 | 50 documents complete; QA review of first batch |
+| May 15, 2026 | ~12 documents remediated (first mid-month check) |
+| May 31, 2026 | ~23 documents complete; QA review of first batch |
 
-#### June 2026 — Target: 50 documents
+#### June 2026 — Target: 23 documents
 - Continue PDF conversions and in-place PDF remediation
 - Spot-check accessibility of completed documents using screen reader (NVDA/JAWS)
 
 | Date | Milestone |
 |---|---|
-| Jun 15, 2026 | 75 documents cumulative |
-| Jun 30, 2026 | 100 documents cumulative; mid-phase review meeting |
+| Jun 15, 2026 | ~35 documents cumulative |
+| Jun 30, 2026 | ~46 documents cumulative; mid-phase review meeting |
 
-#### July 2026 — Target: 50 documents
+#### July 2026 — Target: 23 documents
 - Continue across all three document types
 - Address QA feedback from June review
 
 | Date | Milestone |
 |---|---|
-| Jul 15, 2026 | 125 documents cumulative |
-| Jul 31, 2026 | 150 documents cumulative |
+| Jul 15, 2026 | ~58 documents cumulative |
+| Jul 31, 2026 | ~69 documents cumulative |
 
-#### August 2026 — Target: 50 documents
+#### August 2026 — Target: 23 documents
 - Complete Tier 1 high-priority documents
 - Full QA pass on all Phase 2 documents
 
 | Date | Milestone |
 |---|---|
-| Aug 15, 2026 | 175 documents cumulative |
-| Aug 31, 2026 | **200 documents cumulative — Phase 2 complete** |
+| Aug 15, 2026 | ~81 documents cumulative |
+| Aug 31, 2026 | **~92 documents cumulative — Phase 2 complete** |
 
 ### Phase 2 Deliverables
-- 200 remediated documents published/updated
+- ~92 remediated documents published/updated
 - QA sign-off log for all completed documents
 - Updated project tracker reflecting progress
 
 ---
 
 ## Phase 3: Mid-Priority Document Remediation
-**September 1 – December 31, 2026 (~4 months | Target: ~220 documents)**
+**September 1 – December 31, 2026 (~4 months | Target: ~100 documents)**
 
 Focus on Tier 2 documents: program guides, informational brochures, archived reports, supplemental materials.
 
-**Target Rate:** ~55 documents/month
+**Target Rate:** ~25 documents/month
 
 ### Monthly Breakdown
 
-#### September 2026 — Target: 55 documents
+#### September 2026 — Target: 25 documents
 - Ramp up capacity based on Phase 2 learnings
 - Continue PDF-to-Word conversions and PDF in-place remediation
 
 | Date | Milestone |
 |---|---|
-| Sep 15, 2026 | 228 documents cumulative |
-| Sep 30, 2026 | 255 documents cumulative |
+| Sep 15, 2026 | ~105 documents cumulative |
+| Sep 30, 2026 | ~117 documents cumulative |
 
-#### October 2026 — Target: 55 documents
+#### October 2026 — Target: 25 documents
 - Continue remediation across all types
 - Monthly QA review
 
 | Date | Milestone |
 |---|---|
-| Oct 15, 2026 | 283 documents cumulative |
-| Oct 31, 2026 | 310 documents cumulative; Phase 3 mid-point review |
+| Oct 15, 2026 | ~130 documents cumulative |
+| Oct 31, 2026 | ~142 documents cumulative; Phase 3 mid-point review |
 
-#### November 2026 — Target: 55 documents
+#### November 2026 — Target: 25 documents
 - Continue remediation
 - Begin internal audit review of completed documents
 
 | Date | Milestone |
 |---|---|
-| Nov 15, 2026 | 338 documents cumulative |
-| Nov 30, 2026 | 365 documents cumulative |
+| Nov 15, 2026 | ~155 documents cumulative |
+| Nov 30, 2026 | ~167 documents cumulative |
 
-#### December 2026 — Target: 55 documents
+#### December 2026 — Target: 25 documents
 - Complete all Tier 2 documents
 - Full QA pass on Phase 3 documents
 
 | Date | Milestone |
 |---|---|
-| Dec 15, 2026 | 393 documents cumulative |
-| Dec 31, 2026 | **420 documents cumulative — Phase 3 complete** |
+| Dec 15, 2026 | ~180 documents cumulative |
+| Dec 31, 2026 | **~192 documents cumulative — Phase 3 complete** |
 
 ### Phase 3 Deliverables
-- 420 total remediated documents published
+- ~192 total remediated documents published
 - Internal accessibility audit report (Phases 1–3)
 - Refined workflow SOPs based on lessons learned
 
 ---
 
 ## Phase 4: Final Remediation & Quality Assurance
-**January 1 – April 24, 2027 (~3.75 months | Target: ~180 documents)**
+**January 1 – April 24, 2027 (~3.75 months | Target: ~84 documents)**
 
-Focus on Tier 3 documents: older archives, supplemental/supporting materials, edge cases. Includes final QA sweep of all 600 documents and compliance sign-off.
+Focus on Tier 3 documents: older archives, supplemental/supporting materials, edge cases. Includes final QA sweep of all ~276 documents and compliance sign-off.
 
-**Target Rate:** ~48 documents/month
+**Target Rate:** ~22 documents/month
 
 ### Monthly Breakdown
 
-#### January 2027 — Target: 50 documents
+#### January 2027 — Target: 28 documents
 - Remediate remaining Tier 3 PDFs (in-place and Word conversions)
 - Remediate remaining PowerPoint documents
 
 | Date | Milestone |
 |---|---|
-| Jan 15, 2027 | 445 documents cumulative |
-| Jan 31, 2027 | 470 documents cumulative |
+| Jan 15, 2027 | ~206 documents cumulative |
+| Jan 31, 2027 | ~220 documents cumulative |
 
-#### February 2027 — Target: 50 documents
+#### February 2027 — Target: 28 documents
 - Continue final batch of documents
 - Begin full-project QA review (re-test sample from each phase)
 
 | Date | Milestone |
 |---|---|
-| Feb 15, 2027 | 495 documents cumulative |
-| Feb 28, 2027 | 520 documents cumulative |
+| Feb 15, 2027 | ~234 documents cumulative |
+| Feb 28, 2027 | ~248 documents cumulative |
 
-#### March 2027 — Target: 50 documents
+#### March 2027 — Target: 28 documents
 - Complete all remaining document remediation
 - Conduct thorough accessibility testing: automated (axe/PAC 2024) + manual screen reader testing
 - Address any remediation deficiencies found in QA
 
 | Date | Milestone |
 |---|---|
-| Mar 15, 2027 | 555 documents cumulative |
-| Mar 31, 2027 | **600 documents remediated — remediation complete** |
+| Mar 15, 2027 | ~262 documents cumulative |
+| Mar 31, 2027 | **~276 documents remediated — remediation complete** |
 
 #### April 1–24, 2027 — Final QA, Documentation & Sign-Off
-- Final accessibility audit across all 600 documents
+- Final accessibility audit across all ~276 documents
 - Remediate any outstanding issues identified in final audit
 - Compile compliance documentation package
 - Update website/document library with all accessible versions
+- Coordinate with parallel team on joint compliance sign-off
 - Obtain official compliance sign-off
 
 | Date | Milestone |
@@ -273,6 +277,7 @@ Focus on Tier 3 documents: older archives, supplemental/supporting materials, ed
 | Tool or conversion quality issues | QA every 25 documents; adjust conversion approach as needed |
 | Scope creep (new documents added) | Freeze scope at end of Phase 1; log new docs for post-deadline cycle |
 | ADA regulatory guidance updates | Monitor DOJ communications; adjust standards if needed |
+| Misalignment with parallel remediation team | Hold monthly sync with parallel team to confirm no overlap or gaps |
 
 ---
 
@@ -285,6 +290,7 @@ Focus on Tier 3 documents: older archives, supplemental/supporting materials, ed
 | QA Reviewer | Independent accessibility testing and sign-off |
 | IT/Web Team | Publishing accessible documents to website |
 | Legal/Compliance | Final compliance certification |
+| Parallel Team Lead | Coordinate on the remaining ~324 documents |
 
 ---
 
