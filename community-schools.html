@@ -1,0 +1,648 @@
+<!-- ===== Community Schools: Photo left, Text wraps beside it ===== -->
+<div class="cs-flex-wrap">
+<img class="cs-photo" src="/UserFiles/Servers/Server_74724785/Image/Staff/Headshots/Jenny_Ramsey_Headshot.JPG" alt="Portrait of Mrs. Jenny Ramsey" title="Portrait of Jenny Ramsey">
+<div class="cs-content">
+<h1 class="cs-name">Jenny Ramsey</h1>
+<div class="cs-role"><em>Administrative Coordinator of Community Schools/Acceleration &amp; Enrichment</em></div>
+<div class="cs-contact">
+<strong>301-759-2069</strong><br>
+<a class="cs-email" id="txtID" href="mailto:jennifer.ramsey@acpsmd.org">jennifer.ramsey@acpsmd.org</a>
+</div>
+<p class="cs-intro">
+The Administrative Coordinator of Community Schools provides support to the Community Schools, including supervising the
+Community School Coordinators, budgeting, professional development, and collaborating with community partners and stakeholders
+to provide physical and mental health supports, as well as academic and extracurricular support.
+</p>
+<h4 class="cs-subhead"><span>Key Projects for this office include:</span></h4>
+<ul class="cs-list">
+    <li>Managing COP funding through the Maryland Blueprint.</li>
+    <li>Creating Community Hubs for families, communities, and partnership collaboration.</li>
+    <li>Using school-based data to address needs for students and families.</li>
+    <li>Providing wrap-around services such as healthy food, vision and dental services, safe transportation.</li>
+    <li>Providing additional social workers and counselors, as well as mental health supports.</li>
+</ul>
+</div>
+</div>
+<hr>
+<style>
+    /* ===== Flex layout: image left, text wraps right ===== */
+    .cs-flex-wrap{
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    max-width: 1100px;
+    margin: 0 auto 16px;
+    padding: 0 12px;
+    flex-wrap: wrap; /* stacks nicely on mobile */
+    }
+    /* Photo styling */
+    .cs-photo{
+    display:block;
+    width: clamp(140px, 25%, 220px); /* responsive width */
+    height: auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    margin-top: 4px;
+    flex: 0 0 auto; /* fixed width, text wraps beside it */
+    }
+    /* Text column */
+    .cs-content{
+    flex: 1 1 65%;
+    min-width: 280px;
+    font-family: Sintony, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color: #333;
+    }
+    /* Name, role, and contact */
+    .cs-name{
+    margin: 0 0 4px;
+    font-family: latobold, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: clamp(22px, 4vw, 32px);
+    line-height: 1.2;
+    letter-spacing: -0.15px;
+    }
+    .cs-role{
+    margin: 0 0 6px;
+    font-family: latobold, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: clamp(16px, 3vw, 18px);
+    line-height: 1.3;
+    }
+    .cs-contact{ margin-bottom: 10px; }
+    .cs-email{
+    color:#3d95ed;
+    text-decoration: none;
+    font-size: 16px;
+    }
+    .cs-email:hover, .cs-email:focus-visible{
+    text-decoration: underline;
+    }
+    /* Intro paragraph */
+    .cs-intro{
+    font-size: 16px;
+    line-height: 1.75;
+    margin: 10px 0;
+    }
+    /* Section heading */
+    .cs-subhead{
+    margin: 10px 0 6px;
+    font-family: latobold, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color:#333;
+    }
+    .cs-subhead span{ text-decoration: underline; }
+    /* Bullet list */
+    .cs-list{
+    list-style: disc;
+    margin: 0 0 12px 20px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1.7;
+    }
+    /* Mobile: stack image above text */
+    @media (max-width: 700px){
+    .cs-flex-wrap{
+    flex-direction: column;
+    align-items: center;
+    text-align: left;
+    }
+    .cs-photo{
+    width: 60%;
+    margin: 0 auto 10px;
+    }
+    .cs-content{ flex: 1 1 100%; }
+    }
+</style>
+<style>
+    /* ---- Easy theme variables ---- */
+    :root{
+    --btn-bg: #1882ed;
+    --btn-text: #ffffff;
+    --btn-hover: #17406d;
+    --btn-shadow: 0 6px 16px rgba(0,0,0,.22);
+    --btn-shadow-hover: 0 10px 22px rgba(0,0,0,.28);
+    --lb-backdrop: rgba(0,0,0,.72);
+    --lb-content-bg: #0b0f14;
+    --lb-radius: 12px;
+    --lb-shadow: 0 20px 50px rgba(0,0,0,.45);
+    }
+    .community-card {
+    background:#17406d; color:#fff; max-width:1100px; margin:40px auto; padding:30px 40px;
+    border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3); text-align:left;
+    line-height:1.6; box-sizing:border-box; overflow-wrap:anywhere;
+    }
+    .community-card h2 {
+    font-family:latobold,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    font-size:clamp(22px,4vw,32px);
+    line-height:1.2;
+    margin:0 0 12px;
+    }
+    .community-card p, .community-card li {
+    font-family:Sintony,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    font-size:clamp(15px,2.5vw,16px);
+    letter-spacing:-0.15px;
+    margin:0 0 10px;
+    }
+    .community-card a { color:#fff; text-decoration:underline; }
+    .community-card a:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+
+    /* ===== Main two-column layout ===== */
+    .community-section {
+    display:flex;
+    justify-content:flex-start;
+    align-items:flex-start;
+    gap:60px;
+    max-width:1150px;
+    margin:24px auto;
+    padding:0 40px;
+    flex-wrap:wrap;
+    box-sizing:border-box;
+    }
+
+    /* Action buttons row (lightbox triggers) */
+    .community-actions{
+    flex: 0 0 100%;
+    display: flex;
+    flex-wrap: wrap;         /* FIX: allow buttons to wrap on narrow screens */
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0 4px;
+    padding-bottom: 8px;
+    text-align: center;
+    }
+
+    /* Text column */
+    .community-text {
+    flex:1 1 300px;          /* FIX: lower min so it shrinks on mid-size screens */
+    font-family:Sintony,sans-serif;
+    color:#333;
+    font-size:16px;
+    line-height:1.8;
+    padding-right:30px;
+    margin-left:-20px;
+    box-sizing:border-box;
+    }
+    .community-text h3 {
+    color:rgb(61,149,237);
+    font-family:Merriweather,serif;
+    font-size:22px;
+    margin-top:5px;
+    }
+    .community-text ul {
+    list-style:disc;
+    margin-left:25px;
+    padding-left:0;
+    }
+
+    /* Quick Links */
+    .quick-links {
+    margin-top: 24px;
+    }
+    .quick-links h3 {
+    color: rgb(61,149,237);
+    font-family: Merriweather, serif;
+    font-size: 22px;
+    margin: 10px 0 12px;
+    }
+    .quick-links-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+    }
+    .ql-btn {
+    background: var(--btn-bg, #1882ed);
+    color: #ffffff !important;
+    font: 600 16px/1.1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    padding: 12px 18px;
+    border-radius: 10px;
+    box-shadow: 0 6px 16px rgba(0,0,0,.22);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: .2px;
+    transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
+    }
+    .ql-btn:hover {
+    background: var(--btn-hover, #17406d);
+    box-shadow: 0 10px 22px rgba(0,0,0,.28);
+    transform: translateY(-1px);
+    }
+    .ql-btn:focus-visible {
+    outline: 2px solid white;
+    outline-offset: 2px;
+    }
+    .ql-btn .dot {
+    width: 8px; height: 8px; border-radius: 999px; background: currentColor; opacity: .9;
+    flex-shrink: 0;
+    }
+
+    /* Graphic column */
+    .community-graphic {
+    flex:0 0 350px;
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+    margin-top:20px;
+    box-sizing:border-box;
+    }
+    /* FIX: remove broken inline styles via CSS; image fills its column */
+    .community-graphic img {
+    width:100%;
+    height:auto;
+    border-radius:8px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.2);
+    margin:0;                /* FIX: override any inline margin */
+    }
+
+    /* ===== Tablet breakpoint ===== */
+    @media(max-width:900px){
+    .community-section {
+        flex-direction:column;
+        align-items:center;
+        padding:0 20px;
+        gap:24px;
+    }
+    .community-text {
+        margin-left:0;
+        padding-right:0;
+        flex: 1 1 100%;
+    }
+    .community-graphic {
+        margin-top:16px;
+        flex: 0 0 auto;
+        width:100%;
+        max-width:480px;    /* FIX: cap so it doesn't stretch full width on tablets */
+    }
+    }
+
+    /* ===== Mobile breakpoint ===== */
+    @media(max-width:600px){
+    .community-card {
+        padding: 20px 16px;  /* FIX: reduce horizontal padding on small screens */
+        margin: 24px 12px;
+    }
+    .community-section {
+        padding: 0 12px;
+    }
+    .community-actions {
+        flex-direction: column;  /* FIX: stack action buttons vertically on mobile */
+        align-items: stretch;
+    }
+    .community-actions .lb-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .community-graphic {
+        max-width: 100%;
+    }
+    .ql-btn {
+        width: 100%;             /* FIX: full-width resource links on mobile */
+        box-sizing: border-box;
+    }
+    .quick-links-buttons {
+        align-items: stretch;
+    }
+    }
+
+    /* ---- Lightbox base ---- */
+    .lightbox-backdrop {
+    position: fixed; inset: 0; display: none;
+    background: var(--lb-backdrop);
+    z-index: 9999;
+    }
+    .lightbox-backdrop[aria-hidden="false"] { display: block; }
+    .lightbox {
+    position: fixed; inset: 0;
+    display: grid; place-items: center; pointer-events: none;
+    z-index: 10000;
+    }
+    .lightbox[aria-hidden="true"] { display: none; }
+    .lightbox__panel {
+    pointer-events: auto;
+    position: relative;
+    max-width: min(1100px, 92vw);
+    max-height: min(88vh, 1000px);
+    background: var(--lb-content-bg);
+    border-radius: var(--lb-radius);
+    box-shadow: var(--lb-shadow);
+    overflow: hidden;
+    transform: translateY(6px) scale(.985);
+    opacity: 0;
+    transition: opacity .18s ease, transform .2s ease;
+    }
+    .lightbox[aria-hidden="false"] .lightbox__panel {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    }
+    .lightbox__nav{
+    position:absolute; top: 20%; transform:translateY(-20%);
+    width:42px; height:42px; border:0; border-radius:999px;
+    background:rgba(255,255,255,.35); color:#fff; cursor:pointer;
+    display:none;
+    align-items:center; justify-content:center; font-size:20px; line-height:1;
+    backdrop-filter: blur(2px);
+    z-index: 3;
+    }
+    .lightbox__prev{ left:10px; }
+    .lightbox__next{ right:10px; }
+    .lightbox__nav:hover{ background:rgba(255,255,255,.35); }
+    .lightbox__header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; gap: 10px; color: #fff;
+    }
+    .lightbox__title {
+    font: 600 16px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    margin: 0; color: #fff;
+    }
+    .lightbox__close {
+    background: transparent; border: 0; color: #fff; cursor: pointer;
+    width: 38px; height: 38px; border-radius: 8px;
+    display: inline-grid; place-items: center;
+    transition: background .2s ease, transform .15s ease;
+    }
+    .lightbox__close:hover { background: rgba(255,255,255,.08); transform: translateY(-1px); }
+    .lightbox__close:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+    .lightbox__body {
+    padding: 0; background: #0e141b;
+    }
+    .lightbox__imgWrap {
+    display: grid; place-items: center;
+    max-height: min(84vh, 960px);
+    overflow: auto;
+    background: #0e141b;
+    }
+    .lightbox__imgWrap img {
+    display: block; width: 100%; height: auto;
+    }
+
+    /* ---- Lightbox nav arrows (accessible) ---- */
+    #lightbox .lightbox__nav {
+    position: absolute !important;
+    top: 10% !important;
+    transform: translateY(-10%) !important;
+    z-index: 3 !important;
+    background: #1882ed !important;
+    color: #ffffff !important;
+    font-size: 34px !important;
+    width: 54px !important;
+    height: 54px !important;
+    border: 3px solid #ffffff !important;
+    border-radius: 50% !important;
+    box-shadow: 0 0 14px rgba(0,0,0,0.5) !important;
+    opacity: 1 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+    #lightbox .lightbox__nav:hover,
+    #lightbox .lightbox__nav:focus-visible {
+    background: #0b0f14 !important;
+    border-color: #020d17 !important;
+    outline: 3px solid #020d17 !important;
+    transform: scale(1.1);
+    box-shadow: 0 0 18px rgba(255,255,255,0.6) !important;
+    }
+    #lightbox.lb--show-arrows .lightbox__nav {
+    display: flex !important;
+    }
+    #lightbox .lightbox__prev { left: 10px !important; }
+    #lightbox .lightbox__next { right: 10px !important; }
+
+    /* ---- Button styling ---- */
+    .lb-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 0;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    font: 600 16px/1.1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    padding: 12px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: var(--btn-shadow);
+    transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    letter-spacing: .2px;
+    white-space: normal;       /* FIX: allow button text to wrap rather than overflow */
+    text-align: left;
+    }
+    .lb-btn:hover { background: var(--btn-hover); box-shadow: var(--btn-shadow-hover); transform: translateY(-1px); }
+    .lb-btn:active { transform: translateY(0); }
+    .lb-btn:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+    .lb-btn .dot {
+    width: 8px; height: 8px; border-radius: 999px; background: currentColor; opacity: .9;
+    flex-shrink: 0;
+    }
+
+    @media (max-width: 700px){
+    .lightbox__panel { max-width: 96vw; }
+    }
+    @media (prefers-reduced-motion: reduce){
+    *{animation:none!important;transition:none!important;}
+    }
+</style>
+<div class="community-card">
+<h2>What is a Community School?</h2>
+<p>
+A community school is more than just a place of learning. It's a hub that brings together academic, social,
+and health services to support not just the student, but the whole family and community. At the core of a
+community school are the integrated support services, which address health, mental well-being, and
+personalized academic needs.
+</p>
+</div>
+<!-- ====== LIGHTBOX MARKUP ====== -->
+<div class="lightbox-backdrop" id="lbBackdrop" aria-hidden="true"></div>
+<div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="lbTitle">
+<div class="lightbox__panel">
+<div class="lightbox__header">
+<h3 class="lightbox__title" id="lbTitle">Framework for Community Schools</h3>
+<button class="lightbox__close" type="button" id="lbClose" aria-label="Close">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+<path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+</svg>
+</button>
+</div>
+<button class="lightbox__nav lightbox__prev" type="button" aria-label="Previous">&#10094;</button>
+<button class="lightbox__nav lightbox__next" type="button" aria-label="Next">&#10095;</button>
+<div class="lightbox__body">
+<div class="lightbox__imgWrap">
+<img id="lbImg" src="/UserFiles/Servers/Server_74724785/Image/Community%20Schools/Framwork_for_Community_Schools.svg" alt="Circle graphic with colorful design and text">
+</div>
+</div>
+</div>
+</div>
+<script>
+(function(){
+  const lb        = document.getElementById('lightbox');
+  const backdrop  = document.getElementById('lbBackdrop');
+  const lbImg     = document.getElementById('lbImg');
+  const lbTitle   = document.getElementById('lbTitle');
+  const lbClose   = document.getElementById('lbClose');
+  let prevBtn, nextBtn;
+  let lastTrigger = null;
+  let gallery = [];
+  let galleryIndex = 0;
+  function getNavButtons(){
+    prevBtn = document.querySelector('#lightbox .lightbox__prev');
+    nextBtn = document.querySelector('#lightbox .lightbox__next');
+    if (prevBtn && !prevBtn.__lbBound) {
+      prevBtn.addEventListener('click', prev);
+      prevBtn.__lbBound = true;
+    }
+    if (nextBtn && !nextBtn.__lbBound) {
+      nextBtn.addEventListener('click', next);
+      nextBtn.__lbBound = true;
+    }
+  }
+  function buildGallery(name){
+    return name
+      ? Array.from(document.querySelectorAll('.lightbox-trigger[data-lb-gallery="'+name+'"]'))
+      : [];
+  }
+  function setArrowVisibilityFor(group, hasMultiple){
+    getNavButtons();
+    if (group === 'brochure' && hasMultiple) {
+      lb.classList.add('lb--show-arrows');
+    } else {
+      lb.classList.remove('lb--show-arrows');
+    }
+  }
+  function renderFrom(el){
+    const src   = el.getAttribute('data-lb-src');
+    const alt   = el.getAttribute('data-lb-alt')   || '';
+    const title = el.getAttribute('data-lb-title') || '';
+    if (src) lbImg.src = src;
+    lbImg.alt = alt;
+    lbTitle.textContent = title;
+  }
+  function openLBFrom(el){
+    const group = el.getAttribute('data-lb-gallery');
+    if (group){
+      gallery = buildGallery(group);
+      galleryIndex = Math.max(0, gallery.indexOf(el));
+      if (galleryIndex === -1) galleryIndex = 0;
+      renderFrom(gallery[galleryIndex]);
+      setArrowVisibilityFor(group, gallery.length > 1);
+    } else {
+      gallery = [];
+      galleryIndex = 0;
+      renderFrom(el);
+      setArrowVisibilityFor(null, false);
+    }
+    lb.setAttribute('aria-hidden', 'false');
+    backdrop.setAttribute('aria-hidden', 'false');
+    document.documentElement.style.overflow = 'hidden';
+    lbClose.focus();
+  }
+  function closeLB(){
+    lb.setAttribute('aria-hidden', 'true');
+    backdrop.setAttribute('aria-hidden', 'true');
+    document.documentElement.style.overflow = '';
+    if (lastTrigger) lastTrigger.focus();
+  }
+  function next(){
+    if (gallery.length < 2) return;
+    galleryIndex = (galleryIndex + 1) % gallery.length;
+    renderFrom(gallery[galleryIndex]);
+  }
+  function prev(){
+    if (gallery.length < 2) return;
+    galleryIndex = (galleryIndex - 1 + gallery.length) % gallery.length;
+    renderFrom(gallery[galleryIndex]);
+  }
+  document.addEventListener('click', function(e){
+    const trigger = e.target.closest('.lightbox-trigger');
+    if (!trigger) return;
+    e.preventDefault();
+    lastTrigger = trigger;
+    openLBFrom(trigger);
+  });
+  lbClose.addEventListener('click', closeLB);
+  backdrop.addEventListener('click', closeLB);
+  document.addEventListener('keydown', function(e){
+    const open = lb.getAttribute('aria-hidden') === 'false';
+    if (!open) return;
+    if (e.key === 'Escape') closeLB();
+    if (e.key === 'ArrowRight') next();
+    if (e.key === 'ArrowLeft')  prev();
+  });
+  getNavButtons();
+})();
+</script>
+<div class="community-section">
+<div class="community-actions">
+<button class="lb-btn lightbox-trigger" data-lb-title="Framework for Community Schools Graphic" data-lb-src="/UserFiles/Servers/Server_74724785/Image/Community%20Schools/Framwork_for_Community_Schools.svg" data-lb-alt="Circle graphic with colorful design and text">
+<span class="dot" aria-hidden="true"></span> Framework for Community Schools Graphic
+</button>
+<button class="lb-btn lightbox-trigger" data-lb-gallery="brochure" data-lb-src="/UserFiles/Servers/Server_74724785/Image/Community%20Schools/Community%20Schools_Brochure_Page_1.jpg" data-lb-title="Community Schools Brochure — Front" data-lb-alt="Dark blue, orange, and white brochure front with text and photos">
+<span class="dot" aria-hidden="true"></span> Community Schools Brochure (EN)
+</button>
+<!-- Hidden second page, same gallery -->
+<a class="lightbox-trigger" data-lb-gallery="brochure" data-lb-src="/UserFiles/Servers/Server_74724785/Image/Community%20Schools/Community%20Schools_Brochure_Page_2.jpg" data-lb-title="Community Schools Brochure — Back" data-lb-alt="Dark blue, orange, and white brochure back with text and photos" style="display:none;"></a>
+<button class="lb-btn lightbox-trigger" data-lb-gallery="brochure" data-lb-src="/UserFiles/Servers/Server_74724785/Image/Community%20Schools/spanish-community-schools-brochure_Page_1.jpg" data-lb-title="Community Schools Spanish Brochure — Front" data-lb-alt="Dark blue, orange, and white brochure front with text and photos">
+<span class="dot" aria-hidden="true"></span> Community Schools Brochure (ES)
+</button>
+<!-- Hidden second page, same gallery -->
+<a class="lightbox-trigger" data-lb-gallery="brochure" data-lb-src="/UserFiles/Servers/Server_74724785/Image/Community%20Schools/spanish-community-schools-brochure_Page_2.jpg" data-lb-title="Community Schools Spanish Brochure — Back" data-lb-alt="Dark blue, orange, and white brochure back with text and photos" style="display:none;"></a>
+</div>
+<div class="community-text">
+<h3>What Community Schools Do</h3>
+<p>Community Schools identify the needs of our school and use the strengths of the community to meet them. They provide a wide array of wraparound services that enhance students' ability to be successful.</p>
+<p>These wraparound services aim to improve academic performance, build stronger family-community ties and enhance student well-being.</p>
+<p><strong>Examples of wraparound services:</strong></p>
+<ul>
+    <li>Supports that improve student attendance</li>
+    <li>Enhancing student enrichment experiences and improving the learning environment</li>
+    <li>Family and community engagement</li>
+    <li>Expanding health, vision, and dental services</li>
+</ul>
+<h3>How Does This Impact Students?</h3>
+<p>Students in Allegany County will now have access to vital resources they didn't before. The community school model can address any barriers they face, such as physical and emotional health, academic struggles, food insecurity, or other factors that make it difficult for them to thrive.</p>
+<h3>Does My Child Attend a Community School?</h3>
+<p>There are currently 17 Community Schools in Allegany County:</p>
+<ul>
+    <li>Beall Elementary School</li>
+    <li>Braddock Middle School</li>
+    <li>Cash Valley Elementary School</li>
+    <li>Cresaptown Elementary School</li>
+    <li>Center for Career &amp; Technical Education (CCTE)</li>
+    <li>Flintstone Elementary School</li>
+    <li>Fort Hill High School</li>
+    <li>George's Creek Elementary School</li>
+    <li>John Humbird Elementary School</li>
+    <li>Mount Savage Elementary School</li>
+    <li>Northeast Elementary School</li>
+    <li>Parkside Elementary School</li>
+    <li>South Penn Elementary School</li>
+    <li>Washington Middle School</li>
+    <li>Westmar Middle School</li>
+    <li>Westernport Elementary School</li>
+    <li>Westside Elementary School</li>
+</ul>
+<!-- QUICK LINKS SECTION -->
+<div class="quick-links">
+<h3>Resource Links</h3>
+<div class="quick-links-buttons">
+<a class="ql-btn" href="https://blueprint.marylandpublicschools.org/community-schools/" target="_blank" rel="noopener noreferrer" title="External Link">
+<span class="dot" aria-hidden="true"></span>Blueprint for Maryland's Future-Community Schools
+</a>
+<a class="ql-btn" href="https://www.towson.edu/coe/centers/maryland-center-community-schools/" target="_blank" rel="noopener noreferrer" title="External Link">
+<span class="dot" aria-hidden="true"></span>Maryland Center for Community Schools
+</a>
+<a class="ql-btn" href="https://nccs.org/" target="_blank" rel="noopener noreferrer" title="External Link">
+<span class="dot" aria-hidden="true"></span>National Center for Community Schools</a>
+<a class="ql-btn" href="/UserFiles/Servers/Server_74724785/File/Community Schools/community-schools-english-brochure.pdf" target="_blank" rel="noopener noreferrer" title="PDF">
+<span class="dot" aria-hidden="true"></span>Community Schools English Brochure PDF</a>
+<a class="ql-btn" href="/UserFiles/Servers/Server_74724785/File/Community Schools/spanish-community-schools-brochure.pdf" target="_blank" rel="noopener noreferrer" title="PDF">
+<span class="dot" aria-hidden="true"></span>Community Schools Spanish Brochure PDF</a>
+</div>
+</div>
+</div>
+<div class="community-graphic">
+<!-- FIX: removed inline style="width:148%;height:400%;margin:25px 30px 5px 50px" — controlled by CSS -->
+<img src="/UserFiles/Servers/Server_74724785/Image/Community%20Schools/ACPS%20Community%20Schools%20Journey%20.jpg" alt="Graphic of timeline." longdesc="Graphic displaying a timeline with a title of ACPS Community Schools Journey" title="Graphic of timeline.">
+</div>
+</div>
