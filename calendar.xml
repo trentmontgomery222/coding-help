@@ -1,0 +1,83 @@
+<page style="single" type="Content Space Page" name="Calendar" canonicalName="calendar" theme="0" layoutTemplate="" refresh="0" mobile="True">
+	<column order="1" type="vertical" style="">
+		<instance order="1" title="Calendar">
+			<properties>
+			</properties>
+			<portlet name="Calendar" category="Collaboration" viewable="True" minimizable="True" maximizable="True" editable="False" inlineeditable="False" detachable="False" hidden="False" personalizable="False" cachable="False" nochrome="True" versioncontrolled="False" width="200" height="300">
+				<description>
+				</description>
+				<properties>
+					<property name="Action">
+					</property>
+					<property name="AssemblyName">CollaborationServer.dll</property>
+					<property name="ContextBar">1</property>
+					<property name="AutoGenerateObjectType">workspace_calendar</property>
+					<property name="Place"></property>
+					<property name="ContextId">
+					</property>
+					<property name="ParentId">
+					</property>
+					<property name="Extra">
+					</property>
+					<property name="OneLink">
+					</property>
+					<property name="ObjectId">
+					</property>
+					<property name="ClassName">Intrafinity.CollaborationServer.WSCalendar</property>
+					<property name="IsAutoGenerate">true</property>
+					<property name="NamePropertyName">Label,Description</property>
+					<property name="MobileEnabled">true</property>
+					<property name="MobileVisible">true</property>
+				</properties>
+				<template provider="presentation" name="Presentation" category="" minimizable="True" maximizable="True" editable="True" inlineeditable="False" detachable="False" personalizable="False" cachable="False" nochrome="True" versioncontrolled="False" width="200" height="300">
+					<resource>
+					</resource>
+					<properties>
+						<property name="Place">
+						</property>
+						<property name="ContextId">
+						</property>
+						<property name="Extra">
+						</property>
+						<property name="ObjectId">
+						</property>
+						<property name="OneLink">
+						</property>
+						<property name="Action">
+						</property>
+						<property name="ParentId">
+						</property>
+					</properties>
+					<configuration>
+						<properties>
+						</properties>
+					</configuration>
+				</template>
+				<template provider="mobile" name="Mobile" category="" minimizable="True" maximizable="True" editable="True" inlineeditable="False" detachable="False" personalizable="False" cachable="False" nochrome="True" versioncontrolled="False" width="200" height="300">
+					<resource>
+					</resource>
+					<properties>
+						<property name="Place">
+						</property>
+						<property name="ContextId">
+						</property>
+						<property name="Extra">
+						</property>
+						<property name="ObjectId">
+						</property>
+						<property name="OneLink">
+						</property>
+						<property name="Action">
+						</property>
+						<property name="ParentId">
+						</property>
+					</properties>
+					<configuration>
+						<properties>
+						</properties>
+					</configuration>
+				</template>
+			</portlet>
+		</instance>
+	</column>
+</page>
