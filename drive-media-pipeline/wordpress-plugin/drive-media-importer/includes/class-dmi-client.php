@@ -68,36 +68,47 @@ class DMI_Client {
 
 	/**
 	 * POST with explicit handling of the Apps Script 302 hop.
+	 *
+	 * Apps Script processes the POST, then 302-redirects to a one-time
+	 * script.googleusercontent.com URL that holds the response. That URL
+	 * only answers a plain GET — re-POSTing the body to it gets Google's
+	 * generic "Error 400 (Bad Request)!!1" page. So: send the POST with
+	 * auto-redirects disabled, then fetch the Location target with GET.
 	 */
-	private static function post_following_redirects( $url, $body, $hop = 0 ) {
-		if ( $hop > 3 ) {
-			return new WP_Error( 'dmi_redirect_loop', 'Too many redirects from the Web App.' );
-		}
-
-		$args = array(
+	private static function post_following_redirects( $url, $body ) {
+		$response = wp_remote_post( $url, array(
 			'timeout'     => 60,
-			'redirection' => 5,
+			'redirection' => 0, // handle the 302 ourselves
 			'headers'     => array( 'Content-Type' => 'application/json' ),
 			'body'        => $body,
-		);
-
-		$response = wp_remote_post( $url, $args );
+		) );
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
 
-		$code = wp_remote_retrieve_response_code( $response );
-		if ( in_array( $code, array( 301, 302, 303, 307, 308 ), true ) ) {
+		for ( $hop = 0; $hop < 5; $hop++ ) {
+			$code = wp_remote_retrieve_response_code( $response );
+			if ( ! in_array( $code, array( 301, 302, 303, 307, 308 ), true ) ) {
+				return $response;
+			}
+
 			$location = wp_remote_retrieve_header( $response, 'location' );
 			if ( ! $location ) {
 				return new WP_Error( 'dmi_redirect_no_location', 'Web App redirected without a Location header.' );
 			}
-			// Re-POST the full body to the redirect target so it is never
-			// downgraded to a body-less GET.
-			return self::post_following_redirects( $location, $body, $hop + 1 );
+
+			// The POST has already been processed by Apps Script; the
+			// redirect target just holds the response. Plain GET, no body.
+			$response = wp_remote_get( $location, array(
+				'timeout'     => 60,
+				'redirection' => 0,
+			) );
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
 		}
 
-		return $response;
+		return new WP_Error( 'dmi_redirect_loop', 'Too many redirects from the Web App.' );
 	}
 
 	// ------------------------------------------------------------------
