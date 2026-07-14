@@ -1,11 +1,12 @@
 <?php
 /**
- * Network-admin settings for Drive Media Importer.
+ * Settings screen for Drive Media Importer.
  *
- * Settings are network-scoped (site options). The shared token can be
- * defined as a constant in wp-config.php — DMI_SHARED_TOKEN — which takes
- * precedence over the stored option and keeps the secret out of the
- * database and the repo.
+ * Lives under Settings → Drive Media Importer in the regular wp-admin of
+ * the site the plugin is activated on. Settings are stored as a normal
+ * site option. The shared token can be defined as a constant in
+ * wp-config.php — DMI_SHARED_TOKEN — which takes precedence over the
+ * stored option and keeps the secret out of the database and the repo.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -15,9 +16,9 @@ class DMI_Settings {
 	const OPTION = 'dmi_settings';
 
 	public static function init() {
-		add_action( 'network_admin_menu', array( __CLASS__, 'add_menu' ) );
-		add_action( 'network_admin_edit_dmi_save_settings', array( __CLASS__, 'save' ) );
-		add_action( 'network_admin_edit_dmi_run_now', array( __CLASS__, 'run_now' ) );
+		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
+		add_action( 'admin_post_dmi_save_settings', array( __CLASS__, 'save' ) );
+		add_action( 'admin_post_dmi_run_now', array( __CLASS__, 'run_now' ) );
 	}
 
 	public static function defaults() {
@@ -35,7 +36,7 @@ class DMI_Settings {
 	}
 
 	public static function get() {
-		$settings = wp_parse_args( (array) get_site_option( self::OPTION, array() ), self::defaults() );
+		$settings = wp_parse_args( (array) get_option( self::OPTION, array() ), self::defaults() );
 		if ( defined( 'DMI_SHARED_TOKEN' ) && DMI_SHARED_TOKEN ) {
 			$settings['token'] = DMI_SHARED_TOKEN;
 		}
@@ -43,11 +44,10 @@ class DMI_Settings {
 	}
 
 	public static function add_menu() {
-		add_submenu_page(
-			'settings.php',
+		add_options_page(
 			__( 'Drive Media Importer', 'drive-media-importer' ),
 			__( 'Drive Media Importer', 'drive-media-importer' ),
-			'manage_network_options',
+			'manage_options',
 			'dmi-settings',
 			array( __CLASS__, 'render' )
 		);
@@ -55,13 +55,13 @@ class DMI_Settings {
 
 	public static function save() {
 		check_admin_referer( 'dmi_save_settings' );
-		if ( ! current_user_can( 'manage_network_options' ) ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Insufficient permissions.', 'drive-media-importer' ) );
 		}
 
 		$in       = wp_unslash( $_POST );
 		$existing = self::get();
-		$stored   = (array) get_site_option( self::OPTION, array() );
+		$stored   = (array) get_option( self::OPTION, array() );
 
 		$days = array();
 		if ( ! empty( $in['hours_days'] ) && is_array( $in['hours_days'] ) ) {
@@ -88,19 +88,19 @@ class DMI_Settings {
 			'max_file_bytes' => max( MB_IN_BYTES, (int) ( $in['max_file_bytes'] ?? 20 * MB_IN_BYTES ) ),
 		);
 
-		update_site_option( self::OPTION, $settings );
+		update_option( self::OPTION, $settings, false );
 
 		wp_safe_redirect( add_query_arg(
 			array( 'page' => 'dmi-settings', 'updated' => 'true' ),
-			network_admin_url( 'settings.php' )
+			admin_url( 'options-general.php' )
 		) );
 		exit;
 	}
 
-	/** Manual "Run now" trigger (build-order step 6). */
+	/** Manual "Run now" trigger. */
 	public static function run_now() {
 		check_admin_referer( 'dmi_run_now' );
-		if ( ! current_user_can( 'manage_network_options' ) ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'Insufficient permissions.', 'drive-media-importer' ) );
 		}
 
@@ -108,7 +108,7 @@ class DMI_Settings {
 
 		wp_safe_redirect( add_query_arg(
 			array( 'page' => 'dmi-settings', 'dmi_ran' => rawurlencode( $summary ) ),
-			network_admin_url( 'settings.php' )
+			admin_url( 'options-general.php' )
 		) );
 		exit;
 	}
@@ -118,7 +118,10 @@ class DMI_Settings {
 	}
 
 	public static function render() {
-		$s          = self::get();
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$s           = self::get();
 		$token_const = defined( 'DMI_SHARED_TOKEN' ) && DMI_SHARED_TOKEN;
 		$day_labels  = array(
 			1 => __( 'Mon', 'drive-media-importer' ),
@@ -129,6 +132,7 @@ class DMI_Settings {
 			6 => __( 'Sat', 'drive-media-importer' ),
 			7 => __( 'Sun', 'drive-media-importer' ),
 		);
+		$log = array_reverse( (array) get_option( DMI_Poller::LOG_OPTION, array() ) );
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Drive Media Importer', 'drive-media-importer' ); ?></h1>
@@ -140,7 +144,8 @@ class DMI_Settings {
 				<div class="notice notice-info" role="status"><p><?php echo esc_html( wp_unslash( $_GET['dmi_ran'] ) ); ?></p></div>
 			<?php endif; ?>
 
-			<form method="post" action="<?php echo esc_url( network_admin_url( 'edit.php?action=dmi_save_settings' ) ); ?>">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="dmi_save_settings">
 				<?php wp_nonce_field( 'dmi_save_settings' ); ?>
 				<table class="form-table" role="presentation">
 					<tr>
@@ -206,10 +211,20 @@ class DMI_Settings {
 			</form>
 
 			<h2><?php esc_html_e( 'Manual run', 'drive-media-importer' ); ?></h2>
-			<form method="post" action="<?php echo esc_url( network_admin_url( 'edit.php?action=dmi_run_now' ) ); ?>">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="dmi_run_now">
 				<?php wp_nonce_field( 'dmi_run_now' ); ?>
 				<?php submit_button( __( 'Run one poll cycle now', 'drive-media-importer' ), 'secondary' ); ?>
 			</form>
+
+			<?php if ( $log ) : ?>
+				<h2><?php esc_html_e( 'Recent activity', 'drive-media-importer' ); ?></h2>
+				<ul style="font-family:monospace;">
+					<?php foreach ( array_slice( $log, 0, 15 ) as $entry ) : ?>
+						<li><?php echo esc_html( $entry ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
 		</div>
 		<?php
 	}

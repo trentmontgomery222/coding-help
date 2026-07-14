@@ -13,8 +13,8 @@ defined( 'ABSPATH' ) || exit;
 
 class DMI_Poller {
 
-	const LOCK_TTL  = 10 * MINUTE_IN_SECONDS;
-	const LOG_OPTION = 'dmi_recent_log';
+	const LOCK_TTL   = 10 * MINUTE_IN_SECONDS;
+	public const LOG_OPTION = 'dmi_recent_log';
 
 	/**
 	 * Run one poll cycle.
@@ -35,15 +35,15 @@ class DMI_Poller {
 		}
 
 		// Transient lock prevents overlapping runs.
-		if ( false !== get_site_transient( DMI_LOCK_TRANSIENT ) ) {
+		if ( false !== get_transient( DMI_LOCK_TRANSIENT ) ) {
 			return self::log( 'Skipped: another poll is already running.' );
 		}
-		set_site_transient( DMI_LOCK_TRANSIENT, time(), self::LOCK_TTL );
+		set_transient( DMI_LOCK_TRANSIENT, time(), self::LOCK_TTL );
 
 		try {
 			return self::log( self::poll( $settings ) );
 		} finally {
-			delete_site_transient( DMI_LOCK_TRANSIENT );
+			delete_transient( DMI_LOCK_TRANSIENT );
 		}
 	}
 
@@ -141,14 +141,14 @@ class DMI_Poller {
 		return ( $time >= $settings['hours_start'] ) && ( $time < $settings['hours_end'] );
 	}
 
-	/** Log to PHP error log and keep the last 50 entries in a site option. */
+	/** Log to PHP error log and keep the last 50 entries in an option. */
 	private static function log( $message ) {
 		$entry = '[' . current_time( 'mysql' ) . '] ' . $message;
 		error_log( 'Drive Media Importer: ' . $entry );
 
-		$log = (array) get_site_option( self::LOG_OPTION, array() );
+		$log   = (array) get_option( self::LOG_OPTION, array() );
 		$log[] = $entry;
-		update_site_option( self::LOG_OPTION, array_slice( $log, -50 ) );
+		update_option( self::LOG_OPTION, array_slice( $log, -50 ), false );
 
 		return $message;
 	}

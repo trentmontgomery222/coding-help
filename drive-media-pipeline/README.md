@@ -23,7 +23,7 @@ never sees an inbound POST to block.
 | Path | What it is |
 |---|---|
 | `apps-script/` | One Apps Script project: the Drive add-on card **and** the `doPost` Web App |
-| `wordpress-plugin/drive-media-importer/` | Network-activated WordPress plugin: cron poller + importer + network settings screen |
+| `wordpress-plugin/drive-media-importer/` | Standard WordPress plugin (activate from the normal Plugins screen): cron poller + importer + Settings → Drive Media Importer screen |
 | `docs/SETUP.md` | Step-by-step deployment and verification guide |
 
 ## Data flow
@@ -51,7 +51,7 @@ never sees an inbound POST to block.
   the body is never dropped, and converts HTML error pages into structured
   errors instead of JSON-parse crashes.
 - LockService on every sheet write; transient lock against overlapping polls;
-  cron registers on the **main site only**.
+  activate the plugin on **one site only** so there is a single poller.
 - Stale-`processing` sweep re-queues rows if WordPress dies mid-batch.
 - Working-hours gate uses `wp_timezone()`, never the server's UTC clock.
 - One bad file fails only its own row, never the batch.

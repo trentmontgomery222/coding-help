@@ -85,14 +85,18 @@ flips rows to `processing`, `file` refuses file IDs that are *not* in a
 ## 6. Install the WordPress plugin
 
 1. Copy `wordpress-plugin/drive-media-importer/` into `wp-content/plugins/`.
-2. **Network Activate** it (Network Admin → Plugins).
-3. Define the token in `wp-config.php` (preferred over storing it in the DB):
+2. Activate it from the regular **Plugins** screen in wp-admin. On a
+   multisite network, activate it on **one site only** (the main site) — that
+   site is the single poller; imports still land on whatever subsite each
+   queued row targets.
+3. Define the token in `wp-config.php` (preferred over storing it in the DB),
+   or just paste it into the settings field in the next step:
 
    ```php
    define( 'DMI_SHARED_TOKEN', 'your-shared-token' );
    ```
 
-4. Network Admin → Settings → **Drive Media Importer**: set the Web App URL,
+4. Go to **Settings → Drive Media Importer**: set the Web App URL,
    batch size, and max file size. Leave "Enable polling" OFF for now.
 5. Queue an image from Drive, then click **Run one poll cycle now** (or run
    `wp dmi poll` with WP-CLI). Verify: the image appears in the target

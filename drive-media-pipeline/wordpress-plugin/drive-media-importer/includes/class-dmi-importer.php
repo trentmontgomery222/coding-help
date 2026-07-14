@@ -61,12 +61,20 @@ class DMI_Importer {
 
 		$filename = self::normalize_filename( (string) $row['filename'], self::ALLOWED_TYPES[ $mime ] );
 
-		$target_site = (int) $row['target_site'];
-		if ( $target_site < 1 || ! get_site( $target_site ) ) {
-			return $fail( sprintf( 'Target site "%s" does not exist on this network.', $row['target_site'] ) );
+		// On multisite, import into the requested subsite; on a single site
+		// (or when no/invalid target is given) import into the current site.
+		$switched = false;
+		if ( is_multisite() ) {
+			$target_site = (int) $row['target_site'];
+			if ( $target_site >= 1 && (int) get_current_blog_id() !== $target_site ) {
+				if ( ! get_site( $target_site ) ) {
+					return $fail( sprintf( 'Target site "%s" does not exist on this network.', $row['target_site'] ) );
+				}
+				switch_to_blog( $target_site );
+				$switched = true;
+			}
 		}
 
-		switch_to_blog( $target_site );
 		try {
 			$upload = wp_upload_bits( $filename, null, $bytes );
 			if ( ! empty( $upload['error'] ) ) {
@@ -117,7 +125,9 @@ class DMI_Importer {
 		} catch ( \Throwable $e ) {
 			return $fail( 'Unexpected error during import: ' . $e->getMessage() );
 		} finally {
-			restore_current_blog();
+			if ( $switched ) {
+				restore_current_blog();
+			}
 		}
 	}
 
