@@ -306,7 +306,7 @@ class ACPS_LS_DB {
 	 * }
 	 * @return array { items: object[], total: int }
 	 */
-	public static function list( $args = array() ) {
+	public static function get_links( $args = array() ) {
 		global $wpdb;
 		$table = acps_ls_table_name();
 

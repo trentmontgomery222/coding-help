@@ -94,7 +94,7 @@ class ACPS_LS_List_Table extends WP_List_Table {
 		$orderby = isset( $_REQUEST['orderby'] ) ? sanitize_key( $_REQUEST['orderby'] ) : 'created_at'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$order   = isset( $_REQUEST['order'] ) ? sanitize_key( $_REQUEST['order'] ) : 'desc'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		$result = ACPS_LS_DB::list(
+		$result = ACPS_LS_DB::get_links(
 			array(
 				'search'   => $search,
 				'per_page' => $per_page,

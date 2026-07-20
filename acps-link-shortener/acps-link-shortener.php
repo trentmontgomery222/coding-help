@@ -20,6 +20,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Bail safely on unsupported PHP instead of white-screening on activation.
+ * A too-old PHP is shown a readable notice; the plugin simply does not load.
+ */
+if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
+	add_action(
+		'admin_notices',
+		function () {
+			echo '<div class="notice notice-error"><p>';
+			echo esc_html(
+				sprintf(
+					/* translators: %s: current PHP version. */
+					__( 'ACPS Link Shortener requires PHP 7.4 or newer. This server runs PHP %s. Please update PHP, then activate the plugin.', 'acps-link-shortener' ),
+					PHP_VERSION
+				)
+			);
+			echo '</p></div>';
+		}
+	);
+	return;
+}
+
+/**
  * Core constants.
  *
  * ACPS_LS_SLUG_PREFIX is the single source of truth for the path segment used

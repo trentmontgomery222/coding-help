@@ -21,9 +21,11 @@ class ACPS_LS_Install {
 		self::create_table();
 		update_option( ACPS_LS_OPT_DB_VERSION, ACPS_LS_DB_VERSION );
 
-		// Register the rewrite rule then flush ONCE so /link/{slug} works.
+		// Add the rewrite rule directly (init has already fired during
+		// activation, so hooking it would be too late), then flush ONCE so
+		// /link/{slug} works immediately.
 		$rewrite = new ACPS_LS_Rewrite();
-		$rewrite->register();
+		$rewrite->add_rewrite_rule();
 		flush_rewrite_rules();
 
 		// Schedule the 3-minute Sheet sync if not already scheduled.
