@@ -372,7 +372,7 @@ class ACPS_LS_Admin {
 				printf(
 					/* translators: %s: short-link base such as acpsmd.org/link/. */
 					esc_html__( 'Short links are served from %s.', 'acps-link-shortener' ),
-					'<code>' . esc_html( home_url( '/' . ACPS_LS_SLUG_PREFIX . '/' ) ) . '</code>'
+					'<code>' . esc_html( home_url( '/' . ( '' !== ACPS_LS_SLUG_PREFIX ? ACPS_LS_SLUG_PREFIX . '/' : '' ) ) ) . '</code>'
 				);
 				?>
 			</p>
@@ -423,7 +423,7 @@ class ACPS_LS_Admin {
 
 		$is_edit    = (bool) $id;
 		$page_title = $is_edit ? __( 'Edit Link', 'acps-link-shortener' ) : __( 'Add New Link', 'acps-link-shortener' );
-		$prefix_url = home_url( '/' . ACPS_LS_SLUG_PREFIX . '/' );
+		$prefix_url = home_url( '/' . ( '' !== ACPS_LS_SLUG_PREFIX ? ACPS_LS_SLUG_PREFIX . '/' : '' ) );
 		?>
 		<div class="wrap acps-ls-wrap">
 			<h1><?php echo esc_html( $page_title ); ?></h1>

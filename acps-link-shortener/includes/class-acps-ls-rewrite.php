@@ -16,8 +16,15 @@ class ACPS_LS_Rewrite {
 
 	/**
 	 * Hook into WordPress.
+	 *
+	 * Only registers a rewrite rule + query var in prefixed mode. In bare mode
+	 * (empty prefix) there is no rule at all — the redirect handler uses a 404
+	 * fallback instead, so real pages are never intercepted.
 	 */
 	public function register() {
+		if ( '' === ACPS_LS_SLUG_PREFIX ) {
+			return;
+		}
 		add_action( 'init', array( $this, 'add_rewrite_rule' ) );
 		add_filter( 'query_vars', array( $this, 'add_query_var' ) );
 	}

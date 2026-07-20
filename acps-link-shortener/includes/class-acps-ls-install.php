@@ -21,11 +21,14 @@ class ACPS_LS_Install {
 		self::create_table();
 		update_option( ACPS_LS_OPT_DB_VERSION, ACPS_LS_DB_VERSION );
 
-		// Add the rewrite rule directly (init has already fired during
-		// activation, so hooking it would be too late), then flush ONCE so
-		// /link/{slug} works immediately.
-		$rewrite = new ACPS_LS_Rewrite();
-		$rewrite->add_rewrite_rule();
+		// In prefixed mode, add the rewrite rule directly (init has already
+		// fired during activation, so hooking it would be too late) then flush
+		// ONCE so /{prefix}/{slug} works immediately. In bare mode there is no
+		// rule; we still flush to clear any stale prefixed rule.
+		if ( '' !== ACPS_LS_SLUG_PREFIX ) {
+			$rewrite = new ACPS_LS_Rewrite();
+			$rewrite->add_rewrite_rule();
+		}
 		flush_rewrite_rules();
 
 		// Schedule the 3-minute Sheet sync if not already scheduled.

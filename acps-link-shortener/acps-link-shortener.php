@@ -45,12 +45,23 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Core constants.
  *
  * ACPS_LS_SLUG_PREFIX is the single source of truth for the path segment used
- * in front of every short link (acpsmd.org/{prefix}/{slug}). Changing it here
- * (and re-flushing rewrite rules by re-activating) changes it everywhere.
+ * in front of every short link.
+ *
+ *   'link' -> acpsmd.org/link/{slug}   (prefixed mode; uses a rewrite rule)
+ *   ''     -> acpsmd.org/{slug}         (bare mode; no prefix)
+ *
+ * In bare mode there is NO catch-all rewrite rule (that would hijack every
+ * page). Instead a short link only fires when WordPress would otherwise return
+ * a 404, so every real page, post, category, etc. always wins. A short-link
+ * slug that matches an existing page/post slug will therefore never redirect —
+ * pick slugs that are not already real URLs on the site.
+ *
+ * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
+ * or deactivate + reactivate the plugin).
  */
 define( 'ACPS_LS_VERSION', '1.0.0' );
 define( 'ACPS_LS_DB_VERSION', '1.0.0' );
-define( 'ACPS_LS_SLUG_PREFIX', 'link' );
+define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
 define( 'ACPS_LS_FILE', __FILE__ );
 define( 'ACPS_LS_PATH', plugin_dir_path( __FILE__ ) );
