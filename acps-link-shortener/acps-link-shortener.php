@@ -98,6 +98,21 @@ function acps_ls_manage_capability() {
 }
 
 /**
+ * Whether the 301 (permanent) redirect option is allowed.
+ *
+ * Defaults to false: the permanent option is disabled/grayed out in the admin
+ * and every link is forced to 302 (temporary) so edits take effect immediately
+ * and stale 301s are never cached at the edge. Re-enable with:
+ *
+ *     add_filter( 'acps_ls_allow_permanent', '__return_true' );
+ *
+ * @return bool
+ */
+function acps_ls_allow_permanent() {
+	return (bool) apply_filters( 'acps_ls_allow_permanent', false );
+}
+
+/**
  * Fully-qualified name of the links table.
  *
  * @return string

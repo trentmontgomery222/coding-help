@@ -53,6 +53,17 @@
 	color: #6c6f74; /* dark grey, >4.5:1 on white */
 }
 
+/* Disabled (grayed-out) redirect option. Still readable for contrast; the
+   accompanying "— disabled" text label means status is not by color alone. */
+.acps-ls-disabled {
+	color: #6c6f74;
+	cursor: not-allowed;
+}
+
+.acps-ls-disabled input {
+	cursor: not-allowed;
+}
+
 /* Required-field marker. */
 .acps-ls-required {
 	color: #b32d2e;

@@ -187,8 +187,14 @@ class ACPS_LS_Admin {
 		$slug          = isset( $_POST['slug'] ) ? sanitize_title( wp_unslash( $_POST['slug'] ) ) : '';
 		$raw_dest      = isset( $_POST['destination'] ) ? wp_unslash( $_POST['destination'] ) : '';
 		$title         = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
-		$redirect_type = isset( $_POST['redirect_type'] ) ? absint( wp_unslash( $_POST['redirect_type'] ) ) : 301;
+		$redirect_type = isset( $_POST['redirect_type'] ) ? absint( wp_unslash( $_POST['redirect_type'] ) ) : 302;
 		$is_active     = isset( $_POST['is_active'] ) ? 1 : 0;
+
+		// Permanent (301) is disabled unless explicitly allowed: force 302 so a
+		// tampered/disabled control can never store a permanent redirect.
+		if ( ! acps_ls_allow_permanent() ) {
+			$redirect_type = 302;
+		}
 
 		$errors = array();
 
@@ -295,7 +301,7 @@ class ACPS_LS_Admin {
 			'sync_enabled' => isset( $_POST['sync_enabled'] ) ? 1 : 0,
 			'sheet_url'    => isset( $_POST['sheet_url'] ) ? esc_url_raw( wp_unslash( $_POST['sheet_url'] ), array( 'https' ) ) : '',
 			'sheet_secret' => isset( $_POST['sheet_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['sheet_secret'] ) ) : '',
-			'default_type' => ( isset( $_POST['default_type'] ) && 302 === absint( wp_unslash( $_POST['default_type'] ) ) ) ? 302 : 301,
+			'default_type' => ( acps_ls_allow_permanent() && isset( $_POST['default_type'] ) && 301 === absint( wp_unslash( $_POST['default_type'] ) ) ) ? 301 : 302,
 		);
 
 		update_option( ACPS_LS_OPT_SETTINGS, $settings );
@@ -485,17 +491,28 @@ class ACPS_LS_Admin {
 							</td>
 						</tr>
 
+						<?php
+						$allow_permanent = acps_ls_allow_permanent();
+						// With permanent disabled, always present/force 302.
+						$type_value = $allow_permanent ? $values['redirect_type'] : 302;
+						?>
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Redirect type', 'acps-link-shortener' ); ?></th>
 							<td>
 								<fieldset>
 									<legend class="screen-reader-text"><?php esc_html_e( 'Redirect type', 'acps-link-shortener' ); ?></legend>
-									<label for="acps-ls-type-301">
-										<input type="radio" name="redirect_type" id="acps-ls-type-301" value="301" <?php checked( 301, $values['redirect_type'] ); ?> />
+									<label for="acps-ls-type-301" class="<?php echo $allow_permanent ? '' : 'acps-ls-disabled'; ?>">
+										<input type="radio" name="redirect_type" id="acps-ls-type-301" value="301"
+											<?php checked( 301, $type_value ); ?>
+											<?php disabled( ! $allow_permanent ); ?>
+											<?php echo $allow_permanent ? '' : 'aria-disabled="true"'; ?> />
 										<?php esc_html_e( '301 — Permanent (best for SEO; may be cached at the edge)', 'acps-link-shortener' ); ?>
+										<?php if ( ! $allow_permanent ) : ?>
+											<span class="description">— <?php esc_html_e( 'disabled', 'acps-link-shortener' ); ?></span>
+										<?php endif; ?>
 									</label><br />
 									<label for="acps-ls-type-302">
-										<input type="radio" name="redirect_type" id="acps-ls-type-302" value="302" <?php checked( 302, $values['redirect_type'] ); ?> />
+										<input type="radio" name="redirect_type" id="acps-ls-type-302" value="302" <?php checked( 302, $type_value ); ?> />
 										<?php esc_html_e( '302 — Temporary (edits take effect immediately)', 'acps-link-shortener' ); ?>
 									</label>
 								</fieldset>
@@ -533,7 +550,7 @@ class ACPS_LS_Admin {
 			'sync_enabled' => 0,
 			'sheet_url'    => '',
 			'sheet_secret' => '',
-			'default_type' => 301,
+			'default_type' => 302,
 		);
 		$settings = wp_parse_args( get_option( ACPS_LS_OPT_SETTINGS, array() ), $defaults );
 		$last     = get_option( 'acps_ls_last_sync' );
@@ -589,10 +606,21 @@ class ACPS_LS_Admin {
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Default redirect type', 'acps-link-shortener' ); ?></th>
 							<td>
+								<?php
+								$allow_permanent = acps_ls_allow_permanent();
+								$default_value   = $allow_permanent ? (int) $settings['default_type'] : 302;
+								?>
 								<fieldset>
 									<legend class="screen-reader-text"><?php esc_html_e( 'Default redirect type for synced links', 'acps-link-shortener' ); ?></legend>
-									<label for="acps-ls-default-301"><input type="radio" name="default_type" id="acps-ls-default-301" value="301" <?php checked( 301, (int) $settings['default_type'] ); ?> /> <?php esc_html_e( '301 Permanent', 'acps-link-shortener' ); ?></label><br />
-									<label for="acps-ls-default-302"><input type="radio" name="default_type" id="acps-ls-default-302" value="302" <?php checked( 302, (int) $settings['default_type'] ); ?> /> <?php esc_html_e( '302 Temporary', 'acps-link-shortener' ); ?></label>
+									<label for="acps-ls-default-301" class="<?php echo $allow_permanent ? '' : 'acps-ls-disabled'; ?>">
+										<input type="radio" name="default_type" id="acps-ls-default-301" value="301"
+											<?php checked( 301, $default_value ); ?>
+											<?php disabled( ! $allow_permanent ); ?>
+											<?php echo $allow_permanent ? '' : 'aria-disabled="true"'; ?> />
+										<?php esc_html_e( '301 Permanent', 'acps-link-shortener' ); ?>
+										<?php if ( ! $allow_permanent ) : ?><span class="description">— <?php esc_html_e( 'disabled', 'acps-link-shortener' ); ?></span><?php endif; ?>
+									</label><br />
+									<label for="acps-ls-default-302"><input type="radio" name="default_type" id="acps-ls-default-302" value="302" <?php checked( 302, $default_value ); ?> /> <?php esc_html_e( '302 Temporary', 'acps-link-shortener' ); ?></label>
 								</fieldset>
 							</td>
 						</tr>

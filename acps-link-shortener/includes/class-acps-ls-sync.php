@@ -49,7 +49,7 @@ class ACPS_LS_Sync {
 			'sync_enabled'  => 0,
 			'sheet_url'     => '',
 			'sheet_secret'  => '',
-			'default_type'  => 301,
+			'default_type'  => 302,
 		);
 		$saved = get_option( ACPS_LS_OPT_SETTINGS, array() );
 		return wp_parse_args( is_array( $saved ) ? $saved : array(), $defaults );
@@ -183,6 +183,9 @@ class ACPS_LS_Sync {
 		}
 
 		$redirect_type = isset( $row['redirect_type'] ) ? (int) $row['redirect_type'] : $default_type;
+		if ( ! acps_ls_allow_permanent() ) {
+			$redirect_type = 302; // Permanent disabled: never store a 301 from the sheet.
+		}
 		$is_active     = isset( $row['active'] ) ? (int) filter_var( $row['active'], FILTER_VALIDATE_BOOLEAN ) : 1;
 
 		$created = ACPS_LS_DB::create(
