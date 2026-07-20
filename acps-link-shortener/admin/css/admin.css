@@ -1,0 +1,72 @@
+/**
+ * ACPS Link Shortener admin styles.
+ *
+ * Kept minimal and layered on top of WordPress core admin styles. All colors
+ * meet WCAG 2.1/2.2 AA contrast (>= 4.5:1 on the admin white background) and
+ * status is never conveyed by color alone.
+ */
+
+.acps-ls-wrap .acps-ls-prefix {
+	display: inline-block;
+	padding: 4px 8px;
+	background: #f0f0f1;
+	border: 1px solid #8c8f94;
+	border-right: 0;
+	border-radius: 4px 0 0 4px;
+	color: #1d2327; /* ~15:1 on #f0f0f1 */
+	font-family: Consolas, Monaco, monospace;
+	vertical-align: top;
+}
+
+.acps-ls-wrap #acps-ls-slug {
+	border-radius: 0 4px 4px 0;
+}
+
+.acps-ls-shorturl {
+	display: inline-block;
+	margin-right: 6px;
+}
+
+/* Copy button: visible focus ring for keyboard users (WCAG 2.4.7). */
+.acps-ls-copy:focus,
+.acps-ls-form :focus,
+.acps-ls-wrap a:focus {
+	outline: 2px solid #1d4ed8;
+	outline-offset: 1px;
+	box-shadow: 0 0 0 1px #1d4ed8;
+}
+
+.acps-ls-copy.is-copied {
+	background: #f0f6fc;
+}
+
+/* Status pill. Color + icon + text label together (never color alone). */
+.acps-ls-status {
+	font-weight: 600;
+}
+
+.acps-ls-status--active {
+	color: #135e28; /* dark green, >4.5:1 on white */
+}
+
+.acps-ls-status--inactive {
+	color: #6c6f74; /* dark grey, >4.5:1 on white */
+}
+
+/* Required-field marker. */
+.acps-ls-required {
+	color: #b32d2e;
+	font-weight: 700;
+}
+
+/* Inline field validation error, associated to its input via aria-describedby. */
+.acps-ls-field-error {
+	color: #b32d2e; /* >4.5:1 on white */
+	font-weight: 600;
+	margin: 4px 0 0;
+}
+
+.acps-ls-form input[aria-invalid="true"] {
+	border-color: #b32d2e;
+	box-shadow: 0 0 0 1px #b32d2e;
+}
