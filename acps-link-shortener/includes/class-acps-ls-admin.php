@@ -371,7 +371,7 @@ class ACPS_LS_Admin {
 				<?php
 				printf(
 					/* translators: %s: short-link base such as acpsmd.org/link/. */
-					esc_html__( 'Short links are served from %s and shared across the whole network.', 'acps-link-shortener' ),
+					esc_html__( 'Short links are served from %s.', 'acps-link-shortener' ),
 					'<code>' . esc_html( home_url( '/' . ACPS_LS_SLUG_PREFIX . '/' ) ) . '</code>'
 				);
 				?>

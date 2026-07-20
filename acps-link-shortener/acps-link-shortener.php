@@ -35,7 +35,7 @@ define( 'ACPS_LS_PATH', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_LS_URL', plugin_dir_url( __FILE__ ) );
 define( 'ACPS_LS_BASENAME', plugin_basename( __FILE__ ) );
 
-// Network option keys.
+// Option keys.
 define( 'ACPS_LS_OPT_DB_VERSION', 'acps_ls_db_version' );
 define( 'ACPS_LS_OPT_SETTINGS', 'acps_ls_settings' );
 

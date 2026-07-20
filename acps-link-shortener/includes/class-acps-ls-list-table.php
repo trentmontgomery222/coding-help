@@ -28,7 +28,7 @@ class ACPS_LS_List_Table extends WP_List_Table {
 	/**
 	 * Constructor.
 	 *
-	 * @param string $page_url Network-admin page URL.
+	 * @param string $page_url Admin page URL.
 	 */
 	public function __construct( $page_url ) {
 		$this->page_url = $page_url;
