@@ -3,25 +3,22 @@ Contributors: acps
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Network: true
 Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Self-hosted, branded URL shortener for the ACPS WordPress Multisite network.
-Creates acpsmd.org/link/{slug} redirects with click tracking, an accessible
-network-admin management UI, and optional Google Sheet sync.
+Self-hosted, branded URL shortener. Creates /link/{slug} redirects with click
+tracking, an accessible admin management UI, and optional Google Sheet sync.
 
 == Description ==
 
-A custom, network-activated shortener built for the ACPS environment (WP Engine
-Multisite behind Cloudflare / Global Edge Security). It stores every short link
-in ONE global database table shared across the whole network and serves all
-links from the primary domain under the /link/ prefix.
+A custom single-site shortener built for the ACPS environment (WP Engine behind
+Cloudflare / Global Edge Security). It stores every short link in one database
+table and serves all links from the site under the /link/ prefix.
 
 Features:
 
-* Global, network-wide shared link pool (one table, not per-site).
+* Single link table on the active site.
 * URL format acpsmd.org/link/{slug} — the prefix is a single constant.
 * Per-link 301 (permanent) or 302 (temporary) redirects, default 301.
 * Click counter + last-clicked timestamp.
@@ -54,7 +51,7 @@ accepted by design rather than worked around.
 
 Deploy the bundled google-apps-script/Code.gs as a Google Apps Script web app
 (it reads your sheet and returns rows as JSON), then enter its /exec URL under
-Network Admin -> Link Shortener -> Settings. The plugin polls it every 3 minutes
+the admin menu Link Shortener -> Settings. The plugin polls it every 3 minutes
 and creates a short link for each new row. Slugs (shortened link names) are read
 from the sheet, so staff control them per row. An optional shared secret ensures
 only this site can read the feed.
@@ -66,7 +63,7 @@ the same rules as the manual add form.
 == Frequently Asked Questions ==
 
 = Which capability gates management? =
-`manage_network` by default. Filter `acps_ls_manage_capability` to change it.
+`manage_options` by default. Filter `acps_ls_manage_capability` to change it.
 
 = Does uninstalling delete my links? =
 No. Data is preserved by default. To drop the table on uninstall, define

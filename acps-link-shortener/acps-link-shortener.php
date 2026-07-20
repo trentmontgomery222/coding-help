@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       ACPS Link Shortener
  * Plugin URI:        https://acpsmd.org/
- * Description:       Self-hosted, branded URL shortener for the ACPS network. Creates acpsmd.org/link/{slug} redirects with click tracking, a network-admin management UI, and optional Google Sheet sync.
+ * Description:       Self-hosted, branded URL shortener. Creates /link/{slug} redirects with click tracking, an accessible admin UI, and optional Google Sheet sync.
  * Version:           1.0.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
@@ -10,7 +10,6 @@
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       acps-link-shortener
- * Network:           true
  *
  * @package ACPS_Link_Shortener
  */
@@ -56,34 +55,32 @@ require_once ACPS_LS_PATH . 'includes/class-acps-ls-sync.php';
 /**
  * Return the capability required to manage links.
  *
- * On a network install this defaults to `manage_network`. Filterable so a site
- * can grant a custom role instead (Open Question #1 in the build brief).
+ * Defaults to `manage_options` (a site administrator). Filterable so a site can
+ * grant a custom role instead.
  *
  * @return string
  */
 function acps_ls_manage_capability() {
-	return apply_filters( 'acps_ls_manage_capability', 'manage_network' );
+	return apply_filters( 'acps_ls_manage_capability', 'manage_options' );
 }
 
 /**
- * Fully-qualified name of the global links table (shared across the network).
+ * Fully-qualified name of the links table.
  *
  * @return string
  */
 function acps_ls_table_name() {
 	global $wpdb;
-	return $wpdb->base_prefix . 'acps_links';
+	return $wpdb->prefix . 'acps_links';
 }
 
 /**
  * Activation: build the table, seed options, flush rewrite rules, schedule cron.
  *
- * Runs network-wide. Rewrite rules are flushed here ONLY (never on every load).
- *
- * @param bool $network_wide Whether the plugin was network-activated.
+ * Rewrite rules are flushed here ONLY (never on every load).
  */
-function acps_ls_activate( $network_wide ) {
-	ACPS_LS_Install::activate( $network_wide );
+function acps_ls_activate() {
+	ACPS_LS_Install::activate();
 }
 register_activation_hook( __FILE__, 'acps_ls_activate' );
 
@@ -94,12 +91,6 @@ function acps_ls_deactivate() {
 	ACPS_LS_Install::deactivate();
 }
 register_deactivation_hook( __FILE__, 'acps_ls_deactivate' );
-
-/**
- * When a new site is added to the network the shared table already exists, so
- * there is nothing per-site to create. Kept as a hook point for future needs.
- */
-add_action( 'wp_initialize_site', array( 'ACPS_LS_Install', 'maybe_upgrade' ), 20 );
 
 /**
  * Boot the runtime pieces on every request.
@@ -120,7 +111,7 @@ function acps_ls_bootstrap() {
 	$sync = new ACPS_LS_Sync();
 	$sync->register();
 
-	// Admin UI is network-admin only; load it lazily.
+	// Admin UI; load it lazily.
 	if ( is_admin() ) {
 		require_once ACPS_LS_PATH . 'includes/class-acps-ls-admin.php';
 		$admin = new ACPS_LS_Admin();

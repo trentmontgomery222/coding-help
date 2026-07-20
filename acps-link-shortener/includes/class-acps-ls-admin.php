@@ -1,6 +1,6 @@
 <?php
 /**
- * Network-admin UI: menu, add/edit form, settings, and action handling.
+ * Admin UI: menu, add/edit form, settings, and action handling.
  *
  * @package ACPS_Link_Shortener
  */
@@ -28,7 +28,7 @@ class ACPS_LS_Admin {
 	 * Hook everything.
 	 */
 	public function register() {
-		add_action( 'network_admin_menu', array( $this, 'add_menu' ) );
+		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'handle_actions' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
@@ -39,11 +39,11 @@ class ACPS_LS_Admin {
 	 * @return string
 	 */
 	private function page_url() {
-		return network_admin_url( 'admin.php?page=' . self::MENU_SLUG );
+		return admin_url( 'admin.php?page=' . self::MENU_SLUG );
 	}
 
 	/**
-	 * Register the network-admin menu.
+	 * Register the admin menu.
 	 */
 	public function add_menu() {
 		$cap = acps_ls_manage_capability();
@@ -204,7 +204,7 @@ class ACPS_LS_Admin {
 
 		if ( $errors ) {
 			// Re-render the form with errors + the user's values (transient carry-over).
-			set_site_transient(
+			set_transient(
 				'acps_ls_form_errors_' . get_current_user_id(),
 				array(
 					'errors' => $errors,
@@ -228,7 +228,7 @@ class ACPS_LS_Admin {
 						'id'     => $id ? $id : false,
 					)
 				),
-				network_admin_url( 'admin.php' )
+				admin_url( 'admin.php' )
 			);
 			wp_safe_redirect( $redirect );
 			exit;
@@ -298,14 +298,14 @@ class ACPS_LS_Admin {
 			'default_type' => ( isset( $_POST['default_type'] ) && 302 === absint( wp_unslash( $_POST['default_type'] ) ) ) ? 302 : 301,
 		);
 
-		update_site_option( ACPS_LS_OPT_SETTINGS, $settings );
+		update_option( ACPS_LS_OPT_SETTINGS, $settings );
 
 		// Make sure the sync event exists when enabling.
 		if ( $settings['sync_enabled'] && ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
 			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CRON_INTERVAL, ACPS_LS_CRON_HOOK );
 		}
 
-		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', network_admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ) );
+		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ) );
 		exit;
 	}
 
@@ -358,7 +358,7 @@ class ACPS_LS_Admin {
 		$table = new ACPS_LS_List_Table( $this->page_url() );
 		$table->prepare_items();
 
-		$add_url = network_admin_url( 'admin.php?page=' . self::MENU_SLUG . '-add' );
+		$add_url = admin_url( 'admin.php?page=' . self::MENU_SLUG . '-add' );
 		?>
 		<div class="wrap acps-ls-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Link Shortener', 'acps-link-shortener' ); ?></h1>
@@ -414,9 +414,9 @@ class ACPS_LS_Admin {
 
 		// Carry over failed-submission values + errors, if any.
 		$errors    = array();
-		$transient = get_site_transient( 'acps_ls_form_errors_' . get_current_user_id() );
+		$transient = get_transient( 'acps_ls_form_errors_' . get_current_user_id() );
 		if ( $transient ) {
-			delete_site_transient( 'acps_ls_form_errors_' . get_current_user_id() );
+			delete_transient( 'acps_ls_form_errors_' . get_current_user_id() );
 			$errors = $transient['errors'];
 			$values = array_merge( $values, $transient['values'] );
 		}
@@ -434,7 +434,7 @@ class ACPS_LS_Admin {
 				</div>
 			<?php endif; ?>
 
-			<form method="post" action="<?php echo esc_url( network_admin_url( 'admin.php?page=' . self::MENU_SLUG ) ); ?>" class="acps-ls-form">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=' . self::MENU_SLUG ) ); ?>" class="acps-ls-form">
 				<?php wp_nonce_field( 'acps_ls_save_link', 'acps_ls_nonce' ); ?>
 				<input type="hidden" name="link_id" value="<?php echo esc_attr( $values['link_id'] ); ?>" />
 
@@ -535,8 +535,8 @@ class ACPS_LS_Admin {
 			'sheet_secret' => '',
 			'default_type' => 301,
 		);
-		$settings = wp_parse_args( get_site_option( ACPS_LS_OPT_SETTINGS, array() ), $defaults );
-		$last     = get_site_option( 'acps_ls_last_sync' );
+		$settings = wp_parse_args( get_option( ACPS_LS_OPT_SETTINGS, array() ), $defaults );
+		$last     = get_option( 'acps_ls_last_sync' );
 		$next     = wp_next_scheduled( ACPS_LS_CRON_HOOK );
 		?>
 		<div class="wrap acps-ls-wrap">
@@ -549,7 +549,7 @@ class ACPS_LS_Admin {
 				<?php esc_html_e( 'Every 3 minutes the plugin fetches rows from a Google Apps Script web app and creates a short link for each new row. The slug (shortened link name) comes from the sheet, so it is fully customizable per row. See the bundled google-apps-script/Code.gs for the endpoint to deploy.', 'acps-link-shortener' ); ?>
 			</p>
 
-			<form method="post" action="<?php echo esc_url( network_admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ); ?>">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ); ?>">
 				<?php wp_nonce_field( 'acps_ls_settings', 'acps_ls_settings_nonce' ); ?>
 
 				<table class="form-table" role="presentation">

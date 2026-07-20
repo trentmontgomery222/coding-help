@@ -16,12 +16,10 @@ class ACPS_LS_Install {
 
 	/**
 	 * Run on activation.
-	 *
-	 * @param bool $network_wide Whether network-activated.
 	 */
-	public static function activate( $network_wide ) {
+	public static function activate() {
 		self::create_table();
-		update_site_option( ACPS_LS_OPT_DB_VERSION, ACPS_LS_DB_VERSION );
+		update_option( ACPS_LS_OPT_DB_VERSION, ACPS_LS_DB_VERSION );
 
 		// Register the rewrite rule then flush ONCE so /link/{slug} works.
 		$rewrite = new ACPS_LS_Rewrite();
@@ -84,7 +82,7 @@ class ACPS_LS_Install {
 	 * Run migrations when the stored DB version trails the code version.
 	 */
 	public static function maybe_upgrade() {
-		$installed = get_site_option( ACPS_LS_OPT_DB_VERSION );
+		$installed = get_option( ACPS_LS_OPT_DB_VERSION );
 
 		if ( ACPS_LS_DB_VERSION === $installed ) {
 			return;
@@ -92,6 +90,6 @@ class ACPS_LS_Install {
 
 		// dbDelta is safe to re-run and will add any missing columns/indexes.
 		self::create_table();
-		update_site_option( ACPS_LS_OPT_DB_VERSION, ACPS_LS_DB_VERSION );
+		update_option( ACPS_LS_OPT_DB_VERSION, ACPS_LS_DB_VERSION );
 	}
 }

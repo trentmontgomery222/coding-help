@@ -23,13 +23,13 @@ if ( ! defined( 'ACPS_LS_DROP_DATA_ON_UNINSTALL' ) || ! ACPS_LS_DROP_DATA_ON_UNI
 
 global $wpdb;
 
-$table = $wpdb->base_prefix . 'acps_links';
+$table = $wpdb->prefix . 'acps_links';
 // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
 $wpdb->query( "DROP TABLE IF EXISTS {$table}" );
 
-delete_site_option( 'acps_ls_db_version' );
-delete_site_option( 'acps_ls_settings' );
-delete_site_option( 'acps_ls_last_sync' );
+delete_option( 'acps_ls_db_version' );
+delete_option( 'acps_ls_settings' );
+delete_option( 'acps_ls_last_sync' );
 
 // Clear any scheduled sync.
 wp_clear_scheduled_hook( 'acps_ls_sheet_sync' );

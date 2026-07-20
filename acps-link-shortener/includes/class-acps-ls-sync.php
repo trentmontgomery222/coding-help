@@ -51,7 +51,7 @@ class ACPS_LS_Sync {
 			'sheet_secret'  => '',
 			'default_type'  => 301,
 		);
-		$saved = get_site_option( ACPS_LS_OPT_SETTINGS, array() );
+		$saved = get_option( ACPS_LS_OPT_SETTINGS, array() );
 		return wp_parse_args( is_array( $saved ) ? $saved : array(), $defaults );
 	}
 
@@ -91,7 +91,7 @@ class ACPS_LS_Sync {
 			}
 		}
 
-		update_site_option(
+		update_option(
 			'acps_ls_last_sync',
 			array(
 				'time'    => current_time( 'mysql' ),
