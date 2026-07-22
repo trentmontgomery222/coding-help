@@ -38,8 +38,10 @@ class ACPS_LS_Rewrite {
 	public function add_rewrite_rule() {
 		$prefix = ACPS_LS_SLUG_PREFIX;
 
+		// (.+?) captures one OR more path segments so per-user namespaces like
+		// /katherine/my-link work, not just single-segment slugs.
 		add_rewrite_rule(
-			'^' . $prefix . '/([^/]+)/?$',
+			'^' . $prefix . '/(.+?)/?$',
 			'index.php?' . ACPS_LS_QUERY_VAR . '=$matches[1]',
 			'top'
 		);

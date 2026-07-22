@@ -160,6 +160,12 @@ class ACPS_LS_Admin {
 			return;
 		}
 
+		// "Test connection" button (checked before the save handler).
+		if ( isset( $_POST['acps_ls_test_sync'] ) ) {
+			$this->handle_sync_test();
+			return;
+		}
+
 		// Settings submission.
 		if ( isset( $_POST['acps_ls_save_settings'] ) ) {
 			$this->handle_settings_save();
@@ -322,8 +328,13 @@ class ACPS_LS_Admin {
 		// Custom short-link domain (optional).
 		$link_domain = isset( $_POST['link_domain'] ) ? esc_url_raw( wp_unslash( $_POST['link_domain'] ) ) : '';
 
-		// People (name + password). Passwords are hashed; a blank password on an
-		// existing person keeps their current one.
+		// Google Sheet sync.
+		$sync_enabled = isset( $_POST['sync_enabled'] ) ? 1 : 0;
+		$sheet_url    = isset( $_POST['sheet_url'] ) ? esc_url_raw( wp_unslash( $_POST['sheet_url'] ), array( 'https' ) ) : '';
+		$sheet_secret = isset( $_POST['sheet_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['sheet_secret'] ) ) : '';
+
+		// People (name + password + optional per-user limit + namespace).
+		// Passwords are hashed; a blank password on an existing person keeps theirs.
 		$existing_people = array();
 		foreach ( acps_ls_get_people() as $p ) {
 			$existing_people[ strtolower( $p['label'] ) ] = $p['hash'];
@@ -331,8 +342,10 @@ class ACPS_LS_Admin {
 
 		$people = array();
 		if ( isset( $_POST['person_label'] ) && is_array( $_POST['person_label'] ) ) {
-			$labels    = wp_unslash( $_POST['person_label'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			$passwords = isset( $_POST['person_password'] ) ? wp_unslash( $_POST['person_password'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$labels     = wp_unslash( $_POST['person_label'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$passwords  = isset( $_POST['person_password'] ) ? wp_unslash( $_POST['person_password'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$maxes      = isset( $_POST['person_max'] ) ? wp_unslash( $_POST['person_max'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$namespaces = isset( $_POST['person_namespace'] ) ? wp_unslash( $_POST['person_namespace'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 			foreach ( $labels as $i => $raw_label ) {
 				$label = sanitize_text_field( $raw_label );
@@ -350,22 +363,49 @@ class ACPS_LS_Admin {
 				}
 
 				$people[] = array(
-					'label' => $label,
-					'hash'  => $hash,
+					'label'     => $label,
+					'hash'      => $hash,
+					'max_links' => isset( $maxes[ $i ] ) ? max( 0, absint( $maxes[ $i ] ) ) : 0,
+					'namespace' => isset( $namespaces[ $i ] ) ? sanitize_title( $namespaces[ $i ] ) : '',
 				);
 			}
 		}
 
-		$settings                = $existing;
-		$settings['link_domain'] = $link_domain;
-		$settings['people']      = $people;
-
-		// Drop obsolete sync keys if present.
-		unset( $settings['sync_enabled'], $settings['sheet_url'], $settings['sheet_secret'], $settings['default_type'] );
+		$settings                 = $existing;
+		$settings['link_domain']  = $link_domain;
+		$settings['people']       = $people;
+		$settings['sync_enabled'] = $sync_enabled;
+		$settings['sheet_url']    = $sheet_url;
+		$settings['sheet_secret'] = $sheet_secret;
+		unset( $settings['default_type'] ); // obsolete
 
 		update_option( ACPS_LS_OPT_SETTINGS, $settings );
 
+		// Ensure the cron event exists when enabling.
+		if ( $sync_enabled && ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
+			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CRON_INTERVAL, ACPS_LS_CRON_HOOK );
+		}
+
 		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', $this->settings_url() ) );
+		exit;
+	}
+
+	/**
+	 * Handle the "Test connection" button on the settings screen.
+	 */
+	private function handle_sync_test() {
+		check_admin_referer( 'acps_ls_settings', 'acps_ls_settings_nonce' );
+
+		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'acps-link-shortener' ) );
+		}
+
+		$sync   = new ACPS_LS_Sync();
+		$test   = $sync->test_connection();
+		$notice = $test['ok'] ? 'test_ok' : 'test_fail';
+
+		set_transient( 'acps_ls_test_msg_' . get_current_user_id(), $test['message'], 60 );
+		wp_safe_redirect( add_query_arg( 'acps_ls_notice', $notice, $this->settings_url() ) );
 		exit;
 	}
 
@@ -391,6 +431,19 @@ class ACPS_LS_Admin {
 		);
 
 		$key = sanitize_key( wp_unslash( $_GET['acps_ls_notice'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		// Connection-test results carry a stored message.
+		if ( 'test_ok' === $key || 'test_fail' === $key ) {
+			$msg = get_transient( 'acps_ls_test_msg_' . get_current_user_id() );
+			delete_transient( 'acps_ls_test_msg_' . get_current_user_id() );
+			printf(
+				'<div class="notice %1$s is-dismissible" role="status"><p>%2$s</p></div>',
+				'test_ok' === $key ? 'notice-success' : 'notice-error',
+				esc_html( $msg ? $msg : __( 'Connection test finished.', 'acps-link-shortener' ) )
+			);
+			return;
+		}
+
 		if ( isset( $map[ $key ] ) ) {
 			printf(
 				'<div class="notice notice-success is-dismissible" role="status"><p>%s</p></div>',
@@ -619,11 +672,17 @@ class ACPS_LS_Admin {
 			wp_die( esc_html__( 'You do not have permission to view this page.', 'acps-link-shortener' ) );
 		}
 
-		$settings    = get_option( ACPS_LS_OPT_SETTINGS, array() );
-		$link_domain = ( is_array( $settings ) && ! empty( $settings['link_domain'] ) ) ? $settings['link_domain'] : '';
-		$people      = acps_ls_get_people();
+		$settings     = get_option( ACPS_LS_OPT_SETTINGS, array() );
+		$settings     = is_array( $settings ) ? $settings : array();
+		$link_domain  = ! empty( $settings['link_domain'] ) ? $settings['link_domain'] : '';
+		$sync_enabled = ! empty( $settings['sync_enabled'] );
+		$sheet_url    = ! empty( $settings['sheet_url'] ) ? $settings['sheet_url'] : '';
+		$sheet_secret = ! empty( $settings['sheet_secret'] ) ? $settings['sheet_secret'] : '';
+		$last_sync    = get_option( 'acps_ls_last_sync' );
+		$people       = acps_ls_get_people();
 		// Always render a few blank rows for adding new people.
-		$rows = array_merge( $people, array( array( 'label' => '' ), array( 'label' => '' ), array( 'label' => '' ) ) );
+		$blank = array( 'label' => '', 'max_links' => 0, 'namespace' => '' );
+		$rows  = array_merge( $people, array( $blank, $blank, $blank ) );
 		?>
 		<div class="wrap acps-ls-wrap">
 			<h1><?php esc_html_e( 'Link Shortener Settings', 'acps-link-shortener' ); ?></h1>
@@ -672,35 +731,114 @@ class ACPS_LS_Admin {
 					?>
 				</p>
 
-				<table class="widefat striped acps-ls-people" style="max-width:640px;">
+				<table class="widefat striped acps-ls-people" style="max-width:820px;">
 					<thead>
 						<tr>
 							<th scope="col"><?php esc_html_e( 'Name', 'acps-link-shortener' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Password', 'acps-link-shortener' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Max links', 'acps-link-shortener' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'URL namespace', 'acps-link-shortener' ); ?></th>
 						</tr>
 					</thead>
 					<tbody>
 						<?php foreach ( $rows as $i => $person ) : ?>
-							<?php $has = ! empty( $person['label'] ); ?>
+							<?php
+							$has = ! empty( $person['label'] );
+							$mx  = isset( $person['max_links'] ) ? (int) $person['max_links'] : 0;
+							$ns  = isset( $person['namespace'] ) ? $person['namespace'] : '';
+							?>
 							<tr>
 								<td>
 									<label class="screen-reader-text" for="acps-ls-person-label-<?php echo (int) $i; ?>"><?php esc_html_e( 'Name', 'acps-link-shortener' ); ?></label>
 									<input type="text" name="person_label[<?php echo (int) $i; ?>]" id="acps-ls-person-label-<?php echo (int) $i; ?>"
-										class="regular-text" value="<?php echo esc_attr( $has ? $person['label'] : '' ); ?>" autocomplete="off" />
+										value="<?php echo esc_attr( $has ? $person['label'] : '' ); ?>" autocomplete="off" />
 								</td>
 								<td>
 									<label class="screen-reader-text" for="acps-ls-person-pw-<?php echo (int) $i; ?>"><?php esc_html_e( 'Password', 'acps-link-shortener' ); ?></label>
 									<input type="text" name="person_password[<?php echo (int) $i; ?>]" id="acps-ls-person-pw-<?php echo (int) $i; ?>"
-										class="regular-text" value="" autocomplete="off"
-										placeholder="<?php echo $has ? esc_attr__( '•••••• (leave blank to keep)', 'acps-link-shortener' ) : esc_attr__( 'set a password', 'acps-link-shortener' ); ?>" />
+										value="" autocomplete="off"
+										placeholder="<?php echo $has ? esc_attr__( '•••••• (blank = keep)', 'acps-link-shortener' ) : esc_attr__( 'set a password', 'acps-link-shortener' ); ?>" />
+								</td>
+								<td>
+									<label class="screen-reader-text" for="acps-ls-person-max-<?php echo (int) $i; ?>"><?php esc_html_e( 'Max links (0 = unlimited)', 'acps-link-shortener' ); ?></label>
+									<input type="number" min="0" step="1" style="width:6em;" name="person_max[<?php echo (int) $i; ?>]" id="acps-ls-person-max-<?php echo (int) $i; ?>"
+										value="<?php echo esc_attr( $mx ); ?>" />
+								</td>
+								<td>
+									<label class="screen-reader-text" for="acps-ls-person-ns-<?php echo (int) $i; ?>"><?php esc_html_e( 'URL namespace', 'acps-link-shortener' ); ?></label>
+									<input type="text" name="person_namespace[<?php echo (int) $i; ?>]" id="acps-ls-person-ns-<?php echo (int) $i; ?>"
+										value="<?php echo esc_attr( $ns ); ?>" placeholder="<?php esc_attr_e( 'e.g. katherine', 'acps-link-shortener' ); ?>" />
 								</td>
 							</tr>
 						<?php endforeach; ?>
 					</tbody>
 				</table>
-				<p class="description"><?php esc_html_e( 'Passwords are stored securely (hashed) and cannot be displayed again after saving.', 'acps-link-shortener' ); ?></p>
+				<p class="description">
+					<?php esc_html_e( 'Passwords are hashed and cannot be shown again. Max links = 0 means unlimited (counts only links a person made via the shortcode). URL namespace forces the first path segment, e.g. “katherine” makes their links look like acpsmd.org/katherine/name.', 'acps-link-shortener' ); ?>
+				</p>
 
-				<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings' ); ?>
+				<h2><?php esc_html_e( 'Google Sheet sync', 'acps-link-shortener' ); ?></h2>
+				<p class="description">
+					<?php esc_html_e( 'WordPress sends its links to a Google Apps Script web app every 3 minutes; the script mirrors them into your spreadsheet and returns the sheet’s rows, which WordPress applies (adds, updates, and deletes of sheet-made links). Deploy the bundled google-apps-script/Code.gs and paste its /exec URL below.', 'acps-link-shortener' ); ?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tbody>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Enable sync', 'acps-link-shortener' ); ?></th>
+							<td>
+								<label for="acps-ls-sync-enabled">
+									<input type="checkbox" name="sync_enabled" id="acps-ls-sync-enabled" value="1" <?php checked( true, $sync_enabled ); ?> />
+									<?php esc_html_e( 'Sync links with the Google Sheet every 3 minutes.', 'acps-link-shortener' ); ?>
+								</label>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-sheet-url"><?php esc_html_e( 'Web app URL', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="url" name="sheet_url" id="acps-ls-sheet-url" class="large-text"
+									value="<?php echo esc_attr( $sheet_url ); ?>"
+									placeholder="https://script.google.com/macros/s/…/exec" aria-describedby="acps-ls-sheet-url-desc" />
+								<p class="description" id="acps-ls-sheet-url-desc"><?php esc_html_e( 'The deployed Apps Script web app URL (https). Deploy Code.gs as “Anyone” access.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-sheet-secret"><?php esc_html_e( 'Shared secret', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="text" name="sheet_secret" id="acps-ls-sheet-secret" class="regular-text"
+									value="<?php echo esc_attr( $sheet_secret ); ?>" autocomplete="off" aria-describedby="acps-ls-sheet-secret-desc" />
+								<p class="description" id="acps-ls-sheet-secret-desc"><?php esc_html_e( 'Sent with each request so only this site can drive the sheet. Must match the SECRET in Code.gs.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<?php if ( is_array( $last_sync ) ) : ?>
+							<tr>
+								<th scope="row"><?php esc_html_e( 'Last sync', 'acps-link-shortener' ); ?></th>
+								<td>
+									<?php
+									if ( isset( $last_sync['error'] ) ) {
+										echo '<span style="color:#b32d2e;">' . esc_html( $last_sync['error'] ) . '</span>';
+									} else {
+										printf(
+											/* translators: 1: time, 2: created, 3: updated, 4: deleted, 5: skipped, 6: errors. */
+											esc_html__( '%1$s — created %2$d, updated %3$d, deleted %4$d, skipped %5$d, errors %6$d.', 'acps-link-shortener' ),
+											esc_html( isset( $last_sync['time'] ) ? $last_sync['time'] : '' ),
+											(int) ( $last_sync['created'] ?? 0 ),
+											(int) ( $last_sync['updated'] ?? 0 ),
+											(int) ( $last_sync['deleted'] ?? 0 ),
+											(int) ( $last_sync['skipped'] ?? 0 ),
+											(int) ( $last_sync['errors'] ?? 0 )
+										);
+									}
+									?>
+								</td>
+							</tr>
+						<?php endif; ?>
+					</tbody>
+				</table>
+
+				<p>
+					<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings', false ); ?>
+					<?php submit_button( __( 'Test connection', 'acps-link-shortener' ), 'secondary', 'acps_ls_test_sync', false ); ?>
+				</p>
 			</form>
 		</div>
 		<?php

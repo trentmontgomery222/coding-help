@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       ACPS Link Shortener
  * Plugin URI:        https://acpsmd.org/
- * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, and a password-gated front-end shortcode for staff.
- * Version:           1.1.0
+ * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
+ * Version:           1.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.1.0' );
+define( 'ACPS_LS_VERSION', '1.2.0' );
 define( 'ACPS_LS_DB_VERSION', '1.1.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -72,9 +72,9 @@ define( 'ACPS_LS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_LS_OPT_DB_VERSION', 'acps_ls_db_version' );
 define( 'ACPS_LS_OPT_SETTINGS', 'acps_ls_settings' );
 
-// Legacy WP-Cron hook from the removed Google Sheet sync; kept only so we can
-// unschedule any leftover event on activate/deactivate.
+// WP-Cron hook + interval for the two-way Google Sheet sync.
 define( 'ACPS_LS_CRON_HOOK', 'acps_ls_sheet_sync' );
+define( 'ACPS_LS_CRON_INTERVAL', 'acps_ls_three_minutes' );
 
 /**
  * Load plugin classes.
@@ -84,6 +84,7 @@ require_once ACPS_LS_PATH . 'includes/class-acps-ls-db.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-rewrite.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-redirect.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-shortcode.php';
+require_once ACPS_LS_PATH . 'includes/class-acps-ls-sync.php';
 
 /**
  * Return the capability required to manage links.
@@ -137,9 +138,14 @@ function acps_ls_link_base() {
 }
 
 /**
- * Return the configured front-end people (name + hashed password).
+ * Return the configured front-end people.
  *
- * @return array[] Each: [ 'label' => string, 'hash' => string ].
+ * @return array[] Each: [
+ *     'label'     => string,  // display name / sign-in name
+ *     'hash'      => string,  // hashed password
+ *     'max_links' => int,     // 0 = unlimited (shortcode-created links only)
+ *     'namespace' => string,  // optional first path segment, e.g. 'katherine'
+ * ].
  */
 function acps_ls_get_people() {
 	$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
@@ -151,12 +157,29 @@ function acps_ls_get_people() {
 	foreach ( $people as $person ) {
 		if ( ! empty( $person['label'] ) && ! empty( $person['hash'] ) ) {
 			$clean[] = array(
-				'label' => (string) $person['label'],
-				'hash'  => (string) $person['hash'],
+				'label'     => (string) $person['label'],
+				'hash'      => (string) $person['hash'],
+				'max_links' => isset( $person['max_links'] ) ? max( 0, (int) $person['max_links'] ) : 0,
+				'namespace' => isset( $person['namespace'] ) ? (string) $person['namespace'] : '',
 			);
 		}
 	}
 	return $clean;
+}
+
+/**
+ * Fetch a single person record by label (case-insensitive), or null.
+ *
+ * @param string $label Person label.
+ * @return array|null
+ */
+function acps_ls_get_person( $label ) {
+	foreach ( acps_ls_get_people() as $person ) {
+		if ( strtolower( $person['label'] ) === strtolower( (string) $label ) ) {
+			return $person;
+		}
+	}
+	return null;
 }
 
 /**
@@ -240,6 +263,10 @@ function acps_ls_bootstrap() {
 	$shortcode = new ACPS_LS_Shortcode();
 	$shortcode->register();
 
+	// Two-way Google Sheet sync (WP-Cron + REST test endpoint).
+	$sync = new ACPS_LS_Sync();
+	$sync->register();
+
 	// Admin UI; load it lazily.
 	if ( is_admin() ) {
 		require_once ACPS_LS_PATH . 'includes/class-acps-ls-admin.php';
@@ -248,3 +275,18 @@ function acps_ls_bootstrap() {
 	}
 }
 add_action( 'plugins_loaded', 'acps_ls_bootstrap' );
+
+/**
+ * Register a 3-minute cron schedule for the Sheet sync.
+ *
+ * @param array $schedules Existing schedules.
+ * @return array
+ */
+function acps_ls_cron_schedules( $schedules ) {
+	$schedules[ ACPS_LS_CRON_INTERVAL ] = array(
+		'interval' => 3 * MINUTE_IN_SECONDS,
+		'display'  => __( 'Every 3 minutes (ACPS Link Shortener sync)', 'acps-link-shortener' ),
+	);
+	return $schedules;
+}
+add_filter( 'cron_schedules', 'acps_ls_cron_schedules' );

@@ -3,7 +3,7 @@ Contributors: acps
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,16 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.2.0 =
+* Front-end: separate sign-in from creating. Signing in opens a dashboard where
+  staff create links AND manage/delete the links they made.
+* Per-user options: a link limit (shortcode-created links only) and a URL
+  namespace that forces the first path segment (acpsmd.org/katherine/name).
+* Two-way Google Sheet sync (WordPress -> Google): WordPress mirrors its links
+  into the sheet and applies the sheet's adds/edits/deletes. Only sheet-made
+  links are ever auto-deleted. Includes a "Test connection" button.
+* Multi-segment slugs supported so namespaced links resolve.
 
 = 1.1.0 =
 * Add password-gated front-end shortcode [acps_link_shortener] with per-person

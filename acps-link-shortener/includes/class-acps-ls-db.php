@@ -88,26 +88,100 @@ class ACPS_LS_DB {
 	}
 
 	/**
-	 * Generate a short, unique, non-reserved slug (for auto-named front-end links).
+	 * Sanitize a slug that may contain "/" segments (for per-user namespaces).
 	 *
-	 * @param int $length Number of characters.
+	 * Each path segment is sanitize_title'd; empties are dropped. e.g.
+	 * "Katherine / My Cool Link" -> "katherine/my-cool-link".
+	 *
+	 * @param string $raw Raw slug/path.
 	 * @return string
 	 */
-	public static function generate_unique_slug( $length = 6 ) {
+	public static function sanitize_slug_path( $raw ) {
+		$segments = explode( '/', (string) $raw );
+		$clean    = array();
+		foreach ( $segments as $segment ) {
+			$segment = sanitize_title( $segment );
+			if ( '' !== $segment ) {
+				$clean[] = $segment;
+			}
+		}
+		return implode( '/', $clean );
+	}
+
+	/**
+	 * Count active/all shortcode links created by a given person.
+	 *
+	 * @param string $label Creator label.
+	 * @return int
+	 */
+	public static function count_by_creator( $label ) {
+		global $wpdb;
+		$table = acps_ls_table_name();
+
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM {$table} WHERE source = 'shortcode' AND creator_label = %s",
+				$label
+			)
+		);
+	}
+
+	/**
+	 * Fetch shortcode links created by a given person (newest first).
+	 *
+	 * @param string $label Creator label.
+	 * @return object[]
+	 */
+	public static function get_by_creator( $label ) {
+		global $wpdb;
+		$table = acps_ls_table_name();
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT * FROM {$table} WHERE source = 'shortcode' AND creator_label = %s ORDER BY created_at DESC",
+				$label
+			)
+		);
+		return $rows ? $rows : array();
+	}
+
+	/**
+	 * Fetch every link (used by the two-way sync to mirror WP -> Sheet).
+	 *
+	 * @return object[]
+	 */
+	public static function all() {
+		global $wpdb;
+		$table = acps_ls_table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+		$rows = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY created_at DESC" );
+		return $rows ? $rows : array();
+	}
+
+	/**
+	 * Generate a short, unique, non-reserved slug (for auto-named front-end links).
+	 *
+	 * @param int    $length    Number of characters in the random part.
+	 * @param string $namespace Optional first path segment (already sanitized).
+	 * @return string
+	 */
+	public static function generate_unique_slug( $length = 6, $namespace = '' ) {
 		$reserved = self::reserved_slugs();
+		$prefix   = ( '' !== $namespace ) ? $namespace . '/' : '';
 		$attempts = 0;
 
 		do {
-			$candidate = strtolower( wp_generate_password( $length, false, false ) );
-			$candidate = sanitize_title( $candidate );
+			$part      = sanitize_title( strtolower( wp_generate_password( $length, false, false ) ) );
+			$candidate = $prefix . $part;
 			$attempts++;
 			if ( $attempts > 20 ) {
-				// Extremely unlikely; widen to avoid an infinite loop.
-				$candidate = 'l' . strtolower( wp_generate_password( 8, false, false ) );
-				$candidate = sanitize_title( $candidate );
+				$part      = sanitize_title( 'l' . strtolower( wp_generate_password( 8, false, false ) ) );
+				$candidate = $prefix . $part;
 				break;
 			}
-		} while ( '' === $candidate || in_array( $candidate, $reserved, true ) || self::slug_exists( $candidate ) );
+		} while ( '' === $part || in_array( $part, $reserved, true ) || self::slug_exists( $candidate ) );
 
 		return $candidate;
 	}

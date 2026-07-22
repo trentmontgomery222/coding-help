@@ -48,7 +48,7 @@ class ACPS_LS_Redirect {
 			return;
 		}
 
-		$slug = sanitize_title( wp_unslash( $wp->query_vars[ ACPS_LS_QUERY_VAR ] ) );
+		$slug = ACPS_LS_DB::sanitize_slug_path( wp_unslash( $wp->query_vars[ ACPS_LS_QUERY_VAR ] ) );
 		if ( '' === $slug ) {
 			return;
 		}
@@ -74,13 +74,14 @@ class ACPS_LS_Redirect {
 
 		global $wp;
 		$request = isset( $wp->request ) ? trim( (string) $wp->request, '/' ) : '';
-
-		// Only single-segment paths are candidate slugs (e.g. "open-house").
-		if ( '' === $request || false !== strpos( $request, '/' ) ) {
+		if ( '' === $request ) {
 			return;
 		}
 
-		$slug = sanitize_title( $request );
+		// The whole path is the candidate slug, so single-segment slugs AND
+		// per-user namespaced slugs (e.g. "katherine/my-link") both resolve.
+		// Real pages never reach here because they are not 404s.
+		$slug = ACPS_LS_DB::sanitize_slug_path( $request );
 		if ( '' === $slug ) {
 			return;
 		}
