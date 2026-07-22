@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       ACPS Link Shortener
  * Plugin URI:        https://acpsmd.org/
- * Description:       Self-hosted, branded URL shortener. Creates /link/{slug} redirects with click tracking, an accessible admin UI, and optional Google Sheet sync.
- * Version:           1.0.0
+ * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, and a password-gated front-end shortcode for staff.
+ * Version:           1.1.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -59,8 +59,8 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.0.0' );
-define( 'ACPS_LS_DB_VERSION', '1.0.0' );
+define( 'ACPS_LS_VERSION', '1.1.0' );
+define( 'ACPS_LS_DB_VERSION', '1.1.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
 define( 'ACPS_LS_FILE', __FILE__ );
@@ -72,9 +72,9 @@ define( 'ACPS_LS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_LS_OPT_DB_VERSION', 'acps_ls_db_version' );
 define( 'ACPS_LS_OPT_SETTINGS', 'acps_ls_settings' );
 
-// WP-Cron hook + interval used for the Google Sheet sync.
+// Legacy WP-Cron hook from the removed Google Sheet sync; kept only so we can
+// unschedule any leftover event on activate/deactivate.
 define( 'ACPS_LS_CRON_HOOK', 'acps_ls_sheet_sync' );
-define( 'ACPS_LS_CRON_INTERVAL', 'acps_ls_three_minutes' );
 
 /**
  * Load plugin classes.
@@ -83,7 +83,7 @@ require_once ACPS_LS_PATH . 'includes/class-acps-ls-install.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-db.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-rewrite.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-redirect.php';
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-sync.php';
+require_once ACPS_LS_PATH . 'includes/class-acps-ls-shortcode.php';
 
 /**
  * Return the capability required to manage links.
@@ -110,6 +110,86 @@ function acps_ls_manage_capability() {
  */
 function acps_ls_allow_permanent() {
 	return (bool) apply_filters( 'acps_ls_allow_permanent', false );
+}
+
+/**
+ * Base URL that short links are built on ("the first part" of the short URL).
+ *
+ * Returns the custom short-link domain from Settings when one is configured
+ * (e.g. https://go.acpsmd.org), otherwise falls back to this site's own URL.
+ * The returned value never has a trailing slash.
+ *
+ * IMPORTANT: a custom domain only *works* if it actually resolves to this
+ * WordPress install (DNS + host/WP Engine domain mapping). This function only
+ * controls how the URL is generated and displayed.
+ *
+ * @return string
+ */
+function acps_ls_link_base() {
+	$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
+	$custom   = ( is_array( $settings ) && ! empty( $settings['link_domain'] ) ) ? trim( $settings['link_domain'] ) : '';
+
+	if ( '' !== $custom ) {
+		return untrailingslashit( $custom );
+	}
+
+	return untrailingslashit( home_url() );
+}
+
+/**
+ * Return the configured front-end people (name + hashed password).
+ *
+ * @return array[] Each: [ 'label' => string, 'hash' => string ].
+ */
+function acps_ls_get_people() {
+	$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
+	$people   = ( is_array( $settings ) && ! empty( $settings['people'] ) && is_array( $settings['people'] ) )
+		? $settings['people']
+		: array();
+
+	$clean = array();
+	foreach ( $people as $person ) {
+		if ( ! empty( $person['label'] ) && ! empty( $person['hash'] ) ) {
+			$clean[] = array(
+				'label' => (string) $person['label'],
+				'hash'  => (string) $person['hash'],
+			);
+		}
+	}
+	return $clean;
+}
+
+/**
+ * Verify a front-end name + password against the configured people.
+ *
+ * @param string $name     Person name (case-insensitive match).
+ * @param string $password Submitted password.
+ * @return string|false The canonical person label on success, false otherwise.
+ */
+function acps_ls_authenticate_person( $name, $password ) {
+	$name = trim( (string) $name );
+	if ( '' === $name || '' === (string) $password ) {
+		return false;
+	}
+
+	foreach ( acps_ls_get_people() as $person ) {
+		if ( strtolower( $person['label'] ) === strtolower( $name ) && wp_check_password( $password, $person['hash'] ) ) {
+			return $person['label'];
+		}
+	}
+	return false;
+}
+
+/**
+ * Build the public short URL for a slug (honors the custom domain + prefix).
+ *
+ * @param string $slug Slug.
+ * @return string
+ */
+function acps_ls_short_url( $slug ) {
+	$prefix = ACPS_LS_SLUG_PREFIX;
+	$path   = '/' . ( '' !== $prefix ? $prefix . '/' : '' ) . $slug;
+	return acps_ls_link_base() . $path;
 }
 
 /**
@@ -155,9 +235,10 @@ function acps_ls_bootstrap() {
 	$redirect = new ACPS_LS_Redirect();
 	$redirect->register();
 
-	// Google Sheet sync (WP-Cron).
-	$sync = new ACPS_LS_Sync();
-	$sync->register();
+	// Front-end shortcode (password-gated link creator). Runs on the front end
+	// and handles its own form submission, so it is always registered.
+	$shortcode = new ACPS_LS_Shortcode();
+	$shortcode->register();
 
 	// Admin UI; load it lazily.
 	if ( is_admin() ) {
@@ -167,18 +248,3 @@ function acps_ls_bootstrap() {
 	}
 }
 add_action( 'plugins_loaded', 'acps_ls_bootstrap' );
-
-/**
- * Custom cron schedule: every 3 minutes (for the Sheet sync).
- *
- * @param array $schedules Existing schedules.
- * @return array
- */
-function acps_ls_cron_schedules( $schedules ) {
-	$schedules[ ACPS_LS_CRON_INTERVAL ] = array(
-		'interval' => 3 * MINUTE_IN_SECONDS,
-		'display'  => __( 'Every 3 minutes (ACPS Link Shortener sync)', 'acps-link-shortener' ),
-	);
-	return $schedules;
-}
-add_filter( 'cron_schedules', 'acps_ls_cron_schedules' );

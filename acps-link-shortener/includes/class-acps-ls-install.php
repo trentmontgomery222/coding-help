@@ -31,20 +31,14 @@ class ACPS_LS_Install {
 		}
 		flush_rewrite_rules();
 
-		// Schedule the 3-minute Sheet sync if not already scheduled.
-		if ( ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
-			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CRON_INTERVAL, ACPS_LS_CRON_HOOK );
-		}
+		// Clean up any leftover event from the removed Google Sheet sync.
+		wp_clear_scheduled_hook( ACPS_LS_CRON_HOOK );
 	}
 
 	/**
-	 * Run on deactivation. Clears cron; keeps data.
+	 * Run on deactivation. Data + table are preserved.
 	 */
 	public static function deactivate() {
-		$timestamp = wp_next_scheduled( ACPS_LS_CRON_HOOK );
-		if ( $timestamp ) {
-			wp_unschedule_event( $timestamp, ACPS_LS_CRON_HOOK );
-		}
 		wp_clear_scheduled_hook( ACPS_LS_CRON_HOOK );
 		flush_rewrite_rules();
 	}
@@ -72,6 +66,7 @@ class ACPS_LS_Install {
 			is_active TINYINT(1) NOT NULL DEFAULT 1,
 			source VARCHAR(50) NOT NULL DEFAULT 'manual',
 			created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			creator_label VARCHAR(100) NOT NULL DEFAULT '',
 			created_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
 			updated_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
 			last_clicked_at DATETIME NULL DEFAULT NULL,

@@ -43,7 +43,19 @@ class ACPS_LS_Admin {
 	}
 
 	/**
+	 * URL of the settings screen (now under the core Settings menu).
+	 *
+	 * @return string
+	 */
+	private function settings_url() {
+		return admin_url( 'options-general.php?page=' . self::SETTINGS_SLUG );
+	}
+
+	/**
 	 * Register the admin menu.
+	 *
+	 * The top-level "Link Shortener" menu (All Links + Add New Link) stays put.
+	 * Settings live under wp-admin -> Settings -> Link Shortener.
 	 */
 	public function add_menu() {
 		$cap = acps_ls_manage_capability();
@@ -76,10 +88,10 @@ class ACPS_LS_Admin {
 			array( $this, 'render_form_page' )
 		);
 
-		add_submenu_page(
-			self::MENU_SLUG,
-			__( 'Settings', 'acps-link-shortener' ),
-			__( 'Settings', 'acps-link-shortener' ),
+		// Settings moved to the core Settings menu.
+		add_options_page(
+			__( 'Link Shortener', 'acps-link-shortener' ),
+			__( 'Link Shortener', 'acps-link-shortener' ),
 			$cap,
 			self::SETTINGS_SLUG,
 			array( $this, 'render_settings_page' )
@@ -184,8 +196,6 @@ class ACPS_LS_Admin {
 		}
 
 		$id            = isset( $_POST['link_id'] ) ? absint( wp_unslash( $_POST['link_id'] ) ) : 0;
-		$slug          = isset( $_POST['slug'] ) ? sanitize_title( wp_unslash( $_POST['slug'] ) ) : '';
-		$raw_dest      = isset( $_POST['destination'] ) ? wp_unslash( $_POST['destination'] ) : '';
 		$title         = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
 		$redirect_type = isset( $_POST['redirect_type'] ) ? absint( wp_unslash( $_POST['redirect_type'] ) ) : 302;
 		$is_active     = isset( $_POST['is_active'] ) ? 1 : 0;
@@ -196,9 +206,34 @@ class ACPS_LS_Admin {
 			$redirect_type = 302;
 		}
 
-		$errors = array();
+		/*
+		 * EDIT: the slug and destination are LOCKED once a link exists, so a
+		 * short link can never be repointed to a different destination. Only the
+		 * title, status, and (if allowed) redirect type can change.
+		 */
+		if ( $id ) {
+			if ( ! ACPS_LS_DB::get( $id ) ) {
+				wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'deleted', $this->page_url() ) );
+				exit;
+			}
+			ACPS_LS_DB::update(
+				$id,
+				array(
+					'title'         => $title,
+					'redirect_type' => $redirect_type,
+					'is_active'     => $is_active,
+				)
+			);
+			wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'updated', $this->page_url() ) );
+			exit;
+		}
 
-		$slug_check = ACPS_LS_DB::validate_slug( $slug, $id );
+		// CREATE: validate slug + destination.
+		$slug     = isset( $_POST['slug'] ) ? sanitize_title( wp_unslash( $_POST['slug'] ) ) : '';
+		$raw_dest = isset( $_POST['destination'] ) ? wp_unslash( $_POST['destination'] ) : '';
+		$errors   = array();
+
+		$slug_check = ACPS_LS_DB::validate_slug( $slug, 0 );
 		if ( is_wp_error( $slug_check ) ) {
 			$errors['slug'] = $slug_check->get_error_message();
 		}
@@ -209,13 +244,12 @@ class ACPS_LS_Admin {
 		}
 
 		if ( $errors ) {
-			// Re-render the form with errors + the user's values (transient carry-over).
 			set_transient(
 				'acps_ls_form_errors_' . get_current_user_id(),
 				array(
 					'errors' => $errors,
 					'values' => array(
-						'link_id'       => $id,
+						'link_id'       => 0,
 						'slug'          => $slug,
 						'destination'   => $raw_dest,
 						'title'         => $title,
@@ -225,39 +259,24 @@ class ACPS_LS_Admin {
 				),
 				60
 			);
-
-			$redirect = add_query_arg(
-				array_filter(
-					array(
-						'page'   => $id ? self::MENU_SLUG : self::MENU_SLUG . '-add',
-						'action' => $id ? 'edit' : false,
-						'id'     => $id ? $id : false,
-					)
-				),
-				admin_url( 'admin.php' )
-			);
-			wp_safe_redirect( $redirect );
+			wp_safe_redirect( admin_url( 'admin.php?page=' . self::MENU_SLUG . '-add' ) );
 			exit;
 		}
 
-		$data = array(
-			'slug'          => $slug,
-			'destination'   => $destination,
-			'title'         => $title,
-			'redirect_type' => $redirect_type,
-			'is_active'     => $is_active,
+		$current = wp_get_current_user();
+		ACPS_LS_DB::create(
+			array(
+				'slug'          => $slug,
+				'destination'   => $destination,
+				'title'         => $title,
+				'redirect_type' => $redirect_type,
+				'is_active'     => $is_active,
+				'source'        => 'manual',
+				'creator_label' => $current ? $current->display_name : '',
+			)
 		);
 
-		if ( $id ) {
-			ACPS_LS_DB::update( $id, $data );
-			$notice = 'updated';
-		} else {
-			$data['source'] = 'manual';
-			ACPS_LS_DB::create( $data );
-			$notice = 'created';
-		}
-
-		wp_safe_redirect( add_query_arg( 'acps_ls_notice', $notice, $this->page_url() ) );
+		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'created', $this->page_url() ) );
 		exit;
 	}
 
@@ -297,21 +316,56 @@ class ACPS_LS_Admin {
 			wp_die( esc_html__( 'You do not have permission to change settings.', 'acps-link-shortener' ) );
 		}
 
-		$settings = array(
-			'sync_enabled' => isset( $_POST['sync_enabled'] ) ? 1 : 0,
-			'sheet_url'    => isset( $_POST['sheet_url'] ) ? esc_url_raw( wp_unslash( $_POST['sheet_url'] ), array( 'https' ) ) : '',
-			'sheet_secret' => isset( $_POST['sheet_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['sheet_secret'] ) ) : '',
-			'default_type' => ( acps_ls_allow_permanent() && isset( $_POST['default_type'] ) && 301 === absint( wp_unslash( $_POST['default_type'] ) ) ) ? 301 : 302,
-		);
+		$existing = get_option( ACPS_LS_OPT_SETTINGS, array() );
+		$existing = is_array( $existing ) ? $existing : array();
+
+		// Custom short-link domain (optional).
+		$link_domain = isset( $_POST['link_domain'] ) ? esc_url_raw( wp_unslash( $_POST['link_domain'] ) ) : '';
+
+		// People (name + password). Passwords are hashed; a blank password on an
+		// existing person keeps their current one.
+		$existing_people = array();
+		foreach ( acps_ls_get_people() as $p ) {
+			$existing_people[ strtolower( $p['label'] ) ] = $p['hash'];
+		}
+
+		$people = array();
+		if ( isset( $_POST['person_label'] ) && is_array( $_POST['person_label'] ) ) {
+			$labels    = wp_unslash( $_POST['person_label'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$passwords = isset( $_POST['person_password'] ) ? wp_unslash( $_POST['person_password'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+
+			foreach ( $labels as $i => $raw_label ) {
+				$label = sanitize_text_field( $raw_label );
+				if ( '' === $label ) {
+					continue; // Skip empty rows (also lets an admin delete a person).
+				}
+				$pw = isset( $passwords[ $i ] ) ? (string) $passwords[ $i ] : '';
+
+				if ( '' !== $pw ) {
+					$hash = wp_hash_password( $pw );
+				} elseif ( isset( $existing_people[ strtolower( $label ) ] ) ) {
+					$hash = $existing_people[ strtolower( $label ) ]; // Keep existing.
+				} else {
+					continue; // New person with no password: ignore.
+				}
+
+				$people[] = array(
+					'label' => $label,
+					'hash'  => $hash,
+				);
+			}
+		}
+
+		$settings                = $existing;
+		$settings['link_domain'] = $link_domain;
+		$settings['people']      = $people;
+
+		// Drop obsolete sync keys if present.
+		unset( $settings['sync_enabled'], $settings['sheet_url'], $settings['sheet_secret'], $settings['default_type'] );
 
 		update_option( ACPS_LS_OPT_SETTINGS, $settings );
 
-		// Make sure the sync event exists when enabling.
-		if ( $settings['sync_enabled'] && ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
-			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CRON_INTERVAL, ACPS_LS_CRON_HOOK );
-		}
-
-		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ) );
+		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', $this->settings_url() ) );
 		exit;
 	}
 
@@ -378,7 +432,14 @@ class ACPS_LS_Admin {
 				printf(
 					/* translators: %s: short-link base such as acpsmd.org/link/. */
 					esc_html__( 'Short links are served from %s.', 'acps-link-shortener' ),
-					'<code>' . esc_html( home_url( '/' . ( '' !== ACPS_LS_SLUG_PREFIX ? ACPS_LS_SLUG_PREFIX . '/' : '' ) ) ) . '</code>'
+					'<code>' . esc_html( acps_ls_link_base() . '/' . ( '' !== ACPS_LS_SLUG_PREFIX ? ACPS_LS_SLUG_PREFIX . '/' : '' ) ) . '</code>'
+				);
+				echo ' ';
+				printf(
+					/* translators: 1: shortcode, 2: settings URL. */
+					wp_kses_post( __( 'Put %1$s on any page to let staff create links. Manage passwords and domain under %2$s.', 'acps-link-shortener' ) ),
+					'<code>[acps_link_shortener]</code>',
+					'<a href="' . esc_url( $this->settings_url() ) . '">' . esc_html__( 'Settings → Link Shortener', 'acps-link-shortener' ) . '</a>'
 				);
 				?>
 			</p>
@@ -463,14 +524,20 @@ class ACPS_LS_Admin {
 							</th>
 							<td>
 								<span class="acps-ls-prefix"><?php echo esc_html( $prefix_url ); ?></span><input
-									name="slug" id="acps-ls-slug" type="text" class="regular-text" required
+									name="slug" id="acps-ls-slug" type="text" class="regular-text" <?php echo $is_edit ? 'readonly' : 'required'; ?>
 									value="<?php echo esc_attr( $values['slug'] ); ?>"
 									aria-describedby="acps-ls-slug-desc<?php echo isset( $errors['slug'] ) ? ' acps-ls-slug-error' : ''; ?>"
 									<?php echo isset( $errors['slug'] ) ? 'aria-invalid="true"' : ''; ?> />
 								<?php if ( isset( $errors['slug'] ) ) : ?>
 									<p class="acps-ls-field-error" id="acps-ls-slug-error" role="alert"><?php echo esc_html( $errors['slug'] ); ?></p>
 								<?php endif; ?>
-								<p class="description" id="acps-ls-slug-desc"><?php esc_html_e( 'Lowercase letters, numbers and hyphens. Must be unique.', 'acps-link-shortener' ); ?></p>
+								<p class="description" id="acps-ls-slug-desc">
+									<?php
+									echo $is_edit
+										? esc_html__( 'Locked — the short name cannot be changed after creation.', 'acps-link-shortener' )
+										: esc_html__( 'Lowercase letters, numbers and hyphens. Must be unique.', 'acps-link-shortener' );
+									?>
+								</p>
 							</td>
 						</tr>
 
@@ -479,7 +546,7 @@ class ACPS_LS_Admin {
 								<label for="acps-ls-destination"><?php esc_html_e( 'Destination URL', 'acps-link-shortener' ); ?> <span class="acps-ls-required" aria-hidden="true">*</span></label>
 							</th>
 							<td>
-								<input name="destination" id="acps-ls-destination" type="url" class="large-text" required
+								<input name="destination" id="acps-ls-destination" type="url" class="large-text" <?php echo $is_edit ? 'readonly' : 'required'; ?>
 									placeholder="https://example.com/some/long/page"
 									value="<?php echo esc_attr( $values['destination'] ); ?>"
 									aria-describedby="acps-ls-destination-desc<?php echo isset( $errors['destination'] ) ? ' acps-ls-destination-error' : ''; ?>"
@@ -487,7 +554,13 @@ class ACPS_LS_Admin {
 								<?php if ( isset( $errors['destination'] ) ) : ?>
 									<p class="acps-ls-field-error" id="acps-ls-destination-error" role="alert"><?php echo esc_html( $errors['destination'] ); ?></p>
 								<?php endif; ?>
-								<p class="description" id="acps-ls-destination-desc"><?php esc_html_e( 'The real http/https URL visitors are sent to.', 'acps-link-shortener' ); ?></p>
+								<p class="description" id="acps-ls-destination-desc">
+									<?php
+									echo $is_edit
+										? esc_html__( 'Locked — a short link cannot be repointed to a different destination. Delete and recreate if the target changed.', 'acps-link-shortener' )
+										: esc_html__( 'The real http/https URL visitors are sent to.', 'acps-link-shortener' );
+									?>
+								</p>
 							</td>
 						</tr>
 
@@ -539,125 +612,96 @@ class ACPS_LS_Admin {
 	}
 
 	/**
-	 * Render the settings screen (Sheet sync configuration).
+	 * Render the settings screen (short-link domain + front-end people).
 	 */
 	public function render_settings_page() {
 		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
 			wp_die( esc_html__( 'You do not have permission to view this page.', 'acps-link-shortener' ) );
 		}
 
-		$defaults = array(
-			'sync_enabled' => 0,
-			'sheet_url'    => '',
-			'sheet_secret' => '',
-			'default_type' => 302,
-		);
-		$settings = wp_parse_args( get_option( ACPS_LS_OPT_SETTINGS, array() ), $defaults );
-		$last     = get_option( 'acps_ls_last_sync' );
-		$next     = wp_next_scheduled( ACPS_LS_CRON_HOOK );
+		$settings    = get_option( ACPS_LS_OPT_SETTINGS, array() );
+		$link_domain = ( is_array( $settings ) && ! empty( $settings['link_domain'] ) ) ? $settings['link_domain'] : '';
+		$people      = acps_ls_get_people();
+		// Always render a few blank rows for adding new people.
+		$rows = array_merge( $people, array( array( 'label' => '' ), array( 'label' => '' ), array( 'label' => '' ) ) );
 		?>
 		<div class="wrap acps-ls-wrap">
 			<h1><?php esc_html_e( 'Link Shortener Settings', 'acps-link-shortener' ); ?></h1>
 
 			<?php $this->render_notice_from_query(); ?>
 
-			<h2><?php esc_html_e( 'Google Sheet sync', 'acps-link-shortener' ); ?></h2>
-			<p class="description">
-				<?php esc_html_e( 'Every 3 minutes the plugin fetches rows from a Google Apps Script web app and creates a short link for each new row. The slug (shortened link name) comes from the sheet, so it is fully customizable per row. See the bundled google-apps-script/Code.gs for the endpoint to deploy.', 'acps-link-shortener' ); ?>
-			</p>
-
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ); ?>">
+			<form method="post" action="<?php echo esc_url( $this->settings_url() ); ?>">
 				<?php wp_nonce_field( 'acps_ls_settings', 'acps_ls_settings_nonce' ); ?>
 
+				<h2><?php esc_html_e( 'Short-link domain', 'acps-link-shortener' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tbody>
 						<tr>
-							<th scope="row"><?php esc_html_e( 'Enable sync', 'acps-link-shortener' ); ?></th>
-							<td>
-								<label for="acps-ls-sync-enabled">
-									<input type="checkbox" name="sync_enabled" id="acps-ls-sync-enabled" value="1" <?php checked( 1, $settings['sync_enabled'] ); ?> />
-									<?php esc_html_e( 'Automatically import new rows from the Google Sheet every 3 minutes.', 'acps-link-shortener' ); ?>
-								</label>
-							</td>
-						</tr>
-						<tr>
 							<th scope="row">
-								<label for="acps-ls-sheet-url"><?php esc_html_e( 'Web app URL', 'acps-link-shortener' ); ?></label>
+								<label for="acps-ls-link-domain"><?php esc_html_e( 'Custom domain', 'acps-link-shortener' ); ?></label>
 							</th>
 							<td>
-								<input type="url" name="sheet_url" id="acps-ls-sheet-url" class="large-text"
-									value="<?php echo esc_attr( $settings['sheet_url'] ); ?>"
-									placeholder="https://script.google.com/macros/s/…/exec"
-									aria-describedby="acps-ls-sheet-url-desc" />
-								<p class="description" id="acps-ls-sheet-url-desc"><?php esc_html_e( 'The deployed Apps Script web app that returns your sheet as JSON (https only).', 'acps-link-shortener' ); ?></p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row">
-								<label for="acps-ls-sheet-secret"><?php esc_html_e( 'Shared secret (optional)', 'acps-link-shortener' ); ?></label>
-							</th>
-							<td>
-								<input type="text" name="sheet_secret" id="acps-ls-sheet-secret" class="regular-text"
-									value="<?php echo esc_attr( $settings['sheet_secret'] ); ?>"
-									autocomplete="off" aria-describedby="acps-ls-sheet-secret-desc" />
-								<p class="description" id="acps-ls-sheet-secret-desc"><?php esc_html_e( 'If set, it is sent as a token so only this site can read the feed. Must match the SECRET in Code.gs.', 'acps-link-shortener' ); ?></p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Default redirect type', 'acps-link-shortener' ); ?></th>
-							<td>
-								<?php
-								$allow_permanent = acps_ls_allow_permanent();
-								$default_value   = $allow_permanent ? (int) $settings['default_type'] : 302;
-								?>
-								<fieldset>
-									<legend class="screen-reader-text"><?php esc_html_e( 'Default redirect type for synced links', 'acps-link-shortener' ); ?></legend>
-									<label for="acps-ls-default-301" class="<?php echo $allow_permanent ? '' : 'acps-ls-disabled'; ?>">
-										<input type="radio" name="default_type" id="acps-ls-default-301" value="301"
-											<?php checked( 301, $default_value ); ?>
-											<?php disabled( ! $allow_permanent ); ?>
-											<?php echo $allow_permanent ? '' : 'aria-disabled="true"'; ?> />
-										<?php esc_html_e( '301 Permanent', 'acps-link-shortener' ); ?>
-										<?php if ( ! $allow_permanent ) : ?><span class="description">— <?php esc_html_e( 'disabled', 'acps-link-shortener' ); ?></span><?php endif; ?>
-									</label><br />
-									<label for="acps-ls-default-302"><input type="radio" name="default_type" id="acps-ls-default-302" value="302" <?php checked( 302, $default_value ); ?> /> <?php esc_html_e( '302 Temporary', 'acps-link-shortener' ); ?></label>
-								</fieldset>
+								<input type="url" name="link_domain" id="acps-ls-link-domain" class="regular-text"
+									value="<?php echo esc_attr( $link_domain ); ?>"
+									placeholder="https://go.acpsmd.org"
+									aria-describedby="acps-ls-link-domain-desc" />
+								<p class="description" id="acps-ls-link-domain-desc">
+									<?php esc_html_e( 'Optional. The domain short links are built on. Leave blank to use this site’s own address. The domain must point to this WordPress install (DNS + WP Engine domain mapping) or the links will not resolve.', 'acps-link-shortener' ); ?>
+									<br />
+									<?php
+									printf(
+										/* translators: %s: current short-link base URL. */
+										esc_html__( 'Current base: %s', 'acps-link-shortener' ),
+										'<code>' . esc_html( trailingslashit( acps_ls_link_base() . ( '' !== ACPS_LS_SLUG_PREFIX ? '/' . ACPS_LS_SLUG_PREFIX : '' ) ) ) . '</code>'
+									);
+									?>
+								</p>
 							</td>
 						</tr>
 					</tbody>
 				</table>
 
-				<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings' ); ?>
-			</form>
-
-			<h2><?php esc_html_e( 'Sync status', 'acps-link-shortener' ); ?></h2>
-			<p>
-				<?php
-				if ( $next ) {
-					printf(
-						/* translators: %s: human-readable time. */
-						esc_html__( 'Next scheduled sync: %s', 'acps-link-shortener' ),
-						esc_html( mysql2date( 'Y-m-d H:i:s', gmdate( 'Y-m-d H:i:s', $next ) ) )
-					);
-				} else {
-					esc_html_e( 'No sync currently scheduled.', 'acps-link-shortener' );
-				}
-				?>
-			</p>
-			<?php if ( is_array( $last ) ) : ?>
-				<p>
+				<h2><?php esc_html_e( 'Front-end users (shortcode access)', 'acps-link-shortener' ); ?></h2>
+				<p class="description">
 					<?php
 					printf(
-						/* translators: 1: datetime, 2: created count, 3: skipped count, 4: error count. */
-						esc_html__( 'Last run %1$s — created %2$d, skipped %3$d, errors %4$d.', 'acps-link-shortener' ),
-						esc_html( $last['time'] ),
-						(int) $last['created'],
-						(int) $last['skipped'],
-						(int) $last['errors']
+						/* translators: %s: the shortcode. */
+						esc_html__( 'These people can create links from any page that contains the %s shortcode. Each has their own password. To change a password, type a new one; leave it blank to keep the current password. To remove someone, clear their name and save.', 'acps-link-shortener' ),
+						'<code>[acps_link_shortener]</code>'
 					);
 					?>
 				</p>
-			<?php endif; ?>
+
+				<table class="widefat striped acps-ls-people" style="max-width:640px;">
+					<thead>
+						<tr>
+							<th scope="col"><?php esc_html_e( 'Name', 'acps-link-shortener' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Password', 'acps-link-shortener' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $rows as $i => $person ) : ?>
+							<?php $has = ! empty( $person['label'] ); ?>
+							<tr>
+								<td>
+									<label class="screen-reader-text" for="acps-ls-person-label-<?php echo (int) $i; ?>"><?php esc_html_e( 'Name', 'acps-link-shortener' ); ?></label>
+									<input type="text" name="person_label[<?php echo (int) $i; ?>]" id="acps-ls-person-label-<?php echo (int) $i; ?>"
+										class="regular-text" value="<?php echo esc_attr( $has ? $person['label'] : '' ); ?>" autocomplete="off" />
+								</td>
+								<td>
+									<label class="screen-reader-text" for="acps-ls-person-pw-<?php echo (int) $i; ?>"><?php esc_html_e( 'Password', 'acps-link-shortener' ); ?></label>
+									<input type="text" name="person_password[<?php echo (int) $i; ?>]" id="acps-ls-person-pw-<?php echo (int) $i; ?>"
+										class="regular-text" value="" autocomplete="off"
+										placeholder="<?php echo $has ? esc_attr__( '•••••• (leave blank to keep)', 'acps-link-shortener' ) : esc_attr__( 'set a password', 'acps-link-shortener' ); ?>" />
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+				<p class="description"><?php esc_html_e( 'Passwords are stored securely (hashed) and cannot be displayed again after saving.', 'acps-link-shortener' ); ?></p>
+
+				<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings' ); ?>
+			</form>
 		</div>
 		<?php
 	}

@@ -79,9 +79,7 @@ class ACPS_LS_List_Table extends WP_List_Table {
 	 * @return string
 	 */
 	public static function short_url( $slug ) {
-		$prefix = ACPS_LS_SLUG_PREFIX;
-		$path   = '/' . ( '' !== $prefix ? $prefix . '/' : '' ) . $slug;
-		return home_url( $path );
+		return acps_ls_short_url( $slug );
 	}
 
 	/**

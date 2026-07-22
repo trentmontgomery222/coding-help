@@ -88,6 +88,31 @@ class ACPS_LS_DB {
 	}
 
 	/**
+	 * Generate a short, unique, non-reserved slug (for auto-named front-end links).
+	 *
+	 * @param int $length Number of characters.
+	 * @return string
+	 */
+	public static function generate_unique_slug( $length = 6 ) {
+		$reserved = self::reserved_slugs();
+		$attempts = 0;
+
+		do {
+			$candidate = strtolower( wp_generate_password( $length, false, false ) );
+			$candidate = sanitize_title( $candidate );
+			$attempts++;
+			if ( $attempts > 20 ) {
+				// Extremely unlikely; widen to avoid an infinite loop.
+				$candidate = 'l' . strtolower( wp_generate_password( 8, false, false ) );
+				$candidate = sanitize_title( $candidate );
+				break;
+			}
+		} while ( '' === $candidate || in_array( $candidate, $reserved, true ) || self::slug_exists( $candidate ) );
+
+		return $candidate;
+	}
+
+	/**
 	 * Whether a slug already exists (optionally ignoring one row).
 	 *
 	 * @param string $slug      Slug.
@@ -176,7 +201,8 @@ class ACPS_LS_DB {
 	 *     @type string $title         Label.
 	 *     @type int    $redirect_type 301 or 302.
 	 *     @type int    $is_active     0/1.
-	 *     @type string $source        'manual' or 'sheet'.
+	 *     @type string $source        'manual' or 'shortcode'.
+	 *     @type string $creator_label Human label for who created it (front end).
 	 * }
 	 * @return int|WP_Error Inserted id or error.
 	 */
@@ -196,11 +222,12 @@ class ACPS_LS_DB {
 				'redirect_type' => $redirect_type,
 				'is_active'     => empty( $data['is_active'] ) ? 0 : 1,
 				'source'        => isset( $data['source'] ) ? $data['source'] : 'manual',
+				'creator_label' => isset( $data['creator_label'] ) ? $data['creator_label'] : '',
 				'created_by'    => get_current_user_id(),
 				'created_at'    => $now,
 				'updated_at'    => $now,
 			),
-			array( '%s', '%s', '%s', '%d', '%d', '%s', '%d', '%s', '%s' )
+			array( '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%d', '%s', '%s' )
 		);
 
 		if ( false === $result ) {

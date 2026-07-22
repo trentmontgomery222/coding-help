@@ -3,67 +3,76 @@ Contributors: acps
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Self-hosted, branded URL shortener. Creates /link/{slug} redirects with click
-tracking, an accessible admin management UI, and optional Google Sheet sync.
+Self-hosted, branded URL shortener with click tracking, an accessible admin UI,
+and a password-gated front-end shortcode so staff can make links without Bitly.
 
 == Description ==
 
 A custom single-site shortener built for the ACPS environment (WP Engine behind
 Cloudflare / Global Edge Security). It stores every short link in one database
-table and serves all links from the site under the /link/ prefix.
+table and serves links from the site (or a custom short domain).
 
 Features:
 
 * Single link table on the active site.
-* URL format acpsmd.org/link/{slug} — the prefix is a single constant.
-* Per-link 301 (permanent) or 302 (temporary) redirects, default 301.
+* URL format acpsmd.org/{slug} (the path prefix is a single constant; set it to
+  a value like "link" for acpsmd.org/link/{slug} if you prefer).
+* Optional custom short-link domain (e.g. go.acpsmd.org) set in Settings.
+* 301/302 redirects. Permanent (301) is disabled by default so edits take effect
+  instantly; re-enable with the `acps_ls_allow_permanent` filter.
+* Locked destinations: once a short link exists, its slug and destination cannot
+  be changed, so a given short link always points to exactly one place.
 * Click counter + last-clicked timestamp.
+* Front-end shortcode `[acps_link_shortener]`: a nice, password-gated form for
+  staff to create links from any page. Each person has their own name + password
+  (set in Settings). Passwords are stored hashed; sign-in uses a signed, expiring
+  cookie.
 * Accessible admin (WCAG 2.2 AA / Section 508 targeted): core WP_List_Table and
-  Settings-API-style forms, labelled fields, field-associated validation errors,
+  standard form fields, labelled inputs, field-associated validation errors,
   visible focus, copy-to-clipboard announced via an ARIA live region, and status
   shown with text + icon (never color alone).
 * Security: capability checks, nonces, input sanitization, output escaping, and
   $wpdb->prepare() on every query with variables.
-* Optional Google Sheet sync (WP-Cron, every 3 minutes) that creates a short
-  link for each NEW sheet row, with the slug/name defined per row in the sheet.
+
+== Setup ==
+
+1. Install and activate the plugin (Plugins -> Add New -> Upload Plugin).
+2. If short links 404, visit Settings -> Permalinks and click Save once.
+3. Go to Settings -> Link Shortener to (optionally) set a custom short domain and
+   to add front-end users (name + password).
+4. Add the shortcode `[acps_link_shortener]` to any page. Staff sign in with the
+   name + password you set and can create links there.
+5. Manage all links under the top-level "Link Shortener" menu.
+
+== Custom short domain ==
+
+Settings -> Link Shortener -> Custom domain controls "the first part" of short
+URLs. A custom domain only works if it actually resolves to this WordPress
+install (DNS + WP Engine domain mapping). Leaving it blank uses the site's own
+address.
 
 == Edge caching (WP Engine Global Edge Security / Cloudflare) ==
 
-Cloudflare sits in front of the site and can cache redirects. Two things matter:
-
-1. The redirect handler sends `Cache-Control: private, no-store, no-cache,
-   max-age=0, must-revalidate` (plus Pragma: no-cache) so the edge does not
-   store the redirect. This keeps link edits effective immediately.
-
-2. As belt-and-suspenders, add an edge cache-bypass rule for the `/link/*` path
-   in WP Engine / Cloudflare, and confirm `/link/*` does not collide with any
-   existing WP Engine redirect rules.
+Cloudflare sits in front of the site and can cache redirects. The redirect
+handler sends `Cache-Control: private, no-store, no-cache, max-age=0,
+must-revalidate` (plus Pragma: no-cache) so the edge does not store the redirect,
+keeping edits effective immediately. As belt-and-suspenders, add an edge
+cache-bypass rule for the short-link path.
 
 Known limitation: if a redirect is ever served straight from edge cache without
-reaching PHP, that hit is not counted, so click totals can undercount. This is
-accepted by design rather than worked around.
-
-== Google Sheet sync ==
-
-Deploy the bundled google-apps-script/Code.gs as a Google Apps Script web app
-(it reads your sheet and returns rows as JSON), then enter its /exec URL under
-the admin menu Link Shortener -> Settings. The plugin polls it every 3 minutes
-and creates a short link for each new row. Slugs (shortened link names) are read
-from the sheet, so staff control them per row. An optional shared secret ensures
-only this site can read the feed.
-
-The sync only PULLS data. It does not write to any Google Doc and does not run
-remote commands; all validation and link creation happen inside WordPress under
-the same rules as the manual add form.
+reaching PHP, that hit is not counted, so click totals can undercount.
 
 == Frequently Asked Questions ==
 
 = Which capability gates management? =
 `manage_options` by default. Filter `acps_ls_manage_capability` to change it.
+
+= Can I re-enable permanent (301) redirects? =
+Yes: add_filter( 'acps_ls_allow_permanent', '__return_true' );
 
 = Does uninstalling delete my links? =
 No. Data is preserved by default. To drop the table on uninstall, define
@@ -73,6 +82,16 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.1.0 =
+* Add password-gated front-end shortcode [acps_link_shortener] with per-person
+  name + password (hashed).
+* Move settings to Settings -> Link Shortener; keep the top-level Link Shortener
+  menu for managing links.
+* Add optional custom short-link domain.
+* Lock slug + destination after creation (a short link can't be repointed).
+* Disable permanent (301) redirects by default.
+* Remove the Google Sheet / Apps Script sync.
 
 = 1.0.0 =
 * Initial release.
