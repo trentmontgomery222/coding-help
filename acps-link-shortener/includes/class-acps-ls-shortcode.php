@@ -152,6 +152,37 @@ class ACPS_LS_Shortcode {
 
 		$result = array( 'ok' => false, 'errors' => array() );
 
+		// --- Set password via a one-time setup link ---
+		if ( isset( $_POST['acps_ls_do_setpw'] ) ) {
+			$token = isset( $_POST['acps_ls_setup_token'] ) ? sanitize_text_field( wp_unslash( $_POST['acps_ls_setup_token'] ) ) : '';
+			$label = acps_ls_lookup_setup_token( $token );
+
+			if ( ! $label ) {
+				$result['errors']['setup'] = __( 'This setup link is invalid or has expired. Ask your administrator for a new one.', 'acps-link-shortener' );
+				$this->store_and_redirect( $result );
+				return;
+			}
+
+			$pw1 = isset( $_POST['acps_ls_new_password'] ) ? (string) wp_unslash( $_POST['acps_ls_new_password'] ) : '';
+			$pw2 = isset( $_POST['acps_ls_new_password2'] ) ? (string) wp_unslash( $_POST['acps_ls_new_password2'] ) : '';
+
+			if ( strlen( $pw1 ) < 8 ) {
+				$result['errors']['password'] = __( 'Please use a password of at least 8 characters.', 'acps-link-shortener' );
+			} elseif ( $pw1 !== $pw2 ) {
+				$result['errors']['password'] = __( 'The two passwords do not match.', 'acps-link-shortener' );
+			}
+
+			if ( empty( $result['errors'] ) ) {
+				acps_ls_set_person_password( $label, $pw1 );
+				acps_ls_consume_setup_token( $token );
+				self::set_gate_cookie( $label ); // Sign them straight in.
+				$result['ok']       = true;
+				$result['signedin'] = true;
+			}
+			$this->store_and_redirect( $result );
+			return;
+		}
+
 		// --- Sign in (separate action; does NOT create a link) ---
 		if ( isset( $_POST['acps_ls_do_signin'] ) ) {
 			$label = self::current_person();
@@ -288,7 +319,8 @@ class ACPS_LS_Shortcode {
 		if ( ! $back ) {
 			$back = home_url( '/' );
 		}
-		$back = remove_query_arg( self::RESULT_ARG, $back );
+		// Drop the one-time setup param so a consumed link is never re-shown.
+		$back = remove_query_arg( array( self::RESULT_ARG, 'acps_ls_setup' ), $back );
 		if ( $token ) {
 			$back = add_query_arg( self::RESULT_ARG, $token, $back );
 		}
@@ -308,6 +340,12 @@ class ACPS_LS_Shortcode {
 	 */
 	public function render( $atts = array() ) {
 		$result = $this->pull_result();
+
+		// One-time password setup link (?acps_ls_setup=TOKEN).
+		if ( isset( $_GET['acps_ls_setup'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return $this->render_setup( $result );
+		}
+
 		// current_person() returns the label string; the dashboard needs the
 		// full person record.
 		$label  = self::current_person();
@@ -383,6 +421,59 @@ class ACPS_LS_Shortcode {
 			<button type="submit" name="acps_ls_do_signin" value="1" class="acps-ls-submit"><?php esc_html_e( 'Sign in', 'acps-link-shortener' ); ?></button>
 		</form>
 		<?php
+	}
+
+	/**
+	 * Render the one-time password-setup screen.
+	 *
+	 * @param array|null $result Result payload.
+	 * @return string
+	 */
+	private function render_setup( $result ) {
+		$token = sanitize_text_field( wp_unslash( $_GET['acps_ls_setup'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$label = acps_ls_lookup_setup_token( $token );
+
+		ob_start();
+		echo $this->assets(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo '<div class="acps-ls-box">';
+		echo '<div class="acps-ls-live screen-reader-text" role="status" aria-live="polite"></div>';
+
+		$this->render_alerts( $result );
+
+		if ( ! $label ) {
+			echo '<h2 class="acps-ls-box__title">' . esc_html__( 'Setup link', 'acps-link-shortener' ) . '</h2>';
+			echo '<p class="acps-ls-note">' . esc_html__( 'This setup link is invalid, already used, or expired. Please ask your administrator for a new one.', 'acps-link-shortener' ) . '</p>';
+			echo '</div>';
+			return ob_get_clean();
+		}
+		?>
+		<h2 class="acps-ls-box__title"><?php esc_html_e( 'Set your password', 'acps-link-shortener' ); ?></h2>
+		<p class="acps-ls-signedout">
+			<?php
+			printf(
+				/* translators: %s: person name. */
+				esc_html__( 'Welcome, %s. Choose a password to finish setting up your account.', 'acps-link-shortener' ),
+				'<strong>' . esc_html( $label ) . '</strong>'
+			);
+			?>
+		</p>
+		<form method="post" class="acps-ls-form" action="">
+			<?php self::form_fields(); ?>
+			<input type="hidden" name="acps_ls_setup_token" value="<?php echo esc_attr( $token ); ?>" />
+			<div class="acps-ls-field">
+				<label for="acps-ls-newpw"><?php esc_html_e( 'New password', 'acps-link-shortener' ); ?></label>
+				<input type="password" name="acps_ls_new_password" id="acps-ls-newpw" autocomplete="new-password" minlength="8" required />
+			</div>
+			<div class="acps-ls-field">
+				<label for="acps-ls-newpw2"><?php esc_html_e( 'Confirm password', 'acps-link-shortener' ); ?></label>
+				<input type="password" name="acps_ls_new_password2" id="acps-ls-newpw2" autocomplete="new-password" minlength="8" required />
+			</div>
+			<p class="acps-ls-help"><?php esc_html_e( 'Use at least 8 characters.', 'acps-link-shortener' ); ?></p>
+			<button type="submit" name="acps_ls_do_setpw" value="1" class="acps-ls-submit"><?php esc_html_e( 'Set password &amp; sign in', 'acps-link-shortener' ); ?></button>
+		</form>
+		<?php
+		echo '</div>';
+		return ob_get_clean();
 	}
 
 	/**

@@ -166,6 +166,12 @@ class ACPS_LS_Admin {
 			return;
 		}
 
+		// "Generate setup link" button.
+		if ( isset( $_POST['acps_ls_gen_setup'] ) ) {
+			$this->handle_generate_setup();
+			return;
+		}
+
 		// Settings submission.
 		if ( isset( $_POST['acps_ls_save_settings'] ) ) {
 			$this->handle_settings_save();
@@ -328,6 +334,9 @@ class ACPS_LS_Admin {
 		// Custom short-link domain (optional).
 		$link_domain = isset( $_POST['link_domain'] ) ? esc_url_raw( wp_unslash( $_POST['link_domain'] ) ) : '';
 
+		// Page that hosts the [acps_link_shortener] shortcode (for setup links).
+		$shortcode_page = isset( $_POST['shortcode_page'] ) ? esc_url_raw( wp_unslash( $_POST['shortcode_page'] ) ) : '';
+
 		// Google Sheet sync.
 		$sync_enabled = isset( $_POST['sync_enabled'] ) ? 1 : 0;
 		$sheet_url    = isset( $_POST['sheet_url'] ) ? esc_url_raw( wp_unslash( $_POST['sheet_url'] ), array( 'https' ) ) : '';
@@ -357,9 +366,9 @@ class ACPS_LS_Admin {
 				if ( '' !== $pw ) {
 					$hash = wp_hash_password( $pw );
 				} elseif ( isset( $existing_people[ strtolower( $label ) ] ) ) {
-					$hash = $existing_people[ strtolower( $label ) ]; // Keep existing.
+					$hash = $existing_people[ strtolower( $label ) ]; // Keep existing (may be pending).
 				} else {
-					continue; // New person with no password: ignore.
+					$hash = ''; // New person, pending — password set later via a setup link.
 				}
 
 				$people[] = array(
@@ -371,10 +380,11 @@ class ACPS_LS_Admin {
 			}
 		}
 
-		$settings                 = $existing;
-		$settings['link_domain']  = $link_domain;
-		$settings['people']       = $people;
-		$settings['sync_enabled'] = $sync_enabled;
+		$settings                   = $existing;
+		$settings['link_domain']    = $link_domain;
+		$settings['shortcode_page'] = $shortcode_page;
+		$settings['people']         = $people;
+		$settings['sync_enabled']   = $sync_enabled;
 		$settings['sheet_url']    = $sheet_url;
 		$settings['sheet_secret'] = $sheet_secret;
 		unset( $settings['default_type'] ); // obsolete
@@ -409,6 +419,40 @@ class ACPS_LS_Admin {
 		exit;
 	}
 
+	/**
+	 * Handle the "Generate setup link" button: mint a one-time link for a person.
+	 */
+	private function handle_generate_setup() {
+		check_admin_referer( 'acps_ls_settings', 'acps_ls_settings_nonce' );
+
+		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'acps-link-shortener' ) );
+		}
+
+		$label  = isset( $_POST['setup_label'] ) ? sanitize_text_field( wp_unslash( $_POST['setup_label'] ) ) : '';
+		$person = $label ? acps_ls_get_person( $label ) : null;
+
+		if ( ! $person ) {
+			set_transient( 'acps_ls_setup_link_' . get_current_user_id(), array( 'error' => __( 'Pick a saved person first (add and save them above).', 'acps-link-shortener' ) ), 300 );
+			wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'setup_link', $this->settings_url() ) );
+			exit;
+		}
+
+		$token = acps_ls_create_setup_token( $person['label'] );
+		$url   = add_query_arg( 'acps_ls_setup', rawurlencode( $token ), acps_ls_shortcode_page_url() );
+
+		set_transient(
+			'acps_ls_setup_link_' . get_current_user_id(),
+			array(
+				'label' => $person['label'],
+				'url'   => $url,
+			),
+			300
+		);
+		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'setup_link', $this->settings_url() ) );
+		exit;
+	}
+
 	/* --------------------------------------------------------------------- */
 	/* Rendering                                                              */
 	/* --------------------------------------------------------------------- */
@@ -431,6 +475,24 @@ class ACPS_LS_Admin {
 		);
 
 		$key = sanitize_key( wp_unslash( $_GET['acps_ls_notice'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		// A freshly generated one-time setup link (shown once).
+		if ( 'setup_link' === $key ) {
+			$data = get_transient( 'acps_ls_setup_link_' . get_current_user_id() );
+			delete_transient( 'acps_ls_setup_link_' . get_current_user_id() );
+			if ( is_array( $data ) && ! empty( $data['error'] ) ) {
+				printf( '<div class="notice notice-error is-dismissible"><p>%s</p></div>', esc_html( $data['error'] ) );
+			} elseif ( is_array( $data ) && ! empty( $data['url'] ) ) {
+				echo '<div class="notice notice-success"><p>';
+				printf(
+					/* translators: %s: person name. */
+					esc_html__( 'One-time setup link for %s (copy and send it now — it is shown only once and works one time):', 'acps-link-shortener' ),
+					'<strong>' . esc_html( $data['label'] ) . '</strong>'
+				);
+				echo '</p><p><input type="text" class="large-text code" readonly onfocus="this.select();" value="' . esc_attr( $data['url'] ) . '" style="max-width:640px;" /></p></div>';
+			}
+			return;
+		}
 
 		// Connection-test results carry a stored message.
 		if ( 'test_ok' === $key || 'test_fail' === $key ) {
@@ -672,10 +734,11 @@ class ACPS_LS_Admin {
 			wp_die( esc_html__( 'You do not have permission to view this page.', 'acps-link-shortener' ) );
 		}
 
-		$settings     = get_option( ACPS_LS_OPT_SETTINGS, array() );
-		$settings     = is_array( $settings ) ? $settings : array();
-		$link_domain  = ! empty( $settings['link_domain'] ) ? $settings['link_domain'] : '';
-		$sync_enabled = ! empty( $settings['sync_enabled'] );
+		$settings        = get_option( ACPS_LS_OPT_SETTINGS, array() );
+		$settings        = is_array( $settings ) ? $settings : array();
+		$link_domain     = ! empty( $settings['link_domain'] ) ? $settings['link_domain'] : '';
+		$shortcode_page  = ! empty( $settings['shortcode_page'] ) ? $settings['shortcode_page'] : '';
+		$sync_enabled    = ! empty( $settings['sync_enabled'] );
 		$sheet_url    = ! empty( $settings['sheet_url'] ) ? $settings['sheet_url'] : '';
 		$sheet_secret = ! empty( $settings['sheet_secret'] ) ? $settings['sheet_secret'] : '';
 		$last_sync    = get_option( 'acps_ls_last_sync' );
@@ -717,6 +780,17 @@ class ACPS_LS_Admin {
 								</p>
 							</td>
 						</tr>
+						<tr>
+							<th scope="row">
+								<label for="acps-ls-shortcode-page"><?php esc_html_e( 'Shortcode page', 'acps-link-shortener' ); ?></label>
+							</th>
+							<td>
+								<input type="url" name="shortcode_page" id="acps-ls-shortcode-page" class="regular-text"
+									value="<?php echo esc_attr( $shortcode_page ); ?>"
+									placeholder="<?php echo esc_attr( home_url( '/make-links/' ) ); ?>" aria-describedby="acps-ls-shortcode-page-desc" />
+								<p class="description" id="acps-ls-shortcode-page-desc"><?php esc_html_e( 'The page where you placed the [acps_link_shortener] shortcode. Setup links point here so invitees can set their password.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
 					</tbody>
 				</table>
 
@@ -743,9 +817,17 @@ class ACPS_LS_Admin {
 					<tbody>
 						<?php foreach ( $rows as $i => $person ) : ?>
 							<?php
-							$has = ! empty( $person['label'] );
-							$mx  = isset( $person['max_links'] ) ? (int) $person['max_links'] : 0;
-							$ns  = isset( $person['namespace'] ) ? $person['namespace'] : '';
+							$has     = ! empty( $person['label'] );
+							$pending = $has && empty( $person['hash'] );
+							$mx      = isset( $person['max_links'] ) ? (int) $person['max_links'] : 0;
+							$ns      = isset( $person['namespace'] ) ? $person['namespace'] : '';
+							if ( $has && $pending ) {
+								$pw_placeholder = esc_attr__( 'no password yet — send a setup link', 'acps-link-shortener' );
+							} elseif ( $has ) {
+								$pw_placeholder = esc_attr__( '•••••• (blank = keep)', 'acps-link-shortener' );
+							} else {
+								$pw_placeholder = esc_attr__( 'set a password (or leave blank + send a setup link)', 'acps-link-shortener' );
+							}
 							?>
 							<tr>
 								<td>
@@ -757,7 +839,7 @@ class ACPS_LS_Admin {
 									<label class="screen-reader-text" for="acps-ls-person-pw-<?php echo (int) $i; ?>"><?php esc_html_e( 'Password', 'acps-link-shortener' ); ?></label>
 									<input type="text" name="person_password[<?php echo (int) $i; ?>]" id="acps-ls-person-pw-<?php echo (int) $i; ?>"
 										value="" autocomplete="off"
-										placeholder="<?php echo $has ? esc_attr__( '•••••• (blank = keep)', 'acps-link-shortener' ) : esc_attr__( 'set a password', 'acps-link-shortener' ); ?>" />
+										placeholder="<?php echo esc_attr( $pw_placeholder ); ?>" />
 								</td>
 								<td>
 									<label class="screen-reader-text" for="acps-ls-person-max-<?php echo (int) $i; ?>"><?php esc_html_e( 'Max links (0 = unlimited)', 'acps-link-shortener' ); ?></label>
@@ -775,6 +857,27 @@ class ACPS_LS_Admin {
 				</table>
 				<p class="description">
 					<?php esc_html_e( 'Passwords are hashed and cannot be shown again. Max links = 0 means unlimited (counts only links a person made via the shortcode). URL namespace forces the first path segment, e.g. “katherine” makes their links look like acpsmd.org/katherine/name.', 'acps-link-shortener' ); ?>
+				</p>
+
+				<h3><?php esc_html_e( 'Send a one-time setup link', 'acps-link-shortener' ); ?></h3>
+				<p class="description">
+					<?php esc_html_e( 'Let a person set their own password with a single-use link — you never see or set it. Add and save their name above (leave the password blank), then generate a link and send it to them. The link works once and expires in 72 hours.', 'acps-link-shortener' ); ?>
+				</p>
+				<p>
+					<label for="acps-ls-setup-label" class="screen-reader-text"><?php esc_html_e( 'Person', 'acps-link-shortener' ); ?></label>
+					<select name="setup_label" id="acps-ls-setup-label">
+						<option value=""><?php esc_html_e( '— choose a person —', 'acps-link-shortener' ); ?></option>
+						<?php foreach ( $people as $p ) : ?>
+							<option value="<?php echo esc_attr( $p['label'] ); ?>">
+								<?php
+								echo esc_html( $p['label'] );
+								echo empty( $p['hash'] ) ? esc_html__( ' (no password yet)', 'acps-link-shortener' ) : '';
+								?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+					<?php submit_button( __( 'Generate setup link', 'acps-link-shortener' ), 'secondary', 'acps_ls_gen_setup', false ); ?>
+					<span class="description"><?php esc_html_e( '(Save any name changes first.)', 'acps-link-shortener' ); ?></span>
 				</p>
 
 				<h2><?php esc_html_e( 'Google Sheet sync', 'acps-link-shortener' ); ?></h2>

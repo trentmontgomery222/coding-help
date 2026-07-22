@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Link Shortener
  * Plugin URI:        https://acpsmd.org/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.2.0' );
+define( 'ACPS_LS_VERSION', '1.3.0' );
 define( 'ACPS_LS_DB_VERSION', '1.1.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -71,6 +71,7 @@ define( 'ACPS_LS_BASENAME', plugin_basename( __FILE__ ) );
 // Option keys.
 define( 'ACPS_LS_OPT_DB_VERSION', 'acps_ls_db_version' );
 define( 'ACPS_LS_OPT_SETTINGS', 'acps_ls_settings' );
+define( 'ACPS_LS_OPT_SETUP_TOKENS', 'acps_ls_setup_tokens' );
 
 // WP-Cron hook + interval for the two-way Google Sheet sync.
 define( 'ACPS_LS_CRON_HOOK', 'acps_ls_sheet_sync' );
@@ -155,10 +156,13 @@ function acps_ls_get_people() {
 
 	$clean = array();
 	foreach ( $people as $person ) {
-		if ( ! empty( $person['label'] ) && ! empty( $person['hash'] ) ) {
+		// A person may be "pending" (name set, no password yet) while waiting to
+		// use a setup link, so an empty hash is allowed here; authentication
+		// separately rejects an empty hash.
+		if ( ! empty( $person['label'] ) ) {
 			$clean[] = array(
 				'label'     => (string) $person['label'],
-				'hash'      => (string) $person['hash'],
+				'hash'      => isset( $person['hash'] ) ? (string) $person['hash'] : '',
 				'max_links' => isset( $person['max_links'] ) ? max( 0, (int) $person['max_links'] ) : 0,
 				'namespace' => isset( $person['namespace'] ) ? (string) $person['namespace'] : '',
 			);
@@ -196,11 +200,127 @@ function acps_ls_authenticate_person( $name, $password ) {
 	}
 
 	foreach ( acps_ls_get_people() as $person ) {
+		if ( '' === $person['hash'] ) {
+			continue; // Pending invitee — no password set yet.
+		}
 		if ( strtolower( $person['label'] ) === strtolower( $name ) && wp_check_password( $password, $person['hash'] ) ) {
 			return $person['label'];
 		}
 	}
 	return false;
+}
+
+/**
+ * One-time setup tokens are stored keyed by a SHA-256 hash of the token, so the
+ * raw token is never persisted. Each entry: [ 'label' => string, 'expires' => ts ].
+ *
+ * @return array
+ */
+function acps_ls_setup_token_store() {
+	$store = get_option( ACPS_LS_OPT_SETUP_TOKENS, array() );
+	return is_array( $store ) ? $store : array();
+}
+
+/**
+ * Create a one-time setup token for a person and return the RAW token (shown
+ * once). Expired tokens are pruned on write.
+ *
+ * @param string $label     Person label.
+ * @param int    $ttl_hours Validity window in hours.
+ * @return string Raw token.
+ */
+function acps_ls_create_setup_token( $label, $ttl_hours = 72 ) {
+	$token = wp_generate_password( 32, false, false );
+	$key   = hash( 'sha256', $token );
+	$now   = time();
+
+	$store = acps_ls_setup_token_store();
+	foreach ( $store as $k => $entry ) {
+		if ( empty( $entry['expires'] ) || (int) $entry['expires'] < $now ) {
+			unset( $store[ $k ] );
+		}
+	}
+	$store[ $key ] = array(
+		'label'   => (string) $label,
+		'expires' => $now + ( $ttl_hours * HOUR_IN_SECONDS ),
+	);
+	update_option( ACPS_LS_OPT_SETUP_TOKENS, $store );
+
+	return $token;
+}
+
+/**
+ * Look up a setup token. Returns the person label if valid + unexpired, else false.
+ *
+ * @param string $token Raw token.
+ * @return string|false
+ */
+function acps_ls_lookup_setup_token( $token ) {
+	$key   = hash( 'sha256', (string) $token );
+	$store = acps_ls_setup_token_store();
+
+	if ( empty( $store[ $key ] ) || empty( $store[ $key ]['expires'] ) || (int) $store[ $key ]['expires'] < time() ) {
+		return false;
+	}
+	// The referenced person must still exist.
+	$label = $store[ $key ]['label'];
+	return acps_ls_get_person( $label ) ? $label : false;
+}
+
+/**
+ * Consume (invalidate) a setup token so the link cannot be reused.
+ *
+ * @param string $token Raw token.
+ */
+function acps_ls_consume_setup_token( $token ) {
+	$key   = hash( 'sha256', (string) $token );
+	$store = acps_ls_setup_token_store();
+	if ( isset( $store[ $key ] ) ) {
+		unset( $store[ $key ] );
+		update_option( ACPS_LS_OPT_SETUP_TOKENS, $store );
+	}
+}
+
+/**
+ * Set (or reset) a person's password by label. Returns true if the person was
+ * found and updated.
+ *
+ * @param string $label    Person label.
+ * @param string $password New plaintext password (will be hashed).
+ * @return bool
+ */
+function acps_ls_set_person_password( $label, $password ) {
+	$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
+	if ( ! is_array( $settings ) || empty( $settings['people'] ) || ! is_array( $settings['people'] ) ) {
+		return false;
+	}
+
+	$found = false;
+	foreach ( $settings['people'] as &$person ) {
+		if ( ! empty( $person['label'] ) && strtolower( $person['label'] ) === strtolower( $label ) ) {
+			$person['hash'] = wp_hash_password( $password );
+			$found          = true;
+			break;
+		}
+	}
+	unset( $person );
+
+	if ( $found ) {
+		update_option( ACPS_LS_OPT_SETTINGS, $settings );
+	}
+	return $found;
+}
+
+/**
+ * Base URL of the page that holds the [acps_link_shortener] shortcode. Used to
+ * build setup links. Falls back to the site root.
+ *
+ * @return string
+ */
+function acps_ls_shortcode_page_url() {
+	$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
+	$url      = ( is_array( $settings ) && ! empty( $settings['shortcode_page'] ) ) ? $settings['shortcode_page'] : '';
+	return $url ? $url : home_url( '/' );
 }
 
 /**
