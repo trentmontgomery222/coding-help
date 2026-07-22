@@ -107,6 +107,25 @@ class ACPS_LS_Shortcode {
 		return acps_ls_get_person( $label ) ? $label : false;
 	}
 
+	/**
+	 * The current front-end URL (used so PRG returns to the shortcode page).
+	 *
+	 * @return string
+	 */
+	private static function current_url() {
+		$uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '/';
+		return home_url( $uri );
+	}
+
+	/**
+	 * Print the hidden marker + nonce + return-URL fields shared by every form.
+	 */
+	private static function form_fields() {
+		echo '<input type="hidden" name="acps_ls_shortcode" value="1" />';
+		echo '<input type="hidden" name="acps_ls_return" value="' . esc_url( self::current_url() ) . '" />';
+		wp_nonce_field( self::NONCE, 'acps_ls_sc_nonce' );
+	}
+
 	/* --------------------------------------------------------------------- */
 	/* Submission handling (PRG)                                              */
 	/* --------------------------------------------------------------------- */
@@ -256,7 +275,16 @@ class ACPS_LS_Shortcode {
 	 * @param string|null $token Result token or null.
 	 */
 	private function redirect_back( $token ) {
-		$back = wp_get_referer();
+		// Prefer the page the form was on (carried in a hidden field), so we
+		// return to the shortcode page rather than the homepage when the browser
+		// does not send a Referer header. wp_safe_redirect keeps it same-host.
+		$back = '';
+		if ( ! empty( $_POST['acps_ls_return'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$back = esc_url_raw( wp_unslash( $_POST['acps_ls_return'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		}
+		if ( ! $back ) {
+			$back = wp_get_referer();
+		}
 		if ( ! $back ) {
 			$back = home_url( '/' );
 		}
@@ -280,7 +308,10 @@ class ACPS_LS_Shortcode {
 	 */
 	public function render( $atts = array() ) {
 		$result = $this->pull_result();
-		$person = self::current_person();
+		// current_person() returns the label string; the dashboard needs the
+		// full person record.
+		$label  = self::current_person();
+		$person = $label ? acps_ls_get_person( $label ) : null;
 
 		ob_start();
 		echo $this->assets(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -340,8 +371,7 @@ class ACPS_LS_Shortcode {
 		<h2 class="acps-ls-box__title"><?php esc_html_e( 'Sign in', 'acps-link-shortener' ); ?></h2>
 		<p class="acps-ls-signedout"><?php esc_html_e( 'Sign in to create and manage your short links.', 'acps-link-shortener' ); ?></p>
 		<form method="post" class="acps-ls-form" action="">
-			<input type="hidden" name="acps_ls_shortcode" value="1" />
-			<?php wp_nonce_field( self::NONCE, 'acps_ls_sc_nonce' ); ?>
+			<?php self::form_fields(); ?>
 			<div class="acps-ls-field">
 				<label for="acps-ls-name"><?php esc_html_e( 'Your name', 'acps-link-shortener' ); ?></label>
 				<input type="text" name="acps_ls_name" id="acps-ls-name" autocomplete="username" required />
@@ -374,7 +404,7 @@ class ACPS_LS_Shortcode {
 		<div class="acps-ls-topbar">
 			<h2 class="acps-ls-box__title"><?php esc_html_e( 'Your short links', 'acps-link-shortener' ); ?></h2>
 			<form method="post" action="" class="acps-ls-signoutform">
-				<input type="hidden" name="acps_ls_shortcode" value="1" />
+				<?php self::form_fields(); ?>
 				<button type="submit" name="acps_ls_signout" value="1" class="acps-ls-link-btn">
 					<?php
 					printf(
@@ -410,8 +440,7 @@ class ACPS_LS_Shortcode {
 			<div class="acps-ls-alert acps-ls-alert--info"><p><?php esc_html_e( 'You have reached your link limit. Delete a link below to make room for a new one.', 'acps-link-shortener' ); ?></p></div>
 		<?php else : ?>
 			<form method="post" class="acps-ls-form" action="">
-				<input type="hidden" name="acps_ls_shortcode" value="1" />
-				<?php wp_nonce_field( self::NONCE, 'acps_ls_sc_nonce' ); ?>
+				<?php self::form_fields(); ?>
 				<div class="acps-ls-field">
 					<label for="acps-ls-destination"><?php esc_html_e( 'Destination URL', 'acps-link-shortener' ); ?></label>
 					<input type="url" name="acps_ls_destination" id="acps-ls-destination" placeholder="https://example.com/long/page" required />
@@ -460,8 +489,7 @@ class ACPS_LS_Shortcode {
 							<td><?php echo esc_html( number_format_i18n( (int) $link->clicks ) ); ?></td>
 							<td>
 								<form method="post" action="" class="acps-ls-deleteform" onsubmit="return confirm('<?php echo esc_js( __( 'Delete this short link? This cannot be undone.', 'acps-link-shortener' ) ); ?>');">
-									<input type="hidden" name="acps_ls_shortcode" value="1" />
-									<?php wp_nonce_field( self::NONCE, 'acps_ls_sc_nonce' ); ?>
+									<?php self::form_fields(); ?>
 									<input type="hidden" name="acps_ls_link_id" value="<?php echo (int) $link->id; ?>" />
 									<button type="submit" name="acps_ls_do_delete" value="1" class="acps-ls-delete-btn"><?php esc_html_e( 'Delete', 'acps-link-shortener' ); ?></button>
 								</form>
