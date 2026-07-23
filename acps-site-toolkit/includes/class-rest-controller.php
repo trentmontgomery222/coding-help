@@ -85,6 +85,47 @@ class REST_Controller {
 				'permission_callback' => '__return_true',
 			)
 		);
+
+		register_rest_route(
+			$ns,
+			'/unlock',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'unlock' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+
+	/**
+	 * POST /unlock — verify a password-protected form's password and, on
+	 * success, return the rendered form HTML (never printed into cached markup).
+	 *
+	 * @param \WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function unlock( $req ) {
+		$this->no_cache();
+		$params  = $req->get_json_params();
+		$params  = is_array( $params ) ? $params : $req->get_params();
+
+		$form_id  = isset( $params['form_id'] ) ? absint( $params['form_id'] ) : 0;
+		$password = isset( $params['password'] ) ? (string) $params['password'] : '';
+		$form     = Form::find( $form_id );
+
+		if ( ! $form ) {
+			return new \WP_REST_Response( array( 'success' => false ), 200 );
+		}
+
+		if ( Access::verify_password( $form, $password ) ) {
+			$html = Form_Renderer::render( $form, array( 'post_id' => isset( $params['post_id'] ) ? absint( $params['post_id'] ) : 0 ) );
+			return new \WP_REST_Response( array( 'success' => true, 'html' => $html ), 200 );
+		}
+
+		return new \WP_REST_Response(
+			array( 'success' => false, 'message' => __( 'Incorrect password.', 'acps-site-toolkit' ) ),
+			200
+		);
 	}
 
 	/**

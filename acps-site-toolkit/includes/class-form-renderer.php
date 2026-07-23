@@ -400,16 +400,20 @@ class Form_Renderer {
 	 * so forms.js can show/hide it (spec §7.3).
 	 */
 	private static function conditional_attr( $field ) {
-		if ( empty( $field['conditional']['field'] ) ) {
+		$c = isset( $field['conditional'] ) ? $field['conditional'] : array();
+		if ( empty( $c['enabled'] ) || empty( $c['rules'] ) ) {
 			return '';
 		}
-		$c = $field['conditional'];
-		return sprintf(
-			'data-cond-field="%s" data-cond-op="%s" data-cond-value="%s" hidden',
-			esc_attr( $c['field'] ),
-			esc_attr( isset( $c['op'] ) ? $c['op'] : 'is' ),
-			esc_attr( isset( $c['value'] ) ? $c['value'] : '' )
-		);
+		// The whole rule set (logic + action + rules) travels as one JSON
+		// attribute; forms.js evaluates it. Starts hidden for "show" actions so
+		// there is no flash before JS runs; visible for "hide" actions.
+		$json   = wp_json_encode( array(
+			'logic'  => $c['logic'],
+			'action' => $c['action'],
+			'rules'  => $c['rules'],
+		) );
+		$hidden = ( 'show' === $c['action'] ) ? 'hidden' : '';
+		return 'data-acps-cond="' . esc_attr( $json ) . '" ' . $hidden;
 	}
 
 	/**

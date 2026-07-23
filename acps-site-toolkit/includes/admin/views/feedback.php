@@ -138,6 +138,17 @@ if ( $view_id ) {
 					</p>
 					<p><button type="submit" class="button"><?php esc_html_e( 'Add note', 'acps-site-toolkit' ); ?></button></p>
 				</form>
+
+				<h2><?php esc_html_e( 'Danger zone', 'acps-site-toolkit' ); ?></h2>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<?php wp_nonce_field( 'acps_st_entry_action' ); ?>
+					<input type="hidden" name="action" value="acps_st_entry_action">
+					<input type="hidden" name="entry_id" value="<?php echo esc_attr( $view_id ); ?>">
+					<input type="hidden" name="return" value="<?php echo esc_url( admin_url( 'admin.php?page=acps-st' ) ); ?>">
+					<p>
+						<button type="submit" name="do" value="delete" class="button acps-danger" onclick="return confirm('<?php echo esc_js( __( 'Permanently delete this feedback? This cannot be undone.', 'acps-site-toolkit' ) ); ?>');"><?php esc_html_e( 'Delete permanently', 'acps-site-toolkit' ); ?></button>
+					</p>
+				</form>
 				<?php endif; ?>
 			</div>
 		</div>
@@ -188,10 +199,38 @@ $total = $result['total'];
 		<button type="submit" class="button"><?php esc_html_e( 'Filter', 'acps-site-toolkit' ); ?></button>
 	</form>
 
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+	<?php wp_nonce_field( 'acps_st_entry_action' ); ?>
+	<input type="hidden" name="action" value="acps_st_entry_action">
+	<input type="hidden" name="return" value="<?php echo esc_attr( admin_url( 'admin.php?page=acps-st' . ( $filter_status ? '&status=' . $filter_status : '' ) ) ); ?>">
+
+	<?php if ( current_user_can( 'manage_options' ) && $rows ) : ?>
+	<div class="tablenav top">
+		<label for="acps-bulk" class="screen-reader-text"><?php esc_html_e( 'Bulk action', 'acps-site-toolkit' ); ?></label>
+		<select id="acps-bulk" name="do">
+			<option value=""><?php esc_html_e( 'Bulk actions', 'acps-site-toolkit' ); ?></option>
+			<option value="bulk_trash"><?php esc_html_e( 'Move to Trash', 'acps-site-toolkit' ); ?></option>
+			<option value="bulk_delete"><?php esc_html_e( 'Delete permanently', 'acps-site-toolkit' ); ?></option>
+		</select>
+		<button type="submit" class="button" onclick="return acpsConfirmBulk(this.form);"><?php esc_html_e( 'Apply', 'acps-site-toolkit' ); ?></button>
+	</div>
+	<script>
+	function acpsConfirmBulk( form ) {
+		if ( form.do && form.do.value === 'bulk_delete' ) {
+			return confirm( <?php echo wp_json_encode( __( 'Permanently delete the selected feedback? This cannot be undone.', 'acps-site-toolkit' ) ); ?> );
+		}
+		return true;
+	}
+	</script>
+	<?php endif; ?>
+
 	<table class="widefat striped acps-table">
 		<caption class="screen-reader-text"><?php esc_html_e( 'Feedback submissions', 'acps-site-toolkit' ); ?></caption>
 		<thead>
 			<tr>
+				<?php if ( current_user_can( 'manage_options' ) ) : ?>
+					<td class="check-column"><label for="acps-check-all" class="screen-reader-text"><?php esc_html_e( 'Select all', 'acps-site-toolkit' ); ?></label><input type="checkbox" id="acps-check-all" onclick="var b=this.form.querySelectorAll('input[name=\'entry_ids[]\']');for(var i=0;i<b.length;i++){b[i].checked=this.checked;}"></td>
+				<?php endif; ?>
 				<th scope="col"><?php esc_html_e( 'ID', 'acps-site-toolkit' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Type', 'acps-site-toolkit' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Comment', 'acps-site-toolkit' ); ?></th>
@@ -202,7 +241,7 @@ $total = $result['total'];
 		</thead>
 		<tbody>
 			<?php if ( ! $rows ) : ?>
-				<tr><td colspan="6"><?php esc_html_e( 'No feedback yet.', 'acps-site-toolkit' ); ?></td></tr>
+				<tr><td colspan="7"><?php esc_html_e( 'No feedback yet.', 'acps-site-toolkit' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $rows as $row ) :
 					$d      = Entries::get( (int) $row->id );
@@ -212,6 +251,9 @@ $total = $result['total'];
 					$link   = admin_url( 'admin.php?page=acps-st&entry=' . $row->id );
 					?>
 					<tr>
+						<?php if ( current_user_can( 'manage_options' ) ) : ?>
+							<th scope="row" class="check-column"><label class="screen-reader-text" for="acps-cb-<?php echo esc_attr( $row->id ); ?>"><?php printf( esc_html__( 'Select feedback %d', 'acps-site-toolkit' ), (int) $row->id ); ?></label><input type="checkbox" id="acps-cb-<?php echo esc_attr( $row->id ); ?>" name="entry_ids[]" value="<?php echo esc_attr( $row->id ); ?>"></th>
+						<?php endif; ?>
 						<td><a href="<?php echo esc_url( $link ); ?>">#<?php echo esc_html( $row->id ); ?></a></td>
 						<td><?php echo esc_html( $type ); ?></td>
 						<td><a href="<?php echo esc_url( $link ); ?>"><?php echo esc_html( $comment ); ?></a></td>
@@ -223,6 +265,7 @@ $total = $result['total'];
 			<?php endif; ?>
 		</tbody>
 	</table>
+	</form>
 
 	<?php
 	$total_pages = (int) ceil( $total / 25 );

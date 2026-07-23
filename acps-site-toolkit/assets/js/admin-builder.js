@@ -245,42 +245,121 @@
 		// Page number (multi-page).
 		pane.appendChild( numberRow( 'Page number', field.page || 1, function ( v ) { field.page = v; } ) );
 
-		// Conditional visibility.
+		// Conditional visibility — advanced: action + logic + multiple rules.
+		pane.appendChild( this.renderConditional( field ) );
+	};
+
+	var OPS = [
+		[ 'is', 'is' ],
+		[ 'is_not', 'is not' ],
+		[ 'contains', 'contains' ],
+		[ 'not_contains', "doesn't contain" ],
+		[ 'gt', 'greater than' ],
+		[ 'lt', 'less than' ],
+		[ 'is_empty', 'is empty' ],
+		[ 'is_not_empty', 'is not empty' ]
+	];
+
+	Builder.prototype.renderConditional = function ( field ) {
+		var self = this;
+		// Migrate legacy single-rule shape.
 		var cond = field.conditional || {};
-		var condWrap = document.createElement( 'fieldset' );
-		condWrap.className = 'acps-cond';
-		condWrap.innerHTML = '<legend>Conditional visibility</legend>';
-		var keys = this.fields.filter( function ( f ) { return f.key !== field.key && isInput( f.type ); } );
-		var sel = document.createElement( 'select' );
-		sel.innerHTML = '<option value="">Always show</option>' + keys.map( function ( f ) {
-			return '<option value="' + escapeHtml( f.key ) + '"' + ( cond.field === f.key ? ' selected' : '' ) + '>' + escapeHtml( f.label ) + '</option>';
-		} ).join( '' );
-		var condLabel = document.createElement( 'label' );
-		condLabel.textContent = 'Show this field when';
-		sel.setAttribute( 'aria-label', 'Show this field when field' );
-		condWrap.appendChild( condLabel );
-		condWrap.appendChild( sel );
+		if ( cond.field && ! cond.rules ) {
+			cond = { enabled: true, logic: 'and', action: 'show', rules: [ { field: cond.field, op: cond.op || 'is', value: cond.value || '' } ] };
+		}
+		cond.logic = cond.logic || 'and';
+		cond.action = cond.action || 'show';
+		cond.rules = cond.rules || [];
+		field.conditional = cond;
 
-		var op = document.createElement( 'select' );
-		op.innerHTML = '<option value="is"' + ( cond.op === 'is' ? ' selected' : '' ) + '>is</option>' +
-			'<option value="is_not"' + ( cond.op === 'is_not' ? ' selected' : '' ) + '>is not</option>';
-		op.setAttribute( 'aria-label', 'Condition operator' );
-		condWrap.appendChild( op );
+		var otherFields = this.fields.filter( function ( f ) { return f.key !== field.key && isInput( f.type ); } );
 
-		var val = document.createElement( 'input' );
-		val.type = 'text';
-		val.value = cond.value || '';
-		val.setAttribute( 'aria-label', 'Condition value' );
-		condWrap.appendChild( val );
+		var fs = document.createElement( 'fieldset' );
+		fs.className = 'acps-cond';
+		fs.innerHTML = '<legend>Conditional visibility</legend>';
 
-		var syncCond = function () {
-			field.conditional = sel.value ? { field: sel.value, op: op.value, value: val.value } : {};
-		};
-		sel.addEventListener( 'change', syncCond );
-		op.addEventListener( 'change', syncCond );
-		val.addEventListener( 'input', syncCond );
+		// Enable toggle.
+		var enableWrap = document.createElement( 'label' );
+		var enable = document.createElement( 'input' );
+		enable.type = 'checkbox';
+		enable.checked = !! cond.enabled;
+		enableWrap.appendChild( enable );
+		enableWrap.appendChild( document.createTextNode( ' Only show/hide this field conditionally' ) );
+		fs.appendChild( enableWrap );
 
-		pane.appendChild( condWrap );
+		var body = document.createElement( 'div' );
+		body.className = 'acps-cond-body';
+		body.hidden = ! cond.enabled;
+		fs.appendChild( body );
+
+		enable.addEventListener( 'change', function () {
+			cond.enabled = enable.checked;
+			body.hidden = ! enable.checked;
+			if ( enable.checked && ! cond.rules.length ) {
+				cond.rules.push( { field: otherFields.length ? otherFields[ 0 ].key : '', op: 'is', value: '' } );
+				renderRules();
+			}
+		} );
+
+		// Action + logic row.
+		var actionSel = selectEl( [ [ 'show', 'Show this field' ], [ 'hide', 'Hide this field' ] ], cond.action, 'Action' );
+		actionSel.addEventListener( 'change', function () { cond.action = actionSel.value; } );
+		var logicSel = selectEl( [ [ 'and', 'ALL rules match (AND)' ], [ 'or', 'ANY rule matches (OR)' ] ], cond.logic, 'Match logic' );
+		logicSel.addEventListener( 'change', function () { cond.logic = logicSel.value; } );
+		body.appendChild( wrapInline( [ actionSel, document.createTextNode( ' when ' ), logicSel ] ) );
+
+		var rulesWrap = document.createElement( 'div' );
+		rulesWrap.className = 'acps-cond-rules';
+		body.appendChild( rulesWrap );
+
+		function renderRules() {
+			rulesWrap.innerHTML = '';
+			cond.rules.forEach( function ( rule, ri ) {
+				var row = document.createElement( 'div' );
+				row.className = 'acps-cond-rule';
+
+				var fSel = selectEl( otherFields.map( function ( f ) { return [ f.key, f.label || f.key ]; } ), rule.field, 'Field' );
+				fSel.addEventListener( 'change', function () { rule.field = fSel.value; } );
+
+				var oSel = selectEl( OPS, rule.op, 'Operator' );
+				oSel.addEventListener( 'change', function () { rule.op = oSel.value; } );
+
+				var vInput = document.createElement( 'input' );
+				vInput.type = 'text';
+				vInput.value = rule.value || '';
+				vInput.setAttribute( 'aria-label', 'Value' );
+				vInput.addEventListener( 'input', function () { rule.value = vInput.value; } );
+
+				var del = document.createElement( 'button' );
+				del.type = 'button';
+				del.className = 'button-link acps-danger';
+				del.textContent = 'Remove';
+				del.setAttribute( 'aria-label', 'Remove rule ' + ( ri + 1 ) );
+				del.addEventListener( 'click', function () {
+					cond.rules.splice( ri, 1 );
+					renderRules();
+				} );
+
+				row.appendChild( fSel );
+				row.appendChild( oSel );
+				row.appendChild( vInput );
+				row.appendChild( del );
+				rulesWrap.appendChild( row );
+			} );
+
+			var add = document.createElement( 'button' );
+			add.type = 'button';
+			add.className = 'button';
+			add.textContent = '+ Add rule';
+			add.addEventListener( 'click', function () {
+				cond.rules.push( { field: otherFields.length ? otherFields[ 0 ].key : '', op: 'is', value: '' } );
+				renderRules();
+			} );
+			rulesWrap.appendChild( add );
+		}
+		renderRules();
+
+		return fs;
 	};
 
 	Builder.prototype.renderPreview = function () {
@@ -350,6 +429,25 @@
 		l.appendChild( i );
 		l.appendChild( document.createTextNode( ' ' + label ) );
 		p.appendChild( l );
+		return p;
+	}
+
+	function selectEl( options, selected, ariaLabel ) {
+		var s = document.createElement( 'select' );
+		options.forEach( function ( o ) {
+			var opt = document.createElement( 'option' );
+			opt.value = o[ 0 ];
+			opt.textContent = o[ 1 ];
+			if ( String( o[ 0 ] ) === String( selected ) ) { opt.selected = true; }
+			s.appendChild( opt );
+		} );
+		if ( ariaLabel ) { s.setAttribute( 'aria-label', ariaLabel ); }
+		return s;
+	}
+	function wrapInline( nodes ) {
+		var p = document.createElement( 'p' );
+		p.className = 'acps-cond-inline';
+		nodes.forEach( function ( n ) { p.appendChild( n ); } );
 		return p;
 	}
 

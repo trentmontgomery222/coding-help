@@ -52,7 +52,7 @@ class ACPS_Form_Module extends \FLBuilderModule {
 		}
 		$form = Form::find( $form_id );
 		if ( $form ) {
-			echo Form_Renderer::render( $form, array( 'post_id' => get_the_ID() ?: 0 ) ); // phpcs:ignore
+			echo Access::render_guarded( $form, array( 'post_id' => get_the_ID() ?: 0 ) ); // phpcs:ignore
 		}
 	}
 }

@@ -119,12 +119,140 @@ class Field_Types {
 			'required'    => ! empty( $field['required'] ),
 			'options'     => $options,
 			'validation'  => isset( $field['validation'] ) && is_array( $field['validation'] ) ? $field['validation'] : array(),
-			'conditional' => isset( $field['conditional'] ) && is_array( $field['conditional'] ) ? $field['conditional'] : array(),
+			'conditional' => self::normalize_conditional( isset( $field['conditional'] ) ? $field['conditional'] : array() ),
 			'page'        => isset( $field['page'] ) ? absint( $field['page'] ) : 1,
 			'scale_min'   => isset( $field['scale_min'] ) ? (int) $field['scale_min'] : 1,
 			'scale_max'   => isset( $field['scale_max'] ) ? (int) $field['scale_max'] : 5,
 			'content'     => isset( $field['content'] ) ? wp_kses_post( $field['content'] ) : '',
 		);
+	}
+
+	/**
+	 * Normalize a conditional-visibility definition into a canonical shape:
+	 *
+	 *   array(
+	 *     'enabled' => bool,
+	 *     'logic'   => 'and' | 'or',
+	 *     'action'  => 'show' | 'hide',
+	 *     'rules'   => array( array( 'field' => key, 'op' => op, 'value' => v ), ... )
+	 *   )
+	 *
+	 * Backward compatible with the old single-rule shape
+	 * array( 'field' => key, 'op' => op, 'value' => v ).
+	 *
+	 * @param mixed $cond Raw conditional.
+	 * @return array
+	 */
+	public static function normalize_conditional( $cond ) {
+		$empty = array( 'enabled' => false, 'logic' => 'and', 'action' => 'show', 'rules' => array() );
+		if ( ! is_array( $cond ) || ! $cond ) {
+			return $empty;
+		}
+
+		// Explicitly disabled in the builder → treat as no conditional, even if
+		// stale rules remain in the payload.
+		if ( array_key_exists( 'enabled', $cond ) && ! $cond['enabled'] && ! isset( $cond['field'] ) ) {
+			return $empty;
+		}
+
+		// Legacy single-rule shape → wrap it.
+		if ( isset( $cond['field'] ) && ! isset( $cond['rules'] ) ) {
+			$cond = array(
+				'enabled' => true,
+				'logic'   => 'and',
+				'action'  => 'show',
+				'rules'   => array( array( 'field' => $cond['field'], 'op' => isset( $cond['op'] ) ? $cond['op'] : 'is', 'value' => isset( $cond['value'] ) ? $cond['value'] : '' ) ),
+			);
+		}
+
+		$valid_ops = array( 'is', 'is_not', 'contains', 'not_contains', 'gt', 'lt', 'is_empty', 'is_not_empty' );
+		$rules     = array();
+		if ( ! empty( $cond['rules'] ) && is_array( $cond['rules'] ) ) {
+			foreach ( $cond['rules'] as $rule ) {
+				if ( empty( $rule['field'] ) ) {
+					continue;
+				}
+				$op      = isset( $rule['op'] ) && in_array( $rule['op'], $valid_ops, true ) ? $rule['op'] : 'is';
+				$rules[] = array(
+					'field' => sanitize_key( $rule['field'] ),
+					'op'    => $op,
+					'value' => isset( $rule['value'] ) ? sanitize_text_field( $rule['value'] ) : '',
+				);
+			}
+		}
+
+		if ( ! $rules ) {
+			return $empty;
+		}
+
+		return array(
+			'enabled' => true,
+			'logic'   => ( isset( $cond['logic'] ) && 'or' === $cond['logic'] ) ? 'or' : 'and',
+			'action'  => ( isset( $cond['action'] ) && 'hide' === $cond['action'] ) ? 'hide' : 'show',
+			'rules'   => $rules,
+		);
+	}
+
+	/**
+	 * Evaluate whether a field is currently visible given submitted values.
+	 * Mirrors the client-side logic in forms.js so server validation never
+	 * requires a field the user couldn't see.
+	 *
+	 * @param array $field     Normalized field (with 'conditional').
+	 * @param array $submitted Map of field key => submitted value(s).
+	 * @return bool
+	 */
+	public static function conditional_visible( $field, $submitted ) {
+		$c = isset( $field['conditional'] ) ? $field['conditional'] : array();
+		if ( empty( $c['enabled'] ) || empty( $c['rules'] ) ) {
+			return true;
+		}
+
+		$results = array();
+		foreach ( $c['rules'] as $rule ) {
+			$raw  = isset( $submitted[ $rule['field'] ] ) ? $submitted[ $rule['field'] ] : '';
+			$vals = is_array( $raw ) ? array_map( 'strval', $raw ) : array( (string) $raw );
+			$want = strtolower( (string) $rule['value'] );
+			$lc   = array_map( 'strtolower', $vals );
+			$join = strtolower( implode( '', $vals ) );
+
+			switch ( $rule['op'] ) {
+				case 'is_not':
+					$m = ! in_array( $want, $lc, true );
+					break;
+				case 'contains':
+					$m = ( '' !== $want && false !== strpos( $join, $want ) );
+					break;
+				case 'not_contains':
+					$m = ( '' === $want || false === strpos( $join, $want ) );
+					break;
+				case 'gt':
+					$m = false;
+					foreach ( $vals as $v ) { if ( is_numeric( $v ) && (float) $v > (float) $rule['value'] ) { $m = true; } }
+					break;
+				case 'lt':
+					$m = false;
+					foreach ( $vals as $v ) { if ( is_numeric( $v ) && (float) $v < (float) $rule['value'] ) { $m = true; } }
+					break;
+				case 'is_empty':
+					$m = ( 0 === count( $vals ) || ( 1 === count( $vals ) && '' === $vals[0] ) );
+					break;
+				case 'is_not_empty':
+					$m = ! ( 0 === count( $vals ) || ( 1 === count( $vals ) && '' === $vals[0] ) );
+					break;
+				case 'is':
+				default:
+					$m = in_array( $want, $lc, true );
+					break;
+			}
+			$results[] = $m;
+		}
+
+		$met = ( 'or' === $c['logic'] )
+			? in_array( true, $results, true )
+			: ! in_array( false, $results, true );
+
+		return ( 'hide' === $c['action'] ) ? ! $met : $met;
 	}
 
 	/**

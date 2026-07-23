@@ -148,6 +148,56 @@ $saved       = isset( $_GET['saved'] ); // phpcs:ignore WordPress.Security.Nonce
 					<td><input type="text" id="acps-accent" name="settings[style_accent]" value="<?php echo esc_attr( $form->settings['style']['accent'] ); ?>" placeholder="#0b5fa5"><p class="description"><?php esc_html_e( 'Leave blank to inherit the theme.', 'acps-site-toolkit' ); ?></p></td>
 				</tr>
 			</table>
+
+			<h2><?php esc_html_e( 'Access & sharing', 'acps-site-toolkit' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Restrict who can open this form. You can combine methods — the form shows only when every enabled check passes.', 'acps-site-toolkit' ); ?></p>
+			<?php $access = \ACPS\SiteToolkit\Access::config( $form ); ?>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Require login', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="settings[access][require_login]" value="1" <?php checked( ! empty( $access['require_login'] ) ); ?>> <?php esc_html_e( 'Only logged-in users can access this form', 'acps-site-toolkit' ); ?></label>
+						<fieldset style="margin-top:.5rem">
+							<legend class="screen-reader-text"><?php esc_html_e( 'Allowed roles', 'acps-site-toolkit' ); ?></legend>
+							<p class="description"><?php esc_html_e( 'Limit to these roles (leave all unchecked to allow any logged-in user):', 'acps-site-toolkit' ); ?></p>
+							<?php foreach ( get_editable_roles() as $role_key => $role ) : ?>
+								<label style="display:inline-block;margin-right:1rem">
+									<input type="checkbox" name="settings[access][roles][]" value="<?php echo esc_attr( $role_key ); ?>" <?php checked( in_array( $role_key, (array) $access['roles'], true ) ); ?>>
+									<?php echo esc_html( translate_user_role( $role['name'] ) ); ?>
+								</label>
+							<?php endforeach; ?>
+						</fieldset>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Password', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="settings[access][require_password]" value="1" <?php checked( ! empty( $access['require_password'] ) ); ?>> <?php esc_html_e( 'Require a password', 'acps-site-toolkit' ); ?></label>
+						<p>
+							<label for="acps-access-pw"><?php echo $access['password_hash'] ? esc_html__( 'Set a new password (leave blank to keep the current one)', 'acps-site-toolkit' ) : esc_html__( 'Password', 'acps-site-toolkit' ); ?></label><br>
+							<input type="text" id="acps-access-pw" name="settings[access][password]" value="" autocomplete="off" class="regular-text">
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Secret link', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="settings[access][require_token]" value="1" <?php checked( ! empty( $access['require_token'] ) ); ?>> <?php esc_html_e( 'Only accessible via a private link', 'acps-site-toolkit' ); ?></label>
+						<?php if ( ! empty( $access['require_token'] ) && ! empty( $access['token'] ) ) : ?>
+							<p class="description"><?php esc_html_e( 'Share this link (it appends the key to the page URL that holds the form):', 'acps-site-toolkit' ); ?></p>
+							<input type="text" readonly class="large-text code" onclick="this.select()" value="<?php echo esc_attr( add_query_arg( 'acps_key', $access['token'], home_url( '/' ) ) ); ?>">
+							<p><label><input type="checkbox" name="settings[access][regenerate_token]" value="1"> <?php esc_html_e( 'Regenerate the link on save (invalidates the old one)', 'acps-site-toolkit' ); ?></label></p>
+						<?php else : ?>
+							<p class="description"><?php esc_html_e( 'A private link is generated when you save with this enabled.', 'acps-site-toolkit' ); ?></p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-denied-msg"><?php esc_html_e( 'Denied message', 'acps-site-toolkit' ); ?></label></th>
+					<td><input type="text" id="acps-denied-msg" name="settings[access][denied_message]" value="<?php echo esc_attr( $access['denied_message'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'You do not have access to this form.', 'acps-site-toolkit' ); ?>"></td>
+				</tr>
+			</table>
+
 			<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Save form', 'acps-site-toolkit' ); ?></button></p>
 		</div>
 	</form>

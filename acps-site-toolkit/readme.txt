@@ -83,6 +83,17 @@ unless you turn off "Preserve data on uninstall" in Settings.
 
 == Changelog ==
 
+= 1.1.0 =
+* Feedback: delete feedback items (single delete + bulk trash/delete).
+* New "Contact us" message form template (emails the team, auto-reply to sender).
+* New self-service Q&A / Help widget with searchable pre-set answers that falls
+  through to the contact form ([acps_qa], [acps_contact]).
+* Advanced conditional logic: multiple rules per field with AND/OR and more
+  operators (is, is not, contains, doesn't contain, greater/less than, empty).
+* Form access control / sharing: restrict a form by login/role, password, or a
+  private secret link — combinable per form.
+* Built-in templates now self-heal on a file update without reactivation.
+
 = 1.0.0 =
 * Initial release: journey tracking, feedback system, form builder, analytics,
   integrations (shortcode, block, Beaver Builder module), GDPR export/erase.

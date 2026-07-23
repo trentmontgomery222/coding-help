@@ -36,6 +36,8 @@ foreach ( $tables as $key ) {
 // Remove options.
 delete_option( 'acps_st_settings' );
 delete_option( 'acps_st_schema_version' );
+delete_option( 'acps_st_version' );
+delete_option( 'acps_st_qa' );
 
 // Clear the scheduled purge.
 wp_clear_scheduled_hook( 'acps_st_daily_purge' );

@@ -48,6 +48,14 @@ if ( $view_id ) {
 			<h2><?php esc_html_e( 'Visitor journey', 'acps-site-toolkit' ); ?></h2>
 			<ol class="acps-path"><?php foreach ( $path as $step ) : ?><li><?php echo esc_html( $step ); ?></li><?php endforeach; ?></ol>
 		<?php endif; ?>
+
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:1rem">
+			<?php wp_nonce_field( 'acps_st_entry_action' ); ?>
+			<input type="hidden" name="action" value="acps_st_entry_action">
+			<input type="hidden" name="entry_id" value="<?php echo esc_attr( $view_id ); ?>">
+			<input type="hidden" name="return" value="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-entries&form_id=' . $entry->form_id ) ); ?>">
+			<button type="submit" name="do" value="delete" class="button acps-danger" onclick="return confirm('<?php echo esc_js( __( 'Permanently delete this entry?', 'acps-site-toolkit' ) ); ?>');"><?php esc_html_e( 'Delete permanently', 'acps-site-toolkit' ); ?></button>
+		</form>
 	</div>
 	<?php
 	return;

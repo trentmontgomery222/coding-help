@@ -59,6 +59,16 @@ class Form {
 				'accent'      => '', // blank => inherit theme.
 				'width'       => 'full',
 			),
+			// Access control (form sharing/restriction). See class-access.php.
+			'access'               => array(
+				'require_login'    => 0,
+				'roles'            => array(),
+				'require_password' => 0,
+				'password_hash'    => '',
+				'require_token'    => 0,
+				'token'            => '',
+				'denied_message'   => '',
+			),
 			// Per-form spam overrides fall back to global settings when unset.
 		);
 	}

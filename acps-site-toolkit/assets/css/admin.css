@@ -109,3 +109,18 @@
 }
 
 .acps-filters { margin: 1rem 0; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+/* Q&A editor rows */
+.acps-qa-row {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	padding: 0.75rem 1rem;
+	margin-bottom: 0.75rem;
+}
+
+/* Advanced conditional rules in the builder */
+.acps-cond-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.acps-cond-rule { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; margin: 0.4rem 0; }
+.acps-cond-rule select, .acps-cond-rule input { flex: 1 1 auto; min-width: 6rem; }
+.acps-cond-body { margin-top: 0.5rem; }

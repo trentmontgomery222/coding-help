@@ -76,27 +76,56 @@
 		}
 	};
 
-	/* Conditional visibility (spec §7.3). */
+	/* Conditional visibility (spec §7.3) — multi-rule AND/OR with operators. */
 	ACPSForm.prototype.bindConditional = function () {
 		var form = this.form;
-		var conditionals = form.querySelectorAll( '[data-cond-field]' );
+		var conditionals = form.querySelectorAll( '[data-acps-cond]' );
 		if ( ! conditionals.length ) {
 			return;
 		}
+
+		function ruleMatches( rule, vals ) {
+			var want = ( rule.value == null ? '' : String( rule.value ) ).toLowerCase();
+			var joined = vals.join( '' ).toLowerCase();
+			switch ( rule.op ) {
+				case 'is_not':
+					return vals.map( lc ).indexOf( want ) === -1;
+				case 'contains':
+					return joined.indexOf( want ) !== -1;
+				case 'not_contains':
+					return joined.indexOf( want ) === -1;
+				case 'gt':
+					return vals.some( function ( v ) { return parseFloat( v ) > parseFloat( rule.value ); } );
+				case 'lt':
+					return vals.some( function ( v ) { return parseFloat( v ) < parseFloat( rule.value ); } );
+				case 'is_empty':
+					return vals.length === 0 || ( vals.length === 1 && vals[ 0 ] === '' );
+				case 'is_not_empty':
+					return vals.length > 0 && ! ( vals.length === 1 && vals[ 0 ] === '' );
+				case 'is':
+				default:
+					return vals.map( lc ).indexOf( want ) !== -1;
+			}
+		}
+		function lc( s ) { return String( s ).toLowerCase(); }
+
 		var evaluate = function () {
 			Array.prototype.forEach.call( conditionals, function ( el ) {
-				var key = el.getAttribute( 'data-cond-field' );
-				var op = el.getAttribute( 'data-cond-op' ) || 'is';
-				var want = el.getAttribute( 'data-cond-value' ) || '';
-				var vals = collectValues( form, key );
-				var match = op === 'is_not'
-					? vals.indexOf( want ) === -1
-					: vals.indexOf( want ) !== -1;
-				if ( match ) {
-					el.hidden = false;
-				} else {
-					el.hidden = true;
-				}
+				var cfgAttr = el.getAttribute( 'data-acps-cond' );
+				var conf;
+				try { conf = JSON.parse( cfgAttr ); } catch ( e ) { return; }
+				if ( ! conf || ! conf.rules || ! conf.rules.length ) { return; }
+
+				var results = conf.rules.map( function ( rule ) {
+					return ruleMatches( rule, collectValues( form, rule.field ) );
+				} );
+				var conditionMet = ( conf.logic === 'or' )
+					? results.some( Boolean )
+					: results.every( Boolean );
+
+				// action "show": visible only when met. "hide": hidden when met.
+				var visible = ( conf.action === 'hide' ) ? ! conditionMet : conditionMet;
+				el.hidden = ! visible;
 			} );
 		};
 		form.addEventListener( 'change', evaluate );

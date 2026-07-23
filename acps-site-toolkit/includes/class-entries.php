@@ -232,6 +232,36 @@ class Entries {
 	}
 
 	/**
+	 * Permanently delete one entry and its values + notes.
+	 *
+	 * @param int $id Entry id.
+	 */
+	public static function delete( $id ) {
+		global $wpdb;
+		$id = absint( $id );
+		if ( ! $id ) {
+			return;
+		}
+		$wpdb->delete( Schema::table( 'entry_values' ), array( 'entry_id' => $id ) ); // phpcs:ignore WordPress.DB
+		$wpdb->delete( Schema::table( 'entry_notes' ), array( 'entry_id' => $id ) ); // phpcs:ignore WordPress.DB
+		$wpdb->delete( Schema::table( 'entries' ), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
+	 * Permanently delete many entries.
+	 *
+	 * @param int[] $ids Entry ids.
+	 * @return int Number deleted.
+	 */
+	public static function bulk_delete( $ids ) {
+		$ids = array_filter( array_map( 'absint', (array) $ids ) );
+		foreach ( $ids as $id ) {
+			self::delete( $id );
+		}
+		return count( $ids );
+	}
+
+	/**
 	 * Count entries grouped by page for the analytics overlay (spec §6.4).
 	 *
 	 * @param array $args form_id, category filters.

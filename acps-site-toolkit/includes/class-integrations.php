@@ -23,6 +23,8 @@ class Integrations {
 	public function register() {
 		add_shortcode( 'acps_form', array( $this, 'shortcode_form' ) );
 		add_shortcode( 'acps_feedback', array( $this, 'shortcode_feedback' ) );
+		add_shortcode( 'acps_contact', array( $this, 'shortcode_contact' ) );
+		add_shortcode( 'acps_qa', array( $this, 'shortcode_qa' ) );
 
 		add_action( 'init', array( $this, 'register_block' ) );
 		add_action( 'init', array( $this, 'register_beaver_module' ) );
@@ -53,7 +55,8 @@ class Integrations {
 			return '';
 		}
 
-		return Form_Renderer::render( $form, array( 'post_id' => get_the_ID() ?: 0 ) );
+		// Apply per-form access control (login/roles, password, secret link).
+		return Access::render_guarded( $form, array( 'post_id' => get_the_ID() ?: 0 ) );
 	}
 
 	/**
@@ -63,6 +66,35 @@ class Integrations {
 	 */
 	public function shortcode_feedback() {
 		return Feedback::render_page();
+	}
+
+	/**
+	 * [acps_contact] — the "Contact us" message form (emails the team).
+	 *
+	 * @return string
+	 */
+	public function shortcode_contact() {
+		return Help::render_contact();
+	}
+
+	/**
+	 * [acps_qa show_contact="1" title="…"] — the Q&A / help widget.
+	 *
+	 * @param array $atts Attributes.
+	 * @return string
+	 */
+	public function shortcode_qa( $atts ) {
+		$atts = shortcode_atts(
+			array( 'show_contact' => '1', 'title' => __( 'Questions & answers', 'acps-site-toolkit' ) ),
+			$atts,
+			'acps_qa'
+		);
+		return Help::render_qa(
+			array(
+				'show_contact' => '1' === (string) $atts['show_contact'] || 'true' === $atts['show_contact'],
+				'title'        => sanitize_text_field( $atts['title'] ),
+			)
+		);
 	}
 
 	/**

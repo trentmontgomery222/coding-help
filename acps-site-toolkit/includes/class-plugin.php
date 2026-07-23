@@ -32,6 +32,7 @@ class Plugin {
 		// Apply any pending schema upgrade without a deactivate/reactivate
 		// cycle (spec §11).
 		Schema::maybe_upgrade();
+		$this->maybe_upgrade_templates();
 
 		$this->settings     = new Settings();
 		$this->rest         = new REST_Controller();
@@ -39,6 +40,20 @@ class Plugin {
 		$this->integrations = new Integrations();
 
 		$this->hooks();
+	}
+
+	/**
+	 * When the plugin files are updated in place (no reactivation), make sure
+	 * the built-in form templates exist. Guarded by a version option so the DB
+	 * work happens once per version, not every request.
+	 */
+	private function maybe_upgrade_templates() {
+		if ( get_option( 'acps_st_version' ) === ACPS_ST_VERSION ) {
+			return;
+		}
+		Feedback::ensure_feedback_form();
+		Help::ensure_contact_form();
+		update_option( 'acps_st_version', ACPS_ST_VERSION );
 	}
 
 	/**
@@ -123,6 +138,12 @@ class Plugin {
 
 		// Feedback modal behaviour (focus trap, page picker pre-fill).
 		wp_enqueue_script( 'acps-st-feedback', ACPS_ST_URL . 'assets/js/feedback.js', array( 'acps-st-forms' ), ACPS_ST_VERSION, true );
+
+		// Password gate for restricted forms.
+		wp_enqueue_script( 'acps-st-access', ACPS_ST_URL . 'assets/js/access.js', array( 'acps-st-forms' ), ACPS_ST_VERSION, true );
+
+		// Q&A / help widget.
+		wp_enqueue_script( 'acps-st-qa', ACPS_ST_URL . 'assets/js/qa.js', array(), ACPS_ST_VERSION, true );
 
 		wp_enqueue_style( 'acps-st-frontend', ACPS_ST_URL . 'assets/css/frontend.css', array(), ACPS_ST_VERSION );
 	}

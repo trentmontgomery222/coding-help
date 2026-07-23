@@ -35,6 +35,7 @@ class Admin {
 		add_action( 'admin_post_acps_st_form_action', array( $this, 'handle_form_action' ) );
 		add_action( 'admin_post_acps_st_entry_action', array( $this, 'handle_entry_action' ) );
 		add_action( 'admin_post_acps_st_export', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_acps_st_save_qa', array( $this, 'handle_save_qa' ) );
 	}
 
 	/**
@@ -67,6 +68,7 @@ class Admin {
 		add_submenu_page( self::SLUG, __( 'Forms', 'acps-site-toolkit' ), __( 'Forms', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-forms', array( $this, 'render_forms' ) );
 		add_submenu_page( self::SLUG, __( 'Entries', 'acps-site-toolkit' ), __( 'Entries', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-entries', array( $this, 'render_entries' ) );
 		add_submenu_page( self::SLUG, __( 'Analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, self::SLUG . '-analytics', array( $this, 'render_analytics' ) );
+		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
 		add_submenu_page( self::SLUG, __( 'Settings', 'acps-site-toolkit' ), __( 'Settings', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-settings', array( $this, 'render_settings' ) );
 	}
 
@@ -112,11 +114,42 @@ class Admin {
 	}
 
 	/**
+	 * Q&A / Help management.
+	 */
+	public function render_qa() {
+		$this->require_cap( 'manage_options' );
+		require ACPS_ST_PATH . 'includes/admin/views/qa.php';
+	}
+
+	/**
 	 * Settings (spec §9.2).
 	 */
 	public function render_settings() {
 		$this->require_cap( 'manage_options' );
 		require ACPS_ST_PATH . 'includes/admin/views/settings.php';
+	}
+
+	/**
+	 * Save the Q&A items.
+	 */
+	public function handle_save_qa() {
+		$this->require_cap( 'manage_options' );
+		check_admin_referer( 'acps_st_save_qa' );
+
+		$questions = isset( $_POST['q'] ) ? (array) wp_unslash( $_POST['q'] ) : array(); // phpcs:ignore
+		$answers   = isset( $_POST['a'] ) ? (array) wp_unslash( $_POST['a'] ) : array(); // phpcs:ignore
+
+		$items = array();
+		foreach ( $questions as $i => $q ) {
+			$items[] = array(
+				'q' => $q,
+				'a' => isset( $answers[ $i ] ) ? $answers[ $i ] : '',
+			);
+		}
+		\ACPS\SiteToolkit\Help::save_qa( $items );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=acps-st-qa&saved=1' ) );
+		exit;
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -161,6 +194,36 @@ class Admin {
 		if ( isset( $_POST['settings']['style_accent'] ) ) {
 			$s['style']['accent'] = sanitize_text_field( wp_unslash( $_POST['settings']['style_accent'] ) );
 		}
+
+		// Access control (login/roles, password, secret link).
+		$in_access = isset( $_POST['settings']['access'] ) && is_array( $_POST['settings']['access'] ) ? wp_unslash( $_POST['settings']['access'] ) : array(); // phpcs:ignore
+		$access    = isset( $s['access'] ) && is_array( $s['access'] ) ? $s['access'] : \ACPS\SiteToolkit\Access::defaults();
+
+		$access['require_login']    = empty( $in_access['require_login'] ) ? 0 : 1;
+		$access['require_password'] = empty( $in_access['require_password'] ) ? 0 : 1;
+		$access['require_token']    = empty( $in_access['require_token'] ) ? 0 : 1;
+		$access['roles']            = ! empty( $in_access['roles'] ) ? array_map( 'sanitize_key', (array) $in_access['roles'] ) : array();
+		$access['denied_message']   = isset( $in_access['denied_message'] ) ? sanitize_text_field( $in_access['denied_message'] ) : '';
+
+		// Password: hash a newly-typed one; otherwise keep the existing hash.
+		if ( ! empty( $in_access['password'] ) ) {
+			$access['password_hash'] = wp_hash_password( (string) $in_access['password'] );
+		}
+		if ( ! $access['require_password'] ) {
+			// Turning the gate off clears the stored password.
+			$access['password_hash'] = '';
+		}
+
+		// Secret link token: generate when enabling (or regenerating); clear off.
+		if ( $access['require_token'] ) {
+			if ( empty( $access['token'] ) || ! empty( $in_access['regenerate_token'] ) ) {
+				$access['token'] = \ACPS\SiteToolkit\Access::generate_token();
+			}
+		} else {
+			$access['token'] = '';
+		}
+
+		$s['access']    = $access;
 		$form->settings = $s;
 
 		$form->save();
@@ -209,6 +272,18 @@ class Admin {
 			Entries::assign( $id, isset( $_POST['assigned_to'] ) ? absint( $_POST['assigned_to'] ) : 0 );
 		} elseif ( 'note' === $do && ! empty( $_POST['note'] ) ) {
 			Entries::add_note( $id, wp_unslash( $_POST['note'] ) ); // phpcs:ignore
+		} elseif ( 'trash' === $do ) {
+			Entries::set_status( $id, 'trashed' );
+		} elseif ( 'delete' === $do ) {
+			Entries::delete( $id );
+			// If we were viewing that single entry, drop the ?entry= param.
+			$return = remove_query_arg( 'entry', $return );
+		} elseif ( 'bulk_delete' === $do && ! empty( $_POST['entry_ids'] ) ) {
+			Entries::bulk_delete( wp_unslash( (array) $_POST['entry_ids'] ) ); // phpcs:ignore
+		} elseif ( 'bulk_trash' === $do && ! empty( $_POST['entry_ids'] ) ) {
+			foreach ( (array) $_POST['entry_ids'] as $bid ) { // phpcs:ignore
+				Entries::set_status( absint( $bid ), 'trashed' );
+			}
 		}
 
 		wp_safe_redirect( $return );

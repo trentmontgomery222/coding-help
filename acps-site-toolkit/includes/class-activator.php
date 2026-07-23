@@ -34,8 +34,9 @@ class Activator {
 			update_option( ACPS_ST_OPT_SETTINGS, wp_parse_args( $existing, Settings::defaults() ) );
 		}
 
-		// Ensure the built-in feedback form exists.
+		// Ensure the built-in feedback + contact form templates exist.
 		Feedback::ensure_feedback_form();
+		Help::ensure_contact_form();
 
 		// Schedule the daily retention purge (spec §4.5).
 		if ( ! wp_next_scheduled( Privacy::PURGE_HOOK ) ) {

@@ -61,6 +61,11 @@ class Submission {
 		$summary  = array();
 
 		foreach ( $fields as $field ) {
+			// Skip fields the visitor couldn't see (conditional logic). A hidden
+			// field is never required and its value isn't stored.
+			if ( Field_Types::is_input( $field['type'] ) && 'hidden' !== $field['type'] && ! Field_Types::conditional_visible( $field, $submitted ) ) {
+				continue;
+			}
 			if ( ! Field_Types::is_input( $field['type'] ) || 'hidden' === $field['type'] ) {
 				// Still capture hidden field values.
 				if ( 'hidden' === $field['type'] && isset( $submitted[ $field['key'] ] ) ) {
