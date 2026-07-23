@@ -145,6 +145,11 @@ class Feedback {
 		if ( is_admin() ) {
 			return;
 		}
+		// Don't show the widget inside the Beaver Builder editor — it's the
+		// front end, so is_admin() is false, but we're editing, not visiting.
+		if ( class_exists( 'FLBuilderModel' ) && \FLBuilderModel::is_builder_active() ) {
+			return;
+		}
 		$post_id = get_queried_object_id();
 		if ( ! Settings::should_show_trigger( $post_id ) ) {
 			return;
