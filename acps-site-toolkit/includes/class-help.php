@@ -137,8 +137,11 @@ class Help {
 			<h2 class="acps-qa__title"><?php echo esc_html( $atts['title'] ); ?></h2>
 
 			<div class="acps-qa__searchwrap">
-				<label class="screen-reader-text" for="acps-qa-search"><?php esc_html_e( 'Search questions', 'acps-site-toolkit' ); ?></label>
-				<input type="search" id="acps-qa-search" class="acps-qa__search acps-input" placeholder="<?php esc_attr_e( 'Search questions…', 'acps-site-toolkit' ); ?>" data-acps-qa-search autocomplete="off">
+				<label class="acps-label" for="acps-qa-search"><?php esc_html_e( 'Ask a question', 'acps-site-toolkit' ); ?></label>
+				<input type="search" id="acps-qa-search" class="acps-qa__search acps-input" placeholder="<?php esc_attr_e( 'Type your question…', 'acps-site-toolkit' ); ?>" data-acps-qa-search autocomplete="off">
+				<?php if ( $items ) : ?>
+					<p class="acps-qa__hint description"><?php esc_html_e( 'Matching answers appear below as you type — or browse the list.', 'acps-site-toolkit' ); ?></p>
+				<?php endif; ?>
 			</div>
 
 			<?php if ( $items ) : ?>

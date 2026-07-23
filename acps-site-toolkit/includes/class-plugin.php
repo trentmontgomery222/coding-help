@@ -53,6 +53,15 @@ class Plugin {
 		}
 		Feedback::ensure_feedback_form();
 		Help::ensure_contact_form();
+
+		// The floating button is now the contact form. If the label is still the
+		// old default, flip it to match (leaves any custom label alone).
+		$settings = get_option( ACPS_ST_OPT_SETTINGS );
+		if ( is_array( $settings ) && isset( $settings['trigger_label'] ) && 'Feedback' === $settings['trigger_label'] ) {
+			$settings['trigger_label'] = 'Chat with us';
+			update_option( ACPS_ST_OPT_SETTINGS, $settings );
+		}
+
 		update_option( 'acps_st_version', ACPS_ST_VERSION );
 	}
 

@@ -34,7 +34,7 @@ class Settings {
 			'trigger_display'       => 'all',      // all | include | exclude.
 			'trigger_pages'         => array(),    // post IDs for include/exclude.
 			'trigger_position'      => 'bottom-right', // bottom-right | bottom-left | edge-right | edge-left.
-			'trigger_label'         => 'Feedback',
+			'trigger_label'         => 'Chat with us',
 			'feedback_categories'   => array(
 				"Something's broken",
 				'Hard to use',

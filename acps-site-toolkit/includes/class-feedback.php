@@ -154,12 +154,18 @@ class Feedback {
 		if ( ! Settings::should_show_trigger( $post_id ) ) {
 			return;
 		}
-		$form = Form::feedback_form();
+		// The persistent floating button opens the "Contact us" message form
+		// (a chat-style entry point — not live chat). Feedback stays available
+		// via the [acps_feedback] page and the inbox.
+		$form = Form::find_by_slug( Help::CONTACT_SLUG );
+		if ( ! $form ) {
+			$form = Help::ensure_contact_form();
+		}
 		if ( ! $form ) {
 			return;
 		}
 
-		$label     = Settings::get( 'trigger_label', 'Feedback' );
+		$label     = Settings::get( 'trigger_label', 'Chat with us' );
 		$position  = Settings::get( 'trigger_position', 'bottom-right' );
 		$title     = get_the_title( $post_id );
 		$form_html = Form_Renderer::render( $form, array( 'post_id' => $post_id ) );
@@ -181,8 +187,8 @@ class Feedback {
 			<div class="acps-modal-overlay" hidden>
 				<div class="acps-modal" id="acps-feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="acps-feedback-title">
 					<div class="acps-modal__header">
-						<h2 class="acps-modal__title" id="acps-feedback-title"><?php esc_html_e( 'Share feedback', 'acps-site-toolkit' ); ?></h2>
-						<button type="button" class="acps-modal__close" aria-label="<?php esc_attr_e( 'Close feedback', 'acps-site-toolkit' ); ?>">&times;</button>
+						<h2 class="acps-modal__title" id="acps-feedback-title"><?php esc_html_e( 'Chat with us', 'acps-site-toolkit' ); ?></h2>
+						<button type="button" class="acps-modal__close" aria-label="<?php esc_attr_e( 'Close', 'acps-site-toolkit' ); ?>">&times;</button>
 					</div>
 					<div class="acps-modal__body">
 						<?php echo $form_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
