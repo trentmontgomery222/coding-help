@@ -1,0 +1,289 @@
+/**
+ * ACPS Site Toolkit — front-end styles.
+ *
+ * Deliberately light-touch: forms inherit the theme's typography and colours
+ * where possible (spec §10). Accent and spacing use CSS custom properties so a
+ * child theme can override without fighting heavy specificity.
+ *
+ * Accessibility notes are inline. Key ones: visible focus indicators
+ * (SC 2.4.11 / 2.4.13), 24px minimum target size (SC 2.5.8), 44px for the
+ * primary trigger, reflow at 320px (SC 1.4.10), and prefers-reduced-motion.
+ */
+
+.acps-form-wrap {
+	--acps-accent: #0b5fa5;
+	--acps-error: #b32d2e;
+	--acps-border: #767676; /* ≥3:1 against white (SC 1.4.11) */
+	--acps-radius: 4px;
+	--acps-gap: 1rem;
+	--acps-max-width: 100%;
+	max-width: var( --acps-max-width );
+}
+
+.acps-form .acps-field {
+	margin-bottom: var( --acps-gap );
+}
+
+.acps-form .acps-label,
+.acps-form .acps-legend {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 0.25rem;
+}
+
+.acps-form .acps-required {
+	color: var( --acps-error );
+	font-weight: 600;
+}
+
+.acps-form .acps-help {
+	margin: 0 0 0.35rem;
+	font-size: 0.9em;
+	opacity: 0.85;
+}
+
+.acps-form .acps-input {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+	padding: 0.55rem 0.65rem;
+	border: 1px solid var( --acps-border );
+	border-radius: var( --acps-radius );
+	font: inherit;
+	color: inherit;
+	background: #fff;
+	min-height: 44px; /* comfortable target size */
+}
+
+.acps-form textarea.acps-input {
+	min-height: 8rem;
+	resize: vertical;
+}
+
+.acps-form fieldset.acps-fieldset {
+	border: 1px solid var( --acps-border );
+	border-radius: var( --acps-radius );
+	padding: 0.75rem 1rem 1rem;
+	margin: 0 0 var( --acps-gap );
+}
+
+.acps-form .acps-choice {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0.35rem 0;
+	min-height: 24px;
+}
+
+.acps-form .acps-choice input {
+	width: 1.15rem;
+	height: 1.15rem;
+}
+
+/* Choice chips — still real radios/checkboxes underneath. */
+.acps-choices--chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+.acps-choices--chips .acps-choice {
+	margin: 0;
+}
+.acps-choices--chips label {
+	border: 1px solid var( --acps-border );
+	border-radius: 999px;
+	padding: 0.4rem 0.85rem;
+	cursor: pointer;
+	min-height: 24px;
+	display: inline-flex;
+	align-items: center;
+}
+.acps-choices--chips input:checked + label {
+	background: var( --acps-accent );
+	color: #fff;
+	border-color: var( --acps-accent );
+}
+
+/* Rating stars — the accessible label text is visually hidden, star is decorative. */
+.acps-rating { display: inline-flex; flex-direction: row-reverse; gap: 0.15rem; }
+.acps-rating__item label { font-size: 1.6rem; color: #999; cursor: pointer; line-height: 1; }
+.acps-rating__item input:checked ~ label,
+.acps-rating__item:hover label { color: var( --acps-accent ); }
+.acps-rating__item input:focus-visible + label { outline: 3px solid var( --acps-accent ); }
+
+.acps-scale { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.acps-scale__item { display: inline-flex; flex-direction: column; align-items: center; }
+
+/* Focus: a clearly visible indicator that isn't obscured (SC 2.4.11 / 2.4.13). */
+.acps-form :focus-visible,
+.acps-feedback-trigger:focus-visible,
+.acps-modal__close:focus-visible {
+	outline: 3px solid var( --acps-accent );
+	outline-offset: 2px;
+}
+
+/* Errors — conveyed by text + icon + colour, never colour alone (SC 1.4.1). */
+.acps-field-error {
+	color: var( --acps-error );
+	font-weight: 600;
+	margin: 0.3rem 0 0;
+	min-height: 1em;
+}
+.acps-field-error:not(:empty)::before {
+	content: "⚠ ";
+}
+.acps-has-error .acps-input,
+.acps-has-error .acps-fieldset {
+	border-color: var( --acps-error );
+	box-shadow: 0 0 0 1px var( --acps-error );
+}
+
+.acps-error-summary {
+	border: 2px solid var( --acps-error );
+	border-radius: var( --acps-radius );
+	padding: 0.75rem 1rem;
+	margin-bottom: var( --acps-gap );
+}
+.acps-error-summary__title { margin: 0 0 0.5rem; color: var( --acps-error ); font-size: 1.1rem; }
+.acps-error-summary__list { margin: 0; padding-left: 1.25rem; }
+.acps-error-summary a { color: var( --acps-error ); }
+
+.acps-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+
+.acps-btn {
+	font: inherit;
+	padding: 0.6rem 1.2rem;
+	min-height: 44px;
+	border: 1px solid var( --acps-accent );
+	border-radius: var( --acps-radius );
+	background: var( --acps-accent );
+	color: #fff;
+	cursor: pointer;
+}
+.acps-btn.acps-prev,
+.acps-btn.acps-next { background: #fff; color: var( --acps-accent ); }
+.acps-btn:disabled { opacity: 0.6; cursor: default; }
+
+.acps-confirmation {
+	border: 1px solid var( --acps-accent );
+	border-left-width: 4px;
+	border-radius: var( --acps-radius );
+	padding: 1rem 1.25rem;
+	background: rgba( 11, 95, 165, 0.05 );
+}
+
+.acps-step-indicator { font-weight: 600; }
+
+/* Honeypot: hidden from BOTH sighted users and assistive tech (spec §7.4). */
+.acps-hp {
+	position: absolute !important;
+	left: -9999px !important;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
+/* Screen-reader-only utility (mirrors core .screen-reader-text). */
+.acps-form .screen-reader-text,
+.acps-feedback-root .screen-reader-text {
+	position: absolute !important;
+	width: 1px; height: 1px;
+	padding: 0; margin: -1px;
+	overflow: hidden; clip: rect( 0, 0, 0, 0 );
+	white-space: nowrap; border: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Feedback trigger + modal
+ * ------------------------------------------------------------------ */
+.acps-feedback-root {
+	position: fixed;
+	z-index: 99990;
+}
+.acps-pos-bottom-right { right: 1rem; bottom: 1rem; }
+.acps-pos-bottom-left { left: 1rem; bottom: 1rem; }
+.acps-pos-edge-right { right: 0; top: 50%; transform: translateY( -50% ); }
+.acps-pos-edge-left { left: 0; top: 50%; transform: translateY( -50% ); }
+
+.acps-feedback-trigger {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	min-height: 44px; /* well above 24px min */
+	min-width: 44px;
+	padding: 0.5rem 1rem;
+	border: 1px solid var( --acps-accent, #0b5fa5 );
+	border-radius: 999px;
+	background: var( --acps-accent, #0b5fa5 );
+	color: #fff;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.25 );
+}
+.acps-pos-edge-right .acps-feedback-trigger { border-radius: 4px 0 0 4px; }
+.acps-pos-edge-left .acps-feedback-trigger { border-radius: 0 4px 4px 0; }
+
+.acps-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba( 0, 0, 0, 0.5 );
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+	z-index: 99991;
+}
+.acps-modal-open { overflow: hidden; }
+
+.acps-modal {
+	background: #fff;
+	color: #1a1a1a;
+	width: min( 32rem, 100% );
+	max-height: 90vh;
+	overflow: auto;
+	border-radius: 8px;
+	box-shadow: 0 10px 40px rgba( 0, 0, 0, 0.35 );
+	--acps-max-width: 100%;
+}
+.acps-modal__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem 1.25rem;
+	border-bottom: 1px solid #ddd;
+}
+.acps-modal__title { margin: 0; font-size: 1.25rem; }
+.acps-modal__close {
+	font-size: 1.5rem;
+	line-height: 1;
+	min-width: 44px;
+	min-height: 44px;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	color: inherit;
+}
+.acps-modal__body { padding: 1.25rem; }
+.acps-modal .acps-form-wrap { --acps-accent: #0b5fa5; }
+
+.acps-page-picker-other { margin-top: 0.5rem; }
+
+/* Reflow: nothing forces horizontal scroll at 320px (SC 1.4.10). */
+@media ( max-width: 480px ) {
+	.acps-feedback-root { left: 0.5rem; right: 0.5rem; }
+	.acps-pos-bottom-right,
+	.acps-pos-bottom-left { left: auto; }
+	.acps-actions { flex-direction: column; }
+	.acps-btn { width: 100%; }
+}
+
+/* Respect reduced-motion (spec §8.1). No transitions are essential. */
+@media ( prefers-reduced-motion: reduce ) {
+	* { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+/* High-contrast / forced-colors: keep focus visible. */
+@media ( forced-colors: active ) {
+	.acps-form :focus-visible { outline: 3px solid CanvasText; }
+}

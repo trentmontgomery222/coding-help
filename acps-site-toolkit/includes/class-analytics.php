@@ -1,0 +1,314 @@
+<?php
+/**
+ * Analytics queries (spec §6). All first-party, derived from the sessions and
+ * visits tables. No external service.
+ *
+ * @package ACPS\SiteToolkit
+ */
+
+namespace ACPS\SiteToolkit;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Analytics.
+ */
+class Analytics {
+
+	/**
+	 * Per-page metrics for the top pages (spec §6.1), joined with feedback
+	 * counts to produce the feedback/traffic overlay (spec §6.4) — the default
+	 * sort.
+	 *
+	 * @param array $args date_from, date_to, limit.
+	 * @return array[] Each row: post_id, title, views, sessions, avg_time,
+	 *                 entries (starts), exits, feedback_count, overlay_score.
+	 */
+	public static function top_pages( $args = array() ) {
+		global $wpdb;
+		$visits = Schema::table( 'visits' );
+
+		$args   = wp_parse_args( $args, array( 'limit' => 50, 'date_from' => '', 'date_to' => '' ) );
+		$limit  = max( 1, min( 500, (int) $args['limit'] ) );
+
+		list( $date_sql, $date_params ) = self::date_clause( $args, 'visited_at' );
+
+		$sql = "SELECT post_id,
+					MAX(title) AS title,
+					COUNT(*) AS views,
+					COUNT(DISTINCT session_id) AS sessions,
+					AVG(time_on_page) AS avg_time
+				FROM {$visits}
+				WHERE post_id IS NOT NULL {$date_sql}
+				GROUP BY post_id
+				ORDER BY views DESC
+				LIMIT %d";
+
+		$params = array_merge( $date_params, array( $limit ) );
+		$rows   = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB
+		$rows   = $rows ?: array();
+
+		$entries = self::entry_exit_counts( $args );
+		$feedback = self::feedback_counts_by_page();
+
+		foreach ( $rows as &$r ) {
+			$pid            = (int) $r['post_id'];
+			$r['views']     = (int) $r['views'];
+			$r['sessions']  = (int) $r['sessions'];
+			$r['avg_time']  = round( (float) $r['avg_time'], 1 );
+			$r['entries']   = isset( $entries['entry'][ $pid ] ) ? $entries['entry'][ $pid ] : 0;
+			$r['exits']     = isset( $entries['exit'][ $pid ] ) ? $entries['exit'][ $pid ] : 0;
+			$r['feedback_count'] = isset( $feedback[ $pid ] ) ? $feedback[ $pid ] : 0;
+			// Overlay score: traffic × feedback density — surfaces high-traffic,
+			// high-complaint pages to the top (spec §6.4).
+			$r['overlay_score'] = $r['feedback_count'] * ( 1 + log( max( 1, $r['views'] ) ) );
+			if ( ! $r['title'] ) {
+				$r['title'] = get_the_title( $pid ) ?: ( '#' . $pid );
+			}
+		}
+		unset( $r );
+
+		// Default sort: the overlay (spec §6.4).
+		usort(
+			$rows,
+			function ( $a, $b ) {
+				if ( $b['overlay_score'] === $a['overlay_score'] ) {
+					return $b['views'] <=> $a['views'];
+				}
+				return $b['overlay_score'] <=> $a['overlay_score'];
+			}
+		);
+
+		return $rows;
+	}
+
+	/**
+	 * Entry (session starts) and exit (session ends) counts per page.
+	 *
+	 * @param array $args Date args.
+	 * @return array [ 'entry' => map, 'exit' => map ]
+	 */
+	public static function entry_exit_counts( $args = array() ) {
+		global $wpdb;
+		$visits = Schema::table( 'visits' );
+
+		// Entry = seq_index 1. Exit = the max seq_index per session.
+		$entry_rows = $wpdb->get_results( "SELECT post_id, COUNT(*) AS c FROM {$visits} WHERE seq_index = 1 AND post_id IS NOT NULL GROUP BY post_id", ARRAY_A ); // phpcs:ignore WordPress.DB
+		$exit_rows  = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			"SELECT v.post_id, COUNT(*) AS c
+			 FROM {$visits} v
+			 INNER JOIN (SELECT session_id, MAX(seq_index) AS mx FROM {$visits} GROUP BY session_id) m
+				 ON v.session_id = m.session_id AND v.seq_index = m.mx
+			 WHERE v.post_id IS NOT NULL
+			 GROUP BY v.post_id",
+			ARRAY_A
+		);
+
+		$entry = array();
+		foreach ( $entry_rows ?: array() as $r ) {
+			$entry[ (int) $r['post_id'] ] = (int) $r['c'];
+		}
+		$exit = array();
+		foreach ( $exit_rows ?: array() as $r ) {
+			$exit[ (int) $r['post_id'] ] = (int) $r['c'];
+		}
+		return array( 'entry' => $entry, 'exit' => $exit );
+	}
+
+	/**
+	 * Path analysis for a page: came-from and went-to (spec §6.2).
+	 *
+	 * @param int $post_id Page id.
+	 * @param int $limit   Rows each direction.
+	 * @return array [ 'from' => [ [post_id,title,count] ], 'to' => [...] ]
+	 */
+	public static function path_analysis( $post_id, $limit = 10 ) {
+		global $wpdb;
+		$visits  = Schema::table( 'visits' );
+		$post_id = absint( $post_id );
+		$limit   = max( 1, min( 50, (int) $limit ) );
+
+		// Came from: prev_post_id of visits to this page.
+		$from = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT prev_post_id AS pid, COUNT(*) AS c
+				 FROM {$visits}
+				 WHERE post_id = %d AND prev_post_id IS NOT NULL
+				 GROUP BY prev_post_id ORDER BY c DESC LIMIT %d",
+				$post_id,
+				$limit
+			),
+			ARRAY_A
+		);
+
+		// Went to: pages whose prev_post_id is this page.
+		$to = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT post_id AS pid, COUNT(*) AS c
+				 FROM {$visits}
+				 WHERE prev_post_id = %d AND post_id IS NOT NULL
+				 GROUP BY post_id ORDER BY c DESC LIMIT %d",
+				$post_id,
+				$limit
+			),
+			ARRAY_A
+		);
+
+		return array(
+			'from' => self::label_path_rows( $from ),
+			'to'   => self::label_path_rows( $to ),
+		);
+	}
+
+	/**
+	 * Dead ends: pages with a high exit-to-view ratio (spec §6.3).
+	 *
+	 * @param int $limit Rows.
+	 * @return array[]
+	 */
+	public static function dead_ends( $limit = 10 ) {
+		$pages = self::top_pages( array( 'limit' => 200 ) );
+		$out   = array();
+		foreach ( $pages as $p ) {
+			if ( $p['views'] < 5 ) {
+				continue;
+			}
+			$rate = $p['exits'] / max( 1, $p['sessions'] );
+			if ( $rate >= 0.6 ) {
+				$p['exit_rate'] = round( $rate * 100 );
+				$out[]          = $p;
+			}
+		}
+		usort( $out, function ( $a, $b ) { return $b['exit_rate'] <=> $a['exit_rate']; } );
+		return array_slice( $out, 0, $limit );
+	}
+
+	/**
+	 * The ordered page-title path for one session (spec §5.6 / notifications).
+	 *
+	 * @param int $session_id Session id.
+	 * @return string[] Ordered titles.
+	 */
+	public static function session_path( $session_id ) {
+		global $wpdb;
+		$visits = Schema::table( 'visits' );
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT title, url FROM {$visits} WHERE session_id = %d ORDER BY seq_index ASC", absint( $session_id ) ), ARRAY_A ); // phpcs:ignore WordPress.DB
+		$out    = array();
+		foreach ( $rows ?: array() as $r ) {
+			$out[] = $r['title'] ? $r['title'] : $r['url'];
+		}
+		return $out;
+	}
+
+	/**
+	 * Most common paths across the site (spec §6.5) — top from→to transitions.
+	 *
+	 * @param int $limit Rows.
+	 * @return array[]
+	 */
+	public static function common_transitions( $limit = 15 ) {
+		global $wpdb;
+		$visits = Schema::table( 'visits' );
+		$rows   = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT prev_post_id AS from_id, post_id AS to_id, COUNT(*) AS c
+				 FROM {$visits}
+				 WHERE prev_post_id IS NOT NULL AND post_id IS NOT NULL
+				 GROUP BY prev_post_id, post_id ORDER BY c DESC LIMIT %d",
+				max( 1, (int) $limit )
+			),
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( $rows ?: array() as $r ) {
+			$out[] = array(
+				'from'  => get_the_title( (int) $r['from_id'] ) ?: ( '#' . $r['from_id'] ),
+				'to'    => get_the_title( (int) $r['to_id'] ) ?: ( '#' . $r['to_id'] ),
+				'count' => (int) $r['c'],
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Views-over-time trend (spec §6.5).
+	 *
+	 * @param int $days Days back.
+	 * @return array[] date => count.
+	 */
+	public static function trend( $days = 30 ) {
+		global $wpdb;
+		$visits = Schema::table( 'visits' );
+		$days   = max( 1, min( 365, (int) $days ) );
+		$rows   = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT DATE(visited_at) AS d, COUNT(*) AS c
+				 FROM {$visits}
+				 WHERE visited_at >= %s
+				 GROUP BY DATE(visited_at) ORDER BY d ASC",
+				gmdate( 'Y-m-d 00:00:00', time() - $days * DAY_IN_SECONDS )
+			),
+			ARRAY_A
+		);
+		return $rows ?: array();
+	}
+
+	/**
+	 * Feedback counts per page (non-spam, non-trashed feedback entries).
+	 *
+	 * @return array Map post_id => count.
+	 */
+	public static function feedback_counts_by_page() {
+		global $wpdb;
+		$entries = Schema::table( 'entries' );
+		$forms   = Schema::table( 'forms' );
+		$rows    = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			"SELECT e.page_id, COUNT(*) AS c
+			 FROM {$entries} e
+			 INNER JOIN {$forms} f ON e.form_id = f.id AND f.is_feedback = 1
+			 WHERE e.status NOT IN ('spam','trashed')
+			 GROUP BY e.page_id",
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( $rows ?: array() as $r ) {
+			$out[ (int) $r['page_id'] ] = (int) $r['c'];
+		}
+		return $out;
+	}
+
+	/**
+	 * Resolve path rows to include titles.
+	 */
+	private static function label_path_rows( $rows ) {
+		$out = array();
+		foreach ( $rows ?: array() as $r ) {
+			$pid   = (int) $r['pid'];
+			$out[] = array(
+				'post_id' => $pid,
+				'title'   => get_the_title( $pid ) ?: ( '#' . $pid ),
+				'count'   => (int) $r['c'],
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Build a date WHERE fragment + params.
+	 */
+	private static function date_clause( $args, $column ) {
+		$sql    = '';
+		$params = array();
+		if ( ! empty( $args['date_from'] ) ) {
+			$sql     .= " AND {$column} >= %s";
+			$params[] = $args['date_from'] . ' 00:00:00';
+		}
+		if ( ! empty( $args['date_to'] ) ) {
+			$sql     .= " AND {$column} <= %s";
+			$params[] = $args['date_to'] . ' 23:59:59';
+		}
+		return array( $sql, $params );
+	}
+}

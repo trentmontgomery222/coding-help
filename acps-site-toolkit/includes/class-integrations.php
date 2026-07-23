@@ -1,0 +1,128 @@
+<?php
+/**
+ * Integration surface (spec §10): shortcode, Gutenberg block, and the Beaver
+ * Builder module. All three funnel through the one renderer.
+ *
+ * @package ACPS\SiteToolkit
+ */
+
+namespace ACPS\SiteToolkit;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Integrations.
+ */
+class Integrations {
+
+	/**
+	 * Register everything.
+	 */
+	public function register() {
+		add_shortcode( 'acps_form', array( $this, 'shortcode_form' ) );
+		add_shortcode( 'acps_feedback', array( $this, 'shortcode_feedback' ) );
+
+		add_action( 'init', array( $this, 'register_block' ) );
+		add_action( 'init', array( $this, 'register_beaver_module' ) );
+	}
+
+	/**
+	 * [acps_form id="12"] or [acps_form slug="contact"].
+	 *
+	 * @param array $atts Attributes.
+	 * @return string
+	 */
+	public function shortcode_form( $atts ) {
+		$atts = shortcode_atts( array( 'id' => 0, 'slug' => '' ), $atts, 'acps_form' );
+
+		$form = null;
+		if ( $atts['slug'] ) {
+			$form = Form::find_by_slug( $atts['slug'] );
+		} elseif ( $atts['id'] ) {
+			$form = Form::find( (int) $atts['id'] );
+		}
+
+		if ( ! $form ) {
+			return current_user_can( 'edit_posts' )
+				? '<p class="acps-form-missing">' . esc_html__( 'ACPS form not found.', 'acps-site-toolkit' ) . '</p>'
+				: '';
+		}
+		if ( 'published' !== $form->status && ! current_user_can( 'edit_posts' ) ) {
+			return '';
+		}
+
+		return Form_Renderer::render( $form, array( 'post_id' => get_the_ID() ?: 0 ) );
+	}
+
+	/**
+	 * [acps_feedback] — the dedicated feedback page (entry point B).
+	 *
+	 * @return string
+	 */
+	public function shortcode_feedback() {
+		return Feedback::render_page();
+	}
+
+	/**
+	 * Register a Gutenberg block that wraps the shortcode. Uses a server-render
+	 * callback so the accessible markup and cache-safe tokens are identical.
+	 */
+	public function register_block() {
+		if ( ! function_exists( 'register_block_type' ) ) {
+			return;
+		}
+
+		wp_register_script(
+			'acps-st-block',
+			ACPS_ST_URL . 'assets/js/block.js',
+			array( 'wp-blocks', 'wp-element', 'wp-components', 'wp-block-editor', 'wp-i18n' ),
+			ACPS_ST_VERSION,
+			true
+		);
+
+		// Provide the form list to the editor.
+		$choices = array( array( 'value' => 0, 'label' => __( '— Select a form —', 'acps-site-toolkit' ) ) );
+		foreach ( Form::all() as $f ) {
+			$choices[] = array( 'value' => $f->id, 'label' => $f->title );
+		}
+		wp_localize_script( 'acps-st-block', 'ACPS_ST_BLOCK', array( 'forms' => $choices ) );
+
+		register_block_type(
+			'acps/form',
+			array(
+				'api_version'     => 2,
+				'editor_script'   => 'acps-st-block',
+				'attributes'      => array(
+					'formId' => array( 'type' => 'number', 'default' => 0 ),
+				),
+				'render_callback' => array( $this, 'render_block' ),
+			)
+		);
+	}
+
+	/**
+	 * Server render for the block.
+	 *
+	 * @param array $attrs Block attributes.
+	 * @return string
+	 */
+	public function render_block( $attrs ) {
+		$id = isset( $attrs['formId'] ) ? (int) $attrs['formId'] : 0;
+		if ( ! $id ) {
+			return '';
+		}
+		return $this->shortcode_form( array( 'id' => $id ) );
+	}
+
+	/**
+	 * Register the Beaver Builder module if Beaver Builder is active (spec §10).
+	 * The module file self-registers with FLBuilder.
+	 */
+	public function register_beaver_module() {
+		if ( class_exists( 'FLBuilder' ) && ! class_exists( __NAMESPACE__ . '\\ACPS_Form_Module' ) ) {
+			require_once ACPS_ST_PATH . 'includes/beaver/class-acps-form-module.php';
+		}
+	}
+}

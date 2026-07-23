@@ -1,0 +1,111 @@
+/**
+ * ACPS Site Toolkit — admin styles. Admin screens are a Section 508 surface
+ * too (spec §8.3), so focus states and layout must hold up at 200% zoom.
+ */
+
+.acps-admin .acps-badge {
+	display: inline-block;
+	background: #2271b1;
+	color: #fff;
+	border-radius: 3px;
+	padding: 0 0.4rem;
+	font-size: 0.75rem;
+	vertical-align: middle;
+}
+
+.acps-admin .acps-danger { color: #b32d2e; }
+
+.acps-admin .acps-inline-form { display: inline; }
+.acps-admin .button-link { background: none; border: 0; color: #2271b1; cursor: pointer; padding: 0; }
+
+.acps-admin .acps-flag { background: #fcf3d9; }
+
+.acps-admin .acps-card {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	padding: 1rem 1.25rem;
+	margin: 1rem 0;
+}
+
+.acps-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media ( max-width: 782px ) { .acps-two-col { grid-template-columns: 1fr; } }
+
+.acps-path { margin: 0; padding-left: 1.25rem; }
+
+.acps-detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; }
+@media ( max-width: 960px ) { .acps-detail-grid { grid-template-columns: 1fr; } }
+
+.acps-notes { list-style: none; margin: 0; padding: 0; }
+.acps-notes li { border-left: 3px solid #2271b1; padding: 0.25rem 0.75rem; margin-bottom: 0.75rem; background: #f6f7f7; }
+.acps-note-meta { font-size: 0.8rem; color: #555; }
+
+/* ---- Builder three-pane layout (spec §7.7) ---- */
+.acps-builder-topbar {
+	display: flex;
+	gap: 1.5rem;
+	align-items: flex-end;
+	flex-wrap: wrap;
+	margin-bottom: 1rem;
+}
+.acps-builder-actions { margin-left: auto; }
+
+.acps-builder-panes {
+	display: grid;
+	grid-template-columns: 220px 1fr 300px;
+	gap: 1rem;
+	align-items: start;
+}
+@media ( max-width: 1100px ) {
+	.acps-builder-panes { grid-template-columns: 1fr; }
+}
+
+.acps-pane {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	padding: 0.75rem 1rem 1rem;
+}
+.acps-pane h2 { font-size: 1rem; margin-top: 0.25rem; }
+
+.acps-type-list { list-style: none; margin: 0; padding: 0; }
+.acps-type-list li { margin-bottom: 0.35rem; }
+.acps-type-list .button { width: 100%; text-align: left; }
+
+.acps-canvas { list-style: none; margin: 0; padding: 0; counter-reset: acps; }
+.acps-canvas-item {
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	padding: 0.6rem 0.75rem;
+	margin-bottom: 0.5rem;
+	background: #fbfbfc;
+}
+.acps-canvas-item.is-selected { border-color: #2271b1; box-shadow: 0 0 0 1px #2271b1; }
+.acps-canvas-type { color: #555; font-size: 0.85em; }
+.acps-canvas-req { color: #b32d2e; font-size: 0.8em; }
+.acps-canvas-controls { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; }
+.acps-canvas-controls .button { min-height: 30px; }
+.acps-pos-input { width: 4rem; }
+.acps-canvas-empty { color: #666; font-style: italic; }
+
+.acps-pane--settings fieldset.acps-cond {
+	border: 1px solid #ddd;
+	padding: 0.5rem 0.75rem;
+	margin-top: 0.75rem;
+}
+.acps-pane--settings input[type="text"],
+.acps-pane--settings textarea,
+.acps-pane--settings select { width: 100%; box-sizing: border-box; }
+
+.acps-preview-field { border-bottom: 1px dashed #ddd; padding: 0.5rem 0; }
+.acps-preview-type { color: #777; font-size: 0.85em; }
+
+.acps-builder-formsettings {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	padding: 0.5rem 1.25rem 1.25rem;
+	margin-top: 1.5rem;
+}
+
+.acps-filters { margin: 1rem 0; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }

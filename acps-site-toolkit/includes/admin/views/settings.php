@@ -1,0 +1,175 @@
+<?php
+/**
+ * Settings view (spec §9.2). One page, WordPress Settings API, site options.
+ *
+ * @package ACPS\SiteToolkit
+ */
+
+namespace ACPS\SiteToolkit\Admin;
+
+use ACPS\SiteToolkit\Settings;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+$s   = Settings::all();
+$opt = ACPS_ST_OPT_SETTINGS;
+
+/**
+ * Small helpers for repetitive field markup.
+ */
+$name = function ( $key ) use ( $opt ) {
+	return $opt . '[' . $key . ']';
+};
+$checked = function ( $key ) use ( $s ) {
+	return checked( ! empty( $s[ $key ] ), true, false );
+};
+?>
+<div class="wrap acps-admin">
+	<h1><?php esc_html_e( 'Site Toolkit Settings', 'acps-site-toolkit' ); ?></h1>
+
+	<form method="post" action="options.php">
+		<?php settings_fields( Settings::GROUP ); ?>
+
+		<h2 class="title"><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Feedback widget', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'feedback_enabled' ) ); ?>" value="1" <?php echo $checked( 'feedback_enabled' ); ?>> <?php esc_html_e( 'Show the floating feedback trigger', 'acps-site-toolkit' ); ?></label></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-trigger-display"><?php esc_html_e( 'Show trigger on', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<select id="acps-trigger-display" name="<?php echo esc_attr( $name( 'trigger_display' ) ); ?>">
+						<option value="all" <?php selected( $s['trigger_display'], 'all' ); ?>><?php esc_html_e( 'All pages', 'acps-site-toolkit' ); ?></option>
+						<option value="include" <?php selected( $s['trigger_display'], 'include' ); ?>><?php esc_html_e( 'Only specific pages', 'acps-site-toolkit' ); ?></option>
+						<option value="exclude" <?php selected( $s['trigger_display'], 'exclude' ); ?>><?php esc_html_e( 'All pages except…', 'acps-site-toolkit' ); ?></option>
+					</select>
+					<p><label for="acps-trigger-pages"><?php esc_html_e( 'Page IDs (comma-separated)', 'acps-site-toolkit' ); ?></label><br>
+					<input type="text" id="acps-trigger-pages" name="<?php echo esc_attr( $name( 'trigger_pages' ) ); ?>" value="<?php echo esc_attr( implode( ', ', (array) $s['trigger_pages'] ) ); ?>" class="regular-text"></p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-trigger-position"><?php esc_html_e( 'Trigger position', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<select id="acps-trigger-position" name="<?php echo esc_attr( $name( 'trigger_position' ) ); ?>">
+						<?php
+						$positions = array(
+							'bottom-right' => __( 'Bottom right', 'acps-site-toolkit' ),
+							'bottom-left'  => __( 'Bottom left', 'acps-site-toolkit' ),
+							'edge-right'   => __( 'Right edge tab', 'acps-site-toolkit' ),
+							'edge-left'    => __( 'Left edge tab', 'acps-site-toolkit' ),
+						);
+						foreach ( $positions as $val => $lbl ) {
+							printf( '<option value="%s" %s>%s</option>', esc_attr( $val ), selected( $s['trigger_position'], $val, false ), esc_html( $lbl ) );
+						}
+						?>
+					</select>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-trigger-label"><?php esc_html_e( 'Trigger label', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="text" id="acps-trigger-label" name="<?php echo esc_attr( $name( 'trigger_label' ) ); ?>" value="<?php echo esc_attr( $s['trigger_label'] ); ?>" class="regular-text"></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-categories"><?php esc_html_e( 'Feedback categories', 'acps-site-toolkit' ); ?></label></th>
+				<td><textarea id="acps-categories" name="<?php echo esc_attr( $name( 'feedback_categories' ) ); ?>" rows="6" class="large-text"><?php echo esc_textarea( implode( "\n", (array) $s['feedback_categories'] ) ); ?></textarea>
+				<p class="description"><?php esc_html_e( 'One per line.', 'acps-site-toolkit' ); ?></p></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-recent-count"><?php esc_html_e( 'Recent pages to pre-fill', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="number" id="acps-recent-count" name="<?php echo esc_attr( $name( 'recent_pages_count' ) ); ?>" value="<?php echo esc_attr( $s['recent_pages_count'] ); ?>" min="1" max="10" class="small-text"></td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Screenshots', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'feedback_allow_screenshot' ) ); ?>" value="1" <?php echo $checked( 'feedback_allow_screenshot' ); ?>> <?php esc_html_e( 'Offer an optional screenshot upload on "something\'s broken" reports', 'acps-site-toolkit' ); ?></label></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-notify"><?php esc_html_e( 'Notification recipients', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="text" id="acps-notify" name="<?php echo esc_attr( $name( 'notify_recipients' ) ); ?>" value="<?php echo esc_attr( $s['notify_recipients'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>">
+				<p class="description"><?php esc_html_e( 'Comma-separated. Blank uses the site admin email.', 'acps-site-toolkit' ); ?></p></td>
+			</tr>
+		</table>
+
+		<h2 class="title"><?php esc_html_e( 'Journey tracking & privacy', 'acps-site-toolkit' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Journey tracking', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'tracking_enabled' ) ); ?>" value="1" <?php echo $checked( 'tracking_enabled' ); ?>> <?php esc_html_e( 'Record the page journey per session (via the cache-safe beacon)', 'acps-site-toolkit' ); ?></label></td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Consent mode', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'consent_mode' ) ); ?>" value="1" <?php echo $checked( 'consent_mode' ); ?>> <?php esc_html_e( 'Only track after the visitor consents (forms still work without consent)', 'acps-site-toolkit' ); ?></label></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-idle"><?php esc_html_e( 'Session idle window (minutes)', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="number" id="acps-idle" name="<?php echo esc_attr( $name( 'session_idle_minutes' ) ); ?>" value="<?php echo esc_attr( $s['session_idle_minutes'] ); ?>" min="5" class="small-text"></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-retention"><?php esc_html_e( 'Data retention (months)', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="number" id="acps-retention" name="<?php echo esc_attr( $name( 'retention_months' ) ); ?>" value="<?php echo esc_attr( $s['retention_months'] ); ?>" min="0" class="small-text">
+				<p class="description"><?php esc_html_e( 'Visit rows older than this are auto-purged daily. 0 = keep forever.', 'acps-site-toolkit' ); ?></p></td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'User agents', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'store_full_user_agent' ) ); ?>" value="1" <?php echo $checked( 'store_full_user_agent' ); ?>> <?php esc_html_e( 'Store full user-agent strings (off = parsed browser/OS summary only)', 'acps-site-toolkit' ); ?></label></td>
+			</tr>
+		</table>
+
+		<h2 class="title"><?php esc_html_e( 'Spam prevention', 'acps-site-toolkit' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Layers', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'spam_honeypot' ) ); ?>" value="1" <?php echo $checked( 'spam_honeypot' ); ?>> <?php esc_html_e( 'Honeypot field', 'acps-site-toolkit' ); ?></label><br>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'spam_time_trap' ) ); ?>" value="1" <?php echo $checked( 'spam_time_trap' ); ?>> <?php esc_html_e( 'Time trap (reject submissions faster than a threshold)', 'acps-site-toolkit' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-time-threshold"><?php esc_html_e( 'Time trap threshold (seconds)', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="number" id="acps-time-threshold" name="<?php echo esc_attr( $name( 'spam_time_threshold' ) ); ?>" value="<?php echo esc_attr( $s['spam_time_threshold'] ); ?>" min="0" class="small-text"></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-rate-limit"><?php esc_html_e( 'Rate limit', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<input type="number" id="acps-rate-limit" name="<?php echo esc_attr( $name( 'spam_rate_limit' ) ); ?>" value="<?php echo esc_attr( $s['spam_rate_limit'] ); ?>" min="0" class="small-text">
+					<?php esc_html_e( 'submissions per', 'acps-site-toolkit' ); ?>
+					<label class="screen-reader-text" for="acps-rate-window"><?php esc_html_e( 'window in minutes', 'acps-site-toolkit' ); ?></label>
+					<input type="number" id="acps-rate-window" name="<?php echo esc_attr( $name( 'spam_rate_window' ) ); ?>" value="<?php echo esc_attr( $s['spam_rate_window'] ); ?>" min="1" class="small-text"> <?php esc_html_e( 'minutes', 'acps-site-toolkit' ); ?>
+					<p class="description"><?php esc_html_e( '0 disables rate limiting.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-blocklist"><?php esc_html_e( 'Keyword blocklist', 'acps-site-toolkit' ); ?></label></th>
+				<td><textarea id="acps-blocklist" name="<?php echo esc_attr( $name( 'spam_blocklist' ) ); ?>" rows="4" class="large-text"><?php echo esc_textarea( $s['spam_blocklist'] ); ?></textarea>
+				<p class="description"><?php esc_html_e( 'One term per line. Submissions containing any term are discarded.', 'acps-site-toolkit' ); ?></p></td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Accessible challenge', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'spam_challenge_enable' ) ); ?>" value="1" <?php echo $checked( 'spam_challenge_enable' ); ?>> <?php esc_html_e( 'Ask a plain-text question (readable by screen readers — no image CAPTCHA)', 'acps-site-toolkit' ); ?></label>
+					<p><label for="acps-challenge-q"><?php esc_html_e( 'Question', 'acps-site-toolkit' ); ?></label><br>
+					<input type="text" id="acps-challenge-q" name="<?php echo esc_attr( $name( 'spam_challenge_q' ) ); ?>" value="<?php echo esc_attr( $s['spam_challenge_q'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'What color is the sky?', 'acps-site-toolkit' ); ?>"></p>
+					<p><label for="acps-challenge-a"><?php esc_html_e( 'Expected answer', 'acps-site-toolkit' ); ?></label><br>
+					<input type="text" id="acps-challenge-a" name="<?php echo esc_attr( $name( 'spam_challenge_a' ) ); ?>" value="<?php echo esc_attr( $s['spam_challenge_a'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'blue', 'acps-site-toolkit' ); ?>"></p>
+				</td>
+			</tr>
+		</table>
+
+		<h2 class="title"><?php esc_html_e( 'Access & data', 'acps-site-toolkit' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Editor access', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'editors_view_reports' ) ); ?>" value="1" <?php echo $checked( 'editors_view_reports' ); ?>> <?php esc_html_e( 'Let Editors view Feedback and Analytics (read-only; no settings access)', 'acps-site-toolkit' ); ?></label></td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'On uninstall', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'preserve_data' ) ); ?>" value="1" <?php echo $checked( 'preserve_data' ); ?>> <?php esc_html_e( 'Preserve all data when the plugin is deleted (recommended)', 'acps-site-toolkit' ); ?></label>
+				<p class="description"><?php esc_html_e( 'When off, deleting the plugin drops all tables. Deactivating never removes data.', 'acps-site-toolkit' ); ?></p></td>
+			</tr>
+		</table>
+
+		<?php submit_button(); ?>
+	</form>
+</div>
