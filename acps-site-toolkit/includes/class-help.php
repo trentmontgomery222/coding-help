@@ -64,6 +64,85 @@ class Help {
 		return $form;
 	}
 
+	const MEDIA_SLUG = 'media-coverage-request';
+
+	/**
+	 * Create the "Media Coverage Request" form template (ported from the ACPS
+	 * Google Form). Built in a loop: 5 identical event blocks + a school section.
+	 * Event #1 is required; events #2–#5 are optional so staff can list as many
+	 * events as they have.
+	 *
+	 * @return Form
+	 */
+	public static function ensure_media_request_form() {
+		$existing = Form::find_by_slug( self::MEDIA_SLUG );
+		if ( $existing ) {
+			return $existing;
+		}
+
+		$timeframe = array( 'Morning', 'Afternoon', 'Full day', 'Evening', 'Other' );
+		$attendees = array(
+			'Public Event (open to everyone)', 'Students', 'ACPS Families/Parents', 'ACPS Partners',
+			'Superintendent (coordinate with Nicole Frost)', 'ACPS Senior Leadership (coordinate with Nicole Frost)',
+			'Board of Education Members (coordinate with Nicole Frost)', 'Maryland State Department of Education (coordinate with Nicole Frost)',
+			'Allegany County Government (coordinate with Nicole Frost)', 'Alumni or Alumni Groups', 'Supporters and Donors', 'Other',
+		);
+		$audience = array( 'ACPS Families', 'Community Members', 'Community Partners (businesses, organizations, civic groups, etc.)', 'Supporters and Donors', 'Maryland State Government' );
+		$services = array(
+			"Reshare public (open) event/activity post to the District's social media (5-7 days prior)",
+			"Develop a web slider to promote public event on District's website (7-10 days prior)",
+			'Promote event/activity to local media (7-10 prior)',
+			'Arrange for radio interviews (7-10 days prior)',
+			'Arrange for news reporter coverage (10-12 days prior)',
+			"Have PIO/Comms covers the event, selects and shares 4-6 photos on District's social media (0-5 days after event)",
+			"Reshare event/activity photos post from my school's social media (FB and IG only)",
+			'Submit post-event photograph file with caption to PIO/Comms to submit to local media',
+			'Develop a web slider with event/activity photos', 'Other',
+		);
+		$school = array(
+			'Title 1 school', 'Community school', 'Has a Pantry', 'Offers Friday food bags', 'Has a PTO or PTA',
+			'Has a garden or farm', 'Green School', 'Blue Ribbon School - current', 'Blue Ribbon School - previously',
+			'Has a Head Start program', 'Has a Judy Center', 'Other',
+		);
+		$opts = function ( $arr ) {
+			return array_map( function ( $v ) { return array( 'label' => $v, 'value' => $v ); }, $arr );
+		};
+
+		$fields = array();
+		for ( $n = 1; $n <= 5; $n++ ) {
+			$req = ( 1 === $n );
+			$fields[] = array( 'key' => "event_head_$n", 'type' => 'heading', 'label' => "Event/Activity #$n", 'page' => $n );
+			$fields[] = array( 'key' => "event_name_$n", 'type' => 'short_text', 'label' => 'Event/Activity Name', 'required' => $req, 'page' => $n );
+			$fields[] = array( 'key' => "event_date_$n", 'type' => 'date', 'label' => 'Event/Activity Date', 'page' => $n );
+			$fields[] = array( 'key' => "timeframe_$n", 'type' => 'checkbox', 'label' => 'Timeframe', 'required' => $req, 'options' => $opts( $timeframe ), 'page' => $n );
+			$fields[] = array( 'key' => "attendees_$n", 'type' => 'checkbox', 'label' => 'Attendees (select as many as applicable)', 'required' => $req, 'options' => $opts( $attendees ), 'page' => $n );
+			$fields[] = array( 'key' => "audience_$n", 'type' => 'checkbox', 'label' => 'Target Audience', 'required' => $req, 'options' => $opts( $audience ), 'page' => $n );
+			$fields[] = array( 'key' => "services_$n", 'type' => 'checkbox', 'label' => "Requested Services - What You'd Like to Have Us Do", 'required' => $req, 'options' => $opts( $services ), 'page' => $n );
+			$fields[] = array( 'key' => "coverage_$n", 'type' => 'long_text', 'label' => 'Requested Coverage', 'page' => $n );
+			$fields[] = array( 'key' => "anything_$n", 'type' => 'long_text', 'label' => "Anything else you'd like to share?", 'page' => $n );
+		}
+		$fields[] = array( 'key' => 'school_head', 'type' => 'heading', 'label' => 'Additional School Info', 'content' => 'Tell us more about your school for our website.', 'page' => 6 );
+		$fields[] = array( 'key' => 'school_features', 'type' => 'checkbox', 'label' => 'Check the boxes that apply to your school', 'required' => true, 'options' => $opts( $school ), 'page' => 6 );
+		$fields[] = array( 'key' => 'pto_info', 'type' => 'long_text', 'label' => "If applicable, PTO/PTA leader's name with phone, email and meeting schedule.", 'page' => 6 );
+
+		$form         = new Form();
+		$form->title  = __( 'Media Coverage Request', 'acps-site-toolkit' );
+		$form->slug   = self::MEDIA_SLUG;
+		$form->status = 'published';
+		$form->fields = $fields;
+		$form->settings = wp_parse_args(
+			array(
+				'submit_label'         => __( 'Submit request', 'acps-site-toolkit' ),
+				'multipage'            => 1,
+				'notify_admin'         => 1,
+				'confirmation_message' => __( 'Thank you — your media coverage request has been submitted.', 'acps-site-toolkit' ),
+			),
+			Form::default_settings()
+		);
+		$form->save();
+		return $form;
+	}
+
 	/**
 	 * Render the contact form.
 	 *

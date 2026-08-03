@@ -53,6 +53,7 @@ class Plugin {
 		}
 		Feedback::ensure_feedback_form();
 		Help::ensure_contact_form();
+		Help::ensure_media_request_form();
 
 		// The floating button is now the contact form. If the label is still the
 		// old default, flip it to match (leaves any custom label alone).

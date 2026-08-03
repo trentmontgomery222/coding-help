@@ -37,6 +37,7 @@ class Activator {
 		// Ensure the built-in feedback + contact form templates exist.
 		Feedback::ensure_feedback_form();
 		Help::ensure_contact_form();
+		Help::ensure_media_request_form();
 
 		// Schedule the daily retention purge (spec §4.5).
 		if ( ! wp_next_scheduled( Privacy::PURGE_HOOK ) ) {
