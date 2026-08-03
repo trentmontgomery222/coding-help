@@ -1,0 +1,37 @@
+/**
+ * External Portal — wp-admin styles.
+ */
+
+.exp-admin .exp-inline-form { display: inline-block; margin: 0 .25rem .25rem 0; }
+.exp-admin .exp-row-actions { display: flex; flex-wrap: wrap; gap: .25rem .75rem; align-items: center; }
+.exp-admin .exp-row-actions .button-link { color: #2271b1; }
+.exp-admin .exp-row-actions .button-link:hover { color: #135e96; }
+
+.exp-admin-filter { margin: 1rem 0; display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+
+.exp-cap {
+	border: 1px solid #c3c4c7;
+	padding: .75rem 1rem;
+	margin: 0 0 1rem;
+	background: #fff;
+}
+.exp-cap legend { padding: 0 .4rem; }
+.exp-cap code { background: #f0f0f1; padding: 0 .3rem; }
+.exp-target-list { list-style: none; margin: .25rem 0 0; padding: 0; columns: 2; }
+.exp-target-list li { break-inside: avoid; margin: 0 0 .25rem; }
+
+.exp-badge { display: inline-block; padding: 0 .4rem; border-radius: 3px; font-size: .8em; }
+.exp-badge--warn { background: #fcf9e8; border: 1px solid #dba617; }
+
+.exp-presets { background: #fff; border: 1px solid #c3c4c7; padding: .75rem 1rem; margin: 0 0 1rem; }
+.exp-presets form { display: inline-block; margin: 0 .25rem .25rem 0; }
+
+.exp-review-preview { background: #fff; border: 1px solid #c3c4c7; padding: 1rem; margin: 1rem 0; }
+.exp-review-preview .exp-pre { white-space: pre-wrap; word-break: break-word; }
+
+.exp-whitelist { max-width: 60rem; margin: .5rem 0; }
+.exp-whitelist td { padding: .35rem .5rem; }
+
+@media (max-width: 782px) {
+	.exp-target-list { columns: 1; }
+}

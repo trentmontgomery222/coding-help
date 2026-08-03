@@ -1,9 +1,15 @@
 # WordPress "External Portal" Plugin — Concept & Planning Spec
 
-> **Purpose of this document:** This is a **planning / reference document, not code.**
-> It exists so an AI assistant (or a developer) can read it *before* writing any code
-> for this plugin and understand the full intended architecture, decisions already
-> made, and open questions still to resolve. **No implementation has started yet.**
+> **Purpose of this document:** This is the original **planning / reference document.**
+> It captures the full intended architecture, the decisions already made, and the
+> open questions to resolve.
+
+> **Update — implementation has begun.** An initial build of the plugin now lives in
+> [`external-portal/`](external-portal/). See its [`README.md`](external-portal/README.md)
+> for setup and for how the Section 8 open questions were resolved (with configurable,
+> documented defaults), and [`external-portal/docs/EXTENSION-API.md`](external-portal/docs/EXTENSION-API.md)
+> for the developer-facing extension reference described in Section 7. This planning
+> document is retained as-is for historical context.
 
 ---
 
