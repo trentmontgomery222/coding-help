@@ -1,0 +1,116 @@
+/**
+ * Text Tokens admin styles.
+ *
+ * Focus and status styles are written to meet WCAG 2.1 AA (aiming at 2.2):
+ * status is never conveyed by color alone (icon + text), and focus
+ * indicators are thick and high-contrast.
+ */
+
+.tt-intro {
+	max-width: 50em;
+}
+
+.tt-table code {
+	font-size: 13px;
+}
+
+.tt-row-actions .button {
+	margin-right: 4px;
+}
+
+/* Code input with visible, decorative brackets around the field. */
+.tt-code-wrap {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.tt-bracket {
+	font-weight: 700;
+	font-size: 18px;
+	color: #50575e;
+}
+
+/* Rule config groups. */
+.tt-rule-config {
+	margin-top: 12px;
+	padding: 12px 16px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #f6f7f7;
+	max-width: 40em;
+}
+
+.tt-rule-config legend {
+	font-weight: 600;
+	padding: 0 4px;
+}
+
+.tt-config-field {
+	margin: 8px 0;
+}
+
+.tt-config-field label {
+	font-weight: 600;
+}
+
+.tt-config-field .description {
+	display: block;
+	margin-top: 2px;
+}
+
+/* Status indicators: icon + text, never color alone. */
+.tt-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.tt-status__icon {
+	font-size: 14px;
+	line-height: 1;
+}
+
+.tt-status--ok .tt-status__icon {
+	color: #007017; /* AA-contrast green on white. */
+}
+
+.tt-status--warn .tt-status__icon {
+	color: #8a1f11; /* AA-contrast red on white. */
+}
+
+.tt-status--warn .tt-status__text {
+	color: #8a1f11;
+}
+
+.tt-preview-box {
+	display: inline-flex;
+	min-width: 12em;
+	padding: 6px 10px;
+	margin-right: 8px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #fff;
+	vertical-align: middle;
+}
+
+/* WCAG 2.2-oriented focus indicator: thick, offset, high contrast. */
+.tt-wrap a:focus,
+.tt-wrap button:focus,
+.tt-wrap input:focus,
+.tt-wrap select:focus,
+.tt-wrap textarea:focus {
+	outline: 3px solid #1d4ed8;
+	outline-offset: 2px;
+	box-shadow: none;
+}
+
+@media (prefers-contrast: more) {
+	.tt-status--ok .tt-status__icon {
+		color: #00330a;
+	}
+	.tt-status--warn .tt-status__icon,
+	.tt-status--warn .tt-status__text {
+		color: #5c1109;
+	}
+}
