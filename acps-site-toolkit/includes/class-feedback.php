@@ -170,16 +170,18 @@ class Feedback {
 		$icon_url  = Settings::get( 'trigger_icon_url', '' );
 		$icon_hover = Settings::get( 'trigger_icon_hover_url', '' );
 		$size      = (int) Settings::get( 'trigger_size', 64 );
-		$bg        = Settings::get( 'trigger_bg', '' );
-		$title     = get_the_title( $post_id );
-		$form_html = Form_Renderer::render( $form, array( 'post_id' => $post_id ) );
+		$bg          = Settings::get( 'trigger_bg', '' );
+		$transparent = (bool) Settings::get( 'trigger_transparent', false );
+		$title       = get_the_title( $post_id );
+		$form_html   = Form_Renderer::render( $form, array( 'post_id' => $post_id ) );
 
 		// Size comes from the per-device CSS variables (see the dynamic block in
 		// Plugin::enqueue_frontend); only the optional background is inline here.
 		$trigger_style = '';
-		if ( $bg ) {
+		if ( $bg && ! $transparent ) {
 			$trigger_style .= 'background:' . $bg . ';border-color:' . $bg . ';';
 		}
+		$trigger_class = $transparent ? ' acps-trigger--transparent' : '';
 		unset( $size );
 
 		// Child-theme override (receives $form, $form_html, $label, $position,
@@ -193,14 +195,14 @@ class Feedback {
 		<div class="acps-feedback-root acps-pos-<?php echo esc_attr( $position ); ?>" data-current-page-id="<?php echo esc_attr( $post_id ); ?>" data-current-page-title="<?php echo esc_attr( $title ); ?>">
 			<?php if ( $icon_url ) : ?>
 				<?php // Circular icon-only trigger. The label is the accessible name. ?>
-				<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?>" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" aria-label="<?php echo esc_attr( $label ); ?>" style="<?php echo esc_attr( $trigger_style ); ?>">
+				<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?><?php echo esc_attr( $trigger_class ); ?>" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" aria-label="<?php echo esc_attr( $label ); ?>" style="<?php echo esc_attr( $trigger_style ); ?>">
 					<img class="acps-feedback-trigger__img acps-icon-rest" src="<?php echo esc_url( $icon_url ); ?>" alt="">
 					<?php if ( $icon_hover ) : ?>
 						<img class="acps-feedback-trigger__img acps-icon-hover" src="<?php echo esc_url( $icon_hover ); ?>" alt="" aria-hidden="true">
 					<?php endif; ?>
 				</button>
 			<?php else : ?>
-				<button type="button" class="acps-feedback-trigger" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" style="<?php echo esc_attr( $trigger_style ); ?>">
+				<button type="button" class="acps-feedback-trigger<?php echo esc_attr( $trigger_class ); ?>" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" style="<?php echo esc_attr( $trigger_style ); ?>">
 					<span class="acps-feedback-trigger__icon" aria-hidden="true">&#128172;</span>
 					<span class="acps-feedback-trigger__label"><?php echo esc_html( $label ); ?></span>
 				</button>

@@ -224,6 +224,13 @@
 .acps-pos-edge-right .acps-feedback-trigger { border-radius: 4px 0 0 4px; }
 .acps-pos-edge-left .acps-feedback-trigger { border-radius: 0 4px 4px 0; }
 
+/* Transparent trigger: just the icon, no circle/ring/shadow. */
+.acps-feedback-trigger.acps-trigger--transparent {
+	background: transparent !important;
+	border-color: transparent !important;
+	box-shadow: none !important;
+}
+
 /* Circular icon-only trigger (size from --acps-trigger-size, default 64px). */
 .acps-feedback-trigger--icon {
 	/* Diameter comes from --acps-trigger-size, set per-device in Settings. */

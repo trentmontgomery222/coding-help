@@ -118,6 +118,10 @@ $checked = function ( $key ) use ( $s ) {
 				<td><input type="text" id="acps-trigger-bg" name="<?php echo esc_attr( $name( 'trigger_bg' ) ); ?>" value="<?php echo esc_attr( $s['trigger_bg'] ); ?>" placeholder="#0b5fa5" class="regular-text"><p class="description"><?php esc_html_e( 'Behind a transparent icon. Leave blank to use the theme accent.', 'acps-site-toolkit' ); ?></p></td>
 			</tr>
 			<tr>
+				<th scope="row"><?php esc_html_e( 'Transparent background', 'acps-site-toolkit' ); ?></th>
+				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'trigger_transparent' ) ); ?>" value="1" <?php echo $checked( 'trigger_transparent' ); ?>> <?php esc_html_e( 'No circle, ring or shadow — show just the icon image on a transparent background', 'acps-site-toolkit' ); ?></label><p class="description"><?php esc_html_e( 'Best with an icon image that already has its own shape/transparency.', 'acps-site-toolkit' ); ?></p></td>
+			</tr>
+			<tr>
 				<th scope="row"><label for="acps-categories"><?php esc_html_e( 'Feedback categories', 'acps-site-toolkit' ); ?></label></th>
 				<td><textarea id="acps-categories" name="<?php echo esc_attr( $name( 'feedback_categories' ) ); ?>" rows="6" class="large-text"><?php echo esc_textarea( implode( "\n", (array) $s['feedback_categories'] ) ); ?></textarea>
 				<p class="description"><?php esc_html_e( 'One per line.', 'acps-site-toolkit' ); ?></p></td>

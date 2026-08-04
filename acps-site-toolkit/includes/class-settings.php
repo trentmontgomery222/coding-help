@@ -41,6 +41,7 @@ class Settings {
 			'trigger_size_tablet'   => 60, // circle diameter on tablets.
 			'trigger_size_mobile'   => 52, // circle diameter on phones.
 			'trigger_bg'            => '', // circle background; blank = accent colour.
+			'trigger_transparent'   => 0,  // transparent background (no circle/ring/shadow).
 			'modal_max_width'       => 1200, // popup max width on laptop/desktop.
 			'custom_css'            => '', // full editable stylesheet (overrides base).
 			'feedback_categories'   => array(
@@ -144,6 +145,7 @@ class Settings {
 		$checkboxes = array(
 			'feedback_enabled',
 			'feedback_allow_screenshot',
+			'trigger_transparent',
 			'tracking_enabled',
 			'consent_mode',
 			'store_full_user_agent',
