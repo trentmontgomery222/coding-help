@@ -289,7 +289,7 @@ $selected_fields = ( $selected_form && ! $is_feedback ) ? \ACPS\SiteToolkit\Fiel
 					$comment = isset( $vals['comment'] ) ? wp_trim_words( (string) $vals['comment'], 16 ) : '';
 					$link   = admin_url( 'admin.php?page=acps-st&form_id=' . $form_id . '&entry=' . $row->id );
 					?>
-					<tr>
+					<tr class="acps-status-row acps-status-<?php echo esc_attr( $row->status ); ?>">
 						<?php if ( current_user_can( 'manage_options' ) ) : ?>
 							<th scope="row" class="check-column"><label class="screen-reader-text" for="acps-cb-<?php echo esc_attr( $row->id ); ?>"><?php printf( esc_html__( 'Select entry %d', 'acps-site-toolkit' ), (int) $row->id ); ?></label><input type="checkbox" id="acps-cb-<?php echo esc_attr( $row->id ); ?>" name="entry_ids[]" value="<?php echo esc_attr( $row->id ); ?>"></th>
 						<?php endif; ?>

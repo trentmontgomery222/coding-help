@@ -20,6 +20,22 @@
 
 .acps-admin .acps-flag { background: #fcf3d9; }
 
+/* Status-coloured rows in the triage/entries lists. Target th/td so the color
+   overrides the striped-table background. A left accent bar reinforces it for
+   anyone who can't distinguish the tint (colour is not the only cue). */
+.acps-status-row > td,
+.acps-status-row > th { background-color: var( --acps-row-bg, transparent ) !important; }
+.acps-status-row > td:first-child,
+.acps-status-row > th:first-child { box-shadow: inset 4px 0 0 0 var( --acps-row-bar, transparent ); }
+
+.acps-status-new       { --acps-row-bg: #fff8e1; --acps-row-bar: #dba617; } /* awaiting */
+.acps-status-read      { --acps-row-bg: #ffffff; --acps-row-bar: #c3c4c7; }
+.acps-status-in_progress { --acps-row-bg: #e7f2fb; --acps-row-bar: #2271b1; }
+.acps-status-resolved  { --acps-row-bg: #e6f4ea; --acps-row-bar: #46b450; } /* done/green */
+.acps-status-wont_fix  { --acps-row-bg: #f0f0f1; --acps-row-bar: #8c8f94; }
+.acps-status-spam      { --acps-row-bg: #fcebea; --acps-row-bar: #b32d2e; }
+.acps-status-trashed   { --acps-row-bg: #fbeaea; --acps-row-bar: #b32d2e; }
+
 .acps-admin .acps-card {
 	background: #fff;
 	border: 1px solid #ccd0d4;

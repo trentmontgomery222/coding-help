@@ -116,7 +116,7 @@ $fields = $form ? Field_Types::normalize_list( $form->fields ) : array();
 					$vals = $d ? $d['values'] : array();
 					$link = admin_url( 'admin.php?page=acps-st-entries&entry=' . $row->id );
 					?>
-					<tr>
+					<tr class="acps-status-row acps-status-<?php echo esc_attr( $row->status ); ?>">
 						<td><a href="<?php echo esc_url( $link ); ?>">#<?php echo esc_html( $row->id ); ?></a></td>
 						<?php
 						$shown = 0;
