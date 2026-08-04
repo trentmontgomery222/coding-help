@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Site Toolkit
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.12.0
+ * Version:           1.13.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -32,11 +32,11 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.12.0' );
+define( 'ACPS_ST_VERSION', '1.13.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).
-define( 'ACPS_ST_SCHEMA_VERSION', '1.1.0' );
+define( 'ACPS_ST_SCHEMA_VERSION', '1.2.0' );
 
 define( 'ACPS_ST_FILE', __FILE__ );
 define( 'ACPS_ST_BASENAME', plugin_basename( __FILE__ ) );

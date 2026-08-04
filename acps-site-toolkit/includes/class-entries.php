@@ -40,6 +40,7 @@ class Entries {
 				'form_id'            => absint( $entry['form_id'] ),
 				'submitted_at'       => $now,
 				'session_id'         => ! empty( $entry['session_id'] ) ? absint( $entry['session_id'] ) : null,
+				'visitor_uid'        => ! empty( $entry['visitor_uid'] ) ? Visitors::sanitize( $entry['visitor_uid'] ) : null,
 				'page_id'            => ! empty( $entry['page_id'] ) ? absint( $entry['page_id'] ) : null,
 				'page_url'           => isset( $entry['page_url'] ) ? esc_url_raw( $entry['page_url'] ) : null,
 				'status'             => isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'new',
@@ -114,6 +115,7 @@ class Entries {
 			'form_id'   => 0,
 			'status'    => '',
 			'page_id'   => 0,
+			'visitor'   => '',
 			'search'    => '',
 			'date_from' => '',
 			'date_to'   => '',
@@ -142,6 +144,10 @@ class Entries {
 			$where[]  = 'page_id = %d';
 			$params[] = absint( $args['page_id'] );
 		}
+		if ( '' !== $args['visitor'] ) {
+			$where[]  = 'visitor_uid = %s';
+			$params[] = Visitors::sanitize( $args['visitor'] );
+		}
 		if ( $args['date_from'] ) {
 			$where[]  = 'submitted_at >= %s';
 			$params[] = $args['date_from'] . ' 00:00:00';
@@ -151,10 +157,13 @@ class Entries {
 			$params[] = $args['date_to'] . ' 23:59:59';
 		}
 		if ( '' !== $args['search'] ) {
-			// Search across values.
+			// Search across values, the visitor id, and the visitor's name.
 			$vtable   = Schema::table( 'entry_values' );
+			$vis      = Schema::table( 'visitors' );
 			$like     = '%' . $wpdb->esc_like( $args['search'] ) . '%';
-			$where[]  = "id IN (SELECT entry_id FROM {$vtable} WHERE value LIKE %s)";
+			$where[]  = "( id IN (SELECT entry_id FROM {$vtable} WHERE value LIKE %s) OR visitor_uid LIKE %s OR visitor_uid IN (SELECT uid FROM {$vis} WHERE name LIKE %s) )";
+			$params[] = $like;
+			$params[] = $like;
 			$params[] = $like;
 		}
 

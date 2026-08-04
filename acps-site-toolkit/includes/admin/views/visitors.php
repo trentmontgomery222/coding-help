@@ -1,0 +1,162 @@
+<?php
+/**
+ * Visitors admin: search and browse unique visitors, name them, add notes, and
+ * see all of a visitor's form submissions.
+ *
+ * @package ACPS\SiteToolkit
+ */
+
+namespace ACPS\SiteToolkit\Admin;
+
+use ACPS\SiteToolkit\Visitors;
+use ACPS\SiteToolkit\Entries;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+$view_uid = isset( $_GET['visitor'] ) ? sanitize_text_field( wp_unslash( $_GET['visitor'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+/* -------------------------------------------------------------------------
+ * Single visitor
+ * ---------------------------------------------------------------------- */
+if ( '' !== $view_uid ) {
+	$visitor = Visitors::get( $view_uid );
+	if ( ! $visitor ) {
+		echo '<div class="wrap"><p>' . esc_html__( 'Visitor not found.', 'acps-site-toolkit' ) . '</p></div>';
+		return;
+	}
+	$result  = Entries::query( array( 'visitor' => $view_uid, 'status' => '', 'per_page' => 200 ) );
+	$entries = $result['rows'];
+	$saved   = isset( $_GET['saved'] ); // phpcs:ignore WordPress.Security.NonceVerification
+	?>
+	<div class="wrap acps-admin">
+		<h1><?php esc_html_e( 'Visitor', 'acps-site-toolkit' ); ?>: <?php echo esc_html( $visitor->name ? $visitor->name : $visitor->uid ); ?></h1>
+		<p><a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-visitors' ) ); ?>">&larr; <?php esc_html_e( 'Back to visitors', 'acps-site-toolkit' ); ?></a></p>
+
+		<?php if ( $saved ) : ?>
+			<div class="notice notice-success is-dismissible" role="status"><p><?php esc_html_e( 'Saved.', 'acps-site-toolkit' ); ?></p></div>
+		<?php endif; ?>
+
+		<div class="acps-detail-grid">
+			<div class="acps-detail-main">
+				<h2><?php esc_html_e( 'Details', 'acps-site-toolkit' ); ?></h2>
+				<table class="widefat striped">
+					<tbody>
+						<tr><th scope="row"><?php esc_html_e( 'Visitor ID', 'acps-site-toolkit' ); ?></th><td><code><?php echo esc_html( $visitor->uid ); ?></code></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->name ? $visitor->name : '—' ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->first_seen ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->last_seen ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( count( $entries ) ); ?></td></tr>
+					</tbody>
+				</table>
+
+				<h2><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></h2>
+				<table class="widefat striped">
+					<thead><tr>
+						<th scope="col"><?php esc_html_e( 'ID', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Form', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Status', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Submitted', 'acps-site-toolkit' ); ?></th>
+					</tr></thead>
+					<tbody>
+						<?php if ( ! $entries ) : ?>
+							<tr><td colspan="4"><?php esc_html_e( 'No submissions from this visitor.', 'acps-site-toolkit' ); ?></td></tr>
+						<?php else : ?>
+							<?php foreach ( $entries as $e ) :
+								$form = \ACPS\SiteToolkit\Form::find( (int) $e->form_id );
+								$link = admin_url( 'admin.php?page=acps-st-entries&entry=' . $e->id );
+								?>
+								<tr>
+									<td><a href="<?php echo esc_url( $link ); ?>">#<?php echo esc_html( $e->id ); ?></a></td>
+									<td><?php echo esc_html( $form ? $form->title : ( '#' . $e->form_id ) ); ?></td>
+									<td><?php echo esc_html( $e->status ); ?></td>
+									<td><?php echo esc_html( $e->submitted_at ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						<?php endif; ?>
+					</tbody>
+				</table>
+			</div>
+
+			<div class="acps-detail-side">
+				<h2><?php esc_html_e( 'Edit visitor', 'acps-site-toolkit' ); ?></h2>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<?php wp_nonce_field( 'acps_st_visitor_action' ); ?>
+					<input type="hidden" name="action" value="acps_st_visitor_action">
+					<input type="hidden" name="uid" value="<?php echo esc_attr( $visitor->uid ); ?>">
+					<p>
+						<label for="acps-visitor-name"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></label><br>
+						<input type="text" id="acps-visitor-name" name="name" value="<?php echo esc_attr( $visitor->name ); ?>" class="widefat">
+						<span class="description"><?php esc_html_e( 'Set automatically from an "accname" form field, or edit here.', 'acps-site-toolkit' ); ?></span>
+					</p>
+					<p>
+						<label for="acps-visitor-notes"><?php esc_html_e( 'Internal notes', 'acps-site-toolkit' ); ?></label><br>
+						<textarea id="acps-visitor-notes" name="notes" rows="5" class="widefat"><?php echo esc_textarea( $visitor->notes ); ?></textarea>
+					</p>
+					<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Save', 'acps-site-toolkit' ); ?></button></p>
+				</form>
+			</div>
+		</div>
+	</div>
+	<?php
+	return;
+}
+
+/* -------------------------------------------------------------------------
+ * List
+ * ---------------------------------------------------------------------- */
+$search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+$paged  = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1; // phpcs:ignore
+$result = Visitors::query( array( 'search' => $search, 'paged' => $paged, 'per_page' => 50 ) );
+$rows   = $result['rows'];
+$total  = $result['total'];
+?>
+<div class="wrap acps-admin">
+	<h1><?php esc_html_e( 'Visitors', 'acps-site-toolkit' ); ?></h1>
+	<p class="description"><?php esc_html_e( 'Every unique visitor (by first-party ID). Search by ID or name. Names are set automatically when a form has an "accname" field.', 'acps-site-toolkit' ); ?></p>
+
+	<form method="get" class="acps-filters">
+		<input type="hidden" name="page" value="acps-st-visitors">
+		<label for="acps-visitor-search" class="screen-reader-text"><?php esc_html_e( 'Search visitors', 'acps-site-toolkit' ); ?></label>
+		<input type="search" id="acps-visitor-search" name="s" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php esc_attr_e( 'Search ID or name…', 'acps-site-toolkit' ); ?>">
+		<button type="submit" class="button"><?php esc_html_e( 'Search', 'acps-site-toolkit' ); ?></button>
+	</form>
+
+	<table class="widefat striped acps-table">
+		<caption class="screen-reader-text"><?php esc_html_e( 'Unique visitors', 'acps-site-toolkit' ); ?></caption>
+		<thead><tr>
+			<th scope="col"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></th>
+			<th scope="col"><?php esc_html_e( 'Visitor ID', 'acps-site-toolkit' ); ?></th>
+			<th scope="col"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th>
+			<th scope="col"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th>
+			<th scope="col"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th>
+		</tr></thead>
+		<tbody>
+			<?php if ( ! $rows ) : ?>
+				<tr><td colspan="5"><?php esc_html_e( 'No visitors yet.', 'acps-site-toolkit' ); ?></td></tr>
+			<?php else : ?>
+				<?php foreach ( $rows as $v ) :
+					$link = admin_url( 'admin.php?page=acps-st-visitors&visitor=' . rawurlencode( $v->uid ) );
+					?>
+					<tr>
+						<td><a href="<?php echo esc_url( $link ); ?>"><strong><?php echo esc_html( $v->name ? $v->name : __( '(unnamed)', 'acps-site-toolkit' ) ); ?></strong></a></td>
+						<td><code><?php echo esc_html( $v->uid ); ?></code></td>
+						<td><?php echo esc_html( (int) $v->entry_count ); ?></td>
+						<td><?php echo esc_html( $v->first_seen ); ?></td>
+						<td><?php echo esc_html( $v->last_seen ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+			<?php endif; ?>
+		</tbody>
+	</table>
+
+	<?php
+	$total_pages = (int) ceil( $total / 50 );
+	if ( $total_pages > 1 ) {
+		echo '<div class="tablenav"><div class="tablenav-pages">';
+		echo wp_kses_post( paginate_links( array( 'base' => add_query_arg( 'paged', '%#%' ), 'format' => '', 'current' => $paged, 'total' => $total_pages ) ) );
+		echo '</div></div>';
+	}
+	?>
+</div>

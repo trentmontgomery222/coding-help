@@ -42,7 +42,7 @@ class Exporter {
 		$out = fopen( 'php://output', 'w' );
 
 		// Header row.
-		$header = array( 'Entry ID', 'Submitted', 'Status', 'Page', 'Journey path' );
+		$header = array( 'Entry ID', 'Submitted', 'Status', 'Visitor ID', 'Visitor name', 'Page', 'Journey path' );
 		$keys   = array();
 		if ( $fields ) {
 			foreach ( $fields as $f ) {
@@ -61,8 +61,14 @@ class Exporter {
 			$values = $data ? $data['values'] : array();
 			$page   = $row->page_id ? ( get_the_title( (int) $row->page_id ) ?: ( '#' . $row->page_id ) ) : '';
 			$path   = $row->session_id ? implode( ' > ', Analytics::session_path( (int) $row->session_id ) ) : '';
+			$vuid   = isset( $row->visitor_uid ) ? (string) $row->visitor_uid : '';
+			$vname  = '';
+			if ( $vuid ) {
+				$vrow  = \ACPS\SiteToolkit\Visitors::get( $vuid );
+				$vname = $vrow && $vrow->name ? $vrow->name : '';
+			}
 
-			$line = array( $row->id, $row->submitted_at, $row->status, $page, $path );
+			$line = array( $row->id, $row->submitted_at, $row->status, $vuid, $vname, $page, $path );
 
 			if ( $keys ) {
 				foreach ( $keys as $k ) {

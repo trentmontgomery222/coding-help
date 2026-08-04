@@ -146,13 +146,26 @@ class Submission {
 			$session_id = Session::lookup( $request['acps_session'] );
 		}
 
+		// Persistent visitor id (per browser) — attach to the entry, register the
+		// visitor, and if the form carries an "accname" field, use it as the
+		// visitor's name so this id is recognisable everywhere.
+		$visitor_uid = isset( $request['acps_uid'] ) ? Visitors::sanitize( $request['acps_uid'] ) : '';
+		if ( '' !== $visitor_uid ) {
+			Visitors::record( $visitor_uid );
+			$accname = self::accname_value( $fields, $values );
+			if ( '' !== $accname ) {
+				Visitors::set_name( $visitor_uid, $accname );
+			}
+		}
+
 		$entry_id = Entries::create(
 			array(
-				'form_id'    => $form->id,
-				'session_id' => $session_id,
-				'page_id'    => isset( $request['acps_page_id'] ) ? absint( $request['acps_page_id'] ) : 0,
-				'page_url'   => isset( $request['acps_page_url'] ) ? $request['acps_page_url'] : '',
-				'status'     => $form->is_feedback ? 'new' : 'new',
+				'form_id'     => $form->id,
+				'session_id'  => $session_id,
+				'visitor_uid' => $visitor_uid,
+				'page_id'     => isset( $request['acps_page_id'] ) ? absint( $request['acps_page_id'] ) : 0,
+				'page_url'    => isset( $request['acps_page_url'] ) ? $request['acps_page_url'] : '',
+				'status'      => $form->is_feedback ? 'new' : 'new',
 			),
 			$values
 		);
@@ -205,6 +218,27 @@ class Submission {
 			}
 		}
 
+		return '';
+	}
+
+	/**
+	 * Find the value of an "accname" field (by field key or label), used to name
+	 * the visitor. Returns '' when there is no such field.
+	 *
+	 * @param array $fields Normalized fields.
+	 * @param array $values Clean values keyed by field key.
+	 * @return string
+	 */
+	private static function accname_value( $fields, $values ) {
+		foreach ( $fields as $field ) {
+			$key   = strtolower( $field['key'] );
+			$label = strtolower( preg_replace( '/[^a-z0-9]/i', '', $field['label'] ) );
+			if ( 'accname' === $key || 'accname' === $label ) {
+				$v = isset( $values[ $field['key'] ] ) ? $values[ $field['key'] ] : '';
+				$v = is_array( $v ) ? implode( ' ', $v ) : (string) $v;
+				return trim( $v );
+			}
+		}
 		return '';
 	}
 

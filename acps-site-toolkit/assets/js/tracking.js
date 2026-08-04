@@ -99,6 +99,7 @@
 	/* Shared runtime other scripts read (forms/feedback). */
 	var runtime = window.ACPS_ST_RT = {
 		token: '',
+		uid: '',
 		active: false,
 		restUrl: cfg.restUrl
 	};
@@ -127,11 +128,12 @@
 			return;
 		}
 		runtime.token = getToken();
+		runtime.uid = getUid();
 		runtime.active = true;
 
 		send( '/beacon', {
 			session: runtime.token,
-			uid: getUid(),
+			uid: runtime.uid,
 			consent: cfg.consentMode ? ( hasConsent() ? 1 : 0 ) : 1,
 			post_id: cfg.postId || 0,
 			url: location.href,
@@ -199,6 +201,7 @@
 	// (not suppressed for admins, and consent satisfied).
 	if ( trackingActive() ) {
 		runtime.token = getToken();
+		runtime.uid = getUid();
 	}
 
 	if ( document.readyState === 'loading' ) {

@@ -96,11 +96,14 @@ class Schema {
 		$ddl[] = "CREATE TABLE {$visitors} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			uid CHAR(36) NOT NULL,
+			name VARCHAR(191) DEFAULT NULL,
+			notes TEXT DEFAULT NULL,
 			first_seen DATETIME NOT NULL,
 			last_seen DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY uid (uid),
-			KEY first_seen (first_seen)
+			KEY first_seen (first_seen),
+			KEY name (name)
 		) {$charset_collate};";
 
 		// --- Sessions (spec §3.1) -------------------------------------------
@@ -164,6 +167,7 @@ class Schema {
 			form_id BIGINT UNSIGNED NOT NULL,
 			submitted_at DATETIME NOT NULL,
 			session_id BIGINT UNSIGNED DEFAULT NULL,
+			visitor_uid CHAR(36) DEFAULT NULL,
 			page_id BIGINT UNSIGNED DEFAULT NULL,
 			page_url TEXT DEFAULT NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'new',
@@ -174,6 +178,7 @@ class Schema {
 			PRIMARY KEY  (id),
 			KEY form_id (form_id),
 			KEY session_id (session_id),
+			KEY visitor_uid (visitor_uid),
 			KEY status (status),
 			KEY submitted_at (submitted_at)
 		) {$charset_collate};";

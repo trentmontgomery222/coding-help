@@ -104,6 +104,7 @@ class Form_Renderer {
 				<input type="hidden" name="acps_nonce" value="">
 				<input type="hidden" name="acps_ts" value="">
 				<input type="hidden" name="acps_session" value="" data-acps-session-slot="1">
+				<input type="hidden" name="acps_uid" value="" data-acps-uid-slot="1">
 				<input type="hidden" name="acps_form_id" value="<?php echo esc_attr( $form->id ); ?>">
 				<input type="hidden" name="acps_page_id" value="<?php echo esc_attr( $post_id ); ?>">
 

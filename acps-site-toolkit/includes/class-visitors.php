@@ -48,6 +48,93 @@ class Visitors {
 	}
 
 	/**
+	 * Set (or clear) a visitor's display name — e.g. from an "accname" form
+	 * field. Creates the visitor row if it doesn't exist yet.
+	 *
+	 * @param string $uid  Visitor id.
+	 * @param string $name Name.
+	 */
+	public static function set_name( $uid, $name ) {
+		$uid = self::sanitize( $uid );
+		if ( '' === $uid ) {
+			return;
+		}
+		self::record( $uid ); // ensure the row exists.
+		global $wpdb;
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			Schema::table( 'visitors' ),
+			array( 'name' => $name ? sanitize_text_field( $name ) : null ),
+			array( 'uid' => $uid )
+		);
+	}
+
+	/**
+	 * Set a visitor's internal notes.
+	 *
+	 * @param string $uid   Visitor id.
+	 * @param string $notes Notes.
+	 */
+	public static function set_notes( $uid, $notes ) {
+		$uid = self::sanitize( $uid );
+		if ( '' === $uid ) {
+			return;
+		}
+		self::record( $uid );
+		global $wpdb;
+		$wpdb->update( Schema::table( 'visitors' ), array( 'notes' => sanitize_textarea_field( $notes ) ), array( 'uid' => $uid ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
+	 * Fetch a visitor row by uid.
+	 *
+	 * @param string $uid Visitor id.
+	 * @return object|null
+	 */
+	public static function get( $uid ) {
+		$uid = self::sanitize( $uid );
+		if ( '' === $uid ) {
+			return null;
+		}
+		global $wpdb;
+		return $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . Schema::table( 'visitors' ) . ' WHERE uid = %s', $uid ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
+	 * List / search visitors with their submission counts.
+	 *
+	 * @param array $args search, per_page, paged.
+	 * @return array [ rows => object[], total => int ]
+	 */
+	public static function query( $args = array() ) {
+		global $wpdb;
+		$v = Schema::table( 'visitors' );
+		$e = Schema::table( 'entries' );
+
+		$args = wp_parse_args( $args, array( 'search' => '', 'per_page' => 50, 'paged' => 1 ) );
+
+		$where  = array( '1=1' );
+		$params = array();
+		if ( '' !== $args['search'] ) {
+			$like     = '%' . $wpdb->esc_like( $args['search'] ) . '%';
+			$where[]  = '(uid LIKE %s OR name LIKE %s)';
+			$params[] = $like;
+			$params[] = $like;
+		}
+		$where_sql = implode( ' AND ', $where );
+
+		$per_page = max( 1, (int) $args['per_page'] );
+		$offset   = ( max( 1, (int) $args['paged'] ) - 1 ) * $per_page;
+
+		$count_sql = "SELECT COUNT(*) FROM {$v} WHERE {$where_sql}";
+		$total     = (int) $wpdb->get_var( $params ? $wpdb->prepare( $count_sql, $params ) : $count_sql ); // phpcs:ignore WordPress.DB
+
+		$sql  = "SELECT vv.*, ( SELECT COUNT(*) FROM {$e} en WHERE en.visitor_uid = vv.uid AND en.status NOT IN ('spam','trashed') ) AS entry_count
+				 FROM {$v} vv WHERE {$where_sql} ORDER BY vv.last_seen DESC LIMIT %d OFFSET %d";
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $params, array( $per_page, $offset ) ) ) ); // phpcs:ignore WordPress.DB
+		return array( 'rows' => $rows ? $rows : array(), 'total' => $total );
+	}
+
+	/**
 	 * Total unique users, all time.
 	 *
 	 * @return int

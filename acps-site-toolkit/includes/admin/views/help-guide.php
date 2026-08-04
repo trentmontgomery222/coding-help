@@ -156,6 +156,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 	<div class="acps-card" id="entries">
 		<h2>9. <?php esc_html_e( 'Entries & CSV export', 'acps-site-toolkit' ); ?></h2>
 		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Site Toolkit → Entries. Pick a form, search, and open any entry to see all answers plus the page it was submitted from and the visitor’s journey. Use “Export CSV” for a spreadsheet, or “Delete permanently” on an entry.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Visitors:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'each submission is linked to the visitor’s unique ID. Site Toolkit → Visitors lists everyone; search by ID or name, open one to see all their submissions, and add a name or internal notes. If a form has a field named “accname”, its value automatically becomes that visitor’s name. Search on the Entries screen also matches visitor ID and name.', 'acps-site-toolkit' ); ?></p>
 	</div>
 
 	<div class="acps-card" id="analytics">

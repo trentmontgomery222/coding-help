@@ -65,6 +65,10 @@ if ( $view_id ) {
 						<tr><th scope="row"><?php esc_html_e( 'Submitted', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $entry->submitted_at ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Page', 'acps-site-toolkit' ); ?></th><td><?php echo $entry->page_id ? esc_html( get_the_title( (int) $entry->page_id ) ) : esc_html( $entry->page_url ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Browser', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $entry->user_agent_summary ); ?></td></tr>
+					<?php if ( ! empty( $entry->visitor_uid ) ) : $vrow = \ACPS\SiteToolkit\Visitors::get( $entry->visitor_uid ); ?>
+						<tr><th scope="row"><?php esc_html_e( 'Visitor', 'acps-site-toolkit' ); ?></th>
+						<td><a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-visitors&visitor=' . rawurlencode( $entry->visitor_uid ) ) ); ?>"><?php echo esc_html( $vrow && $vrow->name ? $vrow->name : $entry->visitor_uid ); ?></a></td></tr>
+					<?php endif; ?>
 					</tbody>
 				</table>
 

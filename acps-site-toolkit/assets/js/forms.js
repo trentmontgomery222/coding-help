@@ -60,10 +60,15 @@
 			} )
 			.catch( function () {} );
 
-		// Attach the journey session token so the submission carries the path.
+		// Attach the journey session token and the persistent visitor id so the
+		// submission carries the path and links to the visitor record.
 		var rt = window.ACPS_ST_RT || {};
 		if ( rt.token ) {
 			setVal( form, 'acps_session', rt.token );
+		}
+		var uid = rt.uid || readUidCookie();
+		if ( uid ) {
+			setVal( form, 'acps_uid', uid );
 		}
 	};
 
@@ -404,6 +409,10 @@
 	}
 	function cssEscape( s ) {
 		return String( s ).replace( /"/g, '\\"' );
+	}
+	function readUidCookie() {
+		var m = document.cookie.match( '(^|;)\\s*acps_st_uid\\s*=\\s*([^;]+)' );
+		return m ? decodeURIComponent( m.pop() ) : '';
 	}
 
 	// Expose for feedback.js.

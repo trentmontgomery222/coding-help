@@ -37,6 +37,7 @@ class Admin {
 		add_action( 'admin_post_acps_st_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_acps_st_save_qa', array( $this, 'handle_save_qa' ) );
 		add_action( 'admin_post_acps_st_import_google', array( $this, 'handle_import_google' ) );
+		add_action( 'admin_post_acps_st_visitor_action', array( $this, 'handle_visitor_action' ) );
 		add_action( 'wp_ajax_acps_st_active', array( $this, 'ajax_active' ) );
 	}
 
@@ -107,6 +108,7 @@ class Admin {
 		add_submenu_page( self::SLUG, __( 'Forms', 'acps-site-toolkit' ), __( 'Forms', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-forms', array( $this, 'render_forms' ) );
 		add_submenu_page( self::SLUG, __( 'Entries', 'acps-site-toolkit' ), __( 'Entries', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-entries', array( $this, 'render_entries' ) );
 		add_submenu_page( self::SLUG, __( 'Analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, self::SLUG . '-analytics', array( $this, 'render_analytics' ) );
+		add_submenu_page( self::SLUG, __( 'Visitors', 'acps-site-toolkit' ), __( 'Visitors', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-visitors', array( $this, 'render_visitors' ) );
 		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
 		add_submenu_page( self::SLUG, __( 'Settings', 'acps-site-toolkit' ), __( 'Settings', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-settings', array( $this, 'render_settings' ) );
 		add_submenu_page( self::SLUG, __( 'Help Guide', 'acps-site-toolkit' ), __( 'Help Guide', 'acps-site-toolkit' ), $reports, self::SLUG . '-help', array( $this, 'render_help' ) );
@@ -169,6 +171,32 @@ class Admin {
 	public function render_settings() {
 		$this->require_cap( 'manage_options' );
 		require ACPS_ST_PATH . 'includes/admin/views/settings.php';
+	}
+
+	/**
+	 * Visitors list + single visitor.
+	 */
+	public function render_visitors() {
+		$this->require_cap( 'manage_options' );
+		require ACPS_ST_PATH . 'includes/admin/views/visitors.php';
+	}
+
+	/**
+	 * Save a visitor's name / notes.
+	 */
+	public function handle_visitor_action() {
+		$this->require_cap( 'manage_options' );
+		check_admin_referer( 'acps_st_visitor_action' );
+
+		$uid = isset( $_POST['uid'] ) ? sanitize_text_field( wp_unslash( $_POST['uid'] ) ) : '';
+		if ( isset( $_POST['name'] ) ) {
+			\ACPS\SiteToolkit\Visitors::set_name( $uid, wp_unslash( $_POST['name'] ) ); // phpcs:ignore
+		}
+		if ( isset( $_POST['notes'] ) ) {
+			\ACPS\SiteToolkit\Visitors::set_notes( $uid, wp_unslash( $_POST['notes'] ) ); // phpcs:ignore
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=acps-st-visitors&visitor=' . rawurlencode( $uid ) . '&saved=1' ) );
+		exit;
 	}
 
 	/**
