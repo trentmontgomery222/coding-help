@@ -156,6 +156,30 @@
 	}
 	setInterval( heartbeat, 45 * 1000 );
 
+	// Staff presence: logged-in admins report their location to a SEPARATE
+	// endpoint (not analytics) so admins can see where each other are. Needs the
+	// REST nonce for cookie auth.
+	if ( cfg.presence ) {
+		var presenceUrl = cfg.restUrl.replace( /\/$/, '' ) + '/presence';
+		var sendPresence = function () {
+			if ( document.visibilityState !== 'visible' ) {
+				return;
+			}
+			fetch( presenceUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cfg.restNonce || '' },
+				body: JSON.stringify( {
+					title: document.title,
+					url: location.href,
+					post_id: cfg.postId || 0
+				} )
+			} ).catch( function () {} );
+		};
+		sendPresence();
+		setInterval( sendPresence, 45 * 1000 );
+	}
+
 	// Expose a session token to forms only when tracking is genuinely active
 	// (not suppressed for admins, and consent satisfied).
 	if ( trackingActive() ) {

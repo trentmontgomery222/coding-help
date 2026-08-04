@@ -57,10 +57,21 @@ class Admin {
 				'count' => (int) $p['count'],
 			);
 		}
+
+		$staff     = \ACPS\SiteToolkit\Presence::active( 5 );
+		$staff_out = array();
+		foreach ( $staff as $p ) {
+			$staff_out[] = array(
+				'name' => $p['name'],
+				'page' => $p['title'] ? $p['title'] : $p['url'],
+			);
+		}
+
 		wp_send_json_success(
 			array(
 				'total' => \ACPS\SiteToolkit\Analytics::active_count( 5 ),
 				'pages' => $out,
+				'staff' => $staff_out,
 				'time'  => date_i18n( get_option( 'time_format' ) ),
 			)
 		);

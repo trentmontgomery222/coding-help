@@ -38,6 +38,7 @@ delete_option( 'acps_st_settings' );
 delete_option( 'acps_st_schema_version' );
 delete_option( 'acps_st_version' );
 delete_option( 'acps_st_qa' );
+delete_option( 'acps_st_admin_presence' );
 
 // Clear the scheduled purge.
 wp_clear_scheduled_hook( 'acps_st_daily_purge' );

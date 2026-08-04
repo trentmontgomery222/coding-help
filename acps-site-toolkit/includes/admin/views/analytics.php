@@ -40,6 +40,7 @@ $fmt_time = function ( $seconds ) {
 <?php
 $active_pages = Analytics::active_pages( 5 );
 $active_total = Analytics::active_count( 5 );
+$active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 ?>
 <div class="wrap acps-admin acps-analytics">
 	<h1><?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></h1>
@@ -68,11 +69,33 @@ $active_total = Analytics::active_count( 5 );
 		<p class="description"><?php esc_html_e( 'Last updated:', 'acps-site-toolkit' ); ?> <span data-acps-live-time><?php echo esc_html( date_i18n( get_option( 'time_format' ) ) ); ?></span></p>
 	</div>
 
+	<div class="acps-card acps-live" id="acps-live-staff">
+		<h2>
+			<span class="dashicons dashicons-admin-users" aria-hidden="true"></span>
+			<?php esc_html_e( 'Staff on the site now', 'acps-site-toolkit' ); ?>
+		</h2>
+		<p class="description"><?php esc_html_e( 'Logged-in admins and the page each is currently on. Handy for spotting when a colleague is on a page you’re about to edit. Updates automatically.', 'acps-site-toolkit' ); ?></p>
+		<table class="widefat striped">
+			<caption class="screen-reader-text"><?php esc_html_e( 'Staff currently on the site', 'acps-site-toolkit' ); ?></caption>
+			<thead><tr><th scope="col"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></th><th scope="col"><?php esc_html_e( 'Currently viewing', 'acps-site-toolkit' ); ?></th></tr></thead>
+			<tbody data-acps-staff-body>
+				<?php if ( ! $active_staff ) : ?>
+					<tr><td colspan="2"><?php esc_html_e( 'No other staff on the front of the site right now.', 'acps-site-toolkit' ); ?></td></tr>
+				<?php else : ?>
+					<?php foreach ( $active_staff as $p ) : ?>
+						<tr><td><?php echo esc_html( $p['name'] ); ?></td><td><?php echo esc_html( $p['title'] ? $p['title'] : $p['url'] ); ?></td></tr>
+					<?php endforeach; ?>
+				<?php endif; ?>
+			</tbody>
+		</table>
+	</div>
+
 	<script>
 	( function () {
 		var cfg = window.ACPS_ST_ADMIN || {};
 		if ( ! cfg.ajaxUrl ) { return; }
 		var body = document.querySelector( '[data-acps-live-body]' );
+		var staffBody = document.querySelector( '[data-acps-staff-body]' );
 		var total = document.querySelector( '[data-acps-live-total]' );
 		var timeEl = document.querySelector( '[data-acps-live-time]' );
 		function esc( s ) { var d = document.createElement( 'div' ); d.textContent = s == null ? '' : String( s ); return d.innerHTML; }
@@ -91,6 +114,16 @@ $active_total = Analytics::active_count( 5 );
 						} else {
 							body.innerHTML = d.pages.map( function ( p ) {
 								return '<tr><td>' + esc( p.title ) + '</td><td>' + esc( p.count ) + '</td></tr>';
+							} ).join( '' );
+						}
+					}
+					if ( staffBody ) {
+						var staff = d.staff || [];
+						if ( ! staff.length ) {
+							staffBody.innerHTML = '<tr><td colspan="2"><?php echo esc_js( __( 'No other staff on the front of the site right now.', 'acps-site-toolkit' ) ); ?></td></tr>';
+						} else {
+							staffBody.innerHTML = staff.map( function ( p ) {
+								return '<tr><td>' + esc( p.name ) + '</td><td>' + esc( p.page ) + '</td></tr>';
 							} ).join( '' );
 						}
 					}

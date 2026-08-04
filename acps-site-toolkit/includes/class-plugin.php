@@ -132,6 +132,10 @@ class Plugin {
 			// site — keeps their views out of the numbers and out of the live
 			// "who's on the site" list.
 			'suppress'      => is_user_logged_in() && current_user_can( 'manage_options' ),
+			// Admins report their own location to the separate staff-presence
+			// view (not analytics). Needs a REST nonce for cookie auth.
+			'presence'      => is_user_logged_in() && current_user_can( 'manage_options' ),
+			'restNonce'     => wp_create_nonce( 'wp_rest' ),
 			'consentMode'   => (bool) Settings::get( 'consent_mode' ),
 			'idleMinutes'   => (int) Settings::get( 'session_idle_minutes', 30 ),
 			'recentCount'   => (int) Settings::get( 'recent_pages_count', 3 ),
