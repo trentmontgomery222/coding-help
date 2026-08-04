@@ -36,6 +36,7 @@ class Settings {
 			'trigger_position'      => 'bottom-right', // bottom-right | bottom-left | edge-right | edge-left.
 			'trigger_label'         => 'Chat with us',
 			'trigger_icon_url'      => 'https://acpsmdprod.wpengine.com/wp-content/uploads/2026/08/Untitled-design-1.png',
+			'trigger_icon_hover_url' => '', // shown on hover / focus / while open.
 			'trigger_size'          => 64, // circle diameter (desktop/laptop) in px.
 			'trigger_size_tablet'   => 60, // circle diameter on tablets.
 			'trigger_size_mobile'   => 52, // circle diameter on phones.
@@ -166,7 +167,8 @@ class Settings {
 		$out['trigger_label'] = isset( $input['trigger_label'] ) ? sanitize_text_field( $input['trigger_label'] ) : $defaults['trigger_label'];
 
 		// Trigger appearance.
-		$out['trigger_icon_url'] = isset( $input['trigger_icon_url'] ) ? esc_url_raw( trim( $input['trigger_icon_url'] ) ) : '';
+		$out['trigger_icon_url']       = isset( $input['trigger_icon_url'] ) ? esc_url_raw( trim( $input['trigger_icon_url'] ) ) : '';
+		$out['trigger_icon_hover_url'] = isset( $input['trigger_icon_hover_url'] ) ? esc_url_raw( trim( $input['trigger_icon_hover_url'] ) ) : '';
 		$out['trigger_size']        = max( 24, min( 200, absint( $input['trigger_size'] ?? $defaults['trigger_size'] ) ) );
 		$out['trigger_size_tablet'] = max( 24, min( 200, absint( $input['trigger_size_tablet'] ?? $defaults['trigger_size_tablet'] ) ) );
 		$out['trigger_size_mobile'] = max( 24, min( 200, absint( $input['trigger_size_mobile'] ?? $defaults['trigger_size_mobile'] ) ) );

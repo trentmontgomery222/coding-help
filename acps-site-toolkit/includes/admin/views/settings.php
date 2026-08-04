@@ -83,6 +83,16 @@ $checked = function ( $key ) use ( $s ) {
 				</td>
 			</tr>
 			<tr>
+				<th scope="row"><label for="acps-trigger-icon-hover"><?php esc_html_e( 'Trigger icon URL (hover / open)', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<input type="url" id="acps-trigger-icon-hover" name="<?php echo esc_attr( $name( 'trigger_icon_hover_url' ) ); ?>" value="<?php echo esc_attr( $s['trigger_icon_hover_url'] ); ?>" class="large-text code" placeholder="https://…/icon-hover.png">
+					<p class="description"><?php esc_html_e( 'A second image shown when the button is hovered, focused, or open. Leave blank to keep the resting icon in every state.', 'acps-site-toolkit' ); ?></p>
+					<?php if ( ! empty( $s['trigger_icon_hover_url'] ) ) : ?>
+						<img src="<?php echo esc_url( $s['trigger_icon_hover_url'] ); ?>" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-top:.5rem;border:1px solid #ccd0d4">
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
 				<th scope="row"><?php esc_html_e( 'Button size per device (px)', 'acps-site-toolkit' ); ?></th>
 				<td>
 					<label for="acps-trigger-size"><?php esc_html_e( 'Laptop / desktop', 'acps-site-toolkit' ); ?></label>

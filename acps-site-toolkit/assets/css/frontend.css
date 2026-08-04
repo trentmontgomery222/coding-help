@@ -245,6 +245,18 @@
 	border-radius: 50%;
 	display: block;
 }
+
+/* Two-icon swap: resting icon by default, hover icon on hover / focus / active
+   and while the modal is open. Only one is ever shown. */
+.acps-feedback-trigger--icon.has-hover-icon .acps-icon-hover { display: none; }
+.acps-feedback-trigger--icon.has-hover-icon:hover .acps-icon-rest,
+.acps-feedback-trigger--icon.has-hover-icon:focus-visible .acps-icon-rest,
+.acps-feedback-trigger--icon.has-hover-icon:active .acps-icon-rest { display: none; }
+.acps-feedback-trigger--icon.has-hover-icon:hover .acps-icon-hover,
+.acps-feedback-trigger--icon.has-hover-icon:focus-visible .acps-icon-hover,
+.acps-feedback-trigger--icon.has-hover-icon:active .acps-icon-hover { display: block; }
+.acps-modal-open .acps-feedback-trigger--icon.has-hover-icon .acps-icon-rest { display: none; }
+.acps-modal-open .acps-feedback-trigger--icon.has-hover-icon .acps-icon-hover { display: block; }
 .acps-pos-edge-right .acps-feedback-trigger--icon,
 .acps-pos-edge-left .acps-feedback-trigger--icon { border-radius: 50%; }
 

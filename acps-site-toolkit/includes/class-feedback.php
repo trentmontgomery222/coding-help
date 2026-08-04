@@ -168,6 +168,7 @@ class Feedback {
 		$label     = Settings::get( 'trigger_label', 'Chat with us' );
 		$position  = Settings::get( 'trigger_position', 'bottom-right' );
 		$icon_url  = Settings::get( 'trigger_icon_url', '' );
+		$icon_hover = Settings::get( 'trigger_icon_hover_url', '' );
 		$size      = (int) Settings::get( 'trigger_size', 64 );
 		$bg        = Settings::get( 'trigger_bg', '' );
 		$title     = get_the_title( $post_id );
@@ -192,8 +193,11 @@ class Feedback {
 		<div class="acps-feedback-root acps-pos-<?php echo esc_attr( $position ); ?>" data-current-page-id="<?php echo esc_attr( $post_id ); ?>" data-current-page-title="<?php echo esc_attr( $title ); ?>">
 			<?php if ( $icon_url ) : ?>
 				<?php // Circular icon-only trigger. The label is the accessible name. ?>
-				<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" aria-label="<?php echo esc_attr( $label ); ?>" style="<?php echo esc_attr( $trigger_style ); ?>">
-					<img class="acps-feedback-trigger__img" src="<?php echo esc_url( $icon_url ); ?>" alt="">
+				<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?>" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" aria-label="<?php echo esc_attr( $label ); ?>" style="<?php echo esc_attr( $trigger_style ); ?>">
+					<img class="acps-feedback-trigger__img acps-icon-rest" src="<?php echo esc_url( $icon_url ); ?>" alt="">
+					<?php if ( $icon_hover ) : ?>
+						<img class="acps-feedback-trigger__img acps-icon-hover" src="<?php echo esc_url( $icon_hover ); ?>" alt="" aria-hidden="true">
+					<?php endif; ?>
 				</button>
 			<?php else : ?>
 				<button type="button" class="acps-feedback-trigger" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" style="<?php echo esc_attr( $trigger_style ); ?>">
