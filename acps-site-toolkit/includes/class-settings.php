@@ -74,6 +74,9 @@ class Settings {
 			'spam_challenge_q'      => '',
 			'spam_challenge_a'      => '',
 
+			// Help.
+			'help_guide_url'        => '', // optional external help guide link.
+
 			// Capabilities.
 			'editors_view_reports'  => 0, // grant read-only feedback/analytics to editors (spec §9.1).
 
@@ -172,6 +175,8 @@ class Settings {
 
 		// Custom CSS: strip any tags so it can't break out of the <style> block.
 		$out['custom_css'] = isset( $input['custom_css'] ) ? wp_strip_all_tags( (string) $input['custom_css'] ) : '';
+
+		$out['help_guide_url'] = isset( $input['help_guide_url'] ) ? esc_url_raw( trim( $input['help_guide_url'] ) ) : '';
 
 		// Page ID lists.
 		foreach ( array( 'trigger_pages' ) as $key ) {

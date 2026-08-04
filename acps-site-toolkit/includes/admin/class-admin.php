@@ -70,6 +70,7 @@ class Admin {
 		add_submenu_page( self::SLUG, __( 'Analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, self::SLUG . '-analytics', array( $this, 'render_analytics' ) );
 		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
 		add_submenu_page( self::SLUG, __( 'Settings', 'acps-site-toolkit' ), __( 'Settings', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-settings', array( $this, 'render_settings' ) );
+		add_submenu_page( self::SLUG, __( 'Help Guide', 'acps-site-toolkit' ), __( 'Help Guide', 'acps-site-toolkit' ), $reports, self::SLUG . '-help', array( $this, 'render_help' ) );
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -127,6 +128,14 @@ class Admin {
 	public function render_settings() {
 		$this->require_cap( 'manage_options' );
 		require ACPS_ST_PATH . 'includes/admin/views/settings.php';
+	}
+
+	/**
+	 * Built-in Help Guide.
+	 */
+	public function render_help() {
+		$this->require_cap( $this->reports_cap() );
+		require ACPS_ST_PATH . 'includes/admin/views/help-guide.php';
 	}
 
 	/**

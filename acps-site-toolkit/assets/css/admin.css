@@ -110,6 +110,14 @@
 
 .acps-filters { margin: 1rem 0; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 
+/* Help guide */
+.acps-help { max-width: 60rem; }
+.acps-help .acps-card h2 { margin-top: 0; }
+.acps-help .ul-disc { list-style: disc; margin-left: 1.5rem; }
+.acps-help nav ul { columns: 2; margin: 0; }
+@media ( max-width: 782px ) { .acps-help nav ul { columns: 1; } }
+.acps-help code { background: #f0f0f1; padding: 0.05rem 0.35rem; border-radius: 3px; }
+
 /* Q&A editor rows */
 .acps-qa-row {
 	background: #fff;

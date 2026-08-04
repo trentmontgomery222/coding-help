@@ -216,6 +216,17 @@ $checked = function ( $key ) use ( $s ) {
 			</tr>
 		</table>
 
+		<h2 class="title"><?php esc_html_e( 'Help', 'acps-site-toolkit' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><label for="acps-help-url"><?php esc_html_e( 'Help Guide URL', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<input type="url" id="acps-help-url" name="<?php echo esc_attr( $name( 'help_guide_url' ) ); ?>" value="<?php echo esc_attr( $s['help_guide_url'] ); ?>" class="large-text code" placeholder="https://…">
+					<p class="description"><?php esc_html_e( 'Optional link to your own help doc/video. When set, a button to it appears on the built-in Help Guide page. Leave blank to use only the built-in guide (Site Toolkit → Help Guide).', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+		</table>
+
 		<h2 class="title"><?php esc_html_e( 'Access & data', 'acps-site-toolkit' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>
