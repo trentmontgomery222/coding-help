@@ -92,7 +92,7 @@ class Access {
 				<div class="acps-modal" role="dialog" aria-modal="true" aria-labelledby="acps-token-popup-title" tabindex="-1">
 					<div class="acps-modal__header">
 						<h2 class="acps-modal__title" id="acps-token-popup-title"><?php echo esc_html( $form->title ); ?></h2>
-						<button type="button" class="acps-modal__close" aria-label="<?php esc_attr_e( 'Close', 'acps-site-toolkit' ); ?>">&times;</button>
+						<?php // Shared-link popup has no close (X); it is the reason the visitor is here. Esc still dismisses it. ?>
 					</div>
 					<div class="acps-modal__body">
 						<?php echo $form_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
