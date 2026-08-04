@@ -29,6 +29,15 @@ if ( ! $form ) {
 $types      = Field_Types::all();
 $fields_json = wp_json_encode( array_values( Field_Types::normalize_list( $form->fields ) ) );
 $saved       = isset( $_GET['saved'] ); // phpcs:ignore WordPress.Security.NonceVerification
+
+// Always work from a complete, well-typed settings array so a form saved by an
+// older version (or with unexpected data) can never fatal the editor on a
+// missing key or a non-array value.
+$settings = wp_parse_args( is_array( $form->settings ) ? $form->settings : array(), Form::default_settings() );
+if ( ! is_array( $settings['style'] ) ) {
+	$settings['style'] = array( 'accent' => '', 'width' => 'full' );
+}
+$settings['style'] = wp_parse_args( $settings['style'], array( 'accent' => '', 'width' => 'full' ) );
 ?>
 <div class="wrap acps-admin acps-builder">
 	<h1><?php echo $form->id ? esc_html__( 'Edit form', 'acps-site-toolkit' ) : esc_html__( 'New form', 'acps-site-toolkit' ); ?></h1>
@@ -112,53 +121,53 @@ $saved       = isset( $_GET['saved'] ); // phpcs:ignore WordPress.Security.Nonce
 			<table class="form-table" role="presentation">
 				<tr>
 					<th scope="row"><label for="acps-submit-label"><?php esc_html_e( 'Submit button label', 'acps-site-toolkit' ); ?></label></th>
-					<td><input type="text" id="acps-submit-label" name="settings[submit_label]" value="<?php echo esc_attr( $form->settings['submit_label'] ); ?>" class="regular-text"></td>
+					<td><input type="text" id="acps-submit-label" name="settings[submit_label]" value="<?php echo esc_attr( $settings['submit_label'] ); ?>" class="regular-text"></td>
 				</tr>
 				<tr>
 					<th scope="row"><label for="acps-confirm-type"><?php esc_html_e( 'On submit', 'acps-site-toolkit' ); ?></label></th>
 					<td>
 						<select id="acps-confirm-type" name="settings[confirmation_type]">
-							<option value="message" <?php selected( $form->settings['confirmation_type'], 'message' ); ?>><?php esc_html_e( 'Show a message', 'acps-site-toolkit' ); ?></option>
-							<option value="redirect" <?php selected( $form->settings['confirmation_type'], 'redirect' ); ?>><?php esc_html_e( 'Redirect to a URL', 'acps-site-toolkit' ); ?></option>
-							<option value="both" <?php selected( $form->settings['confirmation_type'], 'both' ); ?>><?php esc_html_e( 'Message, then redirect', 'acps-site-toolkit' ); ?></option>
+							<option value="message" <?php selected( $settings['confirmation_type'], 'message' ); ?>><?php esc_html_e( 'Show a message', 'acps-site-toolkit' ); ?></option>
+							<option value="redirect" <?php selected( $settings['confirmation_type'], 'redirect' ); ?>><?php esc_html_e( 'Redirect to a URL', 'acps-site-toolkit' ); ?></option>
+							<option value="both" <?php selected( $settings['confirmation_type'], 'both' ); ?>><?php esc_html_e( 'Message, then redirect', 'acps-site-toolkit' ); ?></option>
 						</select>
 					</td>
 				</tr>
 				<tr>
 					<th scope="row"><label for="acps-confirm-msg"><?php esc_html_e( 'Confirmation message', 'acps-site-toolkit' ); ?></label></th>
-					<td><textarea id="acps-confirm-msg" name="settings[confirmation_message]" rows="2" class="large-text"><?php echo esc_textarea( $form->settings['confirmation_message'] ); ?></textarea></td>
+					<td><textarea id="acps-confirm-msg" name="settings[confirmation_message]" rows="2" class="large-text"><?php echo esc_textarea( $settings['confirmation_message'] ); ?></textarea></td>
 				</tr>
 				<tr>
 					<th scope="row"><label for="acps-confirm-redirect"><?php esc_html_e( 'Redirect URL', 'acps-site-toolkit' ); ?></label></th>
-					<td><input type="url" id="acps-confirm-redirect" name="settings[confirmation_redirect]" value="<?php echo esc_attr( $form->settings['confirmation_redirect'] ); ?>" class="regular-text"></td>
+					<td><input type="url" id="acps-confirm-redirect" name="settings[confirmation_redirect]" value="<?php echo esc_attr( $settings['confirmation_redirect'] ); ?>" class="regular-text"></td>
 				</tr>
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Multi-page', 'acps-site-toolkit' ); ?></th>
-					<td><label><input type="checkbox" name="settings[multipage]" value="1" <?php checked( $form->settings['multipage'] ); ?>> <?php esc_html_e( 'Split into pages using each field\'s page number, with a "Step X of Y" indicator', 'acps-site-toolkit' ); ?></label></td>
+					<td><label><input type="checkbox" name="settings[multipage]" value="1" <?php checked( $settings['multipage'] ); ?>> <?php esc_html_e( 'Split into pages using each field\'s page number, with a "Step X of Y" indicator', 'acps-site-toolkit' ); ?></label></td>
 				</tr>
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Admin notification', 'acps-site-toolkit' ); ?></th>
-					<td><label><input type="checkbox" name="settings[notify_admin]" value="1" <?php checked( $form->settings['notify_admin'] ); ?>> <?php esc_html_e( 'Email an admin on each submission', 'acps-site-toolkit' ); ?></label></td>
+					<td><label><input type="checkbox" name="settings[notify_admin]" value="1" <?php checked( $settings['notify_admin'] ); ?>> <?php esc_html_e( 'Email an admin on each submission', 'acps-site-toolkit' ); ?></label></td>
 				</tr>
 				<tr>
 					<th scope="row"><label for="acps-notify-to"><?php esc_html_e( 'Notification recipients', 'acps-site-toolkit' ); ?></label></th>
-					<td><input type="text" id="acps-notify-to" name="settings[notify_recipients]" value="<?php echo esc_attr( $form->settings['notify_recipients'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>"><p class="description"><?php esc_html_e( 'Comma-separated. Leave blank to use the site default.', 'acps-site-toolkit' ); ?></p></td>
+					<td><input type="text" id="acps-notify-to" name="settings[notify_recipients]" value="<?php echo esc_attr( $settings['notify_recipients'] ); ?>" class="regular-text" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>"><p class="description"><?php esc_html_e( 'Comma-separated. Leave blank to use the site default.', 'acps-site-toolkit' ); ?></p></td>
 				</tr>
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Auto-reply', 'acps-site-toolkit' ); ?></th>
 					<td>
-						<label><input type="checkbox" name="settings[autoreply_enable]" value="1" <?php checked( $form->settings['autoreply_enable'] ); ?>> <?php esc_html_e( 'Send an auto-reply to the submitter', 'acps-site-toolkit' ); ?></label>
+						<label><input type="checkbox" name="settings[autoreply_enable]" value="1" <?php checked( $settings['autoreply_enable'] ); ?>> <?php esc_html_e( 'Send an auto-reply to the submitter', 'acps-site-toolkit' ); ?></label>
 						<p><label for="acps-autoreply-field"><?php esc_html_e( 'Email field key', 'acps-site-toolkit' ); ?></label>
-						<input type="text" id="acps-autoreply-field" name="settings[autoreply_field]" value="<?php echo esc_attr( $form->settings['autoreply_field'] ); ?>" class="regular-text" placeholder="contact_email"></p>
+						<input type="text" id="acps-autoreply-field" name="settings[autoreply_field]" value="<?php echo esc_attr( $settings['autoreply_field'] ); ?>" class="regular-text" placeholder="contact_email"></p>
 						<p><label for="acps-autoreply-subject"><?php esc_html_e( 'Subject', 'acps-site-toolkit' ); ?></label>
-						<input type="text" id="acps-autoreply-subject" name="settings[autoreply_subject]" value="<?php echo esc_attr( $form->settings['autoreply_subject'] ); ?>" class="regular-text"></p>
+						<input type="text" id="acps-autoreply-subject" name="settings[autoreply_subject]" value="<?php echo esc_attr( $settings['autoreply_subject'] ); ?>" class="regular-text"></p>
 						<p><label for="acps-autoreply-body"><?php esc_html_e( 'Body (merge tags: {form_title}, {field:key})', 'acps-site-toolkit' ); ?></label>
-						<textarea id="acps-autoreply-body" name="settings[autoreply_body]" rows="3" class="large-text"><?php echo esc_textarea( $form->settings['autoreply_body'] ); ?></textarea></p>
+						<textarea id="acps-autoreply-body" name="settings[autoreply_body]" rows="3" class="large-text"><?php echo esc_textarea( $settings['autoreply_body'] ); ?></textarea></p>
 					</td>
 				</tr>
 				<tr>
 					<th scope="row"><label for="acps-accent"><?php esc_html_e( 'Accent colour', 'acps-site-toolkit' ); ?></label></th>
-					<td><input type="text" id="acps-accent" name="settings[style_accent]" value="<?php echo esc_attr( $form->settings['style']['accent'] ); ?>" placeholder="#0b5fa5"><p class="description"><?php esc_html_e( 'Leave blank to inherit the theme.', 'acps-site-toolkit' ); ?></p></td>
+					<td><input type="text" id="acps-accent" name="settings[style_accent]" value="<?php echo esc_attr( $settings['style']['accent'] ); ?>" placeholder="#0b5fa5"><p class="description"><?php esc_html_e( 'Leave blank to inherit the theme.', 'acps-site-toolkit' ); ?></p></td>
 				</tr>
 			</table>
 
