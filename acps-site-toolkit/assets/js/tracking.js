@@ -62,6 +62,10 @@
 		if ( ! cfg.tracking ) {
 			return false;
 		}
+		// Logged-in admins are excluded from analytics entirely.
+		if ( cfg.suppress ) {
+			return false;
+		}
 		if ( cfg.consentMode && ! hasConsent() ) {
 			return false;
 		}
@@ -130,9 +134,31 @@
 		send( '/unload', { session: runtime.token, seconds: seconds }, true );
 	}
 
-	// Even when tracking is inactive, expose a token to forms IF tracking is
-	// simply disabled by consent — but never write a session server-side.
-	if ( cfg.tracking && ( ! cfg.consentMode || hasConsent() ) ) {
+	// Heartbeat: keep the session "active" while the tab is visible, so the live
+	// view stays accurate even when the visitor doesn't navigate. Stops after a
+	// stretch of inactivity to avoid pinging forever on an abandoned tab.
+	var lastInteraction = Date.now();
+	[ 'mousemove', 'keydown', 'scroll', 'touchstart', 'click' ].forEach( function ( evt ) {
+		window.addEventListener( evt, function () { lastInteraction = Date.now(); }, { passive: true } );
+	} );
+	function heartbeat() {
+		if ( ! runtime.active || ! runtime.token ) {
+			return;
+		}
+		if ( document.visibilityState !== 'visible' ) {
+			return;
+		}
+		// Only if the visitor interacted in the last 5 minutes.
+		if ( Date.now() - lastInteraction > 5 * 60 * 1000 ) {
+			return;
+		}
+		send( '/ping', { session: runtime.token }, false );
+	}
+	setInterval( heartbeat, 45 * 1000 );
+
+	// Expose a session token to forms only when tracking is genuinely active
+	// (not suppressed for admins, and consent satisfied).
+	if ( trackingActive() ) {
 		runtime.token = getToken();
 	}
 

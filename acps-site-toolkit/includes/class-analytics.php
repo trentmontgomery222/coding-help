@@ -256,6 +256,83 @@ class Analytics {
 	}
 
 	/**
+	 * Sessions active within the last N minutes, each with the page they are
+	 * currently viewing (their latest visit). Powers the live "who's on the
+	 * site now" view (spec-adjacent; keeps admins from editing pages in use).
+	 *
+	 * @param int $minutes Activity window.
+	 * @return array[] Each: title, url, post_id, device, seconds_ago.
+	 */
+	public static function active_sessions( $minutes = 5 ) {
+		global $wpdb;
+		$sessions = Schema::table( 'sessions' );
+		$visits   = Schema::table( 'visits' );
+
+		$minutes = max( 1, min( 60, (int) $minutes ) );
+		$cutoff  = gmdate( 'Y-m-d H:i:s', current_time( 'timestamp' ) - $minutes * MINUTE_IN_SECONDS ); // phpcs:ignore WordPress.DateTime
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT id, device_type, last_activity_at FROM {$sessions} WHERE last_activity_at >= %s ORDER BY last_activity_at DESC LIMIT 200",
+				$cutoff
+			)
+		);
+		if ( ! $rows ) {
+			return array();
+		}
+
+		$now = current_time( 'timestamp' ); // phpcs:ignore WordPress.DateTime
+		$out = array();
+		foreach ( $rows as $s ) {
+			$visit = $wpdb->get_row( // phpcs:ignore WordPress.DB
+				$wpdb->prepare( "SELECT title, url, post_id FROM {$visits} WHERE session_id = %d ORDER BY seq_index DESC LIMIT 1", $s->id )
+			);
+			$out[] = array(
+				'title'       => $visit ? ( $visit->title ? $visit->title : $visit->url ) : __( '(unknown page)', 'acps-site-toolkit' ),
+				'url'         => $visit ? $visit->url : '',
+				'post_id'     => $visit ? (int) $visit->post_id : 0,
+				'device'      => $s->device_type ? $s->device_type : '—',
+				'seconds_ago' => max( 0, $now - strtotime( $s->last_activity_at ) ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Count of currently-active sessions.
+	 *
+	 * @param int $minutes Window.
+	 * @return int
+	 */
+	public static function active_count( $minutes = 5 ) {
+		global $wpdb;
+		$sessions = Schema::table( 'sessions' );
+		$minutes  = max( 1, min( 60, (int) $minutes ) );
+		$cutoff   = gmdate( 'Y-m-d H:i:s', current_time( 'timestamp' ) - $minutes * MINUTE_IN_SECONDS ); // phpcs:ignore WordPress.DateTime
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$sessions} WHERE last_activity_at >= %s", $cutoff ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
+	 * Aggregate active viewers grouped by page — “N people are on this page”.
+	 *
+	 * @param int $minutes Window.
+	 * @return array[] Each: title, url, post_id, count.
+	 */
+	public static function active_pages( $minutes = 5 ) {
+		$sessions = self::active_sessions( $minutes );
+		$grouped  = array();
+		foreach ( $sessions as $s ) {
+			$key = $s['post_id'] ? 'p' . $s['post_id'] : 'u' . md5( $s['url'] );
+			if ( ! isset( $grouped[ $key ] ) ) {
+				$grouped[ $key ] = array( 'title' => $s['title'], 'url' => $s['url'], 'post_id' => $s['post_id'], 'count' => 0 );
+			}
+			$grouped[ $key ]['count']++;
+		}
+		usort( $grouped, function ( $a, $b ) { return $b['count'] <=> $a['count']; } );
+		return array_values( $grouped );
+	}
+
+	/**
 	 * Feedback counts per page (non-spam, non-trashed feedback entries).
 	 *
 	 * @return array Map post_id => count.

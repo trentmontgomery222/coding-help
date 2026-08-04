@@ -35,9 +35,69 @@ $fmt_time = function ( $seconds ) {
 	return floor( $seconds / 60 ) . 'm ' . ( $seconds % 60 ) . 's';
 };
 ?>
+<?php
+$active_pages = Analytics::active_pages( 5 );
+$active_total = Analytics::active_count( 5 );
+?>
 <div class="wrap acps-admin acps-analytics">
 	<h1><?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></h1>
 	<p class="description"><?php esc_html_e( 'Sorted by the feedback/traffic overlay: pages with heavy traffic and clustered feedback rise to the top of the fix list.', 'acps-site-toolkit' ); ?></p>
+
+	<div class="acps-card acps-live" id="acps-live">
+		<h2>
+			<span class="acps-live-dot" aria-hidden="true"></span>
+			<?php esc_html_e( 'Who’s on the site now', 'acps-site-toolkit' ); ?>
+			<span class="acps-live-count" data-acps-live-total><?php echo esc_html( $active_total ); ?></span>
+		</h2>
+		<p class="description"><?php esc_html_e( 'Live view of pages being read right now (excludes logged-in admins). Handy before you edit a page someone is on. Updates automatically.', 'acps-site-toolkit' ); ?></p>
+		<table class="widefat striped">
+			<caption class="screen-reader-text"><?php esc_html_e( 'Pages currently being viewed', 'acps-site-toolkit' ); ?></caption>
+			<thead><tr><th scope="col"><?php esc_html_e( 'Page', 'acps-site-toolkit' ); ?></th><th scope="col"><?php esc_html_e( 'Viewers', 'acps-site-toolkit' ); ?></th></tr></thead>
+			<tbody data-acps-live-body>
+				<?php if ( ! $active_pages ) : ?>
+					<tr><td colspan="2"><?php esc_html_e( 'No active visitors right now.', 'acps-site-toolkit' ); ?></td></tr>
+				<?php else : ?>
+					<?php foreach ( $active_pages as $p ) : ?>
+						<tr><td><?php echo esc_html( $p['title'] ); ?></td><td><?php echo esc_html( $p['count'] ); ?></td></tr>
+					<?php endforeach; ?>
+				<?php endif; ?>
+			</tbody>
+		</table>
+		<p class="description"><?php esc_html_e( 'Last updated:', 'acps-site-toolkit' ); ?> <span data-acps-live-time><?php echo esc_html( date_i18n( get_option( 'time_format' ) ) ); ?></span></p>
+	</div>
+
+	<script>
+	( function () {
+		var cfg = window.ACPS_ST_ADMIN || {};
+		if ( ! cfg.ajaxUrl ) { return; }
+		var body = document.querySelector( '[data-acps-live-body]' );
+		var total = document.querySelector( '[data-acps-live-total]' );
+		var timeEl = document.querySelector( '[data-acps-live-time]' );
+		function esc( s ) { var d = document.createElement( 'div' ); d.textContent = s == null ? '' : String( s ); return d.innerHTML; }
+		function refresh() {
+			var url = cfg.ajaxUrl + '?action=acps_st_active&nonce=' + encodeURIComponent( cfg.nonce );
+			fetch( url, { credentials: 'same-origin' } )
+				.then( function ( r ) { return r.json(); } )
+				.then( function ( res ) {
+					if ( ! res || ! res.success ) { return; }
+					var d = res.data;
+					if ( total ) { total.textContent = d.total; }
+					if ( timeEl ) { timeEl.textContent = d.time; }
+					if ( body ) {
+						if ( ! d.pages.length ) {
+							body.innerHTML = '<tr><td colspan="2"><?php echo esc_js( __( 'No active visitors right now.', 'acps-site-toolkit' ) ); ?></td></tr>';
+						} else {
+							body.innerHTML = d.pages.map( function ( p ) {
+								return '<tr><td>' + esc( p.title ) + '</td><td>' + esc( p.count ) + '</td></tr>';
+							} ).join( '' );
+						}
+					}
+				} )
+				.catch( function () {} );
+		}
+		setInterval( refresh, 20000 );
+	} )();
+	</script>
 
 	<?php if ( $focus && $paths ) : ?>
 		<div class="acps-card">

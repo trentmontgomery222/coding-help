@@ -37,6 +37,33 @@ class Admin {
 		add_action( 'admin_post_acps_st_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_acps_st_save_qa', array( $this, 'handle_save_qa' ) );
 		add_action( 'admin_post_acps_st_import_google', array( $this, 'handle_import_google' ) );
+		add_action( 'wp_ajax_acps_st_active', array( $this, 'ajax_active' ) );
+	}
+
+	/**
+	 * AJAX: return the live "who's on the site now" data for auto-refresh.
+	 */
+	public function ajax_active() {
+		if ( ! current_user_can( $this->reports_cap() ) ) {
+			wp_send_json_error( array( 'message' => 'forbidden' ), 403 );
+		}
+		check_ajax_referer( 'acps_st_admin', 'nonce' );
+
+		$pages = \ACPS\SiteToolkit\Analytics::active_pages( 5 );
+		$out   = array();
+		foreach ( $pages as $p ) {
+			$out[] = array(
+				'title' => $p['title'],
+				'count' => (int) $p['count'],
+			);
+		}
+		wp_send_json_success(
+			array(
+				'total' => \ACPS\SiteToolkit\Analytics::active_count( 5 ),
+				'pages' => $out,
+				'time'  => date_i18n( get_option( 'time_format' ) ),
+			)
+		);
 	}
 
 	/**

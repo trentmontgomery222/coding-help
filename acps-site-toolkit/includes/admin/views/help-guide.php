@@ -160,6 +160,8 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 		<h2>10. <?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></h2>
 		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Site Toolkit → Analytics. The main table is sorted by the feedback/traffic overlay — pages with lots of traffic AND feedback rise to the top. Click “View” on a page for its came-from / went-to paths. Below are common paths, possible dead ends, and a 30-day trend. Every table is the accessible version of the data.', 'acps-site-toolkit' ); ?></p>
 		<p><?php esc_html_e( 'Note: analytics fills in from real visits on the live (cached) site — you may see little data in staging.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Who’s on the site now:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'the live card at the top of Analytics shows pages being read right now (auto-updating) so you can avoid editing a page someone is on.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Logged-in admins are not counted', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'in analytics or the live view — your own browsing won’t skew the numbers.', 'acps-site-toolkit' ); ?></p>
 	</div>
 
 	<div class="acps-card" id="settings">

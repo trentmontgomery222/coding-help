@@ -92,6 +92,20 @@ class Session {
 	}
 
 	/**
+	 * Bump a session's last-activity timestamp (heartbeat).
+	 *
+	 * @param int $session_id Session id.
+	 */
+	public static function touch( $session_id ) {
+		global $wpdb;
+		$wpdb->update( // phpcs:ignore WordPress.DB
+			Schema::table( 'sessions' ),
+			array( 'last_activity_at' => current_time( 'mysql' ) ),
+			array( 'id' => absint( $session_id ) )
+		);
+	}
+
+	/**
 	 * Validate a session token format (40 hex chars).
 	 *
 	 * @param string $token Raw token.

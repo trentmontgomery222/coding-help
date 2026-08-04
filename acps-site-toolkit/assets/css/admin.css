@@ -33,6 +33,24 @@
 
 .acps-path { margin: 0; padding-left: 1.25rem; }
 
+/* Live "who's on the site now" */
+.acps-live h2 { display: flex; align-items: center; gap: 0.5rem; }
+.acps-live-count {
+	display: inline-flex; align-items: center; justify-content: center;
+	min-width: 1.75rem; height: 1.75rem; padding: 0 0.4rem;
+	background: #2271b1; color: #fff; border-radius: 999px; font-size: 0.9rem;
+}
+.acps-live-dot {
+	width: 0.7rem; height: 0.7rem; border-radius: 50%; background: #46b450;
+	box-shadow: 0 0 0 0 rgba( 70, 180, 80, 0.6 ); animation: acps-pulse 2s infinite;
+}
+@keyframes acps-pulse {
+	0% { box-shadow: 0 0 0 0 rgba( 70, 180, 80, 0.6 ); }
+	70% { box-shadow: 0 0 0 8px rgba( 70, 180, 80, 0 ); }
+	100% { box-shadow: 0 0 0 0 rgba( 70, 180, 80, 0 ); }
+}
+@media ( prefers-reduced-motion: reduce ) { .acps-live-dot { animation: none; } }
+
 .acps-detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; }
 @media ( max-width: 960px ) { .acps-detail-grid { grid-template-columns: 1fr; } }
 

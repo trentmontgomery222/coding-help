@@ -55,6 +55,16 @@ class REST_Controller {
 
 		register_rest_route(
 			$ns,
+			'/ping',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'ping' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		register_rest_route(
+			$ns,
 			'/token',
 			array(
 				'methods'             => 'GET',
@@ -208,6 +218,28 @@ class REST_Controller {
 			Tracking::record_unload( $session, isset( $params['seconds'] ) ? absint( $params['seconds'] ) : 0 );
 		}
 		return new \WP_REST_Response( array( 'ok' => true ), 200 );
+	}
+
+	/**
+	 * POST /ping — heartbeat that keeps a session marked "active" while the tab
+	 * is open, so the live "who's on the site now" view is accurate even when a
+	 * visitor stays on one page. Lookup-only: never creates a session.
+	 *
+	 * @param \WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function ping( $req ) {
+		$this->no_cache();
+		if ( ! Settings::get( 'tracking_enabled' ) ) {
+			return new \WP_REST_Response( array( 'ok' => false ), 200 );
+		}
+		$params  = $req->get_json_params();
+		$params  = is_array( $params ) ? $params : $req->get_params();
+		$session = Session::lookup( isset( $params['session'] ) ? $params['session'] : '' );
+		if ( $session ) {
+			Session::touch( $session );
+		}
+		return new \WP_REST_Response( array( 'ok' => (bool) $session ), 200 );
 	}
 
 	/**
