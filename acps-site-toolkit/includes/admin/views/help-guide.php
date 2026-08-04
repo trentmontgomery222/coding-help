@@ -74,7 +74,8 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 		<ul class="ul-disc">
 			<li><?php esc_html_e( 'Show on all pages / only specific pages / all except some.', 'acps-site-toolkit' ); ?></li>
 			<li><?php esc_html_e( 'Position (corner or edge tab) and the label (used as the button’s screen-reader name).', 'acps-site-toolkit' ); ?></li>
-			<li><?php esc_html_e( 'Icon image URL, circle size per device (laptop/tablet/phone), and background colour.', 'acps-site-toolkit' ); ?></li>
+			<li><?php esc_html_e( 'Icon image URL, plus a second “hover / open” icon that swaps in on hover, focus, or while the popup is open.', 'acps-site-toolkit' ); ?></li>
+			<li><?php esc_html_e( 'Circle size per device (laptop / tablet / phone) and background colour — or tick “Transparent background” for just the icon with no circle, ring or shadow.', 'acps-site-toolkit' ); ?></li>
 			<li><?php esc_html_e( 'Popup width (default 1200px on laptop; shrinks to fit smaller screens).', 'acps-site-toolkit' ); ?></li>
 		</ul>
 	</div>
@@ -160,14 +161,16 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 		<h2>10. <?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></h2>
 		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Site Toolkit → Analytics. The main table is sorted by the feedback/traffic overlay — pages with lots of traffic AND feedback rise to the top. Click “View” on a page for its came-from / went-to paths. Below are common paths, possible dead ends, and a 30-day trend. Every table is the accessible version of the data.', 'acps-site-toolkit' ); ?></p>
 		<p><?php esc_html_e( 'Note: analytics fills in from real visits on the live (cached) site — you may see little data in staging.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Devices, browsers & operating systems:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'a card breaks down sessions, views and average time on page by device type, browser, and OS.', 'acps-site-toolkit' ); ?></p>
 		<p><strong><?php esc_html_e( 'Who’s on the site now:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'the live card at the top of Analytics shows pages being read right now (auto-updating) so you can avoid editing a page someone is on.', 'acps-site-toolkit' ); ?></p>
-		<p><strong><?php esc_html_e( 'Logged-in admins are not counted', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'in analytics or the live view — your own browsing won’t skew the numbers.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Staff on the site now:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'a separate live card lists logged-in admins and the page each is currently viewing — so you can tell when a colleague is on a page you’re about to edit.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Logged-in admins are not counted', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'in analytics or the visitor live view — your own browsing won’t skew the numbers (you still appear in the staff card).', 'acps-site-toolkit' ); ?></p>
 	</div>
 
 	<div class="acps-card" id="settings">
 		<h2>11. <?php esc_html_e( 'Settings reference', 'acps-site-toolkit' ); ?></h2>
 		<ul class="ul-disc">
-			<li><strong><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'button visibility, position, label, icon URL, per-device size, popup width, categories, recent-pages count, notification emails.', 'acps-site-toolkit' ); ?></li>
+			<li><strong><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'button visibility, position, label, resting + hover icon URLs, per-device size, background colour or transparent, popup width, categories, recent-pages count, notification emails.', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Journey tracking & privacy', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'turn tracking on/off, consent mode, session idle window, data retention (auto-purge), and how much of the user agent to store.', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Spam prevention', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'honeypot, time trap, rate limit, keyword blocklist, and an optional plain-text question. No image CAPTCHA.', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Stylesheet', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'the full front-end CSS, editable. Keep the honeypot and focus-outline rules.', 'acps-site-toolkit' ); ?></li>
