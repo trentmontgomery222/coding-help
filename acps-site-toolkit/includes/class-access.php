@@ -42,8 +42,29 @@ class Access {
 			'password_hash'    => '',
 			'require_token'    => 0,
 			'token'            => '',
+			'page_id'          => 0, // the page where this form is placed (for the secret link).
 			'denied_message'   => '',
 		);
+	}
+
+	/**
+	 * Build the shareable secret link for a form: the permalink of the page the
+	 * form is placed on, with the access key appended. Falls back to the site
+	 * root when no page has been chosen (with a note in the UI to pick one).
+	 *
+	 * @param Form $form Form.
+	 * @return string
+	 */
+	public static function secret_link( Form $form ) {
+		$a = self::config( $form );
+		if ( empty( $a['token'] ) ) {
+			return '';
+		}
+		$base = ! empty( $a['page_id'] ) ? get_permalink( (int) $a['page_id'] ) : '';
+		if ( ! $base ) {
+			$base = home_url( '/' );
+		}
+		return add_query_arg( 'acps_key', $a['token'], $base );
 	}
 
 	/**

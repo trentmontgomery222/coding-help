@@ -272,6 +272,7 @@ class Admin {
 		$access['require_password'] = empty( $in_access['require_password'] ) ? 0 : 1;
 		$access['require_token']    = empty( $in_access['require_token'] ) ? 0 : 1;
 		$access['roles']            = ! empty( $in_access['roles'] ) ? array_map( 'sanitize_key', (array) $in_access['roles'] ) : array();
+		$access['page_id']          = isset( $in_access['page_id'] ) ? absint( $in_access['page_id'] ) : 0;
 		$access['denied_message']   = isset( $in_access['denied_message'] ) ? sanitize_text_field( $in_access['denied_message'] ) : '';
 
 		// Password: hash a newly-typed one; otherwise keep the existing hash.
