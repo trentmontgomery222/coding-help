@@ -195,31 +195,29 @@ $saved       = isset( $_GET['saved'] ); // phpcs:ignore WordPress.Security.Nonce
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Secret link', 'acps-site-toolkit' ); ?></th>
 					<td>
-						<label><input type="checkbox" name="settings[access][require_token]" value="1" <?php checked( ! empty( $access['require_token'] ) ); ?>> <?php esc_html_e( 'Only accessible via a private link', 'acps-site-toolkit' ); ?></label>
+						<label><input type="checkbox" name="settings[access][require_token]" value="1" <?php checked( ! empty( $access['require_token'] ) ); ?>> <?php esc_html_e( 'Share via a private link', 'acps-site-toolkit' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Anyone who opens the link sees this form pop up automatically — no need to place it on a page. By default the link opens on your home page.', 'acps-site-toolkit' ); ?></p>
 
 						<p style="margin-top:.6rem">
-							<label for="acps-access-page"><?php esc_html_e( 'Page where you placed this form', 'acps-site-toolkit' ); ?></label><br>
+							<label for="acps-access-page"><?php esc_html_e( 'Open the popup on (optional)', 'acps-site-toolkit' ); ?></label><br>
 							<?php
 							wp_dropdown_pages(
 								array(
 									'id'                => 'acps-access-page',
 									'name'              => 'settings[access][page_id]',
 									'selected'          => (int) $access['page_id'],
-									'show_option_none'  => __( '— Select the page —', 'acps-site-toolkit' ),
+									'show_option_none'  => __( 'Home page (default)', 'acps-site-toolkit' ),
 									'option_none_value' => 0,
 								)
 							);
 							?>
-							<span class="description"><?php esc_html_e( 'Required for the link to work — it must point at the page that actually contains the form (via shortcode, block, or Beaver module).', 'acps-site-toolkit' ); ?></span>
+							<span class="description"><?php esc_html_e( 'The page the link lands on before the popup opens. Leave as Home page unless you want a specific one.', 'acps-site-toolkit' ); ?></span>
 						</p>
 
 						<?php if ( ! empty( $access['require_token'] ) && ! empty( $access['token'] ) ) : ?>
 							<?php $secret_link = \ACPS\SiteToolkit\Access::secret_link( $form ); ?>
 							<p class="description"><strong><?php esc_html_e( 'Share this link:', 'acps-site-toolkit' ); ?></strong></p>
 							<input type="text" readonly class="large-text code" onclick="this.select()" value="<?php echo esc_attr( $secret_link ); ?>">
-							<?php if ( empty( $access['page_id'] ) ) : ?>
-								<p class="description" style="color:#b32d2e"><?php esc_html_e( 'Choose the page above and save — right now this link points at your home page, which does not contain the form.', 'acps-site-toolkit' ); ?></p>
-							<?php endif; ?>
 							<p><label><input type="checkbox" name="settings[access][regenerate_token]" value="1"> <?php esc_html_e( 'Regenerate the link on save (invalidates the old one)', 'acps-site-toolkit' ); ?></label></p>
 						<?php else : ?>
 							<p class="description"><?php esc_html_e( 'A private link is generated when you save with this enabled.', 'acps-site-toolkit' ); ?></p>

@@ -29,12 +29,59 @@
 		if ( root ) {
 			initModal( root );
 		}
+		// Secret-link forms: an auto-opening popup when ?acps_key is present.
+		var autopopup = document.querySelector( '[data-acps-autopopup]' );
+		if ( autopopup ) {
+			initAutoPopup( autopopup );
+		}
 		// Populate every page picker on the page (modal or dedicated page).
 		var pickers = document.querySelectorAll( '[data-acps-pagepicker]' );
 		Array.prototype.forEach.call( pickers, function ( sel ) {
 			initPagePicker( sel, root );
 		} );
 	} );
+
+	/* An already-visible modal that traps focus and closes on Esc / backdrop /
+	   the close button. Used for secret-link form popups. */
+	function initAutoPopup( overlay ) {
+		var modal = overlay.querySelector( '.acps-modal' );
+		var closeBtn = overlay.querySelector( '.acps-modal__close' );
+		if ( ! modal ) {
+			return;
+		}
+		document.body.classList.add( 'acps-modal-open' );
+
+		function close() {
+			overlay.hidden = true;
+			document.body.classList.remove( 'acps-modal-open' );
+			document.removeEventListener( 'keydown', onKeydown, true );
+		}
+		function onKeydown( e ) {
+			if ( e.key === 'Escape' || e.keyCode === 27 ) {
+				e.preventDefault();
+				close();
+			} else if ( e.key === 'Tab' || e.keyCode === 9 ) {
+				trapFocus( e, modal );
+			}
+		}
+
+		document.addEventListener( 'keydown', onKeydown, true );
+		if ( closeBtn ) {
+			closeBtn.addEventListener( 'click', close );
+		}
+		overlay.addEventListener( 'mousedown', function ( e ) {
+			if ( e.target === overlay ) {
+				close();
+			}
+		} );
+
+		var focusable = getFocusable( modal );
+		if ( focusable.length ) {
+			focusable[ 0 ].focus();
+		} else {
+			modal.focus();
+		}
+	}
 
 	/* ---------------------------------------------------------------- *
 	 * Modal

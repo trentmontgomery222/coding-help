@@ -132,7 +132,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 		<ul class="ul-disc">
 			<li><strong><?php esc_html_e( 'Require login', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'optionally limit to chosen roles (e.g. staff).', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Password', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'visitors enter a password to reveal the form.', 'acps-site-toolkit' ); ?></li>
-			<li><strong><?php esc_html_e( 'Secret link', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'first place the form on a page, then choose that page in “Page where you placed this form” and save. The copyable private link points to that page with the key attached; without the key the form stays hidden. (If you don’t pick the page, the link points at your home page and won’t show the form.)', 'acps-site-toolkit' ); ?></li>
+			<li><strong><?php esc_html_e( 'Secret link', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'tick “Share via a private link” and save. Anyone who opens the copyable link sees the form pop up automatically (on the home page by default) — you don’t need to place it on a page. Regenerate the link any time to revoke the old one.', 'acps-site-toolkit' ); ?></li>
 		</ul>
 	</div>
 

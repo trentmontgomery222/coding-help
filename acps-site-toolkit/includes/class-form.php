@@ -135,6 +135,26 @@ class Form {
 	}
 
 	/**
+	 * Find a form by its access (secret-link) token.
+	 *
+	 * @param string $token Token from ?acps_key=.
+	 * @return Form|null
+	 */
+	public static function find_by_access_token( $token ) {
+		$token = (string) $token;
+		if ( '' === $token ) {
+			return null;
+		}
+		foreach ( self::all() as $form ) {
+			$access = isset( $form->settings['access'] ) && is_array( $form->settings['access'] ) ? $form->settings['access'] : array();
+			if ( ! empty( $access['require_token'] ) && ! empty( $access['token'] ) && hash_equals( (string) $access['token'], $token ) ) {
+				return $form;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * List forms.
 	 *
 	 * @param array $args status, include_feedback, orderby.

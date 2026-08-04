@@ -60,11 +60,47 @@ class Access {
 		if ( empty( $a['token'] ) ) {
 			return '';
 		}
-		$base = ! empty( $a['page_id'] ) ? get_permalink( (int) $a['page_id'] ) : '';
-		if ( ! $base ) {
-			$base = home_url( '/' );
-		}
+		// The link points at a landing page (the home page by default). Visiting
+		// it opens the form as a popup — no need to embed the form anywhere.
+		$base = ! empty( $a['page_id'] ) ? get_permalink( (int) $a['page_id'] ) : home_url( '/' );
 		return add_query_arg( 'acps_key', $a['token'], $base );
+	}
+
+	/**
+	 * Render the secret-link form as an auto-opening modal popup in the footer,
+	 * when the current URL carries a valid ?acps_key. This is what makes a
+	 * private link work on any page (e.g. the home page) without embedding the
+	 * form. Hooked to wp_footer.
+	 */
+	public static function render_token_popup() {
+		if ( is_admin() ) {
+			return;
+		}
+		$key = isset( $_GET['acps_key'] ) ? sanitize_text_field( wp_unslash( $_GET['acps_key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		if ( '' === $key ) {
+			return;
+		}
+		$form = Form::find_by_access_token( $key );
+		if ( ! $form ) {
+			return;
+		}
+
+		$form_html = Form_Renderer::render( $form, array( 'post_id' => get_queried_object_id() ) );
+		?>
+		<div class="acps-token-popup-root">
+			<div class="acps-modal-overlay" data-acps-autopopup>
+				<div class="acps-modal" role="dialog" aria-modal="true" aria-labelledby="acps-token-popup-title" tabindex="-1">
+					<div class="acps-modal__header">
+						<h2 class="acps-modal__title" id="acps-token-popup-title"><?php echo esc_html( $form->title ); ?></h2>
+						<button type="button" class="acps-modal__close" aria-label="<?php esc_attr_e( 'Close', 'acps-site-toolkit' ); ?>">&times;</button>
+					</div>
+					<div class="acps-modal__body">
+						<?php echo $form_html; // phpcs:ignore WordPress.Security.EscapeOutput ?>
+					</div>
+				</div>
+			</div>
+		</div>
+		<?php
 	}
 
 	/**

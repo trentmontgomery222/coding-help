@@ -82,6 +82,8 @@ class Plugin {
 		// Front-end assets + feedback modal.
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend' ) );
 		add_action( 'wp_footer', array( __NAMESPACE__ . '\\Feedback', 'render_modal' ) );
+		// Secret-link forms open as an auto popup when ?acps_key is present.
+		add_action( 'wp_footer', array( __NAMESPACE__ . '\\Access', 'render_token_popup' ) );
 
 		// Never let the tracking/token endpoints be cached by WP Engine.
 		add_filter( 'rest_pre_serve_request', array( $this, 'ensure_rest_uncached' ), 10, 4 );
