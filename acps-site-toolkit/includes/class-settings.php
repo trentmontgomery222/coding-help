@@ -35,6 +35,9 @@ class Settings {
 			'trigger_pages'         => array(),    // post IDs for include/exclude.
 			'trigger_position'      => 'bottom-right', // bottom-right | bottom-left | edge-right | edge-left.
 			'trigger_label'         => 'Chat with us',
+			'trigger_icon_url'      => 'https://acpsmdprod.wpengine.com/wp-content/uploads/2026/08/Untitled-design-1.png',
+			'trigger_size'          => 64, // circle diameter in px.
+			'trigger_bg'            => '', // circle background; blank = accent colour.
 			'feedback_categories'   => array(
 				"Something's broken",
 				'Hard to use',
@@ -154,6 +157,11 @@ class Settings {
 		}
 
 		$out['trigger_label'] = isset( $input['trigger_label'] ) ? sanitize_text_field( $input['trigger_label'] ) : $defaults['trigger_label'];
+
+		// Trigger appearance.
+		$out['trigger_icon_url'] = isset( $input['trigger_icon_url'] ) ? esc_url_raw( trim( $input['trigger_icon_url'] ) ) : '';
+		$out['trigger_size']     = max( 24, min( 200, absint( $input['trigger_size'] ?? $defaults['trigger_size'] ) ) );
+		$out['trigger_bg']       = isset( $input['trigger_bg'] ) ? ( sanitize_hex_color( $input['trigger_bg'] ) ?: '' ) : '';
 
 		// Page ID lists.
 		foreach ( array( 'trigger_pages' ) as $key ) {

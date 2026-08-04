@@ -70,7 +70,25 @@ $checked = function ( $key ) use ( $s ) {
 			</tr>
 			<tr>
 				<th scope="row"><label for="acps-trigger-label"><?php esc_html_e( 'Trigger label', 'acps-site-toolkit' ); ?></label></th>
-				<td><input type="text" id="acps-trigger-label" name="<?php echo esc_attr( $name( 'trigger_label' ) ); ?>" value="<?php echo esc_attr( $s['trigger_label'] ); ?>" class="regular-text"></td>
+				<td><input type="text" id="acps-trigger-label" name="<?php echo esc_attr( $name( 'trigger_label' ) ); ?>" value="<?php echo esc_attr( $s['trigger_label'] ); ?>" class="regular-text"><p class="description"><?php esc_html_e( 'Used as the button\'s screen-reader name when an icon image is set.', 'acps-site-toolkit' ); ?></p></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-trigger-icon"><?php esc_html_e( 'Trigger icon URL', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<input type="url" id="acps-trigger-icon" name="<?php echo esc_attr( $name( 'trigger_icon_url' ) ); ?>" value="<?php echo esc_attr( $s['trigger_icon_url'] ); ?>" class="large-text code" placeholder="https://…/icon.png">
+					<p class="description"><?php esc_html_e( 'Image shown in a circle. Leave blank to use the default chat-bubble icon with the label.', 'acps-site-toolkit' ); ?></p>
+					<?php if ( ! empty( $s['trigger_icon_url'] ) ) : ?>
+						<img src="<?php echo esc_url( $s['trigger_icon_url'] ); ?>" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-top:.5rem;border:1px solid #ccd0d4">
+					<?php endif; ?>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-trigger-size"><?php esc_html_e( 'Trigger size (px)', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="number" id="acps-trigger-size" name="<?php echo esc_attr( $name( 'trigger_size' ) ); ?>" value="<?php echo esc_attr( $s['trigger_size'] ); ?>" min="24" max="200" step="1" class="small-text"> <?php esc_html_e( 'Diameter of the circular button.', 'acps-site-toolkit' ); ?></td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-trigger-bg"><?php esc_html_e( 'Trigger background colour', 'acps-site-toolkit' ); ?></label></th>
+				<td><input type="text" id="acps-trigger-bg" name="<?php echo esc_attr( $name( 'trigger_bg' ) ); ?>" value="<?php echo esc_attr( $s['trigger_bg'] ); ?>" placeholder="#0b5fa5" class="regular-text"><p class="description"><?php esc_html_e( 'Behind a transparent icon. Leave blank to use the theme accent.', 'acps-site-toolkit' ); ?></p></td>
 			</tr>
 			<tr>
 				<th scope="row"><label for="acps-categories"><?php esc_html_e( 'Feedback categories', 'acps-site-toolkit' ); ?></label></th>

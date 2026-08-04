@@ -167,8 +167,17 @@ class Feedback {
 
 		$label     = Settings::get( 'trigger_label', 'Chat with us' );
 		$position  = Settings::get( 'trigger_position', 'bottom-right' );
+		$icon_url  = Settings::get( 'trigger_icon_url', '' );
+		$size      = (int) Settings::get( 'trigger_size', 64 );
+		$bg        = Settings::get( 'trigger_bg', '' );
 		$title     = get_the_title( $post_id );
 		$form_html = Form_Renderer::render( $form, array( 'post_id' => $post_id ) );
+
+		// Inline style drives the circle: size + optional background colour.
+		$trigger_style = '--acps-trigger-size:' . max( 24, min( 200, $size ) ) . 'px;';
+		if ( $bg ) {
+			$trigger_style .= 'background:' . $bg . ';border-color:' . $bg . ';';
+		}
 
 		// Child-theme override (receives $form, $form_html, $label, $position,
 		// $post_id, $title).
@@ -179,10 +188,17 @@ class Feedback {
 		}
 		?>
 		<div class="acps-feedback-root acps-pos-<?php echo esc_attr( $position ); ?>" data-current-page-id="<?php echo esc_attr( $post_id ); ?>" data-current-page-title="<?php echo esc_attr( $title ); ?>">
-			<button type="button" class="acps-feedback-trigger" aria-haspopup="dialog" aria-controls="acps-feedback-dialog">
-				<span class="acps-feedback-trigger__icon" aria-hidden="true">&#128172;</span>
-				<span class="acps-feedback-trigger__label"><?php echo esc_html( $label ); ?></span>
-			</button>
+			<?php if ( $icon_url ) : ?>
+				<?php // Circular icon-only trigger. The label is the accessible name. ?>
+				<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" aria-label="<?php echo esc_attr( $label ); ?>" style="<?php echo esc_attr( $trigger_style ); ?>">
+					<img class="acps-feedback-trigger__img" src="<?php echo esc_url( $icon_url ); ?>" alt="">
+				</button>
+			<?php else : ?>
+				<button type="button" class="acps-feedback-trigger" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" style="<?php echo esc_attr( $trigger_style ); ?>">
+					<span class="acps-feedback-trigger__icon" aria-hidden="true">&#128172;</span>
+					<span class="acps-feedback-trigger__label"><?php echo esc_html( $label ); ?></span>
+				</button>
+			<?php endif; ?>
 
 			<div class="acps-modal-overlay" hidden>
 				<div class="acps-modal" id="acps-feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="acps-feedback-title">
