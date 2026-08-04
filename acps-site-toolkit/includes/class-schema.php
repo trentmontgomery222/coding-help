@@ -64,7 +64,7 @@ class Schema {
 	 */
 	public static function drop_all() {
 		global $wpdb;
-		foreach ( array( 'entry_notes', 'entry_values', 'entries', 'forms', 'visits', 'sessions' ) as $key ) {
+		foreach ( array( 'entry_notes', 'entry_values', 'entries', 'forms', 'visits', 'sessions', 'visitors' ) as $key ) {
 			$table = self::table( $key );
 			// Table identifiers can't be parameterized; the name is built from a
 			// fixed whitelist + the trusted site prefix, so this is safe.
@@ -85,8 +85,23 @@ class Schema {
 		$entries      = self::table( 'entries' );
 		$entry_values = self::table( 'entry_values' );
 		$entry_notes  = self::table( 'entry_notes' );
+		$visitors     = self::table( 'visitors' );
 
 		$ddl = array();
+
+		// --- Unique visitors ------------------------------------------------
+		// One row per persistent first-party ID (per browser). UNIQUE(uid)
+		// guarantees no duplicates; registered on first page load so nobody is
+		// missed. Multi-browser counts as separate users by design.
+		$ddl[] = "CREATE TABLE {$visitors} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			uid CHAR(36) NOT NULL,
+			first_seen DATETIME NOT NULL,
+			last_seen DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY uid (uid),
+			KEY first_seen (first_seen)
+		) {$charset_collate};";
 
 		// --- Sessions (spec §3.1) -------------------------------------------
 		$ddl[] = "CREATE TABLE {$sessions} (

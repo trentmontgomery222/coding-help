@@ -53,6 +53,13 @@
 
 .acps-path { margin: 0; padding-left: 1.25rem; }
 
+/* Stat tiles (unique users) */
+.acps-stat-row { display: grid; grid-template-columns: repeat( 4, 1fr ); gap: 1rem; margin: 0.5rem 0 1rem; }
+@media ( max-width: 782px ) { .acps-stat-row { grid-template-columns: repeat( 2, 1fr ); } }
+.acps-stat { background: #f6f7f7; border: 1px solid #dcdce0; border-radius: 8px; padding: 1rem; text-align: center; }
+.acps-stat-num { display: block; font-size: 1.8rem; font-weight: 700; line-height: 1.1; color: #1d2327; }
+.acps-stat-lbl { display: block; font-size: 0.85rem; color: #646970; margin-top: 0.25rem; }
+
 /* Live "who's on the site now" */
 .acps-live h2 { display: flex; align-items: center; gap: 0.5rem; }
 .acps-live-count {

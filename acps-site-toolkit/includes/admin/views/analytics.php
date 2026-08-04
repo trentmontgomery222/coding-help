@@ -167,6 +167,40 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 		</div>
 	<?php endif; ?>
 
+	<?php
+	$uu_total   = \ACPS\SiteToolkit\Visitors::total();
+	$uu_today   = \ACPS\SiteToolkit\Visitors::new_since( date_i18n( 'Y-m-d' ) );
+	$uu_new_30  = \ACPS\SiteToolkit\Visitors::new_since( gmdate( 'Y-m-d', current_time( 'timestamp' ) - 30 * DAY_IN_SECONDS ) );
+	$uu_active  = \ACPS\SiteToolkit\Visitors::active_within( 30 );
+	$uu_trend   = \ACPS\SiteToolkit\Visitors::new_trend( 30 );
+	?>
+	<div class="acps-card">
+		<h2><?php esc_html_e( 'Unique users', 'acps-site-toolkit' ); ?></h2>
+		<p class="description"><?php esc_html_e( 'Each unique first-party ID (per browser) is one user — counted once, never missed. Multiple browsers/devices count separately. Logged-in admins are excluded.', 'acps-site-toolkit' ); ?></p>
+		<div class="acps-stat-row">
+			<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $uu_total ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'Total unique users', 'acps-site-toolkit' ); ?></span></div>
+			<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $uu_new_30 ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'New in last 30 days', 'acps-site-toolkit' ); ?></span></div>
+			<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $uu_active ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'Active in last 30 days', 'acps-site-toolkit' ); ?></span></div>
+			<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $uu_today ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'New today', 'acps-site-toolkit' ); ?></span></div>
+		</div>
+		<details>
+			<summary><?php esc_html_e( 'New users per day (last 30 days)', 'acps-site-toolkit' ); ?></summary>
+			<table class="widefat striped">
+				<caption class="screen-reader-text"><?php esc_html_e( 'New unique users per day', 'acps-site-toolkit' ); ?></caption>
+				<thead><tr><th scope="col"><?php esc_html_e( 'Date', 'acps-site-toolkit' ); ?></th><th scope="col"><?php esc_html_e( 'New users', 'acps-site-toolkit' ); ?></th></tr></thead>
+				<tbody>
+				<?php if ( ! $uu_trend ) : ?>
+					<tr><td colspan="2"><?php esc_html_e( 'No data yet.', 'acps-site-toolkit' ); ?></td></tr>
+				<?php else : ?>
+					<?php foreach ( $uu_trend as $t ) : ?>
+						<tr><td><?php echo esc_html( $t['d'] ); ?></td><td><?php echo esc_html( $t['c'] ); ?></td></tr>
+					<?php endforeach; ?>
+				<?php endif; ?>
+				</tbody>
+			</table>
+		</details>
+	</div>
+
 	<div class="acps-card">
 		<h2><?php esc_html_e( 'Pages — traffic & feedback overlay', 'acps-site-toolkit' ); ?></h2>
 		<table class="widefat striped acps-table">

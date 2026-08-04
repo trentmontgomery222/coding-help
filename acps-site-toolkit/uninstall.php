@@ -27,7 +27,7 @@ if ( $preserve_data ) {
 global $wpdb;
 
 // Drop all plugin tables.
-$tables = array( 'entry_notes', 'entry_values', 'entries', 'forms', 'visits', 'sessions' );
+$tables = array( 'entry_notes', 'entry_values', 'entries', 'forms', 'visits', 'sessions', 'visitors' );
 foreach ( $tables as $key ) {
 	$table = $wpdb->prefix . 'acps_' . $key;
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB

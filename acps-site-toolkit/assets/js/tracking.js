@@ -16,6 +16,7 @@
 	}
 
 	var SID_COOKIE = 'acps_st_sid';
+	var UID_COOKIE = 'acps_st_uid';
 	var CONSENT_COOKIE = 'acps_st_consent';
 
 	/* ---- tiny cookie helpers (first-party only) ---------------------- */
@@ -52,6 +53,19 @@
 		// Refresh the idle window on every activity.
 		writeCookie( SID_COOKIE, t, cfg.idleMinutes || 30 );
 		return t;
+	}
+
+	/* Persistent unique-user id (per browser). Long-lived so the same browser
+	   counts once across sessions; a cleared cookie just becomes a new user
+	   (we prefer over-counting to missing anyone). Cookie lifetimes are capped
+	   near 400 days by browsers, so we renew it on each visit. */
+	function getUid() {
+		var u = readCookie( UID_COOKIE );
+		if ( ! /^[a-f0-9]{40}$/.test( u ) ) {
+			u = makeToken();
+		}
+		writeCookie( UID_COOKIE, u, 400 * 24 * 60 ); // ~400 days in minutes.
+		return u;
 	}
 
 	/* ---- consent ----------------------------------------------------- */
@@ -117,6 +131,7 @@
 
 		send( '/beacon', {
 			session: runtime.token,
+			uid: getUid(),
 			consent: cfg.consentMode ? ( hasConsent() ? 1 : 0 ) : 1,
 			post_id: cfg.postId || 0,
 			url: location.href,

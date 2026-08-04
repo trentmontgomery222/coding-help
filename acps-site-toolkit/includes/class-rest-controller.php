@@ -200,6 +200,12 @@ class REST_Controller {
 			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'bad_session' ), 200 );
 		}
 
+		// Register the persistent unique-user id (dupe-proof, over-counts rather
+		// than misses). Independent of the session.
+		if ( ! empty( $params['uid'] ) ) {
+			Visitors::record( $params['uid'] );
+		}
+
 		$visit_id = Tracking::record_visit(
 			$session_id,
 			array(
