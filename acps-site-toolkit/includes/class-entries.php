@@ -232,6 +232,40 @@ class Entries {
 	}
 
 	/**
+	 * Count non-spam, non-trashed submissions for a form (for a total cap).
+	 *
+	 * @param int $form_id Form id.
+	 * @return int
+	 */
+	public static function count_for_form( $form_id ) {
+		global $wpdb;
+		$t = Schema::table( 'entries' );
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$t} WHERE form_id = %d AND status NOT IN ('spam','trashed')", absint( $form_id ) ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
+	 * Count submissions for a form from one device fingerprint (anonymized IP +
+	 * browser summary), matching the spam rate-limiter's notion of "device".
+	 *
+	 * @param int    $form_id Form id.
+	 * @param string $ip_anon Anonymized IP.
+	 * @param string $ua      User-agent summary.
+	 * @return int
+	 */
+	public static function count_by_fingerprint( $form_id, $ip_anon, $ua ) {
+		global $wpdb;
+		$t = Schema::table( 'entries' );
+		return (int) $wpdb->get_var( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$t} WHERE form_id = %d AND ip_anon = %s AND user_agent_summary = %s AND status NOT IN ('spam','trashed')",
+				absint( $form_id ),
+				(string) $ip_anon,
+				(string) $ua
+			)
+		);
+	}
+
+	/**
 	 * Permanently delete one entry and its values + notes.
 	 *
 	 * @param int $id Entry id.

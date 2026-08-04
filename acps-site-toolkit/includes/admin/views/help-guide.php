@@ -115,6 +115,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 			<li><?php esc_html_e( 'Use “Preview” to see the front-end look, then set Status to Published and Save.', 'acps-site-toolkit' ); ?></li>
 			<li><?php esc_html_e( 'Form-level settings (below the builder): confirmation message/redirect, admin notifications, auto-reply with merge tags like {field:email}, accent colour.', 'acps-site-toolkit' ); ?></li>
 		</ul>
+		<p><strong><?php esc_html_e( 'Response limits:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'in form settings you can cap responses per device (by anonymised IP + browser, like the spam protection) and/or a total for the whole form; 0 means unlimited. Over-limit submissions are turned away with your message.', 'acps-site-toolkit' ); ?></p>
 		<p><?php esc_html_e( 'On the Forms list you can also Duplicate a form or Delete it.', 'acps-site-toolkit' ); ?></p>
 		<p><strong><?php esc_html_e( 'Import from Google Forms:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Forms → “Import Google Form”. Paste the public form link; a matching draft is created for you to review and publish.', 'acps-site-toolkit' ); ?></p>
 	</div>

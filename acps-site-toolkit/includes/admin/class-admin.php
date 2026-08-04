@@ -271,6 +271,9 @@ class Admin {
 		$s['notify_admin']      = ! empty( $_POST['settings']['notify_admin'] ) ? 1 : 0;
 		$s['autoreply_enable']  = ! empty( $_POST['settings']['autoreply_enable'] ) ? 1 : 0;
 		$s['multipage']         = ! empty( $_POST['settings']['multipage'] ) ? 1 : 0;
+		$s['limit_per_device']  = isset( $_POST['settings']['limit_per_device'] ) ? absint( $_POST['settings']['limit_per_device'] ) : 0;
+		$s['limit_total']       = isset( $_POST['settings']['limit_total'] ) ? absint( $_POST['settings']['limit_total'] ) : 0;
+		$s['limit_message']     = isset( $_POST['settings']['limit_message'] ) ? sanitize_text_field( wp_unslash( $_POST['settings']['limit_message'] ) ) : '';
 		if ( isset( $_POST['settings']['style_accent'] ) ) {
 			$s['style']['accent'] = sanitize_text_field( wp_unslash( $_POST['settings']['style_accent'] ) );
 		}

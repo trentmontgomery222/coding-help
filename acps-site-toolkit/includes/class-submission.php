@@ -53,6 +53,16 @@ class Submission {
 			);
 		}
 
+		// --- Response limits (before validation, like the spam gate). --------
+		$limit_error = self::check_limits( $form );
+		if ( '' !== $limit_error ) {
+			return array(
+				'success' => false,
+				'errors'  => array(),
+				'summary' => array( array( 'field' => '', 'message' => $limit_error ) ),
+			);
+		}
+
 		// --- Validation. ----------------------------------------------------
 		$fields   = Field_Types::normalize_list( $form->fields );
 		$submitted = isset( $request['fields'] ) && is_array( $request['fields'] ) ? $request['fields'] : array();
@@ -164,6 +174,38 @@ class Submission {
 			'entry_id'     => $entry_id,
 			'confirmation' => self::confirmation( $form ),
 		);
+	}
+
+	/**
+	 * Enforce per-form response limits. Returns an error message to show, or ''
+	 * when the submission is allowed. Device identity uses the same anonymized
+	 * IP + browser fingerprint as the spam rate-limiter.
+	 *
+	 * @param Form $form Form.
+	 * @return string
+	 */
+	private static function check_limits( Form $form ) {
+		$total = (int) ( $form->settings['limit_total'] ?? 0 );
+		$per   = (int) ( $form->settings['limit_per_device'] ?? 0 );
+		if ( $total <= 0 && $per <= 0 ) {
+			return '';
+		}
+
+		$custom = trim( (string) ( $form->settings['limit_message'] ?? '' ) );
+
+		if ( $total > 0 && Entries::count_for_form( $form->id ) >= $total ) {
+			return $custom ? $custom : __( 'This form is no longer accepting responses.', 'acps-site-toolkit' );
+		}
+
+		if ( $per > 0 ) {
+			$ip = Session::anonymize_ip( Session::client_ip() );
+			$ua = Session::user_agent_summary();
+			if ( Entries::count_by_fingerprint( $form->id, $ip, $ua ) >= $per ) {
+				return $custom ? $custom : __( 'You have already submitted this form the maximum number of times.', 'acps-site-toolkit' );
+			}
+		}
+
+		return '';
 	}
 
 	/**

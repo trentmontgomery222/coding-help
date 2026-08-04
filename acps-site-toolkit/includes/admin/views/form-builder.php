@@ -146,6 +146,24 @@ $settings['style'] = wp_parse_args( $settings['style'], array( 'accent' => '', '
 					<td><label><input type="checkbox" name="settings[multipage]" value="1" <?php checked( $settings['multipage'] ); ?>> <?php esc_html_e( 'Split into pages using each field\'s page number, with a "Step X of Y" indicator', 'acps-site-toolkit' ); ?></label></td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'Response limits', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<p>
+							<label for="acps-limit-device"><?php esc_html_e( 'Max responses per device', 'acps-site-toolkit' ); ?></label>
+							<input type="number" id="acps-limit-device" name="settings[limit_per_device]" value="<?php echo esc_attr( $settings['limit_per_device'] ); ?>" min="0" class="small-text">
+						</p>
+						<p>
+							<label for="acps-limit-total"><?php esc_html_e( 'Max total responses', 'acps-site-toolkit' ); ?></label>
+							<input type="number" id="acps-limit-total" name="settings[limit_total]" value="<?php echo esc_attr( $settings['limit_total'] ); ?>" min="0" class="small-text">
+						</p>
+						<p class="description"><?php esc_html_e( '0 = unlimited. “Per device” recognises a visitor by their anonymised IP + browser (the same signal the spam protection uses), so it’s a strong deterrent rather than a hard identity check.', 'acps-site-toolkit' ); ?></p>
+						<p>
+							<label for="acps-limit-msg"><?php esc_html_e( 'Message when the limit is reached', 'acps-site-toolkit' ); ?></label><br>
+							<input type="text" id="acps-limit-msg" name="settings[limit_message]" value="<?php echo esc_attr( $settings['limit_message'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'This form is no longer accepting responses.', 'acps-site-toolkit' ); ?>">
+						</p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Admin notification', 'acps-site-toolkit' ); ?></th>
 					<td><label><input type="checkbox" name="settings[notify_admin]" value="1" <?php checked( $settings['notify_admin'] ); ?>> <?php esc_html_e( 'Email an admin on each submission', 'acps-site-toolkit' ); ?></label></td>
 				</tr>

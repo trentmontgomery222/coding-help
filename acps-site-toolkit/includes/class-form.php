@@ -54,6 +54,11 @@ class Form {
 			'autoreply_subject'    => 'We received your message',
 			'autoreply_body'       => "Thanks for getting in touch. We'll be in contact if a response is needed.",
 			'multipage'            => 0,
+			// Response limits (0 = unlimited). Enforced at submit time, so they
+			// work behind the page cache — same approach as the spam checks.
+			'limit_per_device'     => 0, // max submissions from one device (anon IP + browser).
+			'limit_total'          => 0, // max total submissions for the whole form.
+			'limit_message'        => '',
 			'submit_label'         => 'Submit',
 			'style'                => array(
 				'accent'      => '', // blank => inherit theme.
