@@ -175,6 +175,21 @@ $checked = function ( $key ) use ( $s ) {
 			</tr>
 		</table>
 
+		<h2 class="title"><?php esc_html_e( 'Custom CSS', 'acps-site-toolkit' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><label for="acps-custom-css"><?php esc_html_e( 'Additional CSS', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<textarea id="acps-custom-css" name="<?php echo esc_attr( $name( 'custom_css' ) ); ?>" rows="10" class="large-text code" spellcheck="false" placeholder=".acps-form-wrap { --acps-accent: #0b5fa5; }"><?php echo esc_textarea( $s['custom_css'] ); ?></textarea>
+					<p class="description">
+						<?php esc_html_e( 'Loaded after the plugin styles, so it overrides them. Handy variables you can set on .acps-form-wrap or .acps-feedback-root:', 'acps-site-toolkit' ); ?>
+						<code>--acps-accent</code>, <code>--acps-error</code>, <code>--acps-border</code>, <code>--acps-radius</code>, <code>--acps-trigger-size</code>.
+						<br><?php esc_html_e( 'Tip: override with variables rather than rewriting rules, so the built-in accessibility and spam-prevention styles stay intact.', 'acps-site-toolkit' ); ?>
+					</p>
+				</td>
+			</tr>
+		</table>
+
 		<h2 class="title"><?php esc_html_e( 'Access & data', 'acps-site-toolkit' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>

@@ -156,6 +156,13 @@ class Plugin {
 		wp_enqueue_script( 'acps-st-qa', ACPS_ST_URL . 'assets/js/qa.js', array(), ACPS_ST_VERSION, true );
 
 		wp_enqueue_style( 'acps-st-frontend', ACPS_ST_URL . 'assets/css/frontend.css', array(), ACPS_ST_VERSION );
+
+		// Custom CSS loads AFTER the base stylesheet so it can override anything
+		// without letting admins delete the accessibility/spam-critical rules.
+		$custom_css = trim( (string) Settings::get( 'custom_css', '' ) );
+		if ( '' !== $custom_css ) {
+			wp_add_inline_style( 'acps-st-frontend', $custom_css );
+		}
 	}
 
 	/**
