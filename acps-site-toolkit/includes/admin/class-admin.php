@@ -36,6 +36,7 @@ class Admin {
 		add_action( 'admin_post_acps_st_entry_action', array( $this, 'handle_entry_action' ) );
 		add_action( 'admin_post_acps_st_export', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_acps_st_save_qa', array( $this, 'handle_save_qa' ) );
+		add_action( 'admin_post_acps_st_import_google', array( $this, 'handle_import_google' ) );
 	}
 
 	/**
@@ -93,6 +94,8 @@ class Admin {
 		$action = isset( $_GET['action'] ) ? sanitize_key( $_GET['action'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 		if ( 'edit' === $action || 'new' === $action ) {
 			require ACPS_ST_PATH . 'includes/admin/views/form-builder.php';
+		} elseif ( 'import' === $action ) {
+			require ACPS_ST_PATH . 'includes/admin/views/import-google.php';
 		} else {
 			require ACPS_ST_PATH . 'includes/admin/views/forms-list.php';
 		}
@@ -158,6 +161,36 @@ class Admin {
 		\ACPS\SiteToolkit\Help::save_qa( $items );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=acps-st-qa&saved=1' ) );
+		exit;
+	}
+
+	/**
+	 * Import a Google Form into a new draft form.
+	 */
+	public function handle_import_google() {
+		$this->require_cap( 'manage_options' );
+		check_admin_referer( 'acps_st_import_google' );
+
+		$url  = isset( $_POST['gform_url'] ) ? esc_url_raw( wp_unslash( $_POST['gform_url'] ) ) : '';
+		$html = isset( $_POST['gform_html'] ) ? wp_unslash( $_POST['gform_html'] ) : ''; // phpcs:ignore
+
+		$result = \ACPS\SiteToolkit\Google_Forms_Importer::import( $url, $html );
+
+		if ( is_wp_error( $result ) ) {
+			$redirect = add_query_arg(
+				array(
+					'page'         => 'acps-st-forms',
+					'action'       => 'import',
+					'import_error' => rawurlencode( $result->get_error_message() ),
+				),
+				admin_url( 'admin.php' )
+			);
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		// Success → open the new draft in the builder.
+		wp_safe_redirect( admin_url( 'admin.php?page=acps-st-forms&action=edit&form=' . (int) $result . '&imported=1' ) );
 		exit;
 	}
 

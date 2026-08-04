@@ -89,6 +89,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 			<li><strong><?php esc_html_e( 'Export', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'the “Export CSV” button at the top.', 'acps-site-toolkit' ); ?></li>
 		</ul>
 		<p><?php esc_html_e( 'A standalone feedback page (with the recent-pages picker) can be placed with the shortcode:', 'acps-site-toolkit' ); ?> <code>[acps_feedback]</code></p>
+		<p><strong><?php esc_html_e( 'Triage any form here:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'use the “Form” dropdown at the top to switch this inbox to any other form’s submissions — with the same assign, status, notes and delete tools.', 'acps-site-toolkit' ); ?></p>
 	</div>
 
 	<div class="acps-card" id="qa">
@@ -114,6 +115,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 			<li><?php esc_html_e( 'Form-level settings (below the builder): confirmation message/redirect, admin notifications, auto-reply with merge tags like {field:email}, accent colour.', 'acps-site-toolkit' ); ?></li>
 		</ul>
 		<p><?php esc_html_e( 'On the Forms list you can also Duplicate a form or Delete it.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Import from Google Forms:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Forms → “Import Google Form”. Paste the public form link; a matching draft is created for you to review and publish.', 'acps-site-toolkit' ); ?></p>
 	</div>
 
 	<div class="acps-card" id="conditional">

@@ -17,7 +17,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $feedback_form = Form::feedback_form();
-$form_id       = $feedback_form ? $feedback_form->id : 0;
+// The triage inbox defaults to the feedback form but can show any form's
+// entries (with the same assign / status / notes workflow).
+$form_id     = isset( $_GET['form_id'] ) ? absint( $_GET['form_id'] ) : ( $feedback_form ? $feedback_form->id : 0 ); // phpcs:ignore WordPress.Security.NonceVerification
+$is_feedback = $feedback_form && $form_id === (int) $feedback_form->id;
+$all_forms   = Form::all();
 
 // Single-item view?
 $view_id = isset( $_GET['entry'] ) ? absint( $_GET['entry'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
@@ -33,7 +37,8 @@ if ( $view_id ) {
 	$values = $data['values'];
 	$notes  = Entries::notes( $view_id );
 	$path   = $entry->session_id ? Analytics::session_path( (int) $entry->session_id ) : array();
-	$return = admin_url( 'admin.php?page=acps-st&entry=' . $view_id );
+	$list_url = admin_url( 'admin.php?page=acps-st&form_id=' . (int) $entry->form_id );
+	$return = add_query_arg( 'entry', $view_id, $list_url );
 	$statuses = array(
 		'new'         => __( 'New', 'acps-site-toolkit' ),
 		'in_progress' => __( 'In progress', 'acps-site-toolkit' ),
@@ -44,7 +49,7 @@ if ( $view_id ) {
 	?>
 	<div class="wrap acps-admin">
 		<h1><?php esc_html_e( 'Feedback item', 'acps-site-toolkit' ); ?> #<?php echo esc_html( $view_id ); ?></h1>
-		<p><a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st' ) ); ?>">&larr; <?php esc_html_e( 'Back to feedback', 'acps-site-toolkit' ); ?></a></p>
+		<p><a href="<?php echo esc_url( $list_url ); ?>">&larr; <?php esc_html_e( 'Back to list', 'acps-site-toolkit' ); ?></a></p>
 
 		<div class="acps-detail-grid">
 			<div class="acps-detail-main">
@@ -144,9 +149,9 @@ if ( $view_id ) {
 					<?php wp_nonce_field( 'acps_st_entry_action' ); ?>
 					<input type="hidden" name="action" value="acps_st_entry_action">
 					<input type="hidden" name="entry_id" value="<?php echo esc_attr( $view_id ); ?>">
-					<input type="hidden" name="return" value="<?php echo esc_url( admin_url( 'admin.php?page=acps-st' ) ); ?>">
+					<input type="hidden" name="return" value="<?php echo esc_url( $list_url ); ?>">
 					<p>
-						<button type="submit" name="do" value="delete" class="button acps-danger" onclick="return confirm('<?php echo esc_js( __( 'Permanently delete this feedback? This cannot be undone.', 'acps-site-toolkit' ) ); ?>');"><?php esc_html_e( 'Delete permanently', 'acps-site-toolkit' ); ?></button>
+						<button type="submit" name="do" value="delete" class="button acps-danger" onclick="return confirm('<?php echo esc_js( __( 'Permanently delete this entry? This cannot be undone.', 'acps-site-toolkit' ) ); ?>');"><?php esc_html_e( 'Delete permanently', 'acps-site-toolkit' ); ?></button>
 					</p>
 				</form>
 				<?php endif; ?>
@@ -171,8 +176,12 @@ $result        = Entries::query(
 $rows  = $result['rows'];
 $total = $result['total'];
 ?>
+<?php
+$selected_form  = $form_id ? Form::find( $form_id ) : null;
+$selected_fields = ( $selected_form && ! $is_feedback ) ? \ACPS\SiteToolkit\Field_Types::normalize_list( $selected_form->fields ) : array();
+?>
 <div class="wrap acps-admin">
-	<h1 class="wp-heading-inline"><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></h1>
+	<h1 class="wp-heading-inline"><?php echo $is_feedback ? esc_html__( 'Feedback', 'acps-site-toolkit' ) : esc_html__( 'Triage', 'acps-site-toolkit' ); ?></h1>
 	<?php if ( current_user_can( 'manage_options' ) && $form_id ) : ?>
 		<a class="page-title-action" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=acps_st_export&form_id=' . $form_id ), 'acps_st_export' ) ); ?>"><?php esc_html_e( 'Export CSV', 'acps-site-toolkit' ); ?></a>
 	<?php endif; ?>
@@ -180,6 +189,14 @@ $total = $result['total'];
 
 	<form method="get" class="acps-filters">
 		<input type="hidden" name="page" value="acps-st">
+		<label for="acps-inbox-form"><?php esc_html_e( 'Form', 'acps-site-toolkit' ); ?></label>
+		<select id="acps-inbox-form" name="form_id" onchange="this.form.submit()">
+			<?php foreach ( $all_forms as $f ) : ?>
+				<option value="<?php echo esc_attr( $f->id ); ?>" <?php selected( $form_id, $f->id ); ?>>
+					<?php echo esc_html( $f->title ); ?><?php echo $f->is_feedback ? ' ' . esc_html__( '(feedback)', 'acps-site-toolkit' ) : ''; ?>
+				</option>
+			<?php endforeach; ?>
+		</select>
 		<label for="acps-filter-status" class="screen-reader-text"><?php esc_html_e( 'Filter by status', 'acps-site-toolkit' ); ?></label>
 		<select id="acps-filter-status" name="status">
 			<option value=""><?php esc_html_e( 'All statuses', 'acps-site-toolkit' ); ?></option>
@@ -202,7 +219,23 @@ $total = $result['total'];
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 	<?php wp_nonce_field( 'acps_st_entry_action' ); ?>
 	<input type="hidden" name="action" value="acps_st_entry_action">
-	<input type="hidden" name="return" value="<?php echo esc_attr( admin_url( 'admin.php?page=acps-st' . ( $filter_status ? '&status=' . $filter_status : '' ) ) ); ?>">
+	<input type="hidden" name="return" value="<?php echo esc_attr( admin_url( 'admin.php?page=acps-st&form_id=' . $form_id . ( $filter_status ? '&status=' . $filter_status : '' ) ) ); ?>">
+
+	<?php
+	// Columns preview: feedback form shows Type + Comment; any other form shows
+	// its first few field values.
+	$preview_fields = array();
+	if ( ! $is_feedback ) {
+		$shown = 0;
+		foreach ( $selected_fields as $pf ) {
+			if ( \ACPS\SiteToolkit\Field_Types::is_input( $pf['type'] ) && 'hidden' !== $pf['type'] && $shown < 3 ) {
+				$preview_fields[] = $pf;
+				$shown++;
+			}
+		}
+	}
+	$col_count = ( current_user_can( 'manage_options' ) ? 1 : 0 ) + 3 + ( $is_feedback ? 2 : count( $preview_fields ) );
+	?>
 
 	<?php if ( current_user_can( 'manage_options' ) && $rows ) : ?>
 	<div class="tablenav top">
@@ -217,7 +250,7 @@ $total = $result['total'];
 	<script>
 	function acpsConfirmBulk( form ) {
 		if ( form.do && form.do.value === 'bulk_delete' ) {
-			return confirm( <?php echo wp_json_encode( __( 'Permanently delete the selected feedback? This cannot be undone.', 'acps-site-toolkit' ) ); ?> );
+			return confirm( <?php echo wp_json_encode( __( 'Permanently delete the selected entries? This cannot be undone.', 'acps-site-toolkit' ) ); ?> );
 		}
 		return true;
 	}
@@ -225,15 +258,21 @@ $total = $result['total'];
 	<?php endif; ?>
 
 	<table class="widefat striped acps-table">
-		<caption class="screen-reader-text"><?php esc_html_e( 'Feedback submissions', 'acps-site-toolkit' ); ?></caption>
+		<caption class="screen-reader-text"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></caption>
 		<thead>
 			<tr>
 				<?php if ( current_user_can( 'manage_options' ) ) : ?>
 					<td class="check-column"><label for="acps-check-all" class="screen-reader-text"><?php esc_html_e( 'Select all', 'acps-site-toolkit' ); ?></label><input type="checkbox" id="acps-check-all" onclick="var b=this.form.querySelectorAll('input[name=\'entry_ids[]\']');for(var i=0;i<b.length;i++){b[i].checked=this.checked;}"></td>
 				<?php endif; ?>
 				<th scope="col"><?php esc_html_e( 'ID', 'acps-site-toolkit' ); ?></th>
-				<th scope="col"><?php esc_html_e( 'Type', 'acps-site-toolkit' ); ?></th>
-				<th scope="col"><?php esc_html_e( 'Comment', 'acps-site-toolkit' ); ?></th>
+				<?php if ( $is_feedback ) : ?>
+					<th scope="col"><?php esc_html_e( 'Type', 'acps-site-toolkit' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Comment', 'acps-site-toolkit' ); ?></th>
+				<?php else : ?>
+					<?php foreach ( $preview_fields as $pf ) : ?>
+						<th scope="col"><?php echo esc_html( $pf['label'] ? $pf['label'] : $pf['key'] ); ?></th>
+					<?php endforeach; ?>
+				<?php endif; ?>
 				<th scope="col"><?php esc_html_e( 'Page', 'acps-site-toolkit' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Status', 'acps-site-toolkit' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Submitted', 'acps-site-toolkit' ); ?></th>
@@ -241,22 +280,31 @@ $total = $result['total'];
 		</thead>
 		<tbody>
 			<?php if ( ! $rows ) : ?>
-				<tr><td colspan="7"><?php esc_html_e( 'No feedback yet.', 'acps-site-toolkit' ); ?></td></tr>
+				<tr><td colspan="<?php echo esc_attr( $col_count ); ?>"><?php esc_html_e( 'Nothing here yet.', 'acps-site-toolkit' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $rows as $row ) :
 					$d      = Entries::get( (int) $row->id );
 					$vals   = $d ? $d['values'] : array();
 					$type   = isset( $vals['feedback_type'] ) ? ( is_array( $vals['feedback_type'] ) ? implode( ', ', $vals['feedback_type'] ) : $vals['feedback_type'] ) : '';
 					$comment = isset( $vals['comment'] ) ? wp_trim_words( (string) $vals['comment'], 16 ) : '';
-					$link   = admin_url( 'admin.php?page=acps-st&entry=' . $row->id );
+					$link   = admin_url( 'admin.php?page=acps-st&form_id=' . $form_id . '&entry=' . $row->id );
 					?>
 					<tr>
 						<?php if ( current_user_can( 'manage_options' ) ) : ?>
-							<th scope="row" class="check-column"><label class="screen-reader-text" for="acps-cb-<?php echo esc_attr( $row->id ); ?>"><?php printf( esc_html__( 'Select feedback %d', 'acps-site-toolkit' ), (int) $row->id ); ?></label><input type="checkbox" id="acps-cb-<?php echo esc_attr( $row->id ); ?>" name="entry_ids[]" value="<?php echo esc_attr( $row->id ); ?>"></th>
+							<th scope="row" class="check-column"><label class="screen-reader-text" for="acps-cb-<?php echo esc_attr( $row->id ); ?>"><?php printf( esc_html__( 'Select entry %d', 'acps-site-toolkit' ), (int) $row->id ); ?></label><input type="checkbox" id="acps-cb-<?php echo esc_attr( $row->id ); ?>" name="entry_ids[]" value="<?php echo esc_attr( $row->id ); ?>"></th>
 						<?php endif; ?>
 						<td><a href="<?php echo esc_url( $link ); ?>">#<?php echo esc_html( $row->id ); ?></a></td>
-						<td><?php echo esc_html( $type ); ?></td>
-						<td><a href="<?php echo esc_url( $link ); ?>"><?php echo esc_html( $comment ); ?></a></td>
+						<?php if ( $is_feedback ) : ?>
+							<td><?php echo esc_html( $type ); ?></td>
+							<td><a href="<?php echo esc_url( $link ); ?>"><?php echo esc_html( $comment ); ?></a></td>
+						<?php else : ?>
+							<?php foreach ( $preview_fields as $pf ) :
+								$v = isset( $vals[ $pf['key'] ] ) ? $vals[ $pf['key'] ] : '';
+								$v = is_array( $v ) ? implode( ', ', $v ) : (string) $v;
+								?>
+								<td><a href="<?php echo esc_url( $link ); ?>"><?php echo esc_html( wp_trim_words( $v, 12 ) ); ?></a></td>
+							<?php endforeach; ?>
+						<?php endif; ?>
 						<td><?php echo $row->page_id ? esc_html( get_the_title( (int) $row->page_id ) ) : esc_html( $row->page_url ); ?></td>
 						<td><?php echo esc_html( $row->status ); ?></td>
 						<td><?php echo esc_html( $row->submitted_at ); ?></td>

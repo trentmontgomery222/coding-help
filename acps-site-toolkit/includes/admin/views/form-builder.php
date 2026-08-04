@@ -36,6 +36,9 @@ $saved       = isset( $_GET['saved'] ); // phpcs:ignore WordPress.Security.Nonce
 	<?php if ( $saved ) : ?>
 		<div class="notice notice-success is-dismissible" role="status"><p><?php esc_html_e( 'Form saved.', 'acps-site-toolkit' ); ?></p></div>
 	<?php endif; ?>
+	<?php if ( isset( $_GET['imported'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification ?>
+		<div class="notice notice-success is-dismissible" role="status"><p><?php esc_html_e( 'Imported from Google Forms. Review the fields below, then set Status to Published and Save.', 'acps-site-toolkit' ); ?></p></div>
+	<?php endif; ?>
 
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="acps-builder-form">
 		<?php wp_nonce_field( 'acps_st_save_form' ); ?>
@@ -65,11 +68,21 @@ $saved       = isset( $_GET['saved'] ); // phpcs:ignore WordPress.Security.Nonce
 			<!-- Left: field type list. -->
 			<section class="acps-pane acps-pane--types" aria-labelledby="acps-types-h">
 				<h2 id="acps-types-h"><?php esc_html_e( 'Add a field', 'acps-site-toolkit' ); ?></h2>
+				<?php
+				$type_icons = array(
+					'short_text'  => 'edit', 'long_text' => 'editor-paragraph', 'email' => 'email',
+					'number'      => 'calculator', 'dropdown' => 'arrow-down-alt2', 'radio' => 'marker',
+					'checkbox'    => 'yes', 'chips' => 'tag', 'date' => 'calendar-alt', 'time' => 'clock',
+					'file'        => 'paperclip', 'scale' => 'chart-bar', 'rating' => 'star-filled',
+					'page_picker' => 'admin-page', 'section' => 'minus', 'heading' => 'heading', 'hidden' => 'hidden',
+				);
+				?>
 				<ul class="acps-type-list">
 					<?php foreach ( $types as $slug => $meta ) : ?>
 						<li>
 							<button type="button" class="button acps-add-field" data-type="<?php echo esc_attr( $slug ); ?>">
-								+ <?php echo esc_html( $meta['label'] ); ?>
+								<span class="dashicons dashicons-<?php echo esc_attr( isset( $type_icons[ $slug ] ) ? $type_icons[ $slug ] : 'plus-alt2' ); ?>" aria-hidden="true"></span>
+								<span><?php echo esc_html( $meta['label'] ); ?></span>
 							</button>
 						</li>
 					<?php endforeach; ?>
