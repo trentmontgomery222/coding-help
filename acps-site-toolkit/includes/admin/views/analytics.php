@@ -19,6 +19,8 @@ $pages       = Analytics::top_pages( array( 'limit' => 50 ) );
 $transitions = Analytics::common_transitions( 15 );
 $dead_ends   = Analytics::dead_ends( 10 );
 $trend       = Analytics::trend( 30 );
+$devices     = Analytics::device_breakdown();
+$ua          = Analytics::ua_breakdown();
 
 // Path drill-down for a selected page.
 $focus = isset( $_GET['focus'] ) ? absint( $_GET['focus'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
@@ -167,6 +169,49 @@ $active_total = Analytics::active_count( 5 );
 				<?php endif; ?>
 			</tbody>
 		</table>
+	</div>
+
+	<div class="acps-card">
+		<h2><?php esc_html_e( 'Devices, browsers & operating systems', 'acps-site-toolkit' ); ?></h2>
+		<p class="description"><?php esc_html_e( 'Sessions, page views, and average time on page, broken down by how visitors reached the site.', 'acps-site-toolkit' ); ?></p>
+		<div class="acps-three-col">
+			<?php
+			$acps_bd_tables = array(
+				__( 'Device', 'acps-site-toolkit' )           => $devices,
+				__( 'Browser', 'acps-site-toolkit' )          => $ua['browsers'],
+				__( 'Operating system', 'acps-site-toolkit' ) => $ua['os'],
+			);
+			foreach ( $acps_bd_tables as $bd_title => $bd_rows ) :
+				?>
+				<div>
+					<h3><?php echo esc_html( $bd_title ); ?></h3>
+					<table class="widefat striped">
+						<thead>
+							<tr>
+								<th scope="col"><?php echo esc_html( $bd_title ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Sessions', 'acps-site-toolkit' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Views', 'acps-site-toolkit' ); ?></th>
+								<th scope="col"><?php esc_html_e( 'Avg time', 'acps-site-toolkit' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php if ( ! $bd_rows ) : ?>
+								<tr><td colspan="4"><?php esc_html_e( 'No data', 'acps-site-toolkit' ); ?></td></tr>
+							<?php else : ?>
+								<?php foreach ( $bd_rows as $bd ) : ?>
+									<tr>
+										<th scope="row"><?php echo esc_html( $bd['label'] ); ?></th>
+										<td><?php echo esc_html( number_format_i18n( $bd['sessions'] ) ); ?></td>
+										<td><?php echo esc_html( number_format_i18n( $bd['views'] ) ); ?></td>
+										<td><?php echo esc_html( $fmt_time( $bd['avg_time'] ) ); ?></td>
+									</tr>
+								<?php endforeach; ?>
+							<?php endif; ?>
+						</tbody>
+					</table>
+				</div>
+			<?php endforeach; ?>
+		</div>
 	</div>
 
 	<div class="acps-two-col">

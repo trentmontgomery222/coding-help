@@ -333,6 +333,107 @@ class Analytics {
 	}
 
 	/**
+	 * Breakdown by device type: sessions, views, and average time on page.
+	 *
+	 * @return array[] Each: label, sessions, views, avg_time.
+	 */
+	public static function device_breakdown() {
+		global $wpdb;
+		$s = Schema::table( 'sessions' );
+		$v = Schema::table( 'visits' );
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			"SELECT s.device_type AS k,
+				COUNT(DISTINCT s.id) AS sessions,
+				COUNT(v.id) AS views,
+				AVG(v.time_on_page) AS avg_time
+			 FROM {$s} s LEFT JOIN {$v} v ON v.session_id = s.id
+			 GROUP BY s.device_type
+			 ORDER BY sessions DESC",
+			ARRAY_A
+		);
+
+		$out = array();
+		foreach ( $rows ?: array() as $r ) {
+			$out[] = array(
+				'label'    => $r['k'] ? ucfirst( $r['k'] ) : __( 'Unknown', 'acps-site-toolkit' ),
+				'sessions' => (int) $r['sessions'],
+				'views'    => (int) $r['views'],
+				'avg_time' => round( (float) $r['avg_time'], 1 ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Breakdown by browser and operating system, derived from the stored
+	 * "Browser / OS" session summary. Returns two lists with sessions, views,
+	 * and average time on page.
+	 *
+	 * @return array [ 'browsers' => array[], 'os' => array[] ]
+	 */
+	public static function ua_breakdown() {
+		global $wpdb;
+		$s = Schema::table( 'sessions' );
+		$v = Schema::table( 'visits' );
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			"SELECT s.user_agent_summary AS ua,
+				COUNT(DISTINCT s.id) AS sessions,
+				COUNT(v.id) AS views,
+				SUM(v.time_on_page) AS sum_time,
+				COUNT(v.time_on_page) AS t_count
+			 FROM {$s} s LEFT JOIN {$v} v ON v.session_id = s.id
+			 GROUP BY s.user_agent_summary",
+			ARRAY_A
+		);
+
+		$browsers = array();
+		$oses     = array();
+		$accumulate = function ( &$bucket, $key, $r ) {
+			if ( ! isset( $bucket[ $key ] ) ) {
+				$bucket[ $key ] = array( 'label' => $key, 'sessions' => 0, 'views' => 0, 'sum_time' => 0, 't_count' => 0 );
+			}
+			$bucket[ $key ]['sessions'] += (int) $r['sessions'];
+			$bucket[ $key ]['views']    += (int) $r['views'];
+			$bucket[ $key ]['sum_time'] += (float) $r['sum_time'];
+			$bucket[ $key ]['t_count']  += (int) $r['t_count'];
+		};
+
+		foreach ( $rows ?: array() as $r ) {
+			$ua = trim( (string) $r['ua'] );
+			if ( '' === $ua ) {
+				$browser = __( 'Unknown', 'acps-site-toolkit' );
+				$os      = __( 'Unknown', 'acps-site-toolkit' );
+			} elseif ( false !== strpos( $ua, ' / ' ) ) {
+				list( $browser, $os ) = array_pad( explode( ' / ', $ua, 2 ), 2, __( 'Other', 'acps-site-toolkit' ) );
+			} else {
+				// Full UA stored — best-effort browser sniff, OS unknown.
+				$browser = 'Other';
+				foreach ( array( 'Edg' => 'Edge', 'OPR' => 'Opera', 'Chrome' => 'Chrome', 'Firefox' => 'Firefox', 'Safari' => 'Safari' ) as $needle => $name ) {
+					if ( false !== strpos( $ua, $needle ) ) { $browser = $name; break; }
+				}
+				$os = __( 'Other', 'acps-site-toolkit' );
+			}
+			$accumulate( $browsers, $browser, $r );
+			$accumulate( $oses, $os, $r );
+		}
+
+		$finish = function ( $bucket ) {
+			$list = array();
+			foreach ( $bucket as $b ) {
+				$b['avg_time'] = $b['t_count'] > 0 ? round( $b['sum_time'] / $b['t_count'], 1 ) : 0;
+				unset( $b['sum_time'], $b['t_count'] );
+				$list[] = $b;
+			}
+			usort( $list, function ( $a, $c ) { return $c['sessions'] <=> $a['sessions']; } );
+			return $list;
+		};
+
+		return array( 'browsers' => $finish( $browsers ), 'os' => $finish( $oses ) );
+	}
+
+	/**
 	 * Feedback counts per page (non-spam, non-trashed feedback entries).
 	 *
 	 * @return array Map post_id => count.

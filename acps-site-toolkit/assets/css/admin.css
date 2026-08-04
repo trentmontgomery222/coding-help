@@ -47,6 +47,10 @@
 .acps-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media ( max-width: 782px ) { .acps-two-col { grid-template-columns: 1fr; } }
 
+.acps-three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+.acps-three-col h3 { margin: 0 0 0.35rem; }
+@media ( max-width: 960px ) { .acps-three-col { grid-template-columns: 1fr; } }
+
 .acps-path { margin: 0; padding-left: 1.25rem; }
 
 /* Live "who's on the site now" */
