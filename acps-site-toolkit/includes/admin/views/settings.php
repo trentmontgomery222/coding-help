@@ -83,8 +83,25 @@ $checked = function ( $key ) use ( $s ) {
 				</td>
 			</tr>
 			<tr>
-				<th scope="row"><label for="acps-trigger-size"><?php esc_html_e( 'Trigger size (px)', 'acps-site-toolkit' ); ?></label></th>
-				<td><input type="number" id="acps-trigger-size" name="<?php echo esc_attr( $name( 'trigger_size' ) ); ?>" value="<?php echo esc_attr( $s['trigger_size'] ); ?>" min="24" max="200" step="1" class="small-text"> <?php esc_html_e( 'Diameter of the circular button.', 'acps-site-toolkit' ); ?></td>
+				<th scope="row"><?php esc_html_e( 'Button size per device (px)', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label for="acps-trigger-size"><?php esc_html_e( 'Laptop / desktop', 'acps-site-toolkit' ); ?></label>
+					<input type="number" id="acps-trigger-size" name="<?php echo esc_attr( $name( 'trigger_size' ) ); ?>" value="<?php echo esc_attr( $s['trigger_size'] ); ?>" min="24" max="200" class="small-text">
+					&nbsp;
+					<label for="acps-trigger-size-t"><?php esc_html_e( 'Tablet', 'acps-site-toolkit' ); ?></label>
+					<input type="number" id="acps-trigger-size-t" name="<?php echo esc_attr( $name( 'trigger_size_tablet' ) ); ?>" value="<?php echo esc_attr( $s['trigger_size_tablet'] ); ?>" min="24" max="200" class="small-text">
+					&nbsp;
+					<label for="acps-trigger-size-m"><?php esc_html_e( 'Phone', 'acps-site-toolkit' ); ?></label>
+					<input type="number" id="acps-trigger-size-m" name="<?php echo esc_attr( $name( 'trigger_size_mobile' ) ); ?>" value="<?php echo esc_attr( $s['trigger_size_mobile'] ); ?>" min="24" max="200" class="small-text">
+					<p class="description"><?php esc_html_e( 'Diameter of the circular button. Tablet ≤1024px, phone ≤600px.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="acps-modal-width"><?php esc_html_e( 'Popup width (px)', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<input type="number" id="acps-modal-width" name="<?php echo esc_attr( $name( 'modal_max_width' ) ); ?>" value="<?php echo esc_attr( $s['modal_max_width'] ); ?>" min="320" max="2000" class="small-text">
+					<p class="description"><?php esc_html_e( 'Max width of the popup on laptop/desktop (e.g. 1200). It automatically shrinks to fit smaller screens.', 'acps-site-toolkit' ); ?></p>
+				</td>
 			</tr>
 			<tr>
 				<th scope="row"><label for="acps-trigger-bg"><?php esc_html_e( 'Trigger background colour', 'acps-site-toolkit' ); ?></label></th>
@@ -175,16 +192,25 @@ $checked = function ( $key ) use ( $s ) {
 			</tr>
 		</table>
 
-		<h2 class="title"><?php esc_html_e( 'Custom CSS', 'acps-site-toolkit' ); ?></h2>
+		<h2 class="title"><?php esc_html_e( 'Stylesheet', 'acps-site-toolkit' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row"><label for="acps-custom-css"><?php esc_html_e( 'Additional CSS', 'acps-site-toolkit' ); ?></label></th>
+				<th scope="row"><label for="acps-custom-css"><?php esc_html_e( 'Site Toolkit CSS', 'acps-site-toolkit' ); ?></label></th>
 				<td>
-					<textarea id="acps-custom-css" name="<?php echo esc_attr( $name( 'custom_css' ) ); ?>" rows="10" class="large-text code" spellcheck="false" placeholder=".acps-form-wrap { --acps-accent: #0b5fa5; }"><?php echo esc_textarea( $s['custom_css'] ); ?></textarea>
+					<?php
+					// Prefill with the full default stylesheet so you can see and
+					// edit every rule. When empty, the default file is used as-is.
+					$css_value = '' !== $s['custom_css']
+						? $s['custom_css']
+						: (string) @file_get_contents( ACPS_ST_PATH . 'assets/css/frontend.css' ); // phpcs:ignore
+					?>
+					<textarea id="acps-custom-css" name="<?php echo esc_attr( $name( 'custom_css' ) ); ?>" rows="24" class="large-text code" spellcheck="false" style="font-family:monospace;white-space:pre;"><?php echo esc_textarea( $css_value ); ?></textarea>
 					<p class="description">
-						<?php esc_html_e( 'Loaded after the plugin styles, so it overrides them. Handy variables you can set on .acps-form-wrap or .acps-feedback-root:', 'acps-site-toolkit' ); ?>
-						<code>--acps-accent</code>, <code>--acps-error</code>, <code>--acps-border</code>, <code>--acps-radius</code>, <code>--acps-trigger-size</code>.
-						<br><?php esc_html_e( 'Tip: override with variables rather than rewriting rules, so the built-in accessibility and spam-prevention styles stay intact.', 'acps-site-toolkit' ); ?>
+						<?php esc_html_e( 'This is the full front-end stylesheet — edit any rule here. What you save loads on top of the maintained default, so your changes win. Leave it empty to revert to the shipped defaults.', 'acps-site-toolkit' ); ?>
+					</p>
+					<p class="description">
+						<strong><?php esc_html_e( 'Please keep these intact', 'acps-site-toolkit' ); ?>:</strong>
+						<?php esc_html_e( 'the .acps-hp rule (hides the spam honeypot) and the :focus-visible outlines (keyboard accessibility). Removing them can break spam protection or accessibility.', 'acps-site-toolkit' ); ?>
 					</p>
 				</td>
 			</tr>

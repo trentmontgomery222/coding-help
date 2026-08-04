@@ -226,11 +226,11 @@
 
 /* Circular icon-only trigger (size from --acps-trigger-size, default 64px). */
 .acps-feedback-trigger--icon {
-	--acps-trigger-size: 64px;
-	width: var( --acps-trigger-size );
-	height: var( --acps-trigger-size );
-	min-width: var( --acps-trigger-size );
-	min-height: var( --acps-trigger-size );
+	/* Diameter comes from --acps-trigger-size, set per-device in Settings. */
+	width: var( --acps-trigger-size, 64px );
+	height: var( --acps-trigger-size, 64px );
+	min-width: var( --acps-trigger-size, 64px );
+	min-height: var( --acps-trigger-size, 64px );
 	padding: 0;
 	border-radius: 50%;
 	overflow: hidden;
@@ -263,7 +263,9 @@
 .acps-modal {
 	background: #fff;
 	color: #1a1a1a;
-	width: min( 32rem, 100% );
+	/* Width comes from --acps-modal-width (set per-device in Settings), but never
+	   exceeds the viewport minus a gutter — so it shrinks on smaller screens. */
+	width: min( var( --acps-modal-width, 512px ), calc( 100% - 2rem ) );
 	max-height: 90vh;
 	overflow: auto;
 	border-radius: 8px;

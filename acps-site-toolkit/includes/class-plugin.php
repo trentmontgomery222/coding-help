@@ -163,6 +163,19 @@ class Plugin {
 		if ( '' !== $custom_css ) {
 			wp_add_inline_style( 'acps-st-frontend', $custom_css );
 		}
+
+		// Per-device sizing (popup width + button diameter) loads LAST as CSS
+		// variables, so these numeric settings stay authoritative. The popup
+		// still shrinks below its max on small screens via the min() in the base
+		// rule; the button size steps down at tablet and phone breakpoints.
+		$modal  = (int) Settings::get( 'modal_max_width', 1200 );
+		$td     = (int) Settings::get( 'trigger_size', 64 );
+		$tt     = (int) Settings::get( 'trigger_size_tablet', 60 );
+		$tm     = (int) Settings::get( 'trigger_size_mobile', 52 );
+		$device = ":root{--acps-modal-width:{$modal}px;--acps-trigger-size:{$td}px;}"
+			. "@media (max-width:1024px){:root{--acps-trigger-size:{$tt}px;}}"
+			. "@media (max-width:600px){:root{--acps-trigger-size:{$tm}px;}}";
+		wp_add_inline_style( 'acps-st-frontend', $device );
 	}
 
 	/**

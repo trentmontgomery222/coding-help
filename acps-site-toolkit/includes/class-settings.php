@@ -36,9 +36,12 @@ class Settings {
 			'trigger_position'      => 'bottom-right', // bottom-right | bottom-left | edge-right | edge-left.
 			'trigger_label'         => 'Chat with us',
 			'trigger_icon_url'      => 'https://acpsmdprod.wpengine.com/wp-content/uploads/2026/08/Untitled-design-1.png',
-			'trigger_size'          => 64, // circle diameter in px.
+			'trigger_size'          => 64, // circle diameter (desktop/laptop) in px.
+			'trigger_size_tablet'   => 60, // circle diameter on tablets.
+			'trigger_size_mobile'   => 52, // circle diameter on phones.
 			'trigger_bg'            => '', // circle background; blank = accent colour.
-			'custom_css'            => '', // appended after the plugin stylesheet.
+			'modal_max_width'       => 1200, // popup max width on laptop/desktop.
+			'custom_css'            => '', // full editable stylesheet (overrides base).
 			'feedback_categories'   => array(
 				"Something's broken",
 				'Hard to use',
@@ -161,8 +164,11 @@ class Settings {
 
 		// Trigger appearance.
 		$out['trigger_icon_url'] = isset( $input['trigger_icon_url'] ) ? esc_url_raw( trim( $input['trigger_icon_url'] ) ) : '';
-		$out['trigger_size']     = max( 24, min( 200, absint( $input['trigger_size'] ?? $defaults['trigger_size'] ) ) );
-		$out['trigger_bg']       = isset( $input['trigger_bg'] ) ? ( sanitize_hex_color( $input['trigger_bg'] ) ?: '' ) : '';
+		$out['trigger_size']        = max( 24, min( 200, absint( $input['trigger_size'] ?? $defaults['trigger_size'] ) ) );
+		$out['trigger_size_tablet'] = max( 24, min( 200, absint( $input['trigger_size_tablet'] ?? $defaults['trigger_size_tablet'] ) ) );
+		$out['trigger_size_mobile'] = max( 24, min( 200, absint( $input['trigger_size_mobile'] ?? $defaults['trigger_size_mobile'] ) ) );
+		$out['modal_max_width']     = max( 320, min( 2000, absint( $input['modal_max_width'] ?? $defaults['modal_max_width'] ) ) );
+		$out['trigger_bg']          = isset( $input['trigger_bg'] ) ? ( sanitize_hex_color( $input['trigger_bg'] ) ?: '' ) : '';
 
 		// Custom CSS: strip any tags so it can't break out of the <style> block.
 		$out['custom_css'] = isset( $input['custom_css'] ) ? wp_strip_all_tags( (string) $input['custom_css'] ) : '';

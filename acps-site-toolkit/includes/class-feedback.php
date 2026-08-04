@@ -173,11 +173,13 @@ class Feedback {
 		$title     = get_the_title( $post_id );
 		$form_html = Form_Renderer::render( $form, array( 'post_id' => $post_id ) );
 
-		// Inline style drives the circle: size + optional background colour.
-		$trigger_style = '--acps-trigger-size:' . max( 24, min( 200, $size ) ) . 'px;';
+		// Size comes from the per-device CSS variables (see the dynamic block in
+		// Plugin::enqueue_frontend); only the optional background is inline here.
+		$trigger_style = '';
 		if ( $bg ) {
 			$trigger_style .= 'background:' . $bg . ';border-color:' . $bg . ';';
 		}
+		unset( $size );
 
 		// Child-theme override (receives $form, $form_html, $label, $position,
 		// $post_id, $title).
