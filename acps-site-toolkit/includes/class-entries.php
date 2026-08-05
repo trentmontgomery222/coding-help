@@ -34,21 +34,25 @@ class Entries {
 		global $wpdb;
 		$now = current_time( 'mysql' );
 
-		$wpdb->insert( // phpcs:ignore WordPress.DB
-			Schema::table( 'entries' ),
-			array(
-				'form_id'            => absint( $entry['form_id'] ),
-				'submitted_at'       => $now,
-				'session_id'         => ! empty( $entry['session_id'] ) ? absint( $entry['session_id'] ) : null,
-				'visitor_uid'        => ! empty( $entry['visitor_uid'] ) ? Visitors::sanitize( $entry['visitor_uid'] ) : null,
-				'page_id'            => ! empty( $entry['page_id'] ) ? absint( $entry['page_id'] ) : null,
-				'page_url'           => isset( $entry['page_url'] ) ? esc_url_raw( $entry['page_url'] ) : null,
-				'status'             => isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'new',
-				'user_id'            => get_current_user_id() ?: null,
-				'ip_anon'            => Session::anonymize_ip( Session::client_ip() ),
-				'user_agent_summary' => Session::user_agent_summary(),
-			)
+		$data = array(
+			'form_id'            => absint( $entry['form_id'] ),
+			'submitted_at'       => $now,
+			'session_id'         => ! empty( $entry['session_id'] ) ? absint( $entry['session_id'] ) : null,
+			'page_id'            => ! empty( $entry['page_id'] ) ? absint( $entry['page_id'] ) : null,
+			'page_url'           => isset( $entry['page_url'] ) ? esc_url_raw( $entry['page_url'] ) : null,
+			'status'             => isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'new',
+			'user_id'            => get_current_user_id() ?: null,
+			'ip_anon'            => Session::anonymize_ip( Session::client_ip() ),
+			'user_agent_summary' => Session::user_agent_summary(),
 		);
+		// Only write visitor_uid when the column actually exists — otherwise a
+		// schema that hasn't upgraded yet would make the whole INSERT fail
+		// ("unknown column") and silently lose the submission.
+		if ( ! empty( $entry['visitor_uid'] ) && self::has_column( 'visitor_uid' ) ) {
+			$data['visitor_uid'] = Visitors::sanitize( $entry['visitor_uid'] );
+		}
+
+		$wpdb->insert( Schema::table( 'entries' ), $data ); // phpcs:ignore WordPress.DB
 		$entry_id = (int) $wpdb->insert_id;
 
 		$vtable = Schema::table( 'entry_values' );
@@ -76,6 +80,24 @@ class Entries {
 		}
 
 		return $entry_id;
+	}
+
+	/**
+	 * Whether the entries table has a given column (cached per request). Guards
+	 * against a schema that hasn't finished upgrading yet.
+	 *
+	 * @param string $column Column name.
+	 * @return bool
+	 */
+	private static function has_column( $column ) {
+		static $cols = null;
+		if ( null === $cols ) {
+			global $wpdb;
+			$table = Schema::table( 'entries' );
+			$found = $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ); // phpcs:ignore WordPress.DB
+			$cols  = is_array( $found ) ? array_map( 'strtolower', $found ) : array();
+		}
+		return in_array( strtolower( $column ), $cols, true );
 	}
 
 	/**
