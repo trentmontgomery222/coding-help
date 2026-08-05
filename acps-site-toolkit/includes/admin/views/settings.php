@@ -168,8 +168,15 @@ $checked = function ( $key ) use ( $s ) {
 			</tr>
 		</table>
 
-		<h2 class="title"><?php esc_html_e( 'Journey tracking & privacy', 'acps-site-toolkit' ); ?></h2>
+		<h2 class="title"><?php esc_html_e( 'Analytics & tracking', 'acps-site-toolkit' ); ?></h2>
 		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Analytics master switch', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'analytics_enabled' ) ); ?>" value="1" <?php echo $checked( 'analytics_enabled' ); ?>> <?php esc_html_e( 'Enable analytics, visitor and page tracking', 'acps-site-toolkit' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Off by default. When off, no beacons, heartbeats, presence pings or visitor cookies run at all — this avoids conflicts with other analytics plugins (e.g. MonsterInsights) and any performance overhead. Forms, feedback and the Q&A widget keep working. The Analytics and Visitors screens are hidden while this is off.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Journey tracking', 'acps-site-toolkit' ); ?></th>
 				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'tracking_enabled' ) ); ?>" value="1" <?php echo $checked( 'tracking_enabled' ); ?>> <?php esc_html_e( 'Record the page journey per session (via the cache-safe beacon)', 'acps-site-toolkit' ); ?></label></td>

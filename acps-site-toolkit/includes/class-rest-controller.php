@@ -33,6 +33,40 @@ class REST_Controller {
 	public function register_routes() {
 		$ns = ACPS_ST_REST_NAMESPACE;
 
+		// Form routes (always available). Tracking routes below are only
+		// registered when analytics is enabled.
+		register_rest_route(
+			$ns,
+			'/token',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'token' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/submit',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'submit' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/unlock',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'unlock' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		if ( ! Settings::get( 'analytics_enabled' ) ) {
+			return;
+		}
+
 		register_rest_route(
 			$ns,
 			'/beacon',
@@ -78,16 +112,6 @@ class REST_Controller {
 
 		register_rest_route(
 			$ns,
-			'/token',
-			array(
-				'methods'             => 'GET',
-				'callback'            => array( $this, 'token' ),
-				'permission_callback' => '__return_true',
-			)
-		);
-
-		register_rest_route(
-			$ns,
 			'/recent-pages',
 			array(
 				'methods'             => 'GET',
@@ -96,26 +120,6 @@ class REST_Controller {
 				'args'                => array(
 					'session' => array( 'required' => true ),
 				),
-			)
-		);
-
-		register_rest_route(
-			$ns,
-			'/submit',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'submit' ),
-				'permission_callback' => '__return_true',
-			)
-		);
-
-		register_rest_route(
-			$ns,
-			'/unlock',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'unlock' ),
-				'permission_callback' => '__return_true',
 			)
 		);
 	}

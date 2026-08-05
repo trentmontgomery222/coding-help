@@ -58,6 +58,10 @@ class Settings {
 			// Notifications.
 			'notify_recipients'     => '', // comma-separated; empty falls back to admin_email.
 
+			// Master switch for ALL analytics/visitor/page tracking. Off by
+			// default now — forms, feedback and Q&A keep working without it.
+			'analytics_enabled'     => 0,
+
 			// Journey tracking.
 			'tracking_enabled'      => 1,
 			'consent_mode'          => 0,
@@ -146,6 +150,7 @@ class Settings {
 			'feedback_enabled',
 			'feedback_allow_screenshot',
 			'trigger_transparent',
+			'analytics_enabled',
 			'tracking_enabled',
 			'consent_mode',
 			'store_full_user_agent',

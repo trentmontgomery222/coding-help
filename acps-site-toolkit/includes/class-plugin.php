@@ -125,16 +125,20 @@ class Plugin {
 	 * the REST config needed to run cache-safely.
 	 */
 	public function enqueue_frontend() {
+		$analytics_on = (bool) Settings::get( 'analytics_enabled' );
+
 		$config = array(
 			'restUrl'       => esc_url_raw( rest_url( ACPS_ST_REST_NAMESPACE ) ),
-			'tracking'      => (bool) Settings::get( 'tracking_enabled' ),
+			// Master switch — when off, tracking.js does nothing at all.
+			'analytics'     => $analytics_on,
+			'tracking'      => $analytics_on && (bool) Settings::get( 'tracking_enabled' ),
 			// Don't record analytics for logged-in site admins browsing their own
 			// site — keeps their views out of the numbers and out of the live
 			// "who's on the site" list.
 			'suppress'      => is_user_logged_in() && current_user_can( 'manage_options' ),
 			// Admins report their own location to the separate staff-presence
 			// view (not analytics). Needs a REST nonce for cookie auth.
-			'presence'      => is_user_logged_in() && current_user_can( 'manage_options' ),
+			'presence'      => $analytics_on && is_user_logged_in() && current_user_can( 'manage_options' ),
 			'restNonce'     => wp_create_nonce( 'wp_rest' ),
 			'consentMode'   => (bool) Settings::get( 'consent_mode' ),
 			'idleMinutes'   => (int) Settings::get( 'session_idle_minutes', 30 ),

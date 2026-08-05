@@ -15,6 +15,14 @@
 		return;
 	}
 
+	// Master off switch: when analytics/visitor/page tracking is disabled, do
+	// nothing at all — no beacon, heartbeat, presence, cookies or network calls.
+	// Forms still work: they read the config below and degrade without a session.
+	if ( ! cfg.analytics ) {
+		window.ACPS_ST_RT = window.ACPS_ST_RT || { token: '', uid: '', active: false };
+		return;
+	}
+
 	var SID_COOKIE = 'acps_st_sid';
 	var UID_COOKIE = 'acps_st_uid';
 	var CONSENT_COOKIE = 'acps_st_consent';
