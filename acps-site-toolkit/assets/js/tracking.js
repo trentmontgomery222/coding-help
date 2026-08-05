@@ -55,16 +55,29 @@
 		return t;
 	}
 
-	/* Persistent unique-user id (per browser). Long-lived so the same browser
-	   counts once across sessions; a cleared cookie just becomes a new user
-	   (we prefer over-counting to missing anyone). Cookie lifetimes are capped
-	   near 400 days by browsers, so we renew it on each visit. */
+	/* Persistent unique-user id (per browser). Stored in BOTH a long-lived
+	   cookie AND localStorage and reconciled on every visit, so clearing just
+	   cookies (or just site cache) does NOT create a new user — the id is
+	   restored from whichever store survives. Only wiping all site data resets
+	   it. Cookie lifetimes are capped near 400 days, so we renew each visit. */
+	function lsGet( key ) {
+		try { return window.localStorage.getItem( key ); } catch ( e ) { return null; }
+	}
+	function lsSet( key, val ) {
+		try { window.localStorage.setItem( key, val ); } catch ( e ) {}
+	}
 	function getUid() {
+		var valid = /^[a-f0-9]{40}$/;
 		var u = readCookie( UID_COOKIE );
-		if ( ! /^[a-f0-9]{40}$/.test( u ) ) {
-			u = makeToken();
+		if ( ! valid.test( u ) ) {
+			u = lsGet( UID_COOKIE ); // cookie cleared → restore from localStorage.
 		}
+		if ( ! valid.test( u ) ) {
+			u = makeToken(); // neither survived → genuinely new.
+		}
+		// Write back to both stores so a future clear of one is recoverable.
 		writeCookie( UID_COOKIE, u, 400 * 24 * 60 ); // ~400 days in minutes.
+		lsSet( UID_COOKIE, u );
 		return u;
 	}
 
