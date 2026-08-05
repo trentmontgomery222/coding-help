@@ -126,19 +126,21 @@ class Plugin {
 	 */
 	public function enqueue_frontend() {
 		$analytics_on = (bool) Settings::get( 'analytics_enabled' );
+		$beacon_on    = $analytics_on && ( (bool) Settings::get( 'track_pageviews' ) || (bool) Settings::get( 'track_visitors' ) );
 
 		$config = array(
 			'restUrl'       => esc_url_raw( rest_url( ACPS_ST_REST_NAMESPACE ) ),
 			// Master switch — when off, tracking.js does nothing at all.
 			'analytics'     => $analytics_on,
-			'tracking'      => $analytics_on && (bool) Settings::get( 'tracking_enabled' ),
+			// Whether the one-per-pageview beacon should fire.
+			'beacon'        => $beacon_on,
+			'tracking'      => $beacon_on,
 			// Don't record analytics for logged-in site admins browsing their own
-			// site — keeps their views out of the numbers and out of the live
-			// "who's on the site" list.
+			// site — keeps their views out of the numbers.
 			'suppress'      => is_user_logged_in() && current_user_can( 'manage_options' ),
-			// Admins report their own location to the separate staff-presence
-			// view (not analytics). Needs a REST nonce for cookie auth.
-			'presence'      => $analytics_on && is_user_logged_in() && current_user_can( 'manage_options' ),
+			// Admin "who's on the site now" — a separate request, only when the
+			// admin-tracking toggle is on.
+			'presence'      => $analytics_on && (bool) Settings::get( 'track_presence' ) && is_user_logged_in() && current_user_can( 'manage_options' ),
 			'restNonce'     => wp_create_nonce( 'wp_rest' ),
 			'consentMode'   => (bool) Settings::get( 'consent_mode' ),
 			'idleMinutes'   => (int) Settings::get( 'session_idle_minutes', 30 ),

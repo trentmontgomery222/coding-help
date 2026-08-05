@@ -67,61 +67,47 @@ class REST_Controller {
 			return;
 		}
 
-		register_rest_route(
-			$ns,
-			'/beacon',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'beacon' ),
-				'permission_callback' => '__return_true', // public tracking endpoint.
-			)
-		);
+		// The single pageview beacon — registered when either page tracking or
+		// unique-visitor counting is on (both ride the one request).
+		if ( Settings::get( 'track_pageviews' ) || Settings::get( 'track_visitors' ) ) {
+			register_rest_route(
+				$ns,
+				'/beacon',
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'beacon' ),
+					'permission_callback' => '__return_true', // public tracking endpoint.
+				)
+			);
+		}
 
-		register_rest_route(
-			$ns,
-			'/unload',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'unload' ),
-				'permission_callback' => '__return_true',
-			)
-		);
+		if ( Settings::get( 'track_pageviews' ) ) {
+			register_rest_route(
+				$ns,
+				'/recent-pages',
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( $this, 'recent_pages' ),
+					'permission_callback' => '__return_true',
+					'args'                => array( 'session' => array( 'required' => true ) ),
+				)
+			);
+		}
 
-		register_rest_route(
-			$ns,
-			'/ping',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'ping' ),
-				'permission_callback' => '__return_true',
-			)
-		);
-
-		register_rest_route(
-			$ns,
-			'/presence',
-			array(
-				'methods'             => 'POST',
-				'callback'            => array( $this, 'presence' ),
-				// Authenticated (cookie + X-WP-Nonce): only admins report presence.
-				'permission_callback' => function () {
-					return is_user_logged_in() && current_user_can( 'manage_options' );
-				},
-			)
-		);
-
-		register_rest_route(
-			$ns,
-			'/recent-pages',
-			array(
-				'methods'             => 'GET',
-				'callback'            => array( $this, 'recent_pages' ),
-				'permission_callback' => '__return_true',
-				'args'                => array(
-					'session' => array( 'required' => true ),
-				),
-			)
-		);
+		// Admin "who's on the site now" — a separate request, off unless enabled.
+		if ( Settings::get( 'track_presence' ) ) {
+			register_rest_route(
+				$ns,
+				'/presence',
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( $this, 'presence' ),
+					'permission_callback' => function () {
+						return is_user_logged_in() && current_user_can( 'manage_options' );
+					},
+				)
+			);
+		}
 	}
 
 	/**
@@ -174,8 +160,7 @@ class REST_Controller {
 	public function beacon( $req ) {
 		$this->no_cache();
 
-		// Honour the tracking master switch and consent mode (spec §4.4).
-		if ( ! Settings::get( 'tracking_enabled' ) ) {
+		if ( ! Settings::get( 'analytics_enabled' ) ) {
 			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'disabled' ), 200 );
 		}
 
@@ -188,39 +173,43 @@ class REST_Controller {
 			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'no_consent' ), 200 );
 		}
 
-		$token = isset( $params['session'] ) ? $params['session'] : '';
-		$session_id = Session::resolve(
-			$token,
-			array(
-				'post_id'  => isset( $params['post_id'] ) ? absint( $params['post_id'] ) : 0,
-				'url'      => isset( $params['url'] ) ? $params['url'] : '',
-				'referrer' => isset( $params['referrer'] ) ? $params['referrer'] : '',
-				'viewport' => isset( $params['viewport'] ) ? $params['viewport'] : '',
-				'consent'  => $consent,
-			)
-		);
+		$track_pages    = (bool) Settings::get( 'track_pageviews' );
+		$track_visitors = (bool) Settings::get( 'track_visitors' );
 
-		if ( ! $session_id ) {
-			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'bad_session' ), 200 );
+		// Unique users are counted from a server-side IP + user-agent fingerprint
+		// (same signal as the spam guard), so clearing cookies/cache never makes a
+		// "new" visitor. No client id needed.
+		if ( $track_visitors ) {
+			Visitors::record();
 		}
 
-		// Register the persistent unique-user id (dupe-proof, over-counts rather
-		// than misses). Independent of the session.
-		if ( ! empty( $params['uid'] ) ) {
-			Visitors::record( $params['uid'] );
+		$visit_id = false;
+		if ( $track_pages ) {
+			$token      = isset( $params['session'] ) ? $params['session'] : '';
+			$session_id = Session::resolve(
+				$token,
+				array(
+					'post_id'  => isset( $params['post_id'] ) ? absint( $params['post_id'] ) : 0,
+					'url'      => isset( $params['url'] ) ? $params['url'] : '',
+					'referrer' => isset( $params['referrer'] ) ? $params['referrer'] : '',
+					'viewport' => isset( $params['viewport'] ) ? $params['viewport'] : '',
+					'consent'  => $consent,
+				)
+			);
+			if ( $session_id ) {
+				$visit_id = Tracking::record_visit(
+					$session_id,
+					array(
+						'post_id'  => isset( $params['post_id'] ) ? absint( $params['post_id'] ) : 0,
+						'url'      => isset( $params['url'] ) ? $params['url'] : '',
+						'title'    => isset( $params['title'] ) ? $params['title'] : '',
+						'viewport' => isset( $params['viewport'] ) ? $params['viewport'] : '',
+					)
+				);
+			}
 		}
 
-		$visit_id = Tracking::record_visit(
-			$session_id,
-			array(
-				'post_id'  => isset( $params['post_id'] ) ? absint( $params['post_id'] ) : 0,
-				'url'      => isset( $params['url'] ) ? $params['url'] : '',
-				'title'    => isset( $params['title'] ) ? $params['title'] : '',
-				'viewport' => isset( $params['viewport'] ) ? $params['viewport'] : '',
-			)
-		);
-
-		return new \WP_REST_Response( array( 'ok' => (bool) $visit_id ), 200 );
+		return new \WP_REST_Response( array( 'ok' => true, 'v' => (bool) $visit_id ), 200 );
 	}
 
 	/**

@@ -173,8 +173,26 @@ $checked = function ( $key ) use ( $s ) {
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Analytics master switch', 'acps-site-toolkit' ); ?></th>
 				<td>
-					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'analytics_enabled' ) ); ?>" value="1" <?php echo $checked( 'analytics_enabled' ); ?>> <?php esc_html_e( 'Enable analytics, visitor and page tracking', 'acps-site-toolkit' ); ?></label>
-					<p class="description"><?php esc_html_e( 'Off by default. When off, no beacons, heartbeats, presence pings or visitor cookies run at all — this avoids conflicts with other analytics plugins (e.g. MonsterInsights) and any performance overhead. Forms, feedback and the Q&A widget keep working. The Analytics and Visitors screens are hidden while this is off.', 'acps-site-toolkit' ); ?></p>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'analytics_enabled' ) ); ?>" value="1" <?php echo $checked( 'analytics_enabled' ); ?>> <?php esc_html_e( 'Enable analytics & tracking', 'acps-site-toolkit' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Turns everything below on or off at once. When off, nothing tracks at all and the Analytics/Visitors screens are hidden. Forms, feedback and Q&A always keep working.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'What to track', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'track_pageviews' ) ); ?>" value="1" <?php echo $checked( 'track_pageviews' ); ?>> <?php esc_html_e( 'Page views & journeys (also powers device/browser stats and paths)', 'acps-site-toolkit' ); ?></label><br>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'track_visitors' ) ); ?>" value="1" <?php echo $checked( 'track_visitors' ); ?>> <?php esc_html_e( 'Unique users (by anonymised IP + browser, like the spam filter — clearing cookies/cache can’t create a new one)', 'acps-site-toolkit' ); ?></label><br>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'track_presence' ) ); ?>" value="1" <?php echo $checked( 'track_presence' ); ?>> <?php esc_html_e( 'Admin “who’s on the site now” view (uses one extra request per admin page view — off by default)', 'acps-site-toolkit' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Page views + unique users share a single background request per page view, so keeping both on costs nothing extra.', 'acps-site-toolkit' ); ?></p>
+					<?php
+					$rq = \ACPS\SiteToolkit\Analytics::requests_summary();
+					/* translators: 1: last hour, 2: today, 3: total */
+					printf(
+						'<p class="description"><strong>%s</strong> %s</p>',
+						esc_html__( 'Tracking requests so far:', 'acps-site-toolkit' ),
+						esc_html( sprintf( __( '%1$s in the last hour · %2$s today · %3$s total', 'acps-site-toolkit' ), number_format_i18n( $rq['hour'] ), number_format_i18n( $rq['today'] ), number_format_i18n( $rq['total'] ) ) )
+					);
+					?>
 				</td>
 			</tr>
 			<tr>

@@ -256,6 +256,26 @@ class Analytics {
 	}
 
 	/**
+	 * Tracking-request volume, derived from recorded page visits (each visit is
+	 * one beacon request). Lets an admin gauge the load the plugin generates
+	 * without adding any extra writes.
+	 *
+	 * @return array total, today, hour.
+	 */
+	public static function requests_summary() {
+		global $wpdb;
+		$v     = Schema::table( 'visits' );
+		$today = current_time( 'Y-m-d' ) . ' 00:00:00';
+		$hour  = gmdate( 'Y-m-d H:i:s', current_time( 'timestamp' ) - HOUR_IN_SECONDS ); // phpcs:ignore WordPress.DateTime
+
+		return array(
+			'total' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$v}" ), // phpcs:ignore WordPress.DB
+			'today' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$v} WHERE visited_at >= %s", $today ) ), // phpcs:ignore WordPress.DB
+			'hour'  => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$v} WHERE visited_at >= %s", $hour ) ), // phpcs:ignore WordPress.DB
+		);
+	}
+
+	/**
 	 * Sessions active within the last N minutes, each with the page they are
 	 * currently viewing (their latest visit). Powers the live "who's on the
 	 * site now" view (spec-adjacent; keeps admins from editing pages in use).

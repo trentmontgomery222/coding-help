@@ -146,11 +146,12 @@ class Submission {
 			$session_id = Session::lookup( $request['acps_session'] );
 		}
 
-		// Persistent visitor id (per browser) — attach to the entry, register the
-		// visitor, and if the form carries an "accname" field, use it as the
-		// visitor's name so this id is recognisable everywhere.
-		$visitor_uid = isset( $request['acps_uid'] ) ? Visitors::sanitize( $request['acps_uid'] ) : '';
-		if ( '' !== $visitor_uid ) {
+		// Visitor identity is the server-side IP + user-agent fingerprint (same
+		// as the spam guard) — attach it to the entry, register the visitor, and
+		// if the form carries an "accname" field use it as the visitor's name.
+		$visitor_uid = '';
+		if ( Settings::get( 'analytics_enabled' ) && Settings::get( 'track_visitors' ) ) {
+			$visitor_uid = Visitors::fingerprint();
 			Visitors::record( $visitor_uid );
 			$accname = self::accname_value( $fields, $values );
 			if ( '' !== $accname ) {

@@ -58,10 +58,12 @@ class Settings {
 			// Notifications.
 			'notify_recipients'     => '', // comma-separated; empty falls back to admin_email.
 
-			// Master switch for ALL analytics/visitor/page tracking. Now uses a
-			// single non-blocking request per pageview, so it's on by default.
-			// Toggle off in Settings to stop every beacon entirely.
+			// Master switch for ALL analytics/visitor/page tracking. Individual
+			// features below can be toggled independently.
 			'analytics_enabled'     => 1,
+			'track_pageviews'       => 1, // page/journey tracking + device stats.
+			'track_visitors'        => 1, // unique users (server IP+UA fingerprint).
+			'track_presence'        => 0, // admin "who's on the site now" (extra request; off).
 
 			// Journey tracking.
 			'tracking_enabled'      => 1,
@@ -152,6 +154,9 @@ class Settings {
 			'feedback_allow_screenshot',
 			'trigger_transparent',
 			'analytics_enabled',
+			'track_pageviews',
+			'track_visitors',
+			'track_presence',
 			'tracking_enabled',
 			'consent_mode',
 			'store_full_user_agent',

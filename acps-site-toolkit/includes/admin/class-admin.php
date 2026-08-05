@@ -137,10 +137,12 @@ class Admin {
 		add_submenu_page( self::SLUG, __( 'Feedback', 'acps-site-toolkit' ), __( 'Feedback', 'acps-site-toolkit' ), $reports, self::SLUG, array( $this, 'render_feedback' ) );
 		add_submenu_page( self::SLUG, __( 'Forms', 'acps-site-toolkit' ), __( 'Forms', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-forms', array( $this, 'render_forms' ) );
 		add_submenu_page( self::SLUG, __( 'Entries', 'acps-site-toolkit' ), __( 'Entries', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-entries', array( $this, 'render_entries' ) );
-		// Analytics + Visitors only appear when the master analytics switch is on.
+		// Analytics + Visitors appear per their toggles.
 		if ( Settings::get( 'analytics_enabled' ) ) {
 			add_submenu_page( self::SLUG, __( 'Analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, self::SLUG . '-analytics', array( $this, 'render_analytics' ) );
-			add_submenu_page( self::SLUG, __( 'Visitors', 'acps-site-toolkit' ), __( 'Visitors', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-visitors', array( $this, 'render_visitors' ) );
+			if ( Settings::get( 'track_visitors' ) ) {
+				add_submenu_page( self::SLUG, __( 'Visitors', 'acps-site-toolkit' ), __( 'Visitors', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-visitors', array( $this, 'render_visitors' ) );
+			}
 		}
 		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
 		add_submenu_page( self::SLUG, __( 'Settings', 'acps-site-toolkit' ), __( 'Settings', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-settings', array( $this, 'render_settings' ) );

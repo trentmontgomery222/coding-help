@@ -176,7 +176,7 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 	?>
 	<div class="acps-card">
 		<h2><?php esc_html_e( 'Unique users', 'acps-site-toolkit' ); ?></h2>
-		<p class="description"><?php esc_html_e( 'Each unique first-party ID (per browser) is one user — counted once, never missed. Multiple browsers/devices count separately. Logged-in admins are excluded.', 'acps-site-toolkit' ); ?></p>
+		<p class="description"><?php esc_html_e( 'A unique user is identified by anonymised IP + browser (the same signal the spam filter uses), computed on the server — so clearing cookies or cache can’t create a new one. People on the same network + browser may count as one. Logged-in admins are excluded.', 'acps-site-toolkit' ); ?></p>
 		<div class="acps-stat-row">
 			<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $uu_total ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'Total unique users', 'acps-site-toolkit' ); ?></span></div>
 			<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $uu_new_30 ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'New in last 30 days', 'acps-site-toolkit' ); ?></span></div>

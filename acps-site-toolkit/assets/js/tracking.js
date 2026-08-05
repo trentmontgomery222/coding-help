@@ -19,12 +19,11 @@
 	// nothing at all — no beacon, heartbeat, presence, cookies or network calls.
 	// Forms still work: they read the config below and degrade without a session.
 	if ( ! cfg.analytics ) {
-		window.ACPS_ST_RT = window.ACPS_ST_RT || { token: '', uid: '', active: false };
+		window.ACPS_ST_RT = window.ACPS_ST_RT || { token: '', active: false };
 		return;
 	}
 
 	var SID_COOKIE = 'acps_st_sid';
-	var UID_COOKIE = 'acps_st_uid';
 	var CONSENT_COOKIE = 'acps_st_consent';
 
 	/* ---- tiny cookie helpers (first-party only) ---------------------- */
@@ -63,31 +62,9 @@
 		return t;
 	}
 
-	/* Persistent unique-user id (per browser). Stored in BOTH a long-lived
-	   cookie AND localStorage and reconciled on every visit, so clearing just
-	   cookies (or just site cache) does NOT create a new user — the id is
-	   restored from whichever store survives. Only wiping all site data resets
-	   it. Cookie lifetimes are capped near 400 days, so we renew each visit. */
-	function lsGet( key ) {
-		try { return window.localStorage.getItem( key ); } catch ( e ) { return null; }
-	}
-	function lsSet( key, val ) {
-		try { window.localStorage.setItem( key, val ); } catch ( e ) {}
-	}
-	function getUid() {
-		var valid = /^[a-f0-9]{40}$/;
-		var u = readCookie( UID_COOKIE );
-		if ( ! valid.test( u ) ) {
-			u = lsGet( UID_COOKIE ); // cookie cleared → restore from localStorage.
-		}
-		if ( ! valid.test( u ) ) {
-			u = makeToken(); // neither survived → genuinely new.
-		}
-		// Write back to both stores so a future clear of one is recoverable.
-		writeCookie( UID_COOKIE, u, 400 * 24 * 60 ); // ~400 days in minutes.
-		lsSet( UID_COOKIE, u );
-		return u;
-	}
+	/* Unique-user identity is now derived SERVER-SIDE from the anonymized IP +
+	   browser (the same signal the spam guard uses), so there is deliberately no
+	   client-side visitor id here — clearing cookies/cache can't mint a new one. */
 
 	/* ---- consent ----------------------------------------------------- */
 	function hasConsent() {
@@ -120,7 +97,6 @@
 	/* Shared runtime other scripts read (forms/feedback). */
 	var runtime = window.ACPS_ST_RT = {
 		token: '',
-		uid: '',
 		active: false,
 		restUrl: cfg.restUrl
 	};
@@ -154,12 +130,10 @@
 			return;
 		}
 		runtime.token = getToken();
-		runtime.uid = getUid();
 		runtime.active = true;
 
 		send( '/beacon', {
 			session: runtime.token,
-			uid: runtime.uid,
 			consent: cfg.consentMode ? ( hasConsent() ? 1 : 0 ) : 1,
 			post_id: cfg.postId || 0,
 			url: location.href,
@@ -172,7 +146,6 @@
 	// Expose a session token to forms even before the beacon fires.
 	if ( trackingActive() ) {
 		runtime.token = getToken();
-		runtime.uid = getUid();
 	}
 
 	// Staff presence (admins only): a single report on load, no timer.

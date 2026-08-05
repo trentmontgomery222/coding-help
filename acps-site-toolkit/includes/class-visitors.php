@@ -22,14 +22,30 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Visitors {
 
 	/**
-	 * Register a visitor id (idempotent). First sight inserts a row; later
-	 * sights only bump last_seen. UNIQUE(uid) makes this dupe-proof even under
-	 * concurrent beacons.
+	 * The server-side visitor fingerprint: a hash of the anonymized IP + parsed
+	 * browser/OS summary — the SAME signal the spam rate-limiter uses. Because
+	 * it's derived server-side from the request, clearing cookies/cache/storage
+	 * cannot create a "new" visitor. Trade-off: people behind the same network
+	 * on the same browser look like one visitor (dedupe over over-count).
 	 *
-	 * @param string $uid Persistent visitor id.
+	 * @return string 32-char hex id.
 	 */
-	public static function record( $uid ) {
-		$uid = self::sanitize( $uid );
+	public static function fingerprint() {
+		$ip = Session::anonymize_ip( Session::client_ip() );
+		$ua = Session::user_agent_summary();
+		return md5( 'acps_v|' . $ip . '|' . $ua );
+	}
+
+	/**
+	 * Register a visitor (idempotent). With no argument it uses the server-side
+	 * fingerprint; an explicit id is used as-is (e.g. to attach a name). First
+	 * sight inserts a row; later sights only bump last_seen. UNIQUE(uid) makes
+	 * this dupe-proof even under concurrent beacons.
+	 *
+	 * @param string|null $uid Explicit id, or null to use the fingerprint.
+	 */
+	public static function record( $uid = null ) {
+		$uid = ( null === $uid || '' === $uid ) ? self::fingerprint() : self::sanitize( $uid );
 		if ( '' === $uid ) {
 			return;
 		}

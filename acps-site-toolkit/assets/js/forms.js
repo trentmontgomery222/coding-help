@@ -62,10 +62,8 @@
 		if ( rt.token ) {
 			setVal( form, 'acps_session', rt.token );
 		}
-		var uid = rt.uid || readUidCookie();
-		if ( uid ) {
-			setVal( form, 'acps_uid', uid );
-		}
+		// Visitor identity is derived server-side (IP + user agent) on submit —
+		// no client id is sent.
 
 		var onFirst = function () {
 			form.removeEventListener( 'focusin', onFirst );
@@ -431,10 +429,6 @@
 	}
 	function cssEscape( s ) {
 		return String( s ).replace( /"/g, '\\"' );
-	}
-	function readUidCookie() {
-		var m = document.cookie.match( '(^|;)\\s*acps_st_uid\\s*=\\s*([^;]+)' );
-		return m ? decodeURIComponent( m.pop() ) : '';
 	}
 
 	// Expose for feedback.js.
