@@ -44,7 +44,42 @@ class Schema {
 			dbDelta( $sql );
 		}
 
+		// Belt-and-braces: dbDelta occasionally won't add a new column to an
+		// existing table. Add the newer columns explicitly if still missing, so
+		// submissions can never fail on an "unknown column".
+		self::ensure_columns();
+
 		update_option( ACPS_ST_OPT_SCHEMA, ACPS_ST_SCHEMA_VERSION );
+	}
+
+	/**
+	 * Ensure newer columns exist on already-created tables (explicit ALTERs,
+	 * independent of dbDelta).
+	 */
+	private static function ensure_columns() {
+		self::add_column_if_missing( self::table( 'entries' ), 'visitor_uid', 'CHAR(36) DEFAULT NULL' );
+		self::add_column_if_missing( self::table( 'visitors' ), 'name', 'VARCHAR(191) DEFAULT NULL' );
+		self::add_column_if_missing( self::table( 'visitors' ), 'notes', 'TEXT DEFAULT NULL' );
+	}
+
+	/**
+	 * Add a column to a table if it isn't there. No-op if the table is absent.
+	 *
+	 * @param string $table Fully-qualified table name.
+	 * @param string $col   Column name.
+	 * @param string $def   Column definition SQL.
+	 */
+	private static function add_column_if_missing( $table, $col, $def ) {
+		global $wpdb;
+		// Confirm the table exists first.
+		$exists_table = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ); // phpcs:ignore WordPress.DB
+		if ( ! $exists_table ) {
+			return;
+		}
+		$has = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$table} LIKE %s", $col ) ); // phpcs:ignore WordPress.DB
+		if ( ! $has ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN {$col} {$def}" ); // phpcs:ignore WordPress.DB
+		}
 	}
 
 	/**
