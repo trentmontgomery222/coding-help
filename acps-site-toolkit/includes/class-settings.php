@@ -58,9 +58,10 @@ class Settings {
 			// Notifications.
 			'notify_recipients'     => '', // comma-separated; empty falls back to admin_email.
 
-			// Master switch for ALL analytics/visitor/page tracking. Off by
-			// default now — forms, feedback and Q&A keep working without it.
-			'analytics_enabled'     => 0,
+			// Master switch for ALL analytics/visitor/page tracking. Now uses a
+			// single non-blocking request per pageview, so it's on by default.
+			// Toggle off in Settings to stop every beacon entirely.
+			'analytics_enabled'     => 1,
 
 			// Journey tracking.
 			'tracking_enabled'      => 1,

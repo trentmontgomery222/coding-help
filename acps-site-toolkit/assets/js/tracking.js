@@ -142,8 +142,13 @@
 		} ).catch( function () {} );
 	}
 
-	var pageStart = Date.now();
-
+	/* MINIMAL-REQUEST DESIGN: exactly ONE non-blocking request per pageview.
+	   navigator.sendBeacon hands the request to the browser to send in the
+	   background — it never delays the page or competes with rendering. There is
+	   deliberately NO heartbeat, NO unload beacon and NO polling: those were the
+	   source of the request flood. Time-on-page is still filled in server-side
+	   from the next pageview, and "active now" means a pageview in the last few
+	   minutes. */
 	function beacon() {
 		if ( ! trackingActive() ) {
 			return;
@@ -161,68 +166,24 @@
 			title: document.title,
 			referrer: document.referrer || '',
 			viewport: window.innerWidth + 'x' + window.innerHeight
-		}, false );
+		}, true );
 	}
 
-	function unload() {
-		if ( ! runtime.active || ! runtime.token ) {
-			return;
-		}
-		var seconds = Math.round( ( Date.now() - pageStart ) / 1000 );
-		send( '/unload', { session: runtime.token, seconds: seconds }, true );
-	}
-
-	// Heartbeat: keep the session "active" while the tab is visible, so the live
-	// view stays accurate even when the visitor doesn't navigate. Stops after a
-	// stretch of inactivity to avoid pinging forever on an abandoned tab.
-	var lastInteraction = Date.now();
-	[ 'mousemove', 'keydown', 'scroll', 'touchstart', 'click' ].forEach( function ( evt ) {
-		window.addEventListener( evt, function () { lastInteraction = Date.now(); }, { passive: true } );
-	} );
-	function heartbeat() {
-		if ( ! runtime.active || ! runtime.token ) {
-			return;
-		}
-		if ( document.visibilityState !== 'visible' ) {
-			return;
-		}
-		// Only if the visitor interacted in the last 5 minutes.
-		if ( Date.now() - lastInteraction > 5 * 60 * 1000 ) {
-			return;
-		}
-		send( '/ping', { session: runtime.token }, false );
-	}
-	setInterval( heartbeat, 45 * 1000 );
-
-	// Staff presence: logged-in admins report their location to a SEPARATE
-	// endpoint (not analytics) so admins can see where each other are. Needs the
-	// REST nonce for cookie auth.
-	if ( cfg.presence ) {
-		var presenceUrl = cfg.restUrl.replace( /\/$/, '' ) + '/presence';
-		var sendPresence = function () {
-			if ( document.visibilityState !== 'visible' ) {
-				return;
-			}
-			fetch( presenceUrl, {
-				method: 'POST',
-				credentials: 'same-origin',
-				headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cfg.restNonce || '' },
-				body: JSON.stringify( {
-					title: document.title,
-					url: location.href,
-					post_id: cfg.postId || 0
-				} )
-			} ).catch( function () {} );
-		};
-		sendPresence();
-		setInterval( sendPresence, 45 * 1000 );
-	}
-
-	// Expose a session token to forms only when tracking is genuinely active
-	// (not suppressed for admins, and consent satisfied).
+	// Expose a session token to forms even before the beacon fires.
 	if ( trackingActive() ) {
 		runtime.token = getToken();
 		runtime.uid = getUid();
+	}
+
+	// Staff presence (admins only): a single report on load, no timer.
+	if ( cfg.presence ) {
+		fetch( cfg.restUrl.replace( /\/$/, '' ) + '/presence', {
+			method: 'POST',
+			credentials: 'same-origin',
+			keepalive: true,
+			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cfg.restNonce || '' },
+			body: JSON.stringify( { title: document.title, url: location.href, post_id: cfg.postId || 0 } )
+		} ).catch( function () {} );
 	}
 
 	if ( document.readyState === 'loading' ) {
@@ -230,12 +191,4 @@
 	} else {
 		beacon();
 	}
-
-	// Write time-on-page on the way out.
-	window.addEventListener( 'pagehide', unload );
-	document.addEventListener( 'visibilitychange', function () {
-		if ( document.visibilityState === 'hidden' ) {
-			unload();
-		}
-	} );
 } )();

@@ -40,7 +40,7 @@
 		this.pages = form.querySelectorAll( '.acps-page' );
 		this.current = 0;
 
-		this.hydrateTokens();
+		this.bindLazyTokens();
 		this.bindHoneypot();
 		this.bindConditional();
 		if ( this.multipage && this.pages.length > 1 ) {
@@ -49,19 +49,15 @@
 		this.bindSubmit();
 	}
 
-	/* Fetch nonce + timestamp after load and inject them. */
-	ACPSForm.prototype.hydrateTokens = function () {
+	/* MINIMAL REQUESTS: the session token and visitor id are free (already in
+	   memory / cookie), so set them now. But the nonce/timestamp need an uncached
+	   request, so DON'T fetch on page load — only when the visitor actually
+	   engages with the form (first focus). Pages where nobody touches a form make
+	   zero extra requests. submit() also guarantees the token is present. */
+	ACPSForm.prototype.bindLazyTokens = function () {
+		var self = this;
 		var form = this.form;
-		fetch( restUrl + '/token', { credentials: 'same-origin' } )
-			.then( function ( r ) { return r.json(); } )
-			.then( function ( data ) {
-				setVal( form, 'acps_nonce', data.nonce );
-				setVal( form, 'acps_ts', data.ts );
-			} )
-			.catch( function () {} );
 
-		// Attach the journey session token and the persistent visitor id so the
-		// submission carries the path and links to the visitor record.
 		var rt = window.ACPS_ST_RT || {};
 		if ( rt.token ) {
 			setVal( form, 'acps_session', rt.token );
@@ -70,6 +66,29 @@
 		if ( uid ) {
 			setVal( form, 'acps_uid', uid );
 		}
+
+		var onFirst = function () {
+			form.removeEventListener( 'focusin', onFirst );
+			self.ensureTokens();
+		};
+		form.addEventListener( 'focusin', onFirst );
+	};
+
+	/* Fetch the nonce + timestamp once (cached promise) and inject them. */
+	ACPSForm.prototype.ensureTokens = function () {
+		if ( this._tokenPromise ) {
+			return this._tokenPromise;
+		}
+		var form = this.form;
+		this._tokenPromise = fetch( restUrl + '/token', { credentials: 'same-origin' } )
+			.then( function ( r ) { return r.json(); } )
+			.then( function ( data ) {
+				setVal( form, 'acps_nonce', data.nonce );
+				setVal( form, 'acps_ts', data.ts );
+				return data;
+			} )
+			.catch( function () { return null; } );
+		return this._tokenPromise;
 	};
 
 	/* The honeypot: give it a submit name only in JS, keep it empty. */
@@ -245,28 +264,31 @@
 		}
 		this.announce( strings.submitting || 'Sending…' );
 
-		var data = new FormData( form );
-
-		fetch( restUrl + '/submit', {
-			method: 'POST',
-			body: data,
-			credentials: 'same-origin'
-		} )
-			.then( function ( r ) { return r.json(); } )
-			.then( function ( res ) {
-				if ( submitBtn ) { submitBtn.disabled = false; }
-				if ( res && res.success ) {
-					self.onSuccess( res.confirmation );
-				} else if ( res && res.summary ) {
-					self.renderServerErrors( res );
-				} else {
-					self.announce( strings.genericError || 'Something went wrong.' );
-				}
+		// Make sure the nonce/timestamp are loaded (they may not be if the visitor
+		// never focused the form, e.g. an autofill submit), then send.
+		this.ensureTokens().then( function () {
+			var data = new FormData( form );
+			fetch( restUrl + '/submit', {
+				method: 'POST',
+				body: data,
+				credentials: 'same-origin'
 			} )
-			.catch( function () {
-				if ( submitBtn ) { submitBtn.disabled = false; }
-				self.announce( strings.genericError || 'Something went wrong.' );
-			} );
+				.then( function ( r ) { return r.json(); } )
+				.then( function ( res ) {
+					if ( submitBtn ) { submitBtn.disabled = false; }
+					if ( res && res.success ) {
+						self.onSuccess( res.confirmation );
+					} else if ( res && res.summary ) {
+						self.renderServerErrors( res );
+					} else {
+						self.announce( strings.genericError || 'Something went wrong.' );
+					}
+				} )
+				.catch( function () {
+					if ( submitBtn ) { submitBtn.disabled = false; }
+					self.announce( strings.genericError || 'Something went wrong.' );
+				} );
+		} );
 	};
 
 	ACPSForm.prototype.onSuccess = function ( confirmation ) {
