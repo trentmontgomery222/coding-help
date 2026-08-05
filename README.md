@@ -1,4 +1,4 @@
-# ACPS Site Toolkit
+# Cayden Form Manager
 
 A single WordPress plugin combining three connected features, built to the spec
 in this repository:
@@ -33,7 +33,7 @@ The plugin lives in [`acps-site-toolkit/`](acps-site-toolkit/).
    is fine — the main file has a complete plugin header).
 2. Activate it on the **Plugins** screen. Activation creates the tables and the
    built-in feedback form.
-3. Configure under **Site Toolkit → Settings**.
+3. Configure under **Cayden Form Manager → Settings**.
 
 ## Structure
 

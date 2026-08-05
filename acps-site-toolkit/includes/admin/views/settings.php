@@ -27,7 +27,7 @@ $checked = function ( $key ) use ( $s ) {
 };
 ?>
 <div class="wrap acps-admin">
-	<h1><?php esc_html_e( 'Site Toolkit Settings', 'acps-site-toolkit' ); ?></h1>
+	<h1><?php esc_html_e( 'Cayden Form Manager Settings', 'acps-site-toolkit' ); ?></h1>
 
 	<form method="post" action="options.php">
 		<?php settings_fields( Settings::GROUP ); ?>
@@ -209,7 +209,7 @@ $checked = function ( $key ) use ( $s ) {
 		<h2 class="title"><?php esc_html_e( 'Stylesheet', 'acps-site-toolkit' ); ?></h2>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row"><label for="acps-custom-css"><?php esc_html_e( 'Site Toolkit CSS', 'acps-site-toolkit' ); ?></label></th>
+				<th scope="row"><label for="acps-custom-css"><?php esc_html_e( 'Cayden Form Manager CSS', 'acps-site-toolkit' ); ?></label></th>
 				<td>
 					<?php
 					// Prefill with the full default stylesheet so you can see and
@@ -236,7 +236,7 @@ $checked = function ( $key ) use ( $s ) {
 				<th scope="row"><label for="acps-help-url"><?php esc_html_e( 'Help Guide URL', 'acps-site-toolkit' ); ?></label></th>
 				<td>
 					<input type="url" id="acps-help-url" name="<?php echo esc_attr( $name( 'help_guide_url' ) ); ?>" value="<?php echo esc_attr( $s['help_guide_url'] ); ?>" class="large-text code" placeholder="https://…">
-					<p class="description"><?php esc_html_e( 'Optional link to your own help doc/video. When set, a button to it appears on the built-in Help Guide page. Leave blank to use only the built-in guide (Site Toolkit → Help Guide).', 'acps-site-toolkit' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Optional link to your own help doc/video. When set, a button to it appears on the built-in Help Guide page. Leave blank to use only the built-in guide (Cayden Form Manager → Help Guide).', 'acps-site-toolkit' ); ?></p>
 				</td>
 			</tr>
 		</table>

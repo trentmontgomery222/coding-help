@@ -1,5 +1,5 @@
 /**
- * ACPS Site Toolkit — feedback modal + page-picker pre-fill.
+ * Cayden Form Manager — feedback modal + page-picker pre-fill.
  *
  * Accessibility (spec §8.1): focus trap while open, Escape closes, focus
  * returns to the trigger on close, role="dialog" + aria-modal, labelled by the

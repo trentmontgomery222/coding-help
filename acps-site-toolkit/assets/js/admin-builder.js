@@ -1,5 +1,5 @@
 /**
- * ACPS Site Toolkit — form builder (admin).
+ * Cayden Form Manager — form builder (admin).
  *
  * Accessibility (spec §7.7 / SC 2.5.7): reordering never requires dragging.
  * Every field has Up / Down buttons and a "move to position" input. The whole

@@ -29,7 +29,7 @@ class ACPS_Form_Module extends \FLBuilderModule {
 			array(
 				'name'            => __( 'ACPS Form', 'acps-site-toolkit' ),
 				'description'     => __( 'Insert an accessible ACPS form or the site feedback form.', 'acps-site-toolkit' ),
-				'category'        => __( 'ACPS Site Toolkit', 'acps-site-toolkit' ),
+				'category'        => __( 'Cayden Form Manager', 'acps-site-toolkit' ),
 				'dir'             => ACPS_ST_PATH . 'includes/beaver/',
 				'url'             => ACPS_ST_URL . 'includes/beaver/',
 				'editor_export'   => true,

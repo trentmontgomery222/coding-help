@@ -26,7 +26,7 @@ $media_id  = $media ? $media->id : '?';
 $menu = admin_url( 'admin.php?page=acps-st' );
 ?>
 <div class="wrap acps-admin acps-help">
-	<h1><?php esc_html_e( 'Site Toolkit — Help Guide', 'acps-site-toolkit' ); ?></h1>
+	<h1><?php esc_html_e( 'Cayden Form Manager — Help Guide', 'acps-site-toolkit' ); ?></h1>
 
 	<?php if ( $help_url ) : ?>
 		<p><a class="button button-primary" href="<?php echo esc_url( $help_url ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open your organisation’s help guide', 'acps-site-toolkit' ); ?> ↗</a></p>
@@ -54,7 +54,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 
 	<div class="acps-card" id="overview">
 		<h2>1. <?php esc_html_e( 'Overview & where things live', 'acps-site-toolkit' ); ?></h2>
-		<p><?php esc_html_e( 'Everything is under the “Site Toolkit” menu in the left admin sidebar:', 'acps-site-toolkit' ); ?></p>
+		<p><?php esc_html_e( 'Everything is under the “Cayden Form Manager” menu in the left admin sidebar:', 'acps-site-toolkit' ); ?></p>
 		<ul class="ul-disc">
 			<li><strong><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'incoming feedback submissions and their status/notes.', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Forms', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'build and edit forms; every form has a shortcode.', 'acps-site-toolkit' ); ?></li>
@@ -95,7 +95,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 
 	<div class="acps-card" id="qa">
 		<h2>4. <?php esc_html_e( 'Q&A / Help widget', 'acps-site-toolkit' ); ?></h2>
-		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Site Toolkit → Q&A / Help. Add question/answer pairs (Add question / Remove), then Save.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Cayden Form Manager → Q&A / Help. Add question/answer pairs (Add question / Remove), then Save.', 'acps-site-toolkit' ); ?></p>
 		<p><?php esc_html_e( 'Put the widget on any page:', 'acps-site-toolkit' ); ?></p>
 		<ul class="ul-disc">
 			<li><code>[acps_qa]</code> — <?php esc_html_e( 'ask box + answers + an “ask a question” contact fallback.', 'acps-site-toolkit' ); ?></li>
@@ -106,7 +106,7 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 
 	<div class="acps-card" id="forms">
 		<h2>5. <?php esc_html_e( 'Building forms', 'acps-site-toolkit' ); ?></h2>
-		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Site Toolkit → Forms → Add New (or Edit).', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Cayden Form Manager → Forms → Add New (or Edit).', 'acps-site-toolkit' ); ?></p>
 		<p><?php esc_html_e( 'The builder has three columns: field types on the left, your form in the middle, and the selected field’s settings on the right.', 'acps-site-toolkit' ); ?></p>
 		<ul class="ul-disc">
 			<li><?php esc_html_e( 'Click a field type on the left to add it.', 'acps-site-toolkit' ); ?></li>
@@ -155,13 +155,13 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 
 	<div class="acps-card" id="entries">
 		<h2>9. <?php esc_html_e( 'Entries & CSV export', 'acps-site-toolkit' ); ?></h2>
-		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Site Toolkit → Entries. Pick a form, search, and open any entry to see all answers plus the page it was submitted from and the visitor’s journey. Use “Export CSV” for a spreadsheet, or “Delete permanently” on an entry.', 'acps-site-toolkit' ); ?></p>
-		<p><strong><?php esc_html_e( 'Visitors:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'each submission is linked to the visitor’s unique ID. Site Toolkit → Visitors lists everyone; search by ID or name, open one to see all their submissions, and add a name or internal notes. If a form has a field named “accname”, its value automatically becomes that visitor’s name. Search on the Entries screen also matches visitor ID and name.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Cayden Form Manager → Entries. Pick a form, search, and open any entry to see all answers plus the page it was submitted from and the visitor’s journey. Use “Export CSV” for a spreadsheet, or “Delete permanently” on an entry.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Visitors:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'each submission is linked to the visitor’s unique ID. Cayden Form Manager → Visitors lists everyone; search by ID or name, open one to see all their submissions, and add a name or internal notes. If a form has a field named “accname”, its value automatically becomes that visitor’s name. Search on the Entries screen also matches visitor ID and name.', 'acps-site-toolkit' ); ?></p>
 	</div>
 
 	<div class="acps-card" id="analytics">
 		<h2>10. <?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></h2>
-		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Site Toolkit → Analytics. The main table is sorted by the feedback/traffic overlay — pages with lots of traffic AND feedback rise to the top. Click “View” on a page for its came-from / went-to paths. Below are common paths, possible dead ends, and a 30-day trend. Every table is the accessible version of the data.', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Where:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'Cayden Form Manager → Analytics. The main table is sorted by the feedback/traffic overlay — pages with lots of traffic AND feedback rise to the top. Click “View” on a page for its came-from / went-to paths. Below are common paths, possible dead ends, and a 30-day trend. Every table is the accessible version of the data.', 'acps-site-toolkit' ); ?></p>
 		<p><?php esc_html_e( 'Note: analytics fills in from real visits on the live (cached) site — you may see little data in staging.', 'acps-site-toolkit' ); ?></p>
 		<p><strong><?php esc_html_e( 'Unique users:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'total unique users plus new/active counts, from a persistent first-party ID per browser — counted once, never missed (a cleared cookie or a different browser just counts as a new user).', 'acps-site-toolkit' ); ?></p>
 		<p><strong><?php esc_html_e( 'Devices, browsers & operating systems:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'a card breaks down sessions, views and average time on page by device type, browser, and OS.', 'acps-site-toolkit' ); ?></p>
@@ -204,5 +204,5 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 		</ul>
 	</div>
 
-	<p><a href="<?php echo esc_url( $menu ); ?>">← <?php esc_html_e( 'Back to Site Toolkit', 'acps-site-toolkit' ); ?></a></p>
+	<p><a href="<?php echo esc_url( $menu ); ?>">← <?php esc_html_e( 'Back to Cayden Form Manager', 'acps-site-toolkit' ); ?></a></p>
 </div>

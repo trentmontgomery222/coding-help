@@ -1,5 +1,5 @@
 /**
- * ACPS Site Toolkit — password gate for restricted forms.
+ * Cayden Form Manager — password gate for restricted forms.
  *
  * The protected form is NOT in the page markup (so it can't leak from cache).
  * On unlock we POST the password to the uncached /unlock endpoint, receive the

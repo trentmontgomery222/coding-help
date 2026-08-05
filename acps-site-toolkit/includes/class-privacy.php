@@ -65,7 +65,7 @@ class Privacy {
 	 */
 	public function register_exporter( $exporters ) {
 		$exporters['acps-site-toolkit'] = array(
-			'exporter_friendly_name' => __( 'ACPS Site Toolkit', 'acps-site-toolkit' ),
+			'exporter_friendly_name' => __( 'Cayden Form Manager', 'acps-site-toolkit' ),
 			'callback'               => array( $this, 'export' ),
 		);
 		return $exporters;
@@ -79,7 +79,7 @@ class Privacy {
 	 */
 	public function register_eraser( $erasers ) {
 		$erasers['acps-site-toolkit'] = array(
-			'eraser_friendly_name' => __( 'ACPS Site Toolkit', 'acps-site-toolkit' ),
+			'eraser_friendly_name' => __( 'Cayden Form Manager', 'acps-site-toolkit' ),
 			'callback'             => array( $this, 'erase' ),
 		);
 		return $erasers;

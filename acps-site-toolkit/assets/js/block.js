@@ -1,5 +1,5 @@
 /**
- * ACPS Site Toolkit — Gutenberg block (editor side).
+ * Cayden Form Manager — Gutenberg block (editor side).
  *
  * A simple server-rendered block: pick a form from a dropdown. The front-end
  * markup comes from the same PHP renderer, so accessibility and the cache-safe

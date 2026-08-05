@@ -95,8 +95,8 @@ class Admin {
 		$reports = $this->reports_cap();
 
 		add_menu_page(
-			__( 'ACPS Site Toolkit', 'acps-site-toolkit' ),
-			__( 'Site Toolkit', 'acps-site-toolkit' ),
+			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
+			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
 			$reports,
 			self::SLUG,
 			array( $this, 'render_feedback' ),

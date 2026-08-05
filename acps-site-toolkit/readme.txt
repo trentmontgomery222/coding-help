@@ -1,4 +1,4 @@
-=== ACPS Site Toolkit ===
+=== Cayden Form Manager ===
 Contributors: acps
 Tags: feedback, analytics, forms, accessibility, journey
 Requires at least: 6.2
@@ -64,7 +64,7 @@ optional screen-reader-friendly plain-text challenge.
 2. Activate the plugin through the **Plugins** screen. Activation creates the
    database tables and the built-in feedback form. Presence on disk is not
    enough — you must activate.
-3. Configure under **Site Toolkit → Settings**.
+3. Configure under **Cayden Form Manager → Settings**.
 
 Schema upgrades apply automatically on load via a stored schema version, so no
 deactivate/reactivate cycle is needed after an update.

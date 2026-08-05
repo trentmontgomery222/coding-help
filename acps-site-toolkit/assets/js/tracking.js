@@ -1,5 +1,5 @@
 /**
- * ACPS Site Toolkit — journey tracking beacon.
+ * Cayden Form Manager — journey tracking beacon.
  *
  * CRITICAL (spec §4.2 / §13): this is the ONLY place a page visit is recorded.
  * The site runs behind WP Engine Global Edge Security, which serves cached

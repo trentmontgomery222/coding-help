@@ -1,5 +1,5 @@
 /**
- * ACPS Site Toolkit — Q&A / help widget.
+ * Cayden Form Manager — Q&A / help widget.
  *
  * Progressive enhancement over server-rendered, cache-safe markup: an
  * accessible accordion (aria-expanded / aria-controls), client-side search
