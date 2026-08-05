@@ -29,6 +29,33 @@ $checked = function ( $key ) use ( $s ) {
 <div class="wrap acps-admin">
 	<h1><?php esc_html_e( 'Cayden Form Manager Settings', 'acps-site-toolkit' ); ?></h1>
 
+	<?php
+	$db_msg = isset( $_GET['db'] ) ? sanitize_key( $_GET['db'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+	if ( 'repaired' === $db_msg ) {
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Database repaired — any missing tables or columns were created.', 'acps-site-toolkit' ) . '</p></div>';
+	} elseif ( 'reset' === $db_msg ) {
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Database reset — all plugin tables were rebuilt fresh and the built-in forms recreated.', 'acps-site-toolkit' ) . '</p></div>';
+	}
+	?>
+
+	<div class="acps-card" style="border-left:4px solid #2271b1;max-width:48rem">
+		<h2><?php esc_html_e( 'Database tools', 'acps-site-toolkit' ); ?></h2>
+		<p><strong><?php esc_html_e( 'Repair', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'safely creates any missing tables/columns without deleting data. Try this first if submissions aren’t saving.', 'acps-site-toolkit' ); ?></p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+			<?php wp_nonce_field( 'acps_st_db_action' ); ?>
+			<input type="hidden" name="action" value="acps_st_db_action">
+			<button type="submit" name="do" value="repair" class="button button-primary"><?php esc_html_e( 'Repair database', 'acps-site-toolkit' ); ?></button>
+		</form>
+
+		<hr>
+		<p><strong style="color:#b32d2e"><?php esc_html_e( 'Reset (destructive)', 'acps-site-toolkit' ); ?></strong> — <?php esc_html_e( 'drops and rebuilds all plugin tables. This permanently deletes every form, entry, visitor and feedback item, then recreates the built-in forms. Settings are kept.', 'acps-site-toolkit' ); ?></p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+			<?php wp_nonce_field( 'acps_st_db_action' ); ?>
+			<input type="hidden" name="action" value="acps_st_db_action">
+			<button type="submit" name="do" value="reset" class="button acps-danger" onclick="return confirm('<?php echo esc_js( __( 'This permanently deletes all forms, entries, visitors and feedback, then rebuilds empty tables. Continue?', 'acps-site-toolkit' ) ); ?>');"><?php esc_html_e( 'Reset all plugin data', 'acps-site-toolkit' ); ?></button>
+		</form>
+	</div>
+
 	<form method="post" action="options.php">
 		<?php settings_fields( Settings::GROUP ); ?>
 

@@ -38,7 +38,37 @@ class Admin {
 		add_action( 'admin_post_acps_st_save_qa', array( $this, 'handle_save_qa' ) );
 		add_action( 'admin_post_acps_st_import_google', array( $this, 'handle_import_google' ) );
 		add_action( 'admin_post_acps_st_visitor_action', array( $this, 'handle_visitor_action' ) );
+		add_action( 'admin_post_acps_st_db_action', array( $this, 'handle_db_action' ) );
 		add_action( 'wp_ajax_acps_st_active', array( $this, 'ajax_active' ) );
+	}
+
+	/**
+	 * Repair or reset the plugin database tables.
+	 */
+	public function handle_db_action() {
+		$this->require_cap( 'manage_options' );
+		check_admin_referer( 'acps_st_db_action' );
+
+		$do  = isset( $_POST['do'] ) ? sanitize_key( $_POST['do'] ) : '';
+		$msg = '';
+
+		if ( 'repair' === $do ) {
+			// Non-destructive: creates any missing tables/columns.
+			\ACPS\SiteToolkit\Schema::install();
+			$msg = 'repaired';
+		} elseif ( 'reset' === $do ) {
+			// Destructive: drop everything and rebuild empty, then recreate the
+			// built-in forms. Settings option is preserved.
+			\ACPS\SiteToolkit\Schema::drop_all();
+			\ACPS\SiteToolkit\Schema::install();
+			\ACPS\SiteToolkit\Feedback::ensure_feedback_form();
+			\ACPS\SiteToolkit\Help::ensure_contact_form();
+			\ACPS\SiteToolkit\Help::ensure_media_request_form();
+			$msg = 'reset';
+		}
+
+		wp_safe_redirect( admin_url( 'admin.php?page=acps-st-settings' . ( $msg ? '&db=' . $msg : '' ) ) );
+		exit;
 	}
 
 	/**
