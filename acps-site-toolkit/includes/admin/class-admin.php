@@ -49,7 +49,9 @@ class Admin {
 		$this->require_cap( 'manage_options' );
 		check_admin_referer( 'acps_st_db_action' );
 
-		$do  = isset( $_POST['do'] ) ? sanitize_key( $_POST['do'] ) : '';
+		// Accept the action from POST (settings form) or GET (the save-failure
+		// admin notice's Repair button). Both are nonce-verified above.
+		$do  = isset( $_REQUEST['do'] ) ? sanitize_key( wp_unslash( $_REQUEST['do'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 		$msg = '';
 
 		if ( 'repair' === $do ) {

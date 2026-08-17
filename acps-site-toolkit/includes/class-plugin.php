@@ -106,6 +106,10 @@ class Plugin {
 		// Admin assets.
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin' ) );
 
+		// Surface a silent save failure so "email arrived but nothing in Entries"
+		// can never go unnoticed again.
+		add_action( 'admin_notices', array( $this, 'maybe_show_save_error_notice' ) );
+
 		// Grant the read-only reports cap to anyone who can manage options.
 		add_filter( 'user_has_cap', array( $this, 'grant_reports_cap' ), 10, 3 );
 
@@ -231,6 +235,44 @@ class Plugin {
 				'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
 			)
 		);
+	}
+
+	/**
+	 * Show an admin notice when the most recent form submission failed to save,
+	 * with the exact database reason and a one-click path to repair the schema.
+	 * The notice clears itself automatically the next time a submission saves.
+	 */
+	public function maybe_show_save_error_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$err = Entries::last_save_error();
+		if ( ! $err ) {
+			return;
+		}
+		$repair_url = wp_nonce_url(
+			add_query_arg(
+				array( 'action' => 'acps_st_db_action', 'do' => 'repair' ),
+				admin_url( 'admin-post.php' )
+			),
+			'acps_st_db_action'
+		);
+		$when = isset( $err['when'] ) ? $err['when'] : '';
+		$msg  = isset( $err['message'] ) ? $err['message'] : '';
+		echo '<div class="notice notice-error"><p><strong>'
+			. esc_html__( 'Cayden Form Manager: a form submission could not be saved.', 'acps-site-toolkit' )
+			. '</strong><br>'
+			. esc_html( sprintf(
+				/* translators: 1: date/time, 2: database error */
+				__( 'Last problem at %1$s — %2$s', 'acps-site-toolkit' ),
+				$when,
+				$msg
+			) )
+			. '</p><p>'
+			. esc_html__( 'Click Repair database to rebuild any missing tables or columns, then submit the form again to confirm. This notice disappears automatically once a submission saves cleanly.', 'acps-site-toolkit' )
+			. '</p><p><a href="' . esc_url( $repair_url ) . '" class="button button-primary">'
+			. esc_html__( 'Repair database', 'acps-site-toolkit' )
+			. '</a></p></div>';
 	}
 
 	/**

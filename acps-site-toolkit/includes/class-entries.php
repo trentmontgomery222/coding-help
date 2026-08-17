@@ -23,12 +23,24 @@ class Entries {
 	const STATUSES_FORM     = array( 'new', 'read', 'spam', 'trashed' );
 	const STATUSES_FEEDBACK = array( 'new', 'in_progress', 'resolved', 'wont_fix', 'spam', 'trashed' );
 
+	/** @var string[]|null Cached lowercase column list for the entries table. */
+	private static $columns_cache = null;
+
+	/** Option key holding the most recent save failure, for the admin notice. */
+	const SAVE_ERROR_OPTION = 'acps_st_last_save_error';
+
 	/**
 	 * Insert an entry plus its values.
 	 *
+	 * This is the single most important write in the plugin, so it is built to
+	 * NEVER fail silently. If the INSERT is rejected (e.g. the schema drifted and
+	 * a column is missing), it repairs the schema on the spot and retries once,
+	 * and if it still can't save it records the exact database error so an admin
+	 * notice can surface it. A submission either becomes a row or leaves a trail.
+	 *
 	 * @param array $entry  Entry columns.
 	 * @param array $values Map of field_key => value (scalar or array).
-	 * @return int Entry id.
+	 * @return int Entry id, or 0 if the row could not be saved.
 	 */
 	public static function create( $entry, $values ) {
 		global $wpdb;
@@ -45,20 +57,33 @@ class Entries {
 			'ip_anon'            => Session::anonymize_ip( Session::client_ip() ),
 			'user_agent_summary' => Session::user_agent_summary(),
 		);
-		// Only write visitor_uid when the column actually exists — otherwise a
-		// schema that hasn't upgraded yet would make the whole INSERT fail
-		// ("unknown column") and silently lose the submission.
-		if ( ! empty( $entry['visitor_uid'] ) && self::has_column( 'visitor_uid' ) ) {
+		if ( ! empty( $entry['visitor_uid'] ) ) {
 			$data['visitor_uid'] = Visitors::sanitize( $entry['visitor_uid'] );
 		}
 
-		$wpdb->insert( Schema::table( 'entries' ), $data ); // phpcs:ignore WordPress.DB
-		$entry_id = (int) $wpdb->insert_id;
+		$entry_id = self::insert_entry_row( $data );
 
-		$vtable = Schema::table( 'entry_values' );
+		// Self-heal: if the insert was rejected, the schema has probably drifted
+		// (missing table/column). Rebuild it and try exactly once more.
+		if ( ! $entry_id ) {
+			$first_error = $wpdb->last_error;
+			Schema::install();
+			self::$columns_cache = null; // re-read columns after the repair.
+			$entry_id = self::insert_entry_row( $data );
+
+			if ( ! $entry_id ) {
+				self::record_save_error( $wpdb->last_error ? $wpdb->last_error : ( $first_error ? $first_error : 'unknown database error inserting entry' ) );
+				return 0;
+			}
+		}
+
+		// Store each submitted value. A value that can't be written shouldn't lose
+		// the whole entry, but it should still be recorded as a problem.
+		$vtable       = Schema::table( 'entry_values' );
+		$value_failed = false;
 		foreach ( $values as $key => $value ) {
 			if ( is_array( $value ) ) {
-				$wpdb->insert( // phpcs:ignore WordPress.DB
+				$ok = $wpdb->insert( // phpcs:ignore WordPress.DB
 					$vtable,
 					array(
 						'entry_id'         => $entry_id,
@@ -68,7 +93,7 @@ class Entries {
 					)
 				);
 			} else {
-				$wpdb->insert( // phpcs:ignore WordPress.DB
+				$ok = $wpdb->insert( // phpcs:ignore WordPress.DB
 					$vtable,
 					array(
 						'entry_id'  => $entry_id,
@@ -77,27 +102,92 @@ class Entries {
 					)
 				);
 			}
+			if ( false === $ok ) {
+				$value_failed = true;
+			}
+		}
+
+		if ( $value_failed ) {
+			self::record_save_error( 'Entry #' . $entry_id . ' saved, but one or more field values did not: ' . ( $wpdb->last_error ? $wpdb->last_error : 'unknown error' ) );
+		} else {
+			// A submission just saved cleanly — clear any stale failure notice.
+			self::clear_save_error();
 		}
 
 		return $entry_id;
 	}
 
 	/**
-	 * Whether the entries table has a given column (cached per request). Guards
-	 * against a schema that hasn't finished upgrading yet.
+	 * Insert the entry row itself, writing only columns that currently exist so a
+	 * not-yet-upgraded schema can never reject the whole INSERT on an unknown
+	 * column. Returns the new id, or 0 if the database rejected the write.
 	 *
-	 * @param string $column Column name.
-	 * @return bool
+	 * @param array $data Column => value map.
+	 * @return int
 	 */
-	private static function has_column( $column ) {
-		static $cols = null;
-		if ( null === $cols ) {
+	private static function insert_entry_row( $data ) {
+		global $wpdb;
+		$cols = self::existing_columns();
+		if ( $cols ) {
+			$data = array_intersect_key( $data, array_flip( $cols ) );
+		}
+		if ( empty( $data ) ) {
+			return 0; // table has no readable columns — nothing to write.
+		}
+		$ok = $wpdb->insert( Schema::table( 'entries' ), $data ); // phpcs:ignore WordPress.DB
+		return ( false === $ok ) ? 0 : (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Lowercase list of columns on the entries table (cached per request).
+	 *
+	 * @return string[]
+	 */
+	private static function existing_columns() {
+		if ( null === self::$columns_cache ) {
 			global $wpdb;
 			$table = Schema::table( 'entries' );
 			$found = $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ); // phpcs:ignore WordPress.DB
-			$cols  = is_array( $found ) ? array_map( 'strtolower', $found ) : array();
+			self::$columns_cache = is_array( $found ) ? array_map( 'strtolower', $found ) : array();
 		}
-		return in_array( strtolower( $column ), $cols, true );
+		return self::$columns_cache;
+	}
+
+	/**
+	 * Record the most recent save failure so an admin notice can surface it, and
+	 * log it for good measure. Auto-cleared the next time a submission saves.
+	 *
+	 * @param string $message Database error / description.
+	 */
+	private static function record_save_error( $message ) {
+		update_option(
+			self::SAVE_ERROR_OPTION,
+			array(
+				'when'    => current_time( 'mysql' ),
+				'message' => (string) $message,
+			),
+			false
+		);
+		error_log( '[Cayden Form Manager] Entry save problem: ' . $message ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+	}
+
+	/**
+	 * Clear the stored save-failure marker (called after a clean save).
+	 */
+	public static function clear_save_error() {
+		if ( false !== get_option( self::SAVE_ERROR_OPTION, false ) ) {
+			delete_option( self::SAVE_ERROR_OPTION );
+		}
+	}
+
+	/**
+	 * The most recent save failure, or null if the last save was clean.
+	 *
+	 * @return array|null [ when, message ]
+	 */
+	public static function last_save_error() {
+		$e = get_option( self::SAVE_ERROR_OPTION, null );
+		return is_array( $e ) ? $e : null;
 	}
 
 	/**
