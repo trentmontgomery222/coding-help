@@ -64,6 +64,7 @@ class Settings {
 			'track_pageviews'       => 1, // page/journey tracking + device stats.
 			'track_visitors'        => 1, // unique users (server IP+UA fingerprint).
 			'track_presence'        => 0, // admin "who's on the site now" (extra request; off).
+			'analytics_sample_rate' => 100, // % of pageviews that send a beacon (lower = far less origin load).
 
 			// Journey tracking.
 			'tracking_enabled'      => 1,
@@ -218,6 +219,7 @@ class Settings {
 		$out['spam_time_threshold']  = max( 0, absint( $input['spam_time_threshold'] ?? $defaults['spam_time_threshold'] ) );
 		$out['spam_rate_limit']      = max( 0, absint( $input['spam_rate_limit'] ?? $defaults['spam_rate_limit'] ) );
 		$out['spam_rate_window']     = max( 1, absint( $input['spam_rate_window'] ?? $defaults['spam_rate_window'] ) );
+		$out['analytics_sample_rate'] = max( 1, min( 100, absint( $input['analytics_sample_rate'] ?? $defaults['analytics_sample_rate'] ) ) );
 
 		// Notification recipients — comma-separated emails.
 		$out['notify_recipients'] = '';

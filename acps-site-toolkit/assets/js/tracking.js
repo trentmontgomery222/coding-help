@@ -129,8 +129,18 @@
 		if ( ! trackingActive() ) {
 			return;
 		}
+		// Keep the session token available to forms even on pageviews we don't
+		// record, so form submissions still link to a session.
 		runtime.token = getToken();
 		runtime.active = true;
+
+		// Sampling: only a share of pageviews actually send a beacon. On a
+		// high-traffic cached site this is the biggest lever on origin load —
+		// e.g. 25 means one origin request for every four pageviews.
+		var rate = cfg.sampleRate || 100;
+		if ( rate < 100 && Math.random() * 100 >= rate ) {
+			return;
+		}
 
 		send( '/beacon', {
 			session: runtime.token,

@@ -135,6 +135,9 @@ class Plugin {
 			// Whether the one-per-pageview beacon should fire.
 			'beacon'        => $beacon_on,
 			'tracking'      => $beacon_on,
+			// Only this % of pageviews actually send a beacon — the single
+			// biggest lever for origin load on a cached site.
+			'sampleRate'    => max( 1, min( 100, (int) Settings::get( 'analytics_sample_rate', 100 ) ) ),
 			// Don't record analytics for logged-in site admins browsing their own
 			// site — keeps their views out of the numbers.
 			'suppress'      => is_user_logged_in() && current_user_can( 'manage_options' ),

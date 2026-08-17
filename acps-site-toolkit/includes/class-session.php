@@ -37,12 +37,15 @@ class Session {
 		$table = Schema::table( 'sessions' );
 		$now   = current_time( 'mysql' );
 
-		$id = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE session_token = %s", $token ) ); // phpcs:ignore WordPress.DB
+		// One round-trip: fetch the id and last-activity together so we don't
+		// issue a second SELECT for the idle check on every single beacon.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, last_activity_at FROM {$table} WHERE session_token = %s", $token ) ); // phpcs:ignore WordPress.DB
 
-		if ( $id ) {
+		if ( $row ) {
+			$id   = (int) $row->id;
+			$last = $row->last_activity_at;
 			// Expire stale sessions: if idle beyond the window, start a fresh row
 			// under the same token so the sequence restarts.
-			$last = $wpdb->get_var( $wpdb->prepare( "SELECT last_activity_at FROM {$table} WHERE id = %d", $id ) ); // phpcs:ignore WordPress.DB
 			$idle = (int) Settings::get( 'session_idle_minutes', 30 ) * MINUTE_IN_SECONDS;
 			if ( $last && ( time() - strtotime( $last . ' GMT' ) ) > $idle ) {
 				// Rotate: delete-then-recreate would break FKs, so we just reset

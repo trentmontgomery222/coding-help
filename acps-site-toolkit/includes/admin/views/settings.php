@@ -196,6 +196,13 @@ $checked = function ( $key ) use ( $s ) {
 				</td>
 			</tr>
 			<tr>
+				<th scope="row"><label for="acps-sample"><?php esc_html_e( 'Sampling rate (%)', 'acps-site-toolkit' ); ?></label></th>
+				<td>
+					<input type="number" id="acps-sample" name="<?php echo esc_attr( $name( 'analytics_sample_rate' ) ); ?>" value="<?php echo esc_attr( $s['analytics_sample_rate'] ); ?>" min="1" max="100" class="small-text">
+					<p class="description"><?php esc_html_e( 'The share of page views that actually send a tracking request. 100% records every view; on a busy site, lowering this (for example to 25%) cuts origin load to a quarter while stats stay proportional. This is the single biggest lever if tracking is slowing the site down. Does not affect form submissions, which are always recorded.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+			<tr>
 				<th scope="row"><?php esc_html_e( 'Journey tracking', 'acps-site-toolkit' ); ?></th>
 				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'tracking_enabled' ) ); ?>" value="1" <?php echo $checked( 'tracking_enabled' ); ?>> <?php esc_html_e( 'Record the page journey per session (via the cache-safe beacon)', 'acps-site-toolkit' ); ?></label></td>
 			</tr>
