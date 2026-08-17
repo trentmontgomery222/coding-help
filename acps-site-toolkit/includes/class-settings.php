@@ -29,6 +29,11 @@ class Settings {
 	 */
 	public static function defaults() {
 		return array(
+			// Feature master switches — turn whole parts of the plugin off.
+			// (Analytics has its own master switch, 'analytics_enabled', below.)
+			'qa_enabled'            => 1, // Q&A / help widget + [acps_qa] shortcode.
+			'restricted_forms_enabled' => 1, // password-gated + secret-link forms.
+
 			// Feedback trigger.
 			'feedback_enabled'      => 1,
 			'trigger_display'       => 'all',      // all | include | exclude.
@@ -151,6 +156,8 @@ class Settings {
 		$input    = is_array( $input ) ? $input : array();
 
 		$checkboxes = array(
+			'qa_enabled',
+			'restricted_forms_enabled',
 			'feedback_enabled',
 			'feedback_allow_screenshot',
 			'trigger_transparent',

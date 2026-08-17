@@ -76,6 +76,10 @@ class Access {
 		if ( is_admin() ) {
 			return;
 		}
+		// Restricted / secret-link forms can be turned off entirely from Settings.
+		if ( ! Settings::get( 'restricted_forms_enabled' ) ) {
+			return;
+		}
 		$key = isset( $_GET['acps_key'] ) ? sanitize_text_field( wp_unslash( $_GET['acps_key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 		if ( '' === $key ) {
 			return;

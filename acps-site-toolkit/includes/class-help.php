@@ -201,6 +201,10 @@ class Help {
 	 * @return string
 	 */
 	public static function render_qa( $atts = array() ) {
+		// Q&A widget can be turned off entirely from Settings.
+		if ( ! Settings::get( 'qa_enabled' ) ) {
+			return '';
+		}
 		$atts = wp_parse_args(
 			$atts,
 			array(

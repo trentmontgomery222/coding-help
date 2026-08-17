@@ -162,17 +162,31 @@ class Plugin {
 		wp_localize_script( 'acps-st-tracking', 'ACPS_ST', $config );
 		wp_enqueue_script( 'acps-st-tracking' );
 
+		$feedback_on   = (bool) Settings::get( 'feedback_enabled' );
+		$restricted_on = (bool) Settings::get( 'restricted_forms_enabled' );
+		$qa_on         = (bool) Settings::get( 'qa_enabled' );
+
 		// Forms runtime (token fetch, validation UI, conditional logic, paging).
+		// This is the shared base for every embedded form, so it always loads —
+		// a form can appear on any page via shortcode/block/Beaver module, which
+		// we can't detect ahead of a cached render.
 		wp_enqueue_script( 'acps-st-forms', ACPS_ST_URL . 'assets/js/forms.js', array( 'acps-st-tracking' ), ACPS_ST_VERSION, true );
 
-		// Feedback modal behaviour (focus trap, page picker pre-fill).
-		wp_enqueue_script( 'acps-st-feedback', ACPS_ST_URL . 'assets/js/feedback.js', array( 'acps-st-forms' ), ACPS_ST_VERSION, true );
+		// Feedback modal behaviour (focus trap, page picker pre-fill) — only when
+		// the feedback/contact widget is enabled.
+		if ( $feedback_on ) {
+			wp_enqueue_script( 'acps-st-feedback', ACPS_ST_URL . 'assets/js/feedback.js', array( 'acps-st-forms' ), ACPS_ST_VERSION, true );
+		}
 
-		// Password gate for restricted forms.
-		wp_enqueue_script( 'acps-st-access', ACPS_ST_URL . 'assets/js/access.js', array( 'acps-st-forms' ), ACPS_ST_VERSION, true );
+		// Password gate / secret-link popup for restricted forms — only when on.
+		if ( $restricted_on ) {
+			wp_enqueue_script( 'acps-st-access', ACPS_ST_URL . 'assets/js/access.js', array( 'acps-st-forms' ), ACPS_ST_VERSION, true );
+		}
 
-		// Q&A / help widget.
-		wp_enqueue_script( 'acps-st-qa', ACPS_ST_URL . 'assets/js/qa.js', array(), ACPS_ST_VERSION, true );
+		// Q&A / help widget — only when on.
+		if ( $qa_on ) {
+			wp_enqueue_script( 'acps-st-qa', ACPS_ST_URL . 'assets/js/qa.js', array(), ACPS_ST_VERSION, true );
+		}
 
 		wp_enqueue_style( 'acps-st-frontend', ACPS_ST_URL . 'assets/css/frontend.css', array(), ACPS_ST_VERSION );
 

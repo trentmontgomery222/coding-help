@@ -59,12 +59,41 @@ $checked = function ( $key ) use ( $s ) {
 	<form method="post" action="options.php">
 		<?php settings_fields( Settings::GROUP ); ?>
 
-		<h2 class="title"><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></h2>
+		<h2 class="title"><?php esc_html_e( 'Features', 'acps-site-toolkit' ); ?></h2>
+		<p class="description" style="max-width:48rem"><?php esc_html_e( 'Turn whole parts of the plugin on or off. When a feature is off, its front-end script is not loaded at all — so it adds nothing to page weight. Each feature also has its own detailed settings in the sections below.', 'acps-site-toolkit' ); ?></p>
 		<table class="form-table" role="presentation">
 			<tr>
-				<th scope="row"><?php esc_html_e( 'Feedback widget', 'acps-site-toolkit' ); ?></th>
-				<td><label><input type="checkbox" name="<?php echo esc_attr( $name( 'feedback_enabled' ) ); ?>" value="1" <?php echo $checked( 'feedback_enabled' ); ?>> <?php esc_html_e( 'Show the floating feedback trigger', 'acps-site-toolkit' ); ?></label></td>
+				<th scope="row"><?php esc_html_e( 'Feedback & contact widget', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'feedback_enabled' ) ); ?>" value="1" <?php echo $checked( 'feedback_enabled' ); ?>> <?php esc_html_e( 'On — show the floating button and its popup form', 'acps-site-toolkit' ); ?></label>
+					<p class="description"><?php esc_html_e( 'Appearance, position, categories and recipients are under “Feedback” below.', 'acps-site-toolkit' ); ?></p>
+				</td>
 			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Q&A / help widget', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'qa_enabled' ) ); ?>" value="1" <?php echo $checked( 'qa_enabled' ); ?>> <?php esc_html_e( 'On — allow the [acps_qa] question-and-answer widget', 'acps-site-toolkit' ); ?></label>
+					<p class="description"><?php esc_html_e( 'When off, the [acps_qa] shortcode outputs nothing and its script never loads. Manage questions under Cayden Form Manager → Q&A.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Restricted / secret-link forms', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="<?php echo esc_attr( $name( 'restricted_forms_enabled' ) ); ?>" value="1" <?php echo $checked( 'restricted_forms_enabled' ); ?>> <?php esc_html_e( 'On — allow password-gated forms and secret share links', 'acps-site-toolkit' ); ?></label>
+					<p class="description"><?php esc_html_e( 'When off, secret ?acps_key links no longer open a form and the access script never loads. Per-form access is set in the form builder.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Analytics & tracking', 'acps-site-toolkit' ); ?></th>
+				<td>
+					<p class="description" style="margin-top:0"><?php esc_html_e( 'Has its own master switch and per-feature toggles in the “Analytics & tracking” section below.', 'acps-site-toolkit' ); ?></p>
+				</td>
+			</tr>
+		</table>
+
+		<h2 class="title"><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></h2>
+		<p class="description" style="max-width:48rem"><?php esc_html_e( 'On/off for this widget is under “Features” above. These settings control how it looks and behaves.', 'acps-site-toolkit' ); ?></p>
+		<table class="form-table" role="presentation">
 			<tr>
 				<th scope="row"><label for="acps-trigger-display"><?php esc_html_e( 'Show trigger on', 'acps-site-toolkit' ); ?></label></th>
 				<td>
