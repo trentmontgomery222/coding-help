@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cayden  Staff Directory
  * Description:       Staff Directory system for the website
- * Version:           2.4.0
+ * Version:           2.5.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; //no access
 }
 
-define( 'CAYDENDIR_SD_VERSION',       '2.4.0' );
+define( 'CAYDENDIR_SD_VERSION',       '2.5.0' );
 define( 'CAYDENDIR_SD_DIR',           plugin_dir_path( __FILE__ ) );
 define( 'CAYDENDIR_SD_URL',           plugin_dir_url( __FILE__ ) );
 define( 'CAYDENDIR_SD_CRON_HOOK',     'CAYDENDIR_sd_daily_sync' );
@@ -369,6 +369,7 @@ function CAYDENDIR_sd_get_settings() {
 		'job_order'      => CAYDENDIR_sd_default_job_order(),
 		'location_order' => CAYDENDIR_sd_default_location_order(),
 		'custom_css'     => CAYDENDIR_sd_default_css(),
+		'sort_rules'     => CAYDENDIR_sd_default_sort_rules(),
 	);
 	$saved = get_option( CAYDENDIR_SD_SETTINGS, array() );
 	$saved = is_array( $saved ) ? $saved : array();
@@ -377,6 +378,22 @@ function CAYDENDIR_sd_get_settings() {
 	if ( ! is_array( $out['columns'] ) ) {
 		$out['columns'] = $defaults['columns'];
 	}
+
+	// Sort rules: older versions only stored job_order/location_order. If this
+	// site was never saved with the new sort_rules, seed them from those two
+	// lists so the ordering is unchanged after upgrading (any custom order the
+	// site had is preserved).
+	if ( ! array_key_exists( 'sort_rules', $saved ) ) {
+		$out['sort_rules'] = array(
+			array( 'field' => 'job',      'mode' => 'priority', 'order' => $out['job_order'] ),
+			array( 'field' => 'location', 'mode' => 'priority', 'order' => $out['location_order'] ),
+		);
+	}
+	if ( ! is_array( $out['sort_rules'] ) ) {
+		$out['sort_rules'] = array();
+	}
+	$out['sort_rules'] = array_values( array_map( 'CAYDENDIR_sd_normalize_sort_rule', $out['sort_rules'] ) );
+
 	return $out;
 }
 
@@ -771,10 +788,122 @@ function CAYDENDIR_sd_get_merged_data() {
 }
 
 /* -------------------------------------------------------------------------
- * Sorting — the spreadsheet sorts by job rank then location rank via
- * Apps Script, but edited/manual data never goes back to the sheet, so the
- * same sort has to happen here at render time. The rank lists live in
- * Settings › Staff Directory › Sort order (one display label per line).
+ * Configurable sort rules
+ *
+ * Sorting is driven by an ordered list of rules saved in Settings › Staff
+ * Directory › Sort rules. Each rule picks a field and a mode:
+ *   - priority : rank by a custom label list (one per line, highest first);
+ *                anything not listed sinks to the bottom.
+ *   - asc      : A → Z alphabetical on that field.
+ *   - desc     : Z → A on that field.
+ * Rules apply in order: the first sorts everyone, and each rule below only
+ * breaks the ties left by the rules above it (so two priority rules on Job
+ * then Location reproduce the original ordering). Fields available for a
+ * rule and the mode labels live in the two helpers below.
+ * ---------------------------------------------------------------------- */
+
+/** Fields a sort rule may target => their admin labels. */
+function CAYDENDIR_sd_sort_fields() {
+	return array(
+		'name'        => 'Name',
+		'publictitle' => 'Title',
+		'job'         => 'Job',
+		'location'    => 'Location',
+		'email'       => 'Email',
+		'id'          => 'Identification (ID)',
+	);
+}
+
+/** Sort modes a rule may use => their admin labels. */
+function CAYDENDIR_sd_sort_modes() {
+	return array(
+		'priority' => 'Custom priority list',
+		'asc'      => 'A → Z (alphabetical)',
+		'desc'     => 'Z → A (reverse)',
+	);
+}
+
+/** The out-of-the-box rules: Job priority, then Location priority. */
+function CAYDENDIR_sd_default_sort_rules() {
+	return array(
+		array( 'field' => 'job',      'mode' => 'priority', 'order' => CAYDENDIR_sd_default_job_order() ),
+		array( 'field' => 'location', 'mode' => 'priority', 'order' => CAYDENDIR_sd_default_location_order() ),
+	);
+}
+
+/** Coerce one raw rule into a valid { field, mode, order } shape. */
+function CAYDENDIR_sd_normalize_sort_rule( $rule ) {
+	$fields = CAYDENDIR_sd_sort_fields();
+	$modes  = CAYDENDIR_sd_sort_modes();
+	$rule   = is_array( $rule ) ? $rule : array();
+	$field  = isset( $rule['field'] ) ? (string) $rule['field'] : '';
+	$mode   = isset( $rule['mode'] ) ? (string) $rule['mode'] : '';
+	if ( ! isset( $fields[ $field ] ) ) { $field = 'job'; }
+	if ( ! isset( $modes[ $mode ] ) )   { $mode  = 'priority'; }
+	return array(
+		'field' => $field,
+		'mode'  => $mode,
+		'order' => isset( $rule['order'] ) ? (string) $rule['order'] : '',
+	);
+}
+
+/** The saved sort rules, normalized. An empty array means "no custom sort". */
+function CAYDENDIR_sd_get_sort_rules( $settings = null ) {
+	if ( null === $settings ) {
+		$settings = CAYDENDIR_sd_get_settings();
+	}
+	$rules = ( isset( $settings['sort_rules'] ) && is_array( $settings['sort_rules'] ) ) ? $settings['sort_rules'] : array();
+	return array_values( array_map( 'CAYDENDIR_sd_normalize_sort_rule', $rules ) );
+}
+
+/**
+ * One editable sort-rule row for the settings screen. $index is the numeric
+ * position, or the "__INDEX__" placeholder for the hidden JS template (whose
+ * inputs are disabled so the template itself never submits).
+ */
+function CAYDENDIR_sd_render_sort_rule_row( $opt, $index, $rule, $is_template = false ) {
+	$rule   = CAYDENDIR_sd_normalize_sort_rule( $rule );
+	$fields = CAYDENDIR_sd_sort_fields();
+	$modes  = CAYDENDIR_sd_sort_modes();
+	$name   = esc_attr( $opt ) . '[sort_rules][' . esc_attr( (string) $index ) . ']';
+	$dis    = $is_template ? ' disabled' : '';
+	$level  = is_numeric( $index ) ? ( (int) $index + 1 ) : 1;
+	$show   = ( 'priority' === $rule['mode'] );
+
+	ob_start();
+	?>
+	<div class="CAYDENDIR-rule" data-CAYDENDIR-rule>
+		<span class="CAYDENDIR-rule__handle" data-CAYDENDIR-handle title="Drag to reorder" aria-hidden="true">&#9776;</span>
+		<span class="CAYDENDIR-rule__level" data-CAYDENDIR-level><?php echo (int) $level; ?></span>
+
+		<select name="<?php echo $name; ?>[field]" data-CAYDENDIR-field aria-label="Sort field"<?php echo $dis; ?>>
+			<?php foreach ( $fields as $fkey => $flabel ) : ?>
+				<option value="<?php echo esc_attr( $fkey ); ?>" <?php selected( $rule['field'], $fkey ); ?>><?php echo esc_html( $flabel ); ?></option>
+			<?php endforeach; ?>
+		</select>
+
+		<select name="<?php echo $name; ?>[mode]" data-CAYDENDIR-mode aria-label="Sort mode"<?php echo $dis; ?>>
+			<?php foreach ( $modes as $mkey => $mlabel ) : ?>
+				<option value="<?php echo esc_attr( $mkey ); ?>" <?php selected( $rule['mode'], $mkey ); ?>><?php echo esc_html( $mlabel ); ?></option>
+			<?php endforeach; ?>
+		</select>
+
+		<button type="button" class="button-link button-link-delete" data-CAYDENDIR-remove>Remove</button>
+
+		<div class="CAYDENDIR-rule__order" data-CAYDENDIR-order-wrap<?php echo $show ? '' : ' hidden'; ?>>
+			<label class="CAYDENDIR-rule__order-label">Priority order &mdash; one label per line, highest priority first (anything not listed sinks to the bottom)
+				<textarea name="<?php echo $name; ?>[order]" rows="8" class="large-text code" spellcheck="false" aria-label="Priority order list"<?php echo $dis; ?>><?php echo esc_textarea( $rule['order'] ); ?></textarea>
+			</label>
+		</div>
+	</div>
+	<?php
+	return ob_get_clean();
+}
+
+/* -------------------------------------------------------------------------
+ * Sorting — the spreadsheet sorts via Apps Script, but edited/manual data
+ * never goes back to the sheet, so the same sort has to happen here at render
+ * time using the configurable rules above.
  * ---------------------------------------------------------------------- */
 
 /** "Label\nLabel\n…" → array( lowercased label => rank ). */
@@ -791,39 +920,62 @@ function CAYDENDIR_sd_rank_map( $text ) {
 }
 
 /**
- * Sort rows by job rank, then location rank. Labels not found in the
- * lists sink to the bottom (like the Infinity fallback in the Apps Script
- * sort) — which also makes typos in overrides easy to spot. Ties keep
- * their incoming order, so nothing shuffles arbitrarily.
+ * Sort rows by the configured rules, in order. Each rule either ranks a field
+ * against a custom priority list (unlisted values sink to the bottom, like the
+ * Infinity fallback in the Apps Script sort — which also flags typos) or sorts
+ * it alphabetically A→Z / Z→A. Later rules only break ties left by earlier
+ * ones, and equal rows keep their incoming order (stable). With no rules
+ * configured, rows are left in their merged order.
  */
 function CAYDENDIR_sd_sort_rows( $rows ) {
 	if ( ! is_array( $rows ) || count( $rows ) < 2 ) {
-		return is_array( $rows ) ? $rows : array();
+		return is_array( $rows ) ? array_values( $rows ) : array();
 	}
 
-	$s    = CAYDENDIR_sd_get_settings();
-	$jobs = CAYDENDIR_sd_rank_map( $s['job_order'] );
-	$locs = CAYDENDIR_sd_rank_map( $s['location_order'] );
-	$big  = PHP_INT_MAX;
+	$rules = CAYDENDIR_sd_get_sort_rules();
+	if ( empty( $rules ) ) {
+		return array_values( $rows );
+	}
 
-	$i = 0;
+	// Pre-build a rank lookup for each priority rule so usort() stays cheap.
+	$maps = array();
+	foreach ( $rules as $ri => $rule ) {
+		if ( 'priority' === $rule['mode'] ) {
+			$maps[ $ri ] = CAYDENDIR_sd_rank_map( $rule['order'] );
+		}
+	}
+
+	$rows = array_values( $rows );
+	$i    = 0;
 	foreach ( $rows as &$r ) {
-		$j = strtolower( trim( (string) ( isset( $r['job'] ) ? $r['job'] : '' ) ) );
-		$l = strtolower( trim( (string) ( isset( $r['location'] ) ? $r['location'] : '' ) ) );
-		$r['_jr'] = isset( $jobs[ $j ] ) ? $jobs[ $j ] : $big;
-		$r['_lr'] = isset( $locs[ $l ] ) ? $locs[ $l ] : $big;
-		$r['_i']  = $i++;
+		$r['_i'] = $i++; // stable final tiebreak
 	}
 	unset( $r );
 
-	usort( $rows, function ( $a, $b ) {
-		if ( $a['_jr'] !== $b['_jr'] ) { return ( $a['_jr'] < $b['_jr'] ) ? -1 : 1; }
-		if ( $a['_lr'] !== $b['_lr'] ) { return ( $a['_lr'] < $b['_lr'] ) ? -1 : 1; }
+	usort( $rows, function ( $a, $b ) use ( $rules, $maps ) {
+		foreach ( $rules as $ri => $rule ) {
+			$field = $rule['field'];
+			$av = strtolower( trim( (string) ( isset( $a[ $field ] ) ? $a[ $field ] : '' ) ) );
+			$bv = strtolower( trim( (string) ( isset( $b[ $field ] ) ? $b[ $field ] : '' ) ) );
+
+			if ( 'priority' === $rule['mode'] ) {
+				$ar = isset( $maps[ $ri ][ $av ] ) ? $maps[ $ri ][ $av ] : PHP_INT_MAX;
+				$br = isset( $maps[ $ri ][ $bv ] ) ? $maps[ $ri ][ $bv ] : PHP_INT_MAX;
+				if ( $ar !== $br ) {
+					return ( $ar < $br ) ? -1 : 1;
+				}
+			} else {
+				$cmp = strnatcasecmp( $av, $bv );
+				if ( 0 !== $cmp ) {
+					return ( 'desc' === $rule['mode'] ) ? -$cmp : $cmp;
+				}
+			}
+		}
 		return ( $a['_i'] < $b['_i'] ) ? -1 : 1;
 	} );
 
 	foreach ( $rows as &$r ) {
-		unset( $r['_jr'], $r['_lr'], $r['_i'] );
+		unset( $r['_i'] );
 	}
 	unset( $r );
 
@@ -1421,6 +1573,9 @@ function CAYDENDIR_sd_admin_assets( $hook ) {
 	wp_enqueue_style( 'wp-color-picker' );
 	wp_enqueue_script( 'wp-color-picker' );
 	wp_add_inline_script( 'wp-color-picker', 'jQuery(function($){$(".CAYDENDIR-color-field").wpColorPicker();});' );
+	// Sort-rules builder: add / remove / drag-reorder rows and show the
+	// priority textarea only for priority rules.
+	wp_enqueue_script( 'CAYDENDIR-sd-admin', plugin_dir_url( __FILE__ ) . 'CAYDENDIR-admin.js', array( 'jquery', 'jquery-ui-sortable' ), CAYDENDIR_SD_VERSION, true );
 }
 
 add_action( 'admin_init', 'CAYDENDIR_sd_register_settings' );
@@ -1470,6 +1625,26 @@ function CAYDENDIR_sd_sanitize_settings( $input ) {
 	if ( isset( $in['custom_css'] ) ) {
 		$css = str_replace( "\0", '', (string) $in['custom_css'] );
 		$out['custom_css'] = ( '' !== trim( $css ) ) ? $css : CAYDENDIR_sd_default_css();
+	}
+
+	// Sort rules — an ordered list of { field, mode, order }. The array-key
+	// order the form submits is the on-screen (priority) order, so keep it.
+	// Submitting no rows at all is allowed and means "no custom sort".
+	if ( isset( $in['sort_rules'] ) && is_array( $in['sort_rules'] ) ) {
+		$rules_in = $in['sort_rules'];
+		ksort( $rules_in, SORT_NUMERIC );
+		$rules = array();
+		foreach ( $rules_in as $rule ) {
+			if ( ! is_array( $rule ) ) {
+				continue;
+			}
+			$r          = CAYDENDIR_sd_normalize_sort_rule( $rule );
+			$r['order'] = ( 'priority' === $r['mode'] ) ? sanitize_textarea_field( isset( $rule['order'] ) ? $rule['order'] : '' ) : '';
+			$rules[]    = $r;
+		}
+		$out['sort_rules'] = $rules;
+	} else {
+		$out['sort_rules'] = array();
 	}
 
 	// Colors
@@ -1617,18 +1792,31 @@ function CAYDENDIR_sd_settings_page() {
 				</tr>
 			</table>
 
-			<h2>Sort order</h2>
-			<p class="description">The directory sorts by Job priority first, then Location priority — same idea as the spreadsheet, but applied in WordPress so manually edited people land in the right place too. One label per line, highest priority first. Anything not listed sinks to the bottom (a handy flag for typos). Labels must match the displayed Job/Location text (case doesn&rsquo;t matter).</p>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_job_order">Job order</label></th>
-					<td><textarea id="CAYDENDIR_job_order" name="<?php echo esc_attr( $opt ); ?>[job_order]" rows="10" class="large-text code"><?php echo esc_textarea( $s['job_order'] ); ?></textarea></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_location_order">Location order</label></th>
-					<td><textarea id="CAYDENDIR_location_order" name="<?php echo esc_attr( $opt ); ?>[location_order]" rows="10" class="large-text code"><?php echo esc_textarea( $s['location_order'] ); ?></textarea></td>
-				</tr>
-			</table>
+			<h2>Sort rules</h2>
+			<p class="description">The directory is sorted by these rules, in order. The first rule sorts everyone; each rule below only breaks the ties left by the rules above it (so two &ldquo;priority&rdquo; rules on Job then Location give the classic ordering). For each rule pick a <strong>field</strong> and how it sorts: a <strong>Custom priority list</strong> (type the order, one label per line, highest first — anything not listed sinks to the bottom, which handily flags typos), <strong>A&nbsp;&rarr;&nbsp;Z</strong>, or <strong>Z&nbsp;&rarr;&nbsp;A</strong>. Priority-list labels must match the displayed text for that field (case doesn&rsquo;t matter). Drag the <span aria-hidden="true">&#9776;</span> handle to reorder, remove a rule to drop that level, and add as many levels as you like. Remove every rule to leave people in their synced order.</p>
+			<style>
+				#CAYDENDIR-sort-rules{max-width:820px;}
+				.CAYDENDIR-rule{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;margin:0 0 8px;border:1px solid #c3c4c7;border-radius:6px;background:#fff;}
+				.CAYDENDIR-rule__handle{cursor:grab;color:#787c82;font-size:18px;line-height:1;-webkit-user-select:none;user-select:none;}
+				.CAYDENDIR-rule__level{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 7px;border-radius:999px;background:#f0f0f1;font-weight:600;}
+				.CAYDENDIR-rule .button-link-delete{margin-left:auto;}
+				.CAYDENDIR-rule__order{flex:0 0 100%;margin-top:4px;}
+				.CAYDENDIR-rule__order-label{display:block;font-weight:600;}
+				.CAYDENDIR-rule__order-label textarea{font-weight:400;margin-top:4px;}
+				#CAYDENDIR-sort-rules .ui-sortable-helper{box-shadow:0 3px 10px rgba(0,0,0,.18);}
+				#CAYDENDIR-sort-rules .ui-sortable-placeholder{visibility:visible!important;height:56px;margin:0 0 8px;border:1px dashed #c3c4c7;border-radius:6px;background:#f6f7f7;}
+			</style>
+			<div id="CAYDENDIR-sort-rules" data-CAYDENDIR-rules>
+				<?php
+				foreach ( $s['sort_rules'] as $ri => $rule ) {
+					echo CAYDENDIR_sd_render_sort_rule_row( $opt, $ri, $rule ); // phpcs:ignore WordPress.Security.EscapeOutput -- row built with esc_*/selected() internally
+				}
+				?>
+			</div>
+			<p><button type="button" class="button" data-CAYDENDIR-add-rule>+ Add sort rule</button></p>
+			<div class="CAYDENDIR-rule-template" data-CAYDENDIR-rule-template hidden>
+				<?php echo CAYDENDIR_sd_render_sort_rule_row( $opt, '__INDEX__', array( 'field' => 'name', 'mode' => 'asc', 'order' => '' ), true ); // phpcs:ignore WordPress.Security.EscapeOutput ?>
+			</div>
 
 			<h2>Colours</h2>
 			<table class="form-table" role="presentation">
