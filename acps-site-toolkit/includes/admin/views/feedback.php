@@ -39,17 +39,26 @@ if ( $view_id ) {
 	$path   = $entry->session_id ? Analytics::session_path( (int) $entry->session_id ) : array();
 	$list_url = admin_url( 'admin.php?page=acps-st&form_id=' . (int) $entry->form_id );
 	$return = add_query_arg( 'entry', $view_id, $list_url );
-	$statuses = array(
-		'new'         => __( 'New', 'acps-site-toolkit' ),
-		'in_progress' => __( 'In progress', 'acps-site-toolkit' ),
-		'resolved'    => __( 'Resolved', 'acps-site-toolkit' ),
-		'wont_fix'    => __( "Won't fix", 'acps-site-toolkit' ),
-		'spam'        => __( 'Spam', 'acps-site-toolkit' ),
-	);
+	$statuses         = Entries::feedback_status_labels();
+	$submitter_email  = \ACPS\SiteToolkit\Notifications::submitter_email( (int) $entry->form_id, $values );
+	// Per-status default messages, so the box can prefill as the status changes.
+	$status_messages = array();
+	foreach ( array_keys( $statuses ) as $st ) {
+		$status_messages[ $st ] = \ACPS\SiteToolkit\Notifications::default_status_message( $st );
+	}
 	?>
 	<div class="wrap acps-admin">
 		<h1><?php esc_html_e( 'Feedback item', 'acps-site-toolkit' ); ?> #<?php echo esc_html( $view_id ); ?></h1>
 		<p><a href="<?php echo esc_url( $list_url ); ?>">&larr; <?php esc_html_e( 'Back to list', 'acps-site-toolkit' ); ?></a></p>
+
+		<?php
+		$emailed = isset( $_GET['emailed'] ) ? sanitize_key( $_GET['emailed'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		if ( 'sent' === $emailed ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Status updated and an email was sent to the submitter.', 'acps-site-toolkit' ) . '</p></div>';
+		} elseif ( 'noemail' === $emailed ) {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Status updated, but no email was sent — this submission has no email address on file.', 'acps-site-toolkit' ) . '</p></div>';
+		}
+		?>
 
 		<div class="acps-detail-grid">
 			<div class="acps-detail-main">
@@ -100,6 +109,40 @@ if ( $view_id ) {
 							<?php endforeach; ?>
 						</select>
 					</p>
+
+					<?php if ( $submitter_email ) : ?>
+						<p>
+							<label>
+								<input type="checkbox" id="acps-notify-submitter" name="notify_submitter" value="1">
+								<?php
+								/* translators: %s: submitter email */
+								printf( esc_html__( 'Email the submitter (%s) about this change', 'acps-site-toolkit' ), esc_html( $submitter_email ) );
+								?>
+							</label>
+						</p>
+						<p id="acps-notify-message-wrap" style="display:none">
+							<label for="acps-notify-message"><?php esc_html_e( 'Message to send', 'acps-site-toolkit' ); ?></label><br>
+							<textarea id="acps-notify-message" name="notify_message" rows="5" class="large-text"><?php echo esc_textarea( $status_messages[ $entry->status ] ?? '' ); ?></textarea>
+							<span class="description"><?php esc_html_e( 'Edit as needed. The message updates to a suggested wording when you change the status, unless you have already edited it.', 'acps-site-toolkit' ); ?></span>
+						</p>
+						<script>
+						( function () {
+							var msgs   = <?php echo wp_json_encode( $status_messages ); ?>;
+							var sel    = document.getElementById( 'acps-status' );
+							var cb     = document.getElementById( 'acps-notify-submitter' );
+							var wrap   = document.getElementById( 'acps-notify-message-wrap' );
+							var ta     = document.getElementById( 'acps-notify-message' );
+							if ( ! sel || ! cb || ! ta ) { return; }
+							var edited = false;
+							ta.addEventListener( 'input', function () { edited = true; } );
+							cb.addEventListener( 'change', function () { wrap.style.display = cb.checked ? '' : 'none'; } );
+							sel.addEventListener( 'change', function () {
+								if ( ! edited && msgs[ sel.value ] ) { ta.value = msgs[ sel.value ]; }
+							} );
+						} )();
+						</script>
+					<?php endif; ?>
+
 					<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Update status', 'acps-site-toolkit' ); ?></button></p>
 				</form>
 
@@ -205,13 +248,7 @@ $selected_fields = ( $selected_form && ! $is_feedback ) ? \ACPS\SiteToolkit\Fiel
 		<select id="acps-filter-status" name="status">
 			<option value=""><?php esc_html_e( 'All statuses', 'acps-site-toolkit' ); ?></option>
 			<?php
-			$labels = array(
-				'new'         => __( 'New', 'acps-site-toolkit' ),
-				'in_progress' => __( 'In progress', 'acps-site-toolkit' ),
-				'resolved'    => __( 'Resolved', 'acps-site-toolkit' ),
-				'wont_fix'    => __( "Won't fix", 'acps-site-toolkit' ),
-				'spam'        => __( 'Spam', 'acps-site-toolkit' ),
-			);
+			$labels = Entries::feedback_status_labels();
 			foreach ( $labels as $val => $lbl ) {
 				printf( '<option value="%s" %s>%s</option>', esc_attr( $val ), selected( $filter_status, $val, false ), esc_html( $lbl ) );
 			}
@@ -310,7 +347,7 @@ $selected_fields = ( $selected_form && ! $is_feedback ) ? \ACPS\SiteToolkit\Fiel
 							<?php endforeach; ?>
 						<?php endif; ?>
 						<td><?php echo $row->page_id ? esc_html( get_the_title( (int) $row->page_id ) ) : esc_html( $row->page_url ); ?></td>
-						<td><?php echo esc_html( $row->status ); ?></td>
+						<td><?php echo esc_html( Entries::feedback_status_label( $row->status ) ); ?></td>
 						<td><?php echo esc_html( $row->submitted_at ); ?></td>
 					</tr>
 				<?php endforeach; ?>

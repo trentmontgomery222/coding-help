@@ -31,6 +31,9 @@
 .acps-status-new       { --acps-row-bg: #fff8e1; --acps-row-bar: #dba617; } /* awaiting */
 .acps-status-read      { --acps-row-bg: #ffffff; --acps-row-bar: #c3c4c7; }
 .acps-status-in_progress { --acps-row-bg: #e7f2fb; --acps-row-bar: #2271b1; }
+.acps-status-needs_details { --acps-row-bg: #fff4e5; --acps-row-bar: #d98a00; } /* waiting on submitter */
+.acps-status-follow_up { --acps-row-bg: #f3e8fd; --acps-row-bar: #7a3fbf; } /* to revisit */
+.acps-status-unsure    { --acps-row-bg: #f6f7f7; --acps-row-bar: #787c82; } /* undecided */
 .acps-status-resolved  { --acps-row-bg: #e6f4ea; --acps-row-bar: #46b450; } /* done/green */
 .acps-status-wont_fix  { --acps-row-bg: #f0f0f1; --acps-row-bar: #8c8f94; }
 .acps-status-spam      { --acps-row-bg: #fcebea; --acps-row-bar: #b32d2e; }

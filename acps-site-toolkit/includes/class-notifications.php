@@ -55,6 +55,96 @@ class Notifications {
 	}
 
 	/**
+	 * Email the person who submitted an entry about a status change.
+	 *
+	 * @param int    $entry_id Entry id.
+	 * @param string $status   New status key.
+	 * @param string $message  Admin's message (falls back to a per-status default).
+	 * @return string 'sent' | 'noemail'
+	 */
+	public static function send_status_update( $entry_id, $status, $message = '' ) {
+		$data = Entries::get( (int) $entry_id );
+		if ( ! $data ) {
+			return 'noemail';
+		}
+		$values = $data['values'];
+		$to     = self::submitter_email( (int) $data['entry']->form_id, $values );
+		if ( ! is_email( $to ) ) {
+			return 'noemail';
+		}
+
+		$message = trim( (string) $message );
+		if ( '' === $message ) {
+			$message = self::default_status_message( $status );
+		}
+
+		$label   = Entries::feedback_status_label( $status );
+		$subject = sprintf( /* translators: %s: status label */ __( 'Update on your feedback: %s', 'acps-site-toolkit' ), $label );
+
+		$body  = $message . "\n\n";
+		$body .= "— " . get_bloginfo( 'name' );
+
+		wp_mail( $to, wp_strip_all_tags( $subject ), $body );
+		return 'sent';
+	}
+
+	/**
+	 * Default message body for a status, used when the admin doesn't type one.
+	 *
+	 * @param string $status Status key.
+	 * @return string
+	 */
+	public static function default_status_message( $status ) {
+		switch ( $status ) {
+			case 'resolved':
+				return __( 'Good news — the issue you reported has been resolved. Thank you for helping us improve the site.', 'acps-site-toolkit' );
+			case 'in_progress':
+				return __( 'Thanks for your feedback. We are now working on what you reported and will follow up.', 'acps-site-toolkit' );
+			case 'needs_details':
+				return __( 'Thanks for your feedback. Could you share a little more detail so we can look into it? Just reply to this email.', 'acps-site-toolkit' );
+			case 'follow_up':
+				return __( 'We are following up on the feedback you sent us and will be in touch again shortly.', 'acps-site-toolkit' );
+			case 'unsure':
+				return __( 'Thanks for your feedback. We are still looking into what you reported and will update you when we know more.', 'acps-site-toolkit' );
+			case 'wont_fix':
+				return __( 'Thank you for your feedback. After review we are not able to make this change right now, but we appreciate you letting us know.', 'acps-site-toolkit' );
+			case 'new':
+				return __( 'Thank you for your feedback — we have received it and will review it soon.', 'acps-site-toolkit' );
+			default:
+				return __( 'There is an update on the feedback you sent us.', 'acps-site-toolkit' );
+		}
+	}
+
+	/**
+	 * Find the submitter's email address from an entry's values: prefer a field
+	 * of type "email"; otherwise any value that looks like an address.
+	 *
+	 * @param int   $form_id Form id.
+	 * @param array $values  Entry values keyed by field key.
+	 * @return string Email or ''.
+	 */
+	public static function submitter_email( $form_id, $values ) {
+		$form = Form::find( (int) $form_id );
+		if ( $form ) {
+			foreach ( Field_Types::normalize_list( $form->fields ) as $f ) {
+				if ( 'email' === $f['type'] && ! empty( $values[ $f['key'] ] ) ) {
+					$v = is_array( $values[ $f['key'] ] ) ? reset( $values[ $f['key'] ] ) : $values[ $f['key'] ];
+					if ( is_email( $v ) ) {
+						return $v;
+					}
+				}
+			}
+		}
+		foreach ( $values as $v ) {
+			$v = is_array( $v ) ? reset( $v ) : $v;
+			if ( is_email( (string) $v ) ) {
+				return $v;
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Send a fixed internal copy of every submission. Runs for all forms,
 	 * regardless of each form's notification settings.
 	 */

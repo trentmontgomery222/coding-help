@@ -21,7 +21,39 @@ class Entries {
 	 * the triage set. Both are stored in the same column.
 	 */
 	const STATUSES_FORM     = array( 'new', 'read', 'spam', 'trashed' );
-	const STATUSES_FEEDBACK = array( 'new', 'in_progress', 'resolved', 'wont_fix', 'spam', 'trashed' );
+	const STATUSES_FEEDBACK = array( 'new', 'in_progress', 'needs_details', 'follow_up', 'unsure', 'resolved', 'wont_fix', 'spam', 'trashed' );
+
+	/**
+	 * Human labels for the feedback workflow statuses, in dropdown order. The
+	 * single source of truth for both the triage control and the filter list.
+	 * ('trashed' is handled by the Trash button, not the status dropdown.)
+	 *
+	 * @return array val => label
+	 */
+	public static function feedback_status_labels() {
+		return array(
+			'new'           => __( 'New', 'acps-site-toolkit' ),
+			'in_progress'   => __( 'In progress', 'acps-site-toolkit' ),
+			'needs_details' => __( 'More details needed', 'acps-site-toolkit' ),
+			'follow_up'     => __( 'Follow up', 'acps-site-toolkit' ),
+			'unsure'        => __( 'Unsure', 'acps-site-toolkit' ),
+			'resolved'      => __( 'Resolved', 'acps-site-toolkit' ),
+			'wont_fix'      => __( "Won't fix", 'acps-site-toolkit' ),
+			'spam'          => __( 'Spam', 'acps-site-toolkit' ),
+		);
+	}
+
+	/**
+	 * A display label for any feedback status, including trashed.
+	 *
+	 * @param string $status Status key.
+	 * @return string
+	 */
+	public static function feedback_status_label( $status ) {
+		$labels              = self::feedback_status_labels();
+		$labels['trashed']   = __( 'Trashed', 'acps-site-toolkit' );
+		return isset( $labels[ $status ] ) ? $labels[ $status ] : ucfirst( str_replace( '_', ' ', (string) $status ) );
+	}
 
 	/** @var string[]|null Cached lowercase column list for the entries table. */
 	private static $columns_cache = null;

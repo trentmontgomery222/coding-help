@@ -425,7 +425,15 @@ class Admin {
 		$return = isset( $_POST['return'] ) ? esc_url_raw( wp_unslash( $_POST['return'] ) ) : admin_url( 'admin.php?page=acps-st' );
 
 		if ( 'status' === $do && isset( $_POST['status'] ) ) {
-			Entries::set_status( $id, sanitize_key( wp_unslash( $_POST['status'] ) ) );
+			$new_status = sanitize_key( wp_unslash( $_POST['status'] ) );
+			Entries::set_status( $id, $new_status );
+
+			// Optionally email the submitter about the new status.
+			if ( ! empty( $_POST['notify_submitter'] ) ) {
+				$message = isset( $_POST['notify_message'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notify_message'] ) ) : '';
+				$result  = \ACPS\SiteToolkit\Notifications::send_status_update( $id, $new_status, $message );
+				$return  = add_query_arg( 'emailed', $result, $return );
+			}
 		} elseif ( 'assign' === $do ) {
 			Entries::assign( $id, isset( $_POST['assigned_to'] ) ? absint( $_POST['assigned_to'] ) : 0 );
 		} elseif ( 'note' === $do && ! empty( $_POST['note'] ) ) {
