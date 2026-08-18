@@ -54,9 +54,14 @@ class Entries {
 			'page_url'           => isset( $entry['page_url'] ) ? esc_url_raw( $entry['page_url'] ) : null,
 			'status'             => isset( $entry['status'] ) ? sanitize_key( $entry['status'] ) : 'new',
 			'user_id'            => get_current_user_id() ?: null,
-			'ip_anon'            => Session::anonymize_ip( Session::client_ip() ),
-			'user_agent_summary' => Session::user_agent_summary(),
 		);
+		// Storing the submitter's anonymized IP + browser is optional (privacy).
+		// Note: per-device response limits rely on this fingerprint, so turning it
+		// off also disables those limits.
+		if ( Settings::get( 'entry_store_ip' ) ) {
+			$data['ip_anon']            = Session::anonymize_ip( Session::client_ip() );
+			$data['user_agent_summary'] = Session::user_agent_summary();
+		}
 		if ( ! empty( $entry['visitor_uid'] ) ) {
 			$data['visitor_uid'] = Visitors::sanitize( $entry['visitor_uid'] );
 		}

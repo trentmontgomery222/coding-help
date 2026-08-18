@@ -186,12 +186,13 @@ class REST_Controller {
 		$visit_id = false;
 		if ( $track_pages ) {
 			$token      = isset( $params['session'] ) ? $params['session'] : '';
+			$store_ref  = (bool) Settings::get( 'track_referrers' );
 			$session_id = Session::resolve(
 				$token,
 				array(
 					'post_id'  => isset( $params['post_id'] ) ? absint( $params['post_id'] ) : 0,
 					'url'      => isset( $params['url'] ) ? $params['url'] : '',
-					'referrer' => isset( $params['referrer'] ) ? $params['referrer'] : '',
+					'referrer' => ( $store_ref && isset( $params['referrer'] ) ) ? $params['referrer'] : '',
 					'viewport' => isset( $params['viewport'] ) ? $params['viewport'] : '',
 					'consent'  => $consent,
 				)

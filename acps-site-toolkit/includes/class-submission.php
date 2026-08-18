@@ -332,7 +332,8 @@ class Submission {
 			return '';
 		}
 
-		$max = (int) apply_filters( 'acps_st_max_upload_bytes', 10 * MB_IN_BYTES, $field );
+		$max_mb = max( 1, (int) Settings::get( 'max_upload_mb', 10 ) );
+		$max    = (int) apply_filters( 'acps_st_max_upload_bytes', $max_mb * MB_IN_BYTES, $field );
 		if ( $file['size'] > $max ) {
 			return new \WP_Error( 'too_big', __( 'That file is too large.', 'acps-site-toolkit' ) );
 		}

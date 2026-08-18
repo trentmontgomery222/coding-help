@@ -49,10 +49,11 @@ class Tracking {
 		$seq          = $prev ? ( (int) $prev->seq_index + 1 ) : 1;
 		$prev_post_id = $prev ? $prev->post_id : null;
 
-		if ( $prev && null === $prev->time_on_page ) {
+		if ( $prev && null === $prev->time_on_page && Settings::get( 'track_time_on_page' ) ) {
 			// Time on the previous page = now - its visited_at, written on this
 			// next visit (spec §3.2). We already know time_on_page is unset from
-			// the row above, so no extra SELECT is needed.
+			// the row above, so no extra SELECT is needed. Skipped entirely when
+			// time-on-page tracking is turned off (one fewer UPDATE per beacon).
 			$elapsed = time() - strtotime( $prev->visited_at . ' GMT' );
 			if ( $elapsed >= 0 && $elapsed < DAY_IN_SECONDS ) {
 				$wpdb->update( $visits, array( 'time_on_page' => $elapsed ), array( 'id' => $prev->id ) ); // phpcs:ignore WordPress.DB

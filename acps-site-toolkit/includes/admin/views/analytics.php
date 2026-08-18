@@ -10,21 +10,33 @@
 namespace ACPS\SiteToolkit\Admin;
 
 use ACPS\SiteToolkit\Analytics;
+use ACPS\SiteToolkit\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$pages       = Analytics::top_pages( array( 'limit' => 50 ) );
-$transitions = Analytics::common_transitions( 15 );
-$dead_ends   = Analytics::dead_ends( 10 );
-$trend       = Analytics::trend( 30 );
-$devices     = Analytics::device_breakdown();
-$ua          = Analytics::ua_breakdown();
+// Which cards to render. A card shows only when its data is being collected AND
+// its "show on dashboard" toggle is on. Turning a card off also skips the
+// queries that build it (Settings → Analytics → Show on dashboard).
+$has_pages     = (bool) Settings::get( 'track_pageviews' );
+$show_live     = $has_pages && Settings::get( 'show_live' );
+$show_uu       = Settings::get( 'track_visitors' ) && Settings::get( 'show_unique_users' );
+$show_pages    = $has_pages && Settings::get( 'show_pages' );
+$show_devices  = $has_pages && Settings::get( 'show_devices' );
+$show_journeys = $has_pages && Settings::get( 'show_journeys' );
+$show_trend    = $has_pages && Settings::get( 'show_trend' );
+
+$pages       = $show_pages ? Analytics::top_pages( array( 'limit' => 50 ) ) : array();
+$transitions = $show_journeys ? Analytics::common_transitions( 15 ) : array();
+$dead_ends   = $show_journeys ? Analytics::dead_ends( 10 ) : array();
+$trend       = $show_trend ? Analytics::trend( 30 ) : array();
+$devices     = $show_devices ? Analytics::device_breakdown() : array();
+$ua          = $show_devices ? Analytics::ua_breakdown() : array( 'browsers' => array(), 'os' => array() );
 
 // Path drill-down for a selected page.
 $focus = isset( $_GET['focus'] ) ? absint( $_GET['focus'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
-$paths = $focus ? Analytics::path_analysis( $focus, 10 ) : null;
+$paths = ( $focus && $show_journeys ) ? Analytics::path_analysis( $focus, 10 ) : null;
 
 $fmt_time = function ( $seconds ) {
 	$seconds = (int) $seconds;
@@ -37,15 +49,17 @@ $fmt_time = function ( $seconds ) {
 	return floor( $seconds / 60 ) . 'm ' . ( $seconds % 60 ) . 's';
 };
 ?>
-<?php
-$active_pages = Analytics::active_pages( 5 );
-$active_total = Analytics::active_count( 5 );
-$active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
-?>
 <div class="wrap acps-admin acps-analytics">
 	<h1><?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></h1>
 	<p class="description"><?php esc_html_e( 'Sorted by the feedback/traffic overlay: pages with heavy traffic and clustered feedback rise to the top of the fix list.', 'acps-site-toolkit' ); ?></p>
+	<p class="description"><?php esc_html_e( 'Choose which of these cards appear under Settings → Analytics → Show on dashboard.', 'acps-site-toolkit' ); ?></p>
 
+	<?php
+	if ( $show_live ) :
+		$active_pages = Analytics::active_pages( 5 );
+		$active_total = Analytics::active_count( 5 );
+		$active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
+		?>
 	<div class="acps-card acps-live" id="acps-live">
 		<h2>
 			<span class="acps-live-dot" aria-hidden="true"></span>
@@ -133,6 +147,7 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 		setInterval( refresh, 20000 );
 	} )();
 	</script>
+	<?php endif; // $show_live ?>
 
 	<?php if ( $focus && $paths ) : ?>
 		<div class="acps-card">
@@ -167,13 +182,13 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 		</div>
 	<?php endif; ?>
 
-	<?php
-	$uu_total   = \ACPS\SiteToolkit\Visitors::total();
-	$uu_today   = \ACPS\SiteToolkit\Visitors::new_since( date_i18n( 'Y-m-d' ) );
-	$uu_new_30  = \ACPS\SiteToolkit\Visitors::new_since( gmdate( 'Y-m-d', current_time( 'timestamp' ) - 30 * DAY_IN_SECONDS ) );
-	$uu_active  = \ACPS\SiteToolkit\Visitors::active_within( 30 );
-	$uu_trend   = \ACPS\SiteToolkit\Visitors::new_trend( 30 );
-	?>
+	<?php if ( $show_uu ) :
+		$uu_total   = \ACPS\SiteToolkit\Visitors::total();
+		$uu_today   = \ACPS\SiteToolkit\Visitors::new_since( date_i18n( 'Y-m-d' ) );
+		$uu_new_30  = \ACPS\SiteToolkit\Visitors::new_since( gmdate( 'Y-m-d', current_time( 'timestamp' ) - 30 * DAY_IN_SECONDS ) );
+		$uu_active  = \ACPS\SiteToolkit\Visitors::active_within( 30 );
+		$uu_trend   = \ACPS\SiteToolkit\Visitors::new_trend( 30 );
+		?>
 	<div class="acps-card">
 		<h2><?php esc_html_e( 'Unique users', 'acps-site-toolkit' ); ?></h2>
 		<p class="description"><?php esc_html_e( 'A unique user is identified by anonymised IP + browser (the same signal the spam filter uses), computed on the server — so clearing cookies or cache can’t create a new one. People on the same network + browser may count as one. Logged-in admins are excluded.', 'acps-site-toolkit' ); ?></p>
@@ -200,7 +215,9 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 			</table>
 		</details>
 	</div>
+	<?php endif; // $show_uu ?>
 
+	<?php if ( $show_pages ) : ?>
 	<div class="acps-card">
 		<h2><?php esc_html_e( 'Pages — traffic & feedback overlay', 'acps-site-toolkit' ); ?></h2>
 		<table class="widefat striped acps-table">
@@ -237,7 +254,9 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 			</tbody>
 		</table>
 	</div>
+	<?php endif; // $show_pages ?>
 
+	<?php if ( $show_devices ) : ?>
 	<div class="acps-card">
 		<h2><?php esc_html_e( 'Devices, browsers & operating systems', 'acps-site-toolkit' ); ?></h2>
 		<p class="description"><?php esc_html_e( 'Sessions, page views, and average time on page, broken down by how visitors reached the site.', 'acps-site-toolkit' ); ?></p>
@@ -280,7 +299,9 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 			<?php endforeach; ?>
 		</div>
 	</div>
+	<?php endif; // $show_devices ?>
 
+	<?php if ( $show_journeys ) : ?>
 	<div class="acps-two-col">
 		<div class="acps-card">
 			<h2><?php esc_html_e( 'Most common paths', 'acps-site-toolkit' ); ?></h2>
@@ -309,7 +330,9 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 			</table>
 		</div>
 	</div>
+	<?php endif; // $show_journeys ?>
 
+	<?php if ( $show_trend ) : ?>
 	<div class="acps-card">
 		<h2><?php esc_html_e( 'Views — last 30 days', 'acps-site-toolkit' ); ?></h2>
 		<?php // Accessible sparkline: a table IS the accessible equivalent (spec §8.3). ?>
@@ -324,4 +347,11 @@ $active_staff = \ACPS\SiteToolkit\Presence::active( 5 );
 			</tbody>
 		</table>
 	</div>
+	<?php endif; // $show_trend ?>
+
+	<?php if ( ! $show_live && ! $show_uu && ! $show_pages && ! $show_devices && ! $show_journeys && ! $show_trend ) : ?>
+	<div class="acps-card">
+		<p><?php esc_html_e( 'Every dashboard card is turned off. Enable the ones you want under Settings → Analytics → Show on dashboard.', 'acps-site-toolkit' ); ?></p>
+	</div>
+	<?php endif; ?>
 </div>

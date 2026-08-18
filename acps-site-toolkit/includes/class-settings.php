@@ -34,6 +34,10 @@ class Settings {
 			'qa_enabled'            => 1, // Q&A / help widget + [acps_qa] shortcode.
 			'restricted_forms_enabled' => 1, // password-gated + secret-link forms.
 
+			// Global form behaviour (per-form builder settings override where noted).
+			'entry_store_ip'        => 1,  // store submitter's anonymized IP + browser on entries.
+			'max_upload_mb'         => 10, // max size for a single file upload, in MB.
+
 			// Feedback trigger.
 			'feedback_enabled'      => 1,
 			'trigger_display'       => 'all',      // all | include | exclude.
@@ -66,10 +70,21 @@ class Settings {
 			// Master switch for ALL analytics/visitor/page tracking. Individual
 			// features below can be toggled independently.
 			'analytics_enabled'     => 1,
+			// What to COLLECT (each affects the beacon / stored data).
 			'track_pageviews'       => 1, // page/journey tracking + device stats.
 			'track_visitors'        => 1, // unique users (server IP+UA fingerprint).
 			'track_presence'        => 0, // admin "who's on the site now" (extra request; off).
+			'track_time_on_page'    => 1, // backfill time-on-page from the next view.
+			'track_referrers'       => 1, // store where visitors came from.
 			'analytics_sample_rate' => 100, // % of pageviews that send a beacon (lower = far less origin load).
+			// What to SHOW on the Analytics dashboard. Turning a card off also
+			// skips the queries that build it, so these double as perf levers.
+			'show_live'             => 1, // "who's on the site now".
+			'show_unique_users'     => 1, // unique-users card.
+			'show_pages'            => 1, // per-page traffic + feedback overlay.
+			'show_devices'          => 1, // device / browser / OS breakdown.
+			'show_journeys'         => 1, // common paths + dead ends.
+			'show_trend'            => 1, // views over the last 30 days.
 
 			// Journey tracking.
 			'tracking_enabled'      => 1,
@@ -158,6 +173,7 @@ class Settings {
 		$checkboxes = array(
 			'qa_enabled',
 			'restricted_forms_enabled',
+			'entry_store_ip',
 			'feedback_enabled',
 			'feedback_allow_screenshot',
 			'trigger_transparent',
@@ -165,6 +181,14 @@ class Settings {
 			'track_pageviews',
 			'track_visitors',
 			'track_presence',
+			'track_time_on_page',
+			'track_referrers',
+			'show_live',
+			'show_unique_users',
+			'show_pages',
+			'show_devices',
+			'show_journeys',
+			'show_trend',
 			'tracking_enabled',
 			'consent_mode',
 			'store_full_user_agent',
@@ -227,6 +251,7 @@ class Settings {
 		$out['spam_rate_limit']      = max( 0, absint( $input['spam_rate_limit'] ?? $defaults['spam_rate_limit'] ) );
 		$out['spam_rate_window']     = max( 1, absint( $input['spam_rate_window'] ?? $defaults['spam_rate_window'] ) );
 		$out['analytics_sample_rate'] = max( 1, min( 100, absint( $input['analytics_sample_rate'] ?? $defaults['analytics_sample_rate'] ) ) );
+		$out['max_upload_mb']         = max( 1, min( 100, absint( $input['max_upload_mb'] ?? $defaults['max_upload_mb'] ) ) );
 
 		// Notification recipients — comma-separated emails.
 		$out['notify_recipients'] = '';
