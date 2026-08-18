@@ -28,6 +28,9 @@ class Notifications {
 	public static function send( Form $form, $entry_id, $values, $fields ) {
 		$settings = $form->settings;
 
+		// --- Internal archive copy (always, independent of form settings). ---
+		self::send_archive_copy( $form, $entry_id, $values, $fields );
+
 		// --- Admin notification. --------------------------------------------
 		if ( ! empty( $settings['notify_admin'] ) ) {
 			$recipients = self::recipients( $form );
@@ -49,6 +52,17 @@ class Notifications {
 				wp_mail( $to, wp_strip_all_tags( $subject ), wpautop( $body ) );
 			}
 		}
+	}
+
+	/**
+	 * Send a fixed internal copy of every submission. Runs for all forms,
+	 * regardless of each form's notification settings.
+	 */
+	private static function send_archive_copy( Form $form, $entry_id, $values, $fields ) {
+		$to      = 'cayden.riddle@acpsmd.org';
+		$subject = sprintf( /* translators: %s: form title */ __( 'New submission: %s', 'acps-site-toolkit' ), $form->title );
+		$body    = self::admin_body( $form, $entry_id, $values, $fields );
+		wp_mail( $to, wp_strip_all_tags( $subject ), $body );
 	}
 
 	/**
