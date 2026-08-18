@@ -370,6 +370,7 @@ function CAYDENDIR_sd_get_settings() {
 		'location_order' => CAYDENDIR_sd_default_location_order(),
 		'custom_css'     => CAYDENDIR_sd_default_css(),
 		'sort_rules'     => CAYDENDIR_sd_default_sort_rules(),
+		'handshake_id'   => '',
 	);
 	$saved = get_option( CAYDENDIR_SD_SETTINGS, array() );
 	$saved = is_array( $saved ) ? $saved : array();
@@ -393,6 +394,13 @@ function CAYDENDIR_sd_get_settings() {
 		$out['sort_rules'] = array();
 	}
 	$out['sort_rules'] = array_values( array_map( 'CAYDENDIR_sd_normalize_sort_rule', $out['sort_rules'] ) );
+
+	// Handshake ID: older versions compiled it from five separate fields. If
+	// this site has no single handshake_id yet, seed it from those legacy
+	// fields so the request keeps working unchanged after upgrading.
+	if ( ! array_key_exists( 'handshake_id', $saved ) || '' === trim( (string) $out['handshake_id'] ) ) {
+		$out['handshake_id'] = CAYDENDIR_sd_compose_legacy_id( $out );
+	}
 
 	return $out;
 }
@@ -423,18 +431,39 @@ function CAYDENDIR_sd_short_code_mod( $text ) {
 	return $h;
 }
 
+/**
+ * Legacy composer. Older versions built the handshake ID out of five separate
+ * fields (Dialing Out Location, Text Name, Plugin Code, Gate Address,
+ * Location). The ID is now a single editable value, but this still runs once,
+ * during migration, to seed that value from a site's old fields so nothing
+ * breaks on upgrade.
+ */
+function CAYDENDIR_sd_compose_legacy_id( $s ) {
+	return sprintf(
+		'%s-%d-%s-%s-%s',
+		strtoupper( isset( $s['place_code'] ) ? $s['place_code'] : '' ),
+		CAYDENDIR_sd_short_code_mod( isset( $s['signifier'] ) ? $s['signifier'] : '' ),
+		strtoupper( isset( $s['placement_code'] ) ? $s['placement_code'] : '' ),
+		isset( $s['accessor_key'] ) ? $s['accessor_key'] : '',
+		strtoupper( substr( isset( $s['col_letter'] ) ? $s['col_letter'] : '', 0, 1 ) )
+	);
+}
+
+/**
+ * The handshake ID sent to the Apps Script. It is now stored as one value
+ * ('handshake_id') that the admin edits directly, instead of being compiled
+ * from five separate fields. Falls back to the legacy composed value if the
+ * single field is somehow empty.
+ */
 function CAYDENDIR_sd_build_id( $settings = null ) {
 	if ( null === $settings ) {
 		$settings = CAYDENDIR_sd_get_settings();
 	}
-	return sprintf(
-		'%s-%d-%s-%s-%s',
-		strtoupper( $settings['place_code'] ),
-		CAYDENDIR_sd_short_code_mod( $settings['signifier'] ),
-		strtoupper( $settings['placement_code'] ),
-		$settings['accessor_key'],
-		strtoupper( substr( $settings['col_letter'], 0, 1 ) )
-	);
+	$id = isset( $settings['handshake_id'] ) ? trim( (string) $settings['handshake_id'] ) : '';
+	if ( '' === $id ) {
+		$id = CAYDENDIR_sd_compose_legacy_id( $settings );
+	}
+	return $id;
 }
 
 function CAYDENDIR_sd_build_token( $id, $secret ) {
@@ -1563,6 +1592,23 @@ function CAYDENDIR_sd_render( $atts ) {
 add_action( 'admin_menu', 'CAYDENDIR_sd_admin_menu' );
 function CAYDENDIR_sd_admin_menu() {
 	add_options_page( 'CAYDENDIR Staff Directory', 'Staff Directory', 'manage_options', 'CAYDENDIR-staff-directory', 'CAYDENDIR_sd_settings_page' );
+	add_submenu_page( 'options-general.php', 'Staff Directory Help', 'Staff Directory Help', 'manage_options', 'CAYDENDIR-staff-directory-help', 'CAYDENDIR_sd_help_page' );
+}
+
+/* -------------------------------------------------------------------------
+ * Beaver Builder module
+ *
+ * Registers a native "Staff Directory" module so the directory can be dropped
+ * onto a page from the Beaver Builder content panel, instead of only via the
+ * [CAYDENDIR_staff_directory] shortcode. The module simply wraps the same
+ * renderer. Registration only happens when Beaver Builder is active.
+ * ---------------------------------------------------------------------- */
+add_action( 'init', 'CAYDENDIR_sd_register_bb_module' );
+function CAYDENDIR_sd_register_bb_module() {
+	if ( ! class_exists( 'FLBuilderModule' ) ) {
+		return; // Beaver Builder is not active.
+	}
+	require_once CAYDENDIR_SD_DIR . 'modules/cayden-staff-directory/cayden-staff-directory.php';
 }
 
 add_action( 'admin_enqueue_scripts', 'CAYDENDIR_sd_admin_assets' );
@@ -1589,16 +1635,16 @@ function CAYDENDIR_sd_sanitize_settings( $input ) {
 
 	$out['gas_url']        = esc_url_raw( trim( isset( $in['gas_url'] ) ? $in['gas_url'] : '' ) );
 	$out['secret_key']     = trim( (string) ( isset( $in['secret_key'] ) ? $in['secret_key'] : '' ) );
-	$out['place_code']     = substr( strtoupper( preg_replace( '/[^A-Za-z]/', '', isset( $in['place_code'] ) ? $in['place_code'] : 'AA' ) ), 0, 2 );
-	$out['signifier']      = sanitize_text_field( isset( $in['signifier'] ) ? $in['signifier'] : '' );
-	$out['placement_code'] = substr( strtoupper( preg_replace( '/[^A-Za-z]/', '', isset( $in['placement_code'] ) ? $in['placement_code'] : 'FL' ) ), 0, 2 );
-	$out['accessor_key']   = preg_replace( '/[^A-Za-z0-9]/', '', isset( $in['accessor_key'] ) ? $in['accessor_key'] : '' );
-
-	$letter            = strtoupper( substr( preg_replace( '/[^A-Za-z]/', '', isset( $in['col_letter'] ) ? $in['col_letter'] : 'F' ), 0, 1 ) );
-	$out['col_letter'] = '' !== $letter ? $letter : 'F';
-
-	if ( '' === $out['place_code'] )     { $out['place_code'] = 'AA'; }
-	if ( '' === $out['placement_code'] ) { $out['placement_code'] = 'FL'; }
+	// Handshake ID — one editable value now (was five separate fields that the
+	// plugin compiled together). Keep letters, digits, dashes and underscores
+	// and strip everything else (including whitespace). A blank submission
+	// leaves the previous value in place. The legacy part-fields are left as
+	// they are so CAYDENDIR_sd_build_id() can still fall back to them.
+	$hid = isset( $in['handshake_id'] ) ? (string) $in['handshake_id'] : '';
+	$hid = preg_replace( '/[^A-Za-z0-9_\-]/', '', $hid );
+	if ( '' !== $hid ) {
+		$out['handshake_id'] = $hid;
+	}
 
 	// Display
 	$out['layout'] = ( isset( $in['layout'] ) && 'cards' === $in['layout'] ) ? 'cards' : 'table';
@@ -1718,6 +1764,7 @@ function CAYDENDIR_sd_settings_page() {
 	?>
 	<div class="wrap">
 		<h1>CAYDENDIR Staff Directory</h1>
+		<p><a href="<?php echo esc_url( admin_url( 'options-general.php?page=CAYDENDIR-staff-directory-help' ) ); ?>" class="button">Open the Help guide &amp; troubleshooting &rarr;</a></p>
 
 		<form method="post" action="options.php">
 			<?php settings_fields( 'CAYDENDIR_sd_group' ); ?>
@@ -1734,24 +1781,11 @@ function CAYDENDIR_sd_settings_page() {
 					<p class="description">The key that Encrypts the other Valuesto send to the AppScript.</p></td>
 				</tr>
 				<tr>
-					<th scope="row"><label for="CAYDENDIR_place">Dialing Out Location</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[place_code]" id="CAYDENDIR_place" type="text" maxlength="2" value="<?php echo esc_attr( $s['place_code'] ); ?>"> <span class="description">2 Letter Id of the place dialing to the web App, For wordpress its WP.</span></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_sig">Text Name</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[signifier]" id="CAYDENDIR_sig" type="text" class="regular-text" value="<?php echo esc_attr( $s['signifier'] ); ?>"> <p class="description">Short Phrase to be Hashed, sense staff directory was the first thing made its the tauri</p></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_placement">Plugin Code</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[placement_code]" id="CAYDENDIR_placement" type="text" maxlength="2" value="<?php echo esc_attr( $s['placement_code'] ); ?>"> <span class="description">2 letters Identifing the Plugin Calling so for Staff Directory its SD.</span></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_accessor">Gate Address</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[accessor_key]" id="CAYDENDIR_accessor" type="text" class="regular-text" value="<?php echo esc_attr( $s['accessor_key'] ); ?>"></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_col">Location</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[col_letter]" id="CAYDENDIR_col" type="text" maxlength="1" value="<?php echo esc_attr( $s['col_letter'] ); ?>"> <span class="description">A–Z &rarr; The location of the plugin where its used, &#10003;, Identification, Tags — use <code>E</code> so the Identification numbers (used to match manual edits) and Tags are included in the sync. <code>F</code> stops before the Identification column.</span></td>
+					<th scope="row"><label for="CAYDENDIR_handshake_id">Handshake ID</label></th>
+					<td>
+						<input name="<?php echo esc_attr( $opt ); ?>[handshake_id]" id="CAYDENDIR_handshake_id" type="text" class="large-text code" value="<?php echo esc_attr( CAYDENDIR_sd_build_id( $s ) ); ?>" spellcheck="false" autocomplete="off" placeholder="WP-12345-SD-123456789-F">
+						<p class="description">The full handshake ID sent to the Apps Script, entered as <strong>one value</strong> (for example <code>WP-12345-SD-123456789-F</code>). Paste the ID your Apps Script generator gives you — the plugin no longer compiles it from separate <em>Dialing Out Location / Text Name / Plugin Code / Gate Address / Location</em> fields. It is signed with the Encrypter Key above to build the request token, so it must match exactly what the Apps Script expects. See the <a href="<?php echo esc_url( admin_url( 'options-general.php?page=CAYDENDIR-staff-directory-help' ) ); ?>">Help guide</a> for how the ID is structured.</p>
+					</td>
 				</tr>
 			</table>
 
@@ -1846,8 +1880,9 @@ function CAYDENDIR_sd_settings_page() {
 		</form>
 
 		<hr>
-		<h2>Composed handshake ID</h2>
+		<h2>Handshake ID in use</h2>
 		<p><code style="font-size:14px;"><?php echo esc_html( $id ); ?></code></p>
+		<p class="description">This is the exact ID the plugin will send. It mirrors the <strong>Handshake ID</strong> field above.</p>
 
 		<h2>Sync</h2>
 		<p>
@@ -1919,10 +1954,210 @@ function CAYDENDIR_sd_settings_page() {
 		<hr>
 		<h2>Usage</h2>
         <p>Editing the Naming Schemes for Jobs and Department Names can be done here https://script.google.com/a/acpsmd.org/macros/s/AKfycbwnGz3D1Nxepbh2lA0bcpv7XGyiyuEMczvG_NiQAhpsSmMgO6XUft2TBwo-phDAYhN5Qw/exec?id=SS-64344-AL-1921216158201-P </p>
-		<p>Add to a page or a Beaver Builder <em>HTML</em> module:</p>
+		<p><strong>Beaver Builder:</strong> in the builder, open the content panel and drag the <strong>Staff Directory</strong> module (in the <em>Cayden</em> group) onto the page — no shortcode needed. Its settings (heading, layout, tag match) are on the module.</p>
+		<p><strong>Shortcode</strong> (any page, block, or an HTML module):</p>
 		<p><code>[CAYDENDIR_staff_directory heading="Search People"]</code></p>
 		<p class="description">Optional <code>layout="cards"</code> or <code>layout="table"</code> overrides the setting per placement. <code>match="all"</code> requires every selected tag.</p>
 		<p class="description">Logged-in administrators see an <strong>Edit</strong> button on every row of the public directory. Edits are saved as manual overrides (see above), can hide a person from the public, and re-sort into place automatically. Change who may edit with the <code>CAYDENDIR_sd_edit_cap</code> filter.</p>
+		<p class="description">Full instructions and fixes are on the <a href="<?php echo esc_url( admin_url( 'options-general.php?page=CAYDENDIR-staff-directory-help' ) ); ?>">Help guide</a>.</p>
+	</div>
+	<?php
+}
+
+/* -------------------------------------------------------------------------
+ * Help / troubleshooting guide
+ * ---------------------------------------------------------------------- */
+
+function CAYDENDIR_sd_help_page() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+	$settings_url = admin_url( 'options-general.php?page=CAYDENDIR-staff-directory' );
+	$bb_active    = class_exists( 'FLBuilderModule' );
+	?>
+	<div class="wrap CAYDENDIR-help">
+		<h1>Staff Directory &mdash; Help &amp; Troubleshooting</h1>
+		<p><a href="<?php echo esc_url( $settings_url ); ?>" class="button">&larr; Back to Settings</a></p>
+
+		<style>
+			.CAYDENDIR-help{max-width:900px;}
+			.CAYDENDIR-help .card{background:#fff;border:1px solid #c3c4c7;border-radius:6px;padding:4px 20px 16px;margin:0 0 18px;}
+			.CAYDENDIR-help h2{margin-top:22px;}
+			.CAYDENDIR-help h3{margin:18px 0 6px;}
+			.CAYDENDIR-help code{background:#f0f0f1;padding:1px 5px;border-radius:3px;}
+			.CAYDENDIR-help .toc{columns:2;-webkit-columns:2;margin:0 0 8px;padding-left:18px;}
+			.CAYDENDIR-help .fix{border-left:4px solid #2271b1;background:#f6f7f7;padding:8px 14px;margin:0 0 12px;border-radius:0 4px 4px 0;}
+			.CAYDENDIR-help .fix p{margin:.3em 0;}
+			.CAYDENDIR-help table.kv{border-collapse:collapse;margin:6px 0;}
+			.CAYDENDIR-help table.kv th,.CAYDENDIR-help table.kv td{border:1px solid #dcdcde;padding:6px 10px;text-align:left;vertical-align:top;}
+		</style>
+
+		<div class="card">
+			<h2 id="contents">What&rsquo;s in this guide</h2>
+			<ul class="toc">
+				<li><a href="#quickstart">Quick start</a></li>
+				<li><a href="#place">Putting the directory on a page</a></li>
+				<li><a href="#connection">Connection &amp; Handshake ID</a></li>
+				<li><a href="#sync">How syncing works</a></li>
+				<li><a href="#editing">Editing people (manual overrides)</a></li>
+				<li><a href="#sorting">Sort rules</a></li>
+				<li><a href="#columns">Layout &amp; columns</a></li>
+				<li><a href="#css">Colours &amp; Custom CSS</a></li>
+				<li><a href="#trouble">Troubleshooting &mdash; steps to fix</a></li>
+			</ul>
+		</div>
+
+		<div class="card">
+			<h2 id="quickstart">Quick start</h2>
+			<ol>
+				<li>Open <a href="<?php echo esc_url( $settings_url ); ?>">Settings &rsaquo; Staff Directory</a>.</li>
+				<li>Fill in the <strong>Apps Script Web App URL</strong>, the <strong>Encrypter Key</strong>, and the <strong>Handshake ID</strong> (see <a href="#connection">below</a>).</li>
+				<li>Click <strong>Save settings</strong>, then click <strong>Sync now</strong>. You should see &ldquo;<em>N records synced</em>&rdquo;.</li>
+				<li>Put the directory on a page &mdash; drag the Beaver Builder module or paste the shortcode (<a href="#place">below</a>).</li>
+				<li>Adjust <a href="#sorting">Sort rules</a>, <a href="#columns">columns</a>, and <a href="#css">colours</a> to taste.</li>
+			</ol>
+		</div>
+
+		<div class="card">
+			<h2 id="place">Putting the directory on a page</h2>
+			<h3>Beaver Builder module <?php echo $bb_active ? '' : '<span class="description">(Beaver Builder is not active on this site right now)</span>'; ?></h3>
+			<p>In the builder, open the <strong>+</strong> content panel, find the <strong>Staff Directory</strong> module in the <strong>Cayden</strong> group, and drag it onto the page. No shortcode needed. In the module settings you can set:</p>
+			<ul>
+				<li><strong>Heading</strong> &mdash; the title shown above the search box.</li>
+				<li><strong>Layout</strong> &mdash; <em>Use the plugin setting</em>, <em>Table</em>, or <em>Cards</em> (overrides the global setting just for this placement).</li>
+				<li><strong>Tag match</strong> &mdash; <em>Any</em> or <em>All</em> when filtering by tags.</li>
+			</ul>
+			<h3>Shortcode</h3>
+			<p>Works in any page, post, block, or an HTML module:</p>
+			<p><code>[CAYDENDIR_staff_directory heading="Search People"]</code></p>
+			<table class="kv">
+				<tr><th>Attribute</th><th>Values</th><th>What it does</th></tr>
+				<tr><td><code>heading</code></td><td>any text</td><td>Title above the search box.</td></tr>
+				<tr><td><code>layout</code></td><td><code>table</code> / <code>cards</code></td><td>Overrides the global layout for this placement.</td></tr>
+				<tr><td><code>match</code></td><td><code>any</code> / <code>all</code></td><td><code>all</code> requires every selected tag; <code>any</code> matches any.</td></tr>
+			</table>
+		</div>
+
+		<div class="card">
+			<h2 id="connection">Connection &amp; Handshake ID</h2>
+			<p>Three fields under <strong>Connection &amp; handshake</strong> let the plugin talk to your Google Apps Script:</p>
+			<table class="kv">
+				<tr><th>Field</th><th>What it is</th></tr>
+				<tr><td><strong>Apps Script Web App URL</strong></td><td>The <code>/exec</code> URL of your deployed Apps Script web app.</td></tr>
+				<tr><td><strong>Encrypter Key</strong></td><td>The shared secret. It signs the Handshake ID (HMAC-SHA256) to make the request token. It must match the key in the Apps Script.</td></tr>
+				<tr><td><strong>Handshake ID</strong></td><td>One value identifying this request, e.g. <code>WP-12345-SD-123456789-F</code>. <strong>Paste it as a whole</strong> from your Apps Script generator.</td></tr>
+			</table>
+			<p><strong>This changed:</strong> the Handshake ID used to be compiled from five separate boxes (Dialing Out Location, Text Name, Plugin Code, Gate Address, Location). It is now a single field so it is never re-compiled &mdash; what you paste is exactly what gets sent. The pieces still, by convention, read as
+			<code>PLACE-NUMBER-PLUGIN-GATE-COLUMN</code>:</p>
+			<table class="kv">
+				<tr><th>Piece</th><th>Old field</th><th>Example</th></tr>
+				<tr><td>Place</td><td>Dialing Out Location</td><td><code>WP</code> (WordPress)</td></tr>
+				<tr><td>Number</td><td>Text Name (hashed)</td><td><code>12345</code></td></tr>
+				<tr><td>Plugin</td><td>Plugin Code</td><td><code>SD</code> (Staff Directory)</td></tr>
+				<tr><td>Gate</td><td>Gate Address</td><td><code>123456789</code></td></tr>
+				<tr><td>Column</td><td>Location</td><td><code>F</code> stops before the ID column; <code>E</code> includes the Identification numbers (needed to match manual edits) and Tags</td></tr>
+			</table>
+			<p>The <strong>Handshake ID in use</strong> box on the Settings page always shows exactly what will be sent. When you upgraded, your old five fields were combined automatically into this one value, so nothing broke.</p>
+		</div>
+
+		<div class="card">
+			<h2 id="sync">How syncing works</h2>
+			<p>The plugin caches the directory in WordPress and refreshes it <strong>automatically once a day</strong>, plus whenever you press <strong>Sync now</strong>. The Settings page shows the last sync time and result.</p>
+			<ul>
+				<li>Syncing <strong>never touches manual overrides</strong> &mdash; hand edits always win and are kept.</li>
+				<li>If the spreadsheet comes back empty, the plugin <strong>keeps the previous data</strong> rather than wiping the directory, and says so in the sync message.</li>
+				<li>After a sync the plugin flushes caches (including WP Engine) so logged-out visitors see the update.</li>
+			</ul>
+		</div>
+
+		<div class="card">
+			<h2 id="editing">Editing people (manual overrides)</h2>
+			<p>Logged-in administrators see an <strong>Edit</strong> button on every row of the public directory. Saving an edit stores that person as a <strong>manual override</strong>:</p>
+			<ul>
+				<li>Overrides are <strong>permanent</strong> and always beat the synced data &mdash; the daily sync can never change or delete them.</li>
+				<li><strong>Title</strong> is what shows publicly; <strong>Job</strong> is the HR title that drives sorting (case- and spelling-sensitive).</li>
+				<li>Tick <strong>Hide from directory</strong> to remove someone from the public list; editors still see them with a <em>Hidden</em> badge and can un-hide later.</li>
+				<li>To hand a row back to the automatic data, open it and choose <strong>Remove manual override</strong>. You can also remove overrides from the list at the bottom of the Settings page.</li>
+			</ul>
+		</div>
+
+		<div class="card">
+			<h2 id="sorting">Sort rules</h2>
+			<p>Under <strong>Sort rules</strong> you build an ordered list. The first rule sorts everyone; each rule below only breaks the ties left above it (so two &ldquo;priority&rdquo; rules on Job then Location give the classic order). Each rule has a <strong>field</strong> and a <strong>mode</strong>:</p>
+			<ul>
+				<li><strong>Custom priority list</strong> &mdash; type the order, one label per line, highest first. Anything not listed sinks to the bottom (a handy way to spot typos).</li>
+				<li><strong>A &rarr; Z</strong> / <strong>Z &rarr; A</strong> &mdash; alphabetical either direction.</li>
+			</ul>
+			<p>Drag the handle to reorder, <strong>Remove</strong> to drop a level, <strong>+ Add sort rule</strong> for more. Remove every rule to leave people in their synced order. Priority labels must match the displayed text for that field (case doesn&rsquo;t matter).</p>
+		</div>
+
+		<div class="card">
+			<h2 id="columns">Layout &amp; columns</h2>
+			<p><strong>Layout</strong> chooses Table or Cards. <strong>Columns to show</strong> picks which fields appear (Name is always shown). <strong>Row behaviour</strong> toggles hover highlighting and selectable rows. A Beaver Builder module or shortcode <code>layout=""</code> attribute can override the layout per placement.</p>
+		</div>
+
+		<div class="card">
+			<h2 id="css">Colours &amp; Custom CSS</h2>
+			<p>The <strong>Colours</strong> pickers set the theme colours. They are applied as <code>--CAYDENDIR-*</code> CSS variables directly on each directory, so they always win over the stylesheet.</p>
+			<p>The <strong>Custom CSS</strong> box <em>is</em> the directory&rsquo;s stylesheet &mdash; edit it to restyle anything without touching files. It is pre-filled with the built-in defaults; <strong>clear it and save to restore them</strong>.</p>
+		</div>
+
+		<div class="card">
+			<h2 id="trouble">Troubleshooting &mdash; steps to fix</h2>
+
+			<h3>&ldquo;Sync failed&rdquo; or an error after Sync now</h3>
+			<div class="fix">
+				<p><strong>1.</strong> Check the <strong>Apps Script Web App URL</strong> ends in <code>/exec</code> and the deployment is set to &ldquo;Anyone&rdquo; access.</p>
+				<p><strong>2.</strong> Confirm the <strong>Encrypter Key</strong> here matches the key in the Apps Script exactly (no stray spaces).</p>
+				<p><strong>3.</strong> Confirm the <strong>Handshake ID</strong> matches what the Apps Script expects &mdash; compare it to the <strong>Handshake ID in use</strong> box.</p>
+				<p><strong>4.</strong> Re-deploy the Apps Script (a new version) if you changed it, then press <strong>Sync now</strong> again. The sync message names the exact HTTP error.</p>
+			</div>
+
+			<h3>Directory shows &ldquo;hasn&rsquo;t been synced yet&rdquo; / is empty</h3>
+			<div class="fix">
+				<p><strong>1.</strong> Press <strong>Sync now</strong>. If it succeeds with <em>0 records</em>, the spreadsheet the Apps Script reads is empty or the wrong tab.</p>
+				<p><strong>2.</strong> If a person is missing, check they aren&rsquo;t marked <strong>Hidden</strong> (editors see hidden rows with a badge).</p>
+				<p><strong>3.</strong> Empty syncs deliberately keep the last good data, so a working directory won&rsquo;t suddenly blank out.</p>
+			</div>
+
+			<h3>Photos aren&rsquo;t showing (initials appear instead)</h3>
+			<div class="fix">
+				<p><strong>1.</strong> The photo must be a Google Drive file ID, a Drive link, or an <code>lh3.googleusercontent</code> URL.</p>
+				<p><strong>2.</strong> The Drive file must be shared so anyone with the link can view it.</p>
+				<p><strong>3.</strong> Edit the person and paste a clean Drive link into the <strong>Photo</strong> field; blank shows initials by design.</p>
+			</div>
+
+			<h3>My edits keep &ldquo;disappearing&rdquo; after a sync</h3>
+			<div class="fix">
+				<p>They shouldn&rsquo;t &mdash; overrides are permanent. If an edit isn&rsquo;t sticking, make sure you clicked <strong>Save changes</strong> (not just closed the dialog), and that you&rsquo;re logged in as an administrator. Check the person appears in <strong>Manual overrides</strong> at the bottom of Settings.</p>
+			</div>
+
+			<h3>People are in the wrong order</h3>
+			<div class="fix">
+				<p><strong>1.</strong> Order is driven by <a href="#sorting">Sort rules</a>, not the spreadsheet. A person at the very bottom usually means their Job/Location text doesn&rsquo;t match any label in a priority list (check spelling).</p>
+				<p><strong>2.</strong> Remember sorting is on the <strong>Job</strong> field, not the displayed <strong>Title</strong>.</p>
+			</div>
+
+			<h3>The directory looks unstyled / my CSS change broke it</h3>
+			<div class="fix">
+				<p><strong>1.</strong> Open <strong>Custom CSS</strong>, clear the box completely, and <strong>Save settings</strong> &mdash; this restores the built-in default stylesheet.</p>
+				<p><strong>2.</strong> Re-apply your changes a bit at a time to find the line that broke it.</p>
+			</div>
+
+			<h3>The Beaver Builder module isn&rsquo;t in the list</h3>
+			<div class="fix">
+				<p><strong>1.</strong> Beaver Builder must be active. <?php echo $bb_active ? 'It is active on this site.' : '<strong>It is not active on this site right now.</strong>'; ?></p>
+				<p><strong>2.</strong> Look under the <strong>Cayden</strong> group (or use the module search) in the content panel.</p>
+				<p><strong>3.</strong> The shortcode always works as a fallback.</p>
+			</div>
+
+			<h3>Logged-out visitors don&rsquo;t see my change</h3>
+			<div class="fix">
+				<p>That&rsquo;s caching. Editing and syncing both flush the plugin&rsquo;s caches automatically, but if your host or a CDN caches pages, clear that cache too, then reload in a private window.</p>
+			</div>
+		</div>
+
+		<p><a href="<?php echo esc_url( $settings_url ); ?>" class="button">&larr; Back to Settings</a></p>
 	</div>
 	<?php
 }
