@@ -284,6 +284,75 @@ class MCM_DB {
 	}
 
 	/**
+	 * Create (or return existing) a block that edits an ENTIRE Beaver Builder
+	 * module (every meaningful setting), not just one field. Stored with
+	 * source 'beaver_module' and an empty field_key.
+	 *
+	 * @param array $data label, post_id, node_id, content(preview), updated_by
+	 * @return int|WP_Error
+	 */
+	public static function save_beaver_module_block( $data ) {
+		global $wpdb;
+
+		$post_id = absint( $data['post_id'] ?? 0 );
+		$node_id = sanitize_text_field( $data['node_id'] ?? '' );
+
+		if ( ! $post_id || '' === $node_id ) {
+			return new WP_Error( 'mcm_bb_ref', __( 'Missing Beaver Builder module reference.', 'mcm' ) );
+		}
+
+		$existing = self::get_beaver_module_block( $post_id, $node_id );
+		if ( $existing ) {
+			return (int) $existing->id;
+		}
+
+		$base = sanitize_title( 'bbmod-' . $node_id );
+		$slug = $base;
+		$i    = 2;
+		while ( self::get_block_by_slug( $slug ) ) {
+			$slug = $base . '-' . $i;
+			++$i;
+		}
+
+		$row = array(
+			'slug'       => $slug,
+			'label'      => sanitize_text_field( $data['label'] ?? '' ),
+			'type'       => 'module',
+			'source'     => 'beaver_module',
+			'post_id'    => $post_id,
+			'node_id'    => $node_id,
+			'field_key'  => '',
+			'content'    => sanitize_text_field( $data['content'] ?? '' ),
+			'max_length' => 0,
+			'updated_at' => current_time( 'mysql' ),
+			'updated_by' => sanitize_text_field( $data['updated_by'] ?? '' ),
+		);
+		$wpdb->insert(
+			self::blocks_table(),
+			$row,
+			array( '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%d', '%s', '%s' )
+		);
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * @param int    $post_id
+	 * @param string $node_id
+	 * @return object|null
+	 */
+	public static function get_beaver_module_block( $post_id, $node_id ) {
+		global $wpdb;
+		$table = self::blocks_table();
+		return $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE source = 'beaver_module' AND post_id = %d AND node_id = %s",
+				absint( $post_id ),
+				$node_id
+			)
+		);
+	}
+
+	/**
 	 * Find a Beaver block by its module-field reference.
 	 *
 	 * @param int    $post_id
@@ -312,7 +381,7 @@ class MCM_DB {
 		global $wpdb;
 		$table = self::blocks_table();
 		return $wpdb->get_results(
-			$wpdb->prepare( "SELECT * FROM {$table} WHERE source = 'beaver' AND post_id = %d ORDER BY label ASC", absint( $post_id ) )
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE source IN ('beaver','beaver_module') AND post_id = %d ORDER BY label ASC", absint( $post_id ) )
 		);
 	}
 

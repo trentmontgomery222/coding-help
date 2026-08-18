@@ -14,10 +14,11 @@ of content you assign them, in the format you allow.
 - **Content Blocks** — named, editable pieces of content (single-line text,
   multi-line text, or *limited* rich text). Each renders on any page/post via a
   shortcode.
-- **Beaver Builder fields** — expose individual module fields from any
-  Beaver Builder page (headings, rich-text, callouts, buttons, etc.) as editable
-  blocks. Editors change the real page content; edits are written straight back
-  into Beaver Builder's layout data. See *Beaver Builder support* below.
+- **Beaver Builder editing** — expose a **whole Beaver Builder module** (image,
+  text, links, icons, colours — everything in the box, including image
+  upload/replace) *or* a single field, as an editable block. Editors change the
+  real page content; edits are written straight back into Beaver Builder's
+  layout data. See *Beaver Builder support* below.
 - **Editor accounts** — stored in the plugin's own database tables with hashed
   passwords, fully separate from WordPress users. No wp-admin, no dashboard, no
   WordPress capabilities.
@@ -61,36 +62,57 @@ individual text fields, and writes edits back through Beaver Builder's own API
 the post meta directly. After a save it clears Beaver Builder's asset cache so
 the change shows immediately.
 
-**Setup**
+**Two ways to expose Beaver content**
 
-1. Go to *Content Manager → Beaver Builder*.
-2. Pick a page that's built with Beaver Builder.
-3. The screen lists every editable text field it found (module · field, with a
-   preview of the current value). Click **Add** on the ones you want editors to
-   control, choosing a label, field type, and optional max length.
-4. Assign those blocks to editors under *Content Manager → Editors*, exactly
-   like custom blocks.
+*Content Manager → Beaver Builder* → pick a page. You then get two lists:
 
-Editors then edit those fields from the portal; their changes update the live
-Beaver Builder page. Both the published layout and the working draft are updated.
+1. **Whole modules — edit everything in the box.** Click **Edit whole module**
+   on any module and editors get a generated form covering the *entire* module:
+   image (with upload/replace), text, links, icons, captions, toggles, colours,
+   and — under an **Advanced** section — every remaining setting the module has.
+   This is the "edit any Beaver Builder box" mode.
+2. **Single fields — fine-grained.** Expose just one field (e.g. a heading) with
+   a chosen type and max length, when you want to lock editors down to one thing.
 
-**Recognised modules** (others fall back to a generic content-field scan):
-`heading`, `rich-text`, `callout` (title / text / CTA text), `icon`, `button`,
-`button-group`, `photo` (caption), `testimonial`, `cta`, `html`, and more. The
-field map lives in `includes/class-mcm-beaver.php` (`field_map()`) and is easy to
-extend.
+Either way, assign the resulting blocks to editors under
+*Content Manager → Editors*. Editors edit from the portal; changes update the
+live Beaver Builder page (published layout **and** working draft), and the
+plugin clears Beaver Builder's asset cache so the change shows immediately.
 
-**Field types & sanitising for Beaver fields**
+**How whole-module editing works**
 
-- A module's rich-text field (e.g. `rich-text → text`) is treated as **rich
-  text** and sanitised with `wp_kses_post` on save, so existing markup survives
-  but scripts/unsafe attributes are stripped.
-- Set a field to **single-line text** to force plain text (good for headings and
-  labels) — HTML the editor types is reduced to text.
+For a module block, the plugin reads the module's live settings and renders a
+widget per setting, inferred from the value/key:
 
-> Note: rich-text fields are edited as raw HTML in a textarea in this proof.
-> Dropping in a WYSIWYG editor (`wp_editor()` on the front end) is a natural
-> next step.
+| Setting looks like… | Editor gets… | Sanitised with |
+|---------------------|--------------|----------------|
+| an image (`photo`)  | image upload + preview | image-only upload → new attachment |
+| a link / URL        | URL field    | `esc_url_raw` |
+| an icon class       | text field   | class-safe filter |
+| `yes`/`no` or `0`/`1` | on/off toggle | constrained to the field's tokens |
+| a hex colour        | colour field | `sanitize_hex_color` |
+| a number            | number field | numeric filter |
+| HTML / long text    | rich text / textarea | `wp_kses_post` / `sanitize_textarea_field` |
+| anything else       | text field   | `sanitize_text_field` |
+
+On save, only settings the plugin actually rendered are written back — array/
+object settings (typography, borders, responsive maps) are **preserved
+untouched**, so editing text or an image can't corrupt the layout. Image uploads
+are restricted to jpg/png/gif/webp, capped at 8 MB, and become real media-library
+attachments.
+
+**Curated content fields** (shown first, before Advanced) are defined per module
+in `includes/class-mcm-beaver.php` (`content_schema()`): heading, rich-text,
+callout, icon, button, photo/image, html, and more — easy to extend.
+
+**Recognised modules for single-field mode** (others fall back to a generic
+content-field scan): `heading`, `rich-text`, `callout` (title / text / CTA text),
+`icon`, `button`, `button-group`, `photo` (caption), `testimonial`, `cta`,
+`html`, and more. That map lives in `includes/class-mcm-beaver.php`
+(`field_map()`).
+
+> Note: rich-text is edited as HTML in a textarea in this proof. Dropping in a
+> WYSIWYG editor (`wp_editor()` on the front end) is a natural next step.
 
 ## Shortcodes
 

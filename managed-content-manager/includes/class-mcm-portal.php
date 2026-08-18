@@ -81,6 +81,11 @@ class MCM_Portal {
 	 * @return string
 	 */
 	private function render_block_output( $block ) {
+		// Whole-module blocks are rendered by Beaver Builder on their own page;
+		// there is no single value to inline via shortcode.
+		if ( 'beaver_module' === $block->source ) {
+			return '';
+		}
 		$is_bb   = 'beaver' === $block->source;
 		$content = $is_bb
 			? MCM_Beaver::get_field_value( (int) $block->post_id, $block->node_id, $block->field_key )
@@ -183,42 +188,206 @@ class MCM_Portal {
 			<?php if ( empty( $blocks ) ) : ?>
 				<p class="mcm-empty"><?php esc_html_e( 'You have not been assigned any content to edit yet.', 'mcm' ); ?></p>
 			<?php else : ?>
-				<?php foreach ( $blocks as $block ) : ?>
-					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mcm-block-form">
-						<input type="hidden" name="action" value="mcm_portal_save" />
-						<input type="hidden" name="mcm_csrf" value="<?php echo esc_attr( $auth->csrf_token() ); ?>" />
-						<input type="hidden" name="block_id" value="<?php echo esc_attr( $block->id ); ?>" />
-						<input type="hidden" name="redirect" value="<?php echo esc_attr( $this->current_url() ); ?>" />
-
-						<div class="mcm-field">
-							<label class="mcm-field-label" for="mcm-f-<?php echo esc_attr( $block->id ); ?>">
-								<?php echo esc_html( $block->label ); ?>
-								<span class="mcm-type-badge"><?php echo esc_html( $this->type_label( $block->type ) ); ?></span>
-							</label>
-
-							<?php $this->render_editor_field( $block ); ?>
-
-							<?php if ( (int) $block->max_length > 0 ) : ?>
-								<div class="mcm-count" data-max="<?php echo esc_attr( $block->max_length ); ?>"></div>
-							<?php endif; ?>
-
-							<div class="mcm-field-actions">
-								<button type="submit" class="mcm-btn mcm-btn-primary"><?php esc_html_e( 'Save', 'mcm' ); ?></button>
-								<span class="mcm-last">
-									<?php if ( $block->updated_at ) : ?>
-										<?php
-										/* translators: %s datetime */
-										printf( esc_html__( 'Last saved %s', 'mcm' ), esc_html( $block->updated_at ) );
-										?>
-									<?php endif; ?>
-								</span>
-							</div>
-						</div>
-					</form>
-				<?php endforeach; ?>
+				<?php
+				foreach ( $blocks as $block ) {
+					if ( 'beaver_module' === $block->source ) {
+						$this->render_module_form( $block, $auth );
+					} else {
+						$this->render_single_field_form( $block, $auth );
+					}
+				}
+				?>
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * The original one-input form (custom blocks + single Beaver fields).
+	 *
+	 * @param object   $block
+	 * @param MCM_Auth $auth
+	 */
+	private function render_single_field_form( $block, $auth ) {
+		?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mcm-block-form">
+			<input type="hidden" name="action" value="mcm_portal_save" />
+			<input type="hidden" name="mcm_csrf" value="<?php echo esc_attr( $auth->csrf_token() ); ?>" />
+			<input type="hidden" name="block_id" value="<?php echo esc_attr( $block->id ); ?>" />
+			<input type="hidden" name="redirect" value="<?php echo esc_attr( $this->current_url() ); ?>" />
+
+			<div class="mcm-field">
+				<label class="mcm-field-label" for="mcm-f-<?php echo esc_attr( $block->id ); ?>">
+					<?php echo esc_html( $block->label ); ?>
+					<span class="mcm-type-badge"><?php echo esc_html( $this->type_label( $block->type ) ); ?></span>
+				</label>
+
+				<?php $this->render_editor_field( $block ); ?>
+
+				<?php if ( (int) $block->max_length > 0 ) : ?>
+					<div class="mcm-count" data-max="<?php echo esc_attr( $block->max_length ); ?>"></div>
+				<?php endif; ?>
+
+				<div class="mcm-field-actions">
+					<button type="submit" class="mcm-btn mcm-btn-primary"><?php esc_html_e( 'Save', 'mcm' ); ?></button>
+					<span class="mcm-last">
+						<?php if ( $block->updated_at ) : ?>
+							<?php
+							/* translators: %s datetime */
+							printf( esc_html__( 'Last saved %s', 'mcm' ), esc_html( $block->updated_at ) );
+							?>
+						<?php endif; ?>
+					</span>
+				</div>
+			</div>
+		</form>
+		<?php
+	}
+
+	/**
+	 * The whole-module editor: one form with a widget per meaningful setting,
+	 * plus an "advanced" section exposing every remaining scalar setting.
+	 *
+	 * @param object   $block
+	 * @param MCM_Auth $auth
+	 */
+	private function render_module_form( $block, $auth ) {
+		$desc = MCM_Beaver::describe_module( (int) $block->post_id, $block->node_id );
+		?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mcm-block-form mcm-module-form" enctype="multipart/form-data">
+			<input type="hidden" name="action" value="mcm_portal_save" />
+			<input type="hidden" name="mcm_csrf" value="<?php echo esc_attr( $auth->csrf_token() ); ?>" />
+			<input type="hidden" name="block_id" value="<?php echo esc_attr( $block->id ); ?>" />
+			<input type="hidden" name="redirect" value="<?php echo esc_attr( $this->current_url() ); ?>" />
+
+			<div class="mcm-module-head">
+				<span class="mcm-field-label"><?php echo esc_html( $block->label ); ?></span>
+				<?php if ( ! is_wp_error( $desc ) ) : ?>
+					<span class="mcm-type-badge"><?php echo esc_html( $desc['label'] ); ?></span>
+				<?php endif; ?>
+			</div>
+
+			<?php if ( is_wp_error( $desc ) ) : ?>
+				<p class="mcm-flash mcm-flash-err"><?php echo esc_html( $desc->get_error_message() ); ?></p>
+			<?php else : ?>
+				<?php foreach ( $desc['primary'] as $f ) : ?>
+					<div class="mcm-field">
+						<label class="mcm-field-label" for="<?php echo esc_attr( 'mcm-' . $block->id . '-' . $f['key'] ); ?>"><?php echo esc_html( $f['label'] ); ?></label>
+						<?php $this->render_widget( $block, $f ); ?>
+					</div>
+				<?php endforeach; ?>
+
+				<?php if ( ! empty( $desc['advanced'] ) ) : ?>
+					<details class="mcm-advanced">
+						<summary><?php esc_html_e( 'Advanced — all other settings', 'mcm' ); ?></summary>
+						<p class="mcm-help"><?php esc_html_e( 'These control appearance and layout. Change them only if you know what they do.', 'mcm' ); ?></p>
+						<div class="mcm-adv-grid">
+							<?php foreach ( $desc['advanced'] as $f ) : ?>
+								<div class="mcm-field mcm-adv-field">
+									<label class="mcm-adv-label" for="<?php echo esc_attr( 'mcm-' . $block->id . '-' . $f['key'] ); ?>"><?php echo esc_html( $f['label'] ); ?></label>
+									<?php $this->render_widget( $block, $f ); ?>
+								</div>
+							<?php endforeach; ?>
+						</div>
+					</details>
+				<?php endif; ?>
+
+				<div class="mcm-field-actions">
+					<button type="submit" class="mcm-btn mcm-btn-primary"><?php esc_html_e( 'Save module', 'mcm' ); ?></button>
+					<span class="mcm-last">
+						<?php if ( $block->updated_at ) : ?>
+							<?php
+							/* translators: %s datetime */
+							printf( esc_html__( 'Last saved %s', 'mcm' ), esc_html( $block->updated_at ) );
+							?>
+						<?php endif; ?>
+					</span>
+				</div>
+			<?php endif; ?>
+		</form>
+		<?php
+	}
+
+	/**
+	 * Render one widget inside a module form. All names are namespaced under
+	 * mcm_fields[key]; images post under mcm_files[key].
+	 *
+	 * @param object $block
+	 * @param array  $f descriptor
+	 */
+	private function render_widget( $block, $f ) {
+		$id    = 'mcm-' . (int) $block->id . '-' . $f['key'];
+		$name  = 'mcm_fields[' . $f['key'] . ']';
+		$value = (string) $f['value'];
+
+		switch ( $f['widget'] ) {
+			case 'image':
+				$src = MCM_Beaver::module_image_src( (int) $block->post_id, $block->node_id );
+				if ( $src ) {
+					echo '<div class="mcm-img-preview"><img src="' . esc_url( $src ) . '" alt="" /></div>';
+				}
+				echo '<input type="file" accept="image/*" name="mcm_files[' . esc_attr( $f['key'] ) . ']" id="' . esc_attr( $id ) . '" class="mcm-input" />';
+				echo '<p class="mcm-help">' . esc_html__( 'Choose a new image to replace the current one. Leave empty to keep it.', 'mcm' ) . '</p>';
+				break;
+
+			case 'richtext':
+				printf(
+					'<textarea id="%1$s" name="%2$s" class="mcm-input mcm-richtext" rows="5">%3$s</textarea>',
+					esc_attr( $id ),
+					esc_attr( $name ),
+					esc_textarea( $value )
+				);
+				break;
+
+			case 'textarea':
+				printf(
+					'<textarea id="%1$s" name="%2$s" class="mcm-input" rows="3">%3$s</textarea>',
+					esc_attr( $id ),
+					esc_attr( $name ),
+					esc_textarea( $value )
+				);
+				break;
+
+			case 'select':
+				echo '<select id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" class="mcm-input">';
+				foreach ( (array) $f['options'] as $opt ) {
+					echo '<option value="' . esc_attr( $opt ) . '" ' . selected( $value, $opt, false ) . '>' . esc_html( $opt ) . '</option>';
+				}
+				echo '</select>';
+				break;
+
+			case 'toggle':
+				$on      = $f['on'];
+				$off     = $f['off'];
+				$checked = ( (string) $value === (string) $on ) ? ' checked' : '';
+				// Hidden "off" value so unchecking submits the off token.
+				echo '<input type="hidden" name="' . esc_attr( $name ) . '" value="' . esc_attr( $off ) . '" />';
+				echo '<label class="mcm-toggle"><input type="checkbox" name="' . esc_attr( $name ) . '" value="' . esc_attr( $on ) . '"' . $checked . ' /> ' . esc_html__( 'On', 'mcm' ) . '</label>';
+				break;
+
+			case 'color':
+				$hex = preg_match( '/^#/', $value ) ? $value : ( '' !== $value ? '#' . ltrim( $value, '#' ) : '' );
+				echo '<input type="text" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" class="mcm-input mcm-color" value="' . esc_attr( $value ) . '" placeholder="#000000" />';
+				break;
+
+			case 'number':
+				echo '<input type="number" step="any" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" class="mcm-input" value="' . esc_attr( $value ) . '" />';
+				break;
+
+			case 'url':
+				echo '<input type="url" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" class="mcm-input" value="' . esc_attr( $value ) . '" placeholder="https://" />';
+				break;
+
+			case 'icon':
+				echo '<input type="text" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" class="mcm-input" value="' . esc_attr( $value ) . '" placeholder="fas fa-star" />';
+				echo '<p class="mcm-help">' . esc_html__( 'Font Awesome class, e.g. "fas fa-phone".', 'mcm' ) . '</p>';
+				break;
+
+			case 'text':
+			default:
+				echo '<input type="text" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" class="mcm-input" value="' . esc_attr( $value ) . '" />';
+				break;
+		}
 	}
 
 	/**
@@ -345,6 +514,10 @@ class MCM_Portal {
 		$name  = 'editor:' . $editor->username;
 		$block = MCM_DB::get_block( $block_id );
 
+		if ( $block && 'beaver_module' === $block->source ) {
+			$this->save_module_block( $block, $name );
+		}
+
 		if ( $block && 'beaver' === $block->source ) {
 			// Rich-text Beaver fields keep their existing markup (wp_kses_post);
 			// text/textarea are reduced to plain text.
@@ -363,6 +536,150 @@ class MCM_Portal {
 			$this->bounce( array( 'mcm_perr' => $res->get_error_message() ) );
 		}
 		$this->bounce( array( 'mcm_pmsg' => __( 'Saved.', 'mcm' ) ) );
+	}
+
+	/**
+	 * Save a whole-module edit: sanitize each posted setting by its declared
+	 * widget, handle image uploads, then write everything back to the module.
+	 * Ends the request (via bounce()).
+	 *
+	 * @param object $block
+	 * @param string $name editor label for the audit column
+	 */
+	private function save_module_block( $block, $name ) {
+		$desc = MCM_Beaver::describe_module( (int) $block->post_id, $block->node_id );
+		if ( is_wp_error( $desc ) ) {
+			$this->bounce( array( 'mcm_perr' => $desc->get_error_message() ) );
+		}
+
+		$posted = isset( $_POST['mcm_fields'] ) && is_array( $_POST['mcm_fields'] ) ? wp_unslash( $_POST['mcm_fields'] ) : array(); // phpcs:ignore WordPress.Security.ValidationSanitization.MissingUnslash,WordPress.Security.ValidationSanitization.InputNotSanitized -- sanitized per-widget below.
+		$assoc  = array();
+		$images = array();
+
+		// Only settings we actually described are writable — never trust extra
+		// posted keys. Text-type widgets first; image uploads are applied last
+		// so a fresh upload always wins over any posted photo_src field.
+		foreach ( array_merge( $desc['primary'], $desc['advanced'] ) as $f ) {
+			$key = $f['key'];
+
+			if ( 'image' === $f['widget'] ) {
+				$images[] = $key;
+				continue;
+			}
+			if ( ! array_key_exists( $key, $posted ) ) {
+				continue;
+			}
+			$assoc[ $key ] = MCM_Beaver::sanitize_widget_value( $f['widget'], $posted[ $key ], $f );
+		}
+
+		foreach ( $images as $key ) {
+			$upload = $this->maybe_upload_image( $key );
+			if ( is_wp_error( $upload ) ) {
+				$this->bounce( array( 'mcm_perr' => $upload->get_error_message() ) );
+			}
+			if ( is_array( $upload ) ) {
+				// Standard Beaver Builder photo settings; these override any
+				// posted photo_src/photo_source.
+				$assoc['photo']        = (int) $upload['id'];
+				$assoc['photo_src']    = $upload['url'];
+				$assoc['photo_source'] = 'library';
+			}
+		}
+
+		if ( empty( $assoc ) ) {
+			$this->bounce( array( 'mcm_pmsg' => __( 'Nothing to change.', 'mcm' ) ) );
+		}
+
+		$res = MCM_Beaver::update_module_settings( (int) $block->post_id, $block->node_id, $assoc );
+		if ( is_wp_error( $res ) ) {
+			$this->bounce( array( 'mcm_perr' => $res->get_error_message() ) );
+		}
+
+		// Refresh cached preview.
+		$mod = MCM_Beaver::get_module( (int) $block->post_id, $block->node_id );
+		if ( is_array( $mod ) ) {
+			$preview = MCM_Beaver::module_preview( $mod['slug'], (object) $mod['settings'] );
+			MCM_DB::update_block_cache( (int) $block->id, $preview, $name );
+		}
+
+		$this->bounce( array( 'mcm_pmsg' => __( 'Module saved to the page.', 'mcm' ) ) );
+	}
+
+	/**
+	 * Handle an optional image upload for one module field.
+	 *
+	 * @param string $key field key posted under mcm_files[key]
+	 * @return array|WP_Error|null [id,url] on upload, null if no file, WP_Error on failure
+	 */
+	private function maybe_upload_image( $key ) {
+		if ( empty( $_FILES['mcm_files']['name'][ $key ] ) ) {
+			return null;
+		}
+
+		$file = array(
+			'name'     => sanitize_file_name( $_FILES['mcm_files']['name'][ $key ] ), // phpcs:ignore WordPress.Security.ValidationSanitization.InputNotSanitized
+			'type'     => isset( $_FILES['mcm_files']['type'][ $key ] ) ? sanitize_text_field( $_FILES['mcm_files']['type'][ $key ] ) : '',
+			'tmp_name' => isset( $_FILES['mcm_files']['tmp_name'][ $key ] ) ? $_FILES['mcm_files']['tmp_name'][ $key ] : '',
+			'error'    => isset( $_FILES['mcm_files']['error'][ $key ] ) ? (int) $_FILES['mcm_files']['error'][ $key ] : UPLOAD_ERR_NO_FILE,
+			'size'     => isset( $_FILES['mcm_files']['size'][ $key ] ) ? (int) $_FILES['mcm_files']['size'][ $key ] : 0,
+		);
+
+		if ( UPLOAD_ERR_NO_FILE === $file['error'] ) {
+			return null;
+		}
+
+		// Enforce image types + a size cap regardless of what the browser sent.
+		$check = wp_check_filetype_and_ext( $file['tmp_name'], $file['name'] );
+		$allowed = array( 'jpg|jpeg|jpe', 'gif', 'png', 'webp' );
+		$ok_ext  = false;
+		foreach ( $allowed as $ext ) {
+			if ( isset( $check['ext'] ) && preg_match( '/^(' . $ext . ')$/', $check['ext'] ) ) {
+				$ok_ext = true;
+				break;
+			}
+		}
+		if ( ! $ok_ext || 0 !== strpos( (string) $check['type'], 'image/' ) ) {
+			return new WP_Error( 'mcm_img_type', __( 'Please choose an image file (jpg, png, gif or webp).', 'mcm' ) );
+		}
+		if ( $file['size'] > 8 * MB_IN_BYTES ) {
+			return new WP_Error( 'mcm_img_size', __( 'That image is too large (max 8 MB).', 'mcm' ) );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$overrides = array(
+			'test_form' => false,
+			'mimes'     => array(
+				'jpg|jpeg|jpe' => 'image/jpeg',
+				'gif'          => 'image/gif',
+				'png'          => 'image/png',
+				'webp'         => 'image/webp',
+			),
+		);
+		$moved = wp_handle_upload( $file, $overrides );
+		if ( isset( $moved['error'] ) ) {
+			return new WP_Error( 'mcm_img_upload', $moved['error'] );
+		}
+
+		$attachment = array(
+			'post_mime_type' => $moved['type'],
+			'post_title'     => preg_replace( '/\.[^.]+$/', '', basename( $moved['file'] ) ),
+			'post_content'   => '',
+			'post_status'    => 'inherit',
+		);
+		$attach_id = wp_insert_attachment( $attachment, $moved['file'] );
+		if ( is_wp_error( $attach_id ) || ! $attach_id ) {
+			return new WP_Error( 'mcm_img_attach', __( 'The image could not be saved to the media library.', 'mcm' ) );
+		}
+		$meta = wp_generate_attachment_metadata( $attach_id, $moved['file'] );
+		wp_update_attachment_metadata( $attach_id, $meta );
+
+		return array(
+			'id'  => (int) $attach_id,
+			'url' => wp_get_attachment_url( $attach_id ),
+		);
 	}
 
 	// -----------------------------------------------------------------------
