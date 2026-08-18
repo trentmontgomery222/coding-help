@@ -1,7 +1,8 @@
 <?php
 /**
- * Admin controller: the single top-level menu and its five subpages
- * (spec §9), plus the POST/AJAX handlers behind them.
+ * Admin controller: the plugin's top-level menu and its subpages (spec §9),
+ * plus the Settings page (registered under the WordPress Settings menu) and
+ * the POST/AJAX handlers behind them.
  *
  * No Network Admin presence; no manage_network checks (spec §9.1).
  *
@@ -69,7 +70,7 @@ class Admin {
 			$msg = 'reset';
 		}
 
-		wp_safe_redirect( admin_url( 'admin.php?page=acps-st-settings' . ( $msg ? '&db=' . $msg : '' ) ) );
+		wp_safe_redirect( self::settings_url() . ( $msg ? '&db=' . $msg : '' ) );
 		exit;
 	}
 
@@ -91,20 +92,10 @@ class Admin {
 			);
 		}
 
-		$staff     = \ACPS\SiteToolkit\Presence::active( 5 );
-		$staff_out = array();
-		foreach ( $staff as $p ) {
-			$staff_out[] = array(
-				'name' => $p['name'],
-				'page' => $p['title'] ? $p['title'] : $p['url'],
-			);
-		}
-
 		wp_send_json_success(
 			array(
 				'total' => \ACPS\SiteToolkit\Analytics::active_count( 5 ),
 				'pages' => $out,
-				'staff' => $staff_out,
 				'time'  => date_i18n( get_option( 'time_format' ) ),
 			)
 		);
@@ -147,8 +138,26 @@ class Admin {
 			}
 		}
 		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
-		add_submenu_page( self::SLUG, __( 'Settings', 'acps-site-toolkit' ), __( 'Settings', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-settings', array( $this, 'render_settings' ) );
 		add_submenu_page( self::SLUG, __( 'Help Guide', 'acps-site-toolkit' ), __( 'Help Guide', 'acps-site-toolkit' ), $reports, self::SLUG . '-help', array( $this, 'render_help' ) );
+
+		// Settings lives under the WordPress “Settings” menu (Settings → Cayden
+		// Form Manager), not the plugin’s own menu.
+		add_options_page(
+			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
+			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
+			'manage_options',
+			self::SLUG . '-settings',
+			array( $this, 'render_settings' )
+		);
+	}
+
+	/**
+	 * The admin URL of the settings page (now under Settings → …).
+	 *
+	 * @return string
+	 */
+	public static function settings_url() {
+		return admin_url( 'options-general.php?page=' . self::SLUG . '-settings' );
 	}
 
 	/* ------------------------------------------------------------------ *

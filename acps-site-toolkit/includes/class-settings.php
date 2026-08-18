@@ -73,7 +73,6 @@ class Settings {
 			// What to COLLECT (each affects the beacon / stored data).
 			'track_pageviews'       => 1, // page/journey tracking + device stats.
 			'track_visitors'        => 1, // unique users (server IP+UA fingerprint).
-			'track_presence'        => 0, // admin "who's on the site now" (extra request; off).
 			'track_time_on_page'    => 1, // backfill time-on-page from the next view.
 			'track_referrers'       => 1, // store where visitors came from.
 			'analytics_sample_rate' => 100, // % of pageviews that send a beacon (lower = far less origin load).
@@ -180,7 +179,6 @@ class Settings {
 			'analytics_enabled',
 			'track_pageviews',
 			'track_visitors',
-			'track_presence',
 			'track_time_on_page',
 			'track_referrers',
 			'show_live',

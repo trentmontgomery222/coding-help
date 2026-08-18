@@ -93,21 +93,6 @@ class REST_Controller {
 				)
 			);
 		}
-
-		// Admin "who's on the site now" — a separate request, off unless enabled.
-		if ( Settings::get( 'track_presence' ) ) {
-			register_rest_route(
-				$ns,
-				'/presence',
-				array(
-					'methods'             => 'POST',
-					'callback'            => array( $this, 'presence' ),
-					'permission_callback' => function () {
-						return is_user_logged_in() && current_user_can( 'manage_options' );
-					},
-				)
-			);
-		}
 	}
 
 	/**
@@ -253,21 +238,6 @@ class REST_Controller {
 			Session::touch( $session );
 		}
 		return new \WP_REST_Response( array( 'ok' => (bool) $session ), 200 );
-	}
-
-	/**
-	 * POST /presence — record where the current admin is on the site. Separate
-	 * from analytics; never touches the sessions/visits tables.
-	 *
-	 * @param \WP_REST_Request $req Request.
-	 * @return \WP_REST_Response
-	 */
-	public function presence( $req ) {
-		$this->no_cache();
-		$params = $req->get_json_params();
-		$params = is_array( $params ) ? $params : $req->get_params();
-		Presence::record( $params );
-		return new \WP_REST_Response( array( 'ok' => true ), 200 );
 	}
 
 	/**

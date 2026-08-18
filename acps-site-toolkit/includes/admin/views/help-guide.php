@@ -166,13 +166,16 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 		<p><strong><?php esc_html_e( 'Unique users:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'total unique users plus new/active counts, from a persistent first-party ID per browser — counted once, never missed (a cleared cookie or a different browser just counts as a new user).', 'acps-site-toolkit' ); ?></p>
 		<p><strong><?php esc_html_e( 'Devices, browsers & operating systems:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'a card breaks down sessions, views and average time on page by device type, browser, and OS.', 'acps-site-toolkit' ); ?></p>
 		<p><strong><?php esc_html_e( 'Who’s on the site now:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'the live card at the top of Analytics shows pages being read right now (auto-updating) so you can avoid editing a page someone is on.', 'acps-site-toolkit' ); ?></p>
-		<p><strong><?php esc_html_e( 'Staff on the site now:', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'a separate live card lists logged-in admins and the page each is currently viewing — so you can tell when a colleague is on a page you’re about to edit.', 'acps-site-toolkit' ); ?></p>
-		<p><strong><?php esc_html_e( 'Logged-in admins are not counted', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'in analytics or the visitor live view — your own browsing won’t skew the numbers (you still appear in the staff card).', 'acps-site-toolkit' ); ?></p>
+		<p><strong><?php esc_html_e( 'Logged-in admins are not counted', 'acps-site-toolkit' ); ?></strong> <?php esc_html_e( 'in analytics or the visitor live view — your own browsing won’t skew the numbers.', 'acps-site-toolkit' ); ?></p>
 	</div>
 
 	<div class="acps-card" id="settings">
 		<h2>11. <?php esc_html_e( 'Settings reference', 'acps-site-toolkit' ); ?></h2>
+		<p><?php esc_html_e( 'Settings live under the WordPress “Settings” menu → Cayden Form Manager, organised into tabs (Features, Feedback, Forms, Analytics, Spam, Appearance, Help, Access & data). One Save button stores every tab.', 'acps-site-toolkit' ); ?></p>
 		<ul class="ul-disc">
+			<li><strong><?php esc_html_e( 'Features', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'turn whole features on/off — feedback widget, Q&A widget, restricted forms, analytics.', 'acps-site-toolkit' ); ?></li>
+			<li><strong><?php esc_html_e( 'Forms', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'store submitter IP/browser on entries, and the max upload size for form files.', 'acps-site-toolkit' ); ?></li>
+			<li><strong><?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'master switch, what to collect (page views, time on page, referrers, unique users), sampling rate, and which dashboard cards to show.', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'button visibility, position, label, resting + hover icon URLs, per-device size, background colour or transparent, popup width, categories, recent-pages count, notification emails.', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Journey tracking & privacy', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'turn tracking on/off, consent mode, session idle window, data retention (auto-purge), and how much of the user agent to store.', 'acps-site-toolkit' ); ?></li>
 			<li><strong><?php esc_html_e( 'Spam prevention', 'acps-site-toolkit' ); ?></strong>: <?php esc_html_e( 'honeypot, time trap, rate limit, keyword blocklist, and an optional plain-text question. No image CAPTCHA.', 'acps-site-toolkit' ); ?></li>

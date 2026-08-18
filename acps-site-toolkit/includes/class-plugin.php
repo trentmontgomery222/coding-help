@@ -145,9 +145,6 @@ class Plugin {
 			// Don't record analytics for logged-in site admins browsing their own
 			// site — keeps their views out of the numbers.
 			'suppress'      => is_user_logged_in() && current_user_can( 'manage_options' ),
-			// Admin "who's on the site now" — a separate request, only when the
-			// admin-tracking toggle is on.
-			'presence'      => $analytics_on && (bool) Settings::get( 'track_presence' ) && is_user_logged_in() && current_user_can( 'manage_options' ),
 			'restNonce'     => wp_create_nonce( 'wp_rest' ),
 			'consentMode'   => (bool) Settings::get( 'consent_mode' ),
 			'idleMinutes'   => (int) Settings::get( 'session_idle_minutes', 30 ),
@@ -333,7 +330,7 @@ class Plugin {
 	 * @return array
 	 */
 	public function action_links( $links ) {
-		$url  = admin_url( 'admin.php?page=acps-st-settings' );
+		$url  = Admin\Admin::settings_url();
 		$link = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Settings', 'acps-site-toolkit' ) . '</a>';
 		array_unshift( $links, $link );
 		return $links;

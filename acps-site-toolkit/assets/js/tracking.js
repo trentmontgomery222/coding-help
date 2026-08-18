@@ -158,17 +158,6 @@
 		runtime.token = getToken();
 	}
 
-	// Staff presence (admins only): a single report on load, no timer.
-	if ( cfg.presence ) {
-		fetch( cfg.restUrl.replace( /\/$/, '' ) + '/presence', {
-			method: 'POST',
-			credentials: 'same-origin',
-			keepalive: true,
-			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': cfg.restNonce || '' },
-			body: JSON.stringify( { title: document.title, url: location.href, post_id: cfg.postId || 0 } )
-		} ).catch( function () {} );
-	}
-
 	if ( document.readyState === 'loading' ) {
 		document.addEventListener( 'DOMContentLoaded', beacon );
 	} else {
