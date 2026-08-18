@@ -24,13 +24,12 @@ if ( ! class_exists( 'CaydenStaffDirectoryModule' ) ) {
 			parent::__construct( array(
 				'name'            => __( 'Staff Directory', 'cayden-staff-directory' ),
 				'description'     => __( 'Searchable staff directory with the plugin\'s data, layout and styling.', 'cayden-staff-directory' ),
-				// Top-level group ("tab") in the Beaver Builder content panel.
-				// Shared across every Cayden plugin via the CAYDENDIR_BB_GROUP
-				// constant, so they all appear together under "Caydens Plugins".
-				// It is a plain, untranslated string on purpose — the value is a
-				// grouping key, and translating it would split the group.
-				'group'           => defined( 'CAYDENDIR_BB_GROUP' ) ? CAYDENDIR_BB_GROUP : 'Caydens Plugins',
-				'category'        => __( 'Staff Directory', 'cayden-staff-directory' ),
+				// Stays in Beaver Builder's default (Standard) module group, but
+				// sits under a shared "Caydens Plugins" category so every Cayden
+				// plugin's module groups together there. The category is a plain,
+				// untranslated string on purpose — it is the grouping key, and
+				// translating it would split the category.
+				'category'        => defined( 'CAYDENDIR_BB_CATEGORY' ) ? CAYDENDIR_BB_CATEGORY : 'Caydens Plugins',
 				'dir'             => CAYDENDIR_SD_DIR . 'modules/cayden-staff-directory/',
 				'url'             => CAYDENDIR_SD_URL . 'modules/cayden-staff-directory/',
 				'editor_export'   => true,

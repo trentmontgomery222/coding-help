@@ -26,14 +26,15 @@ define( 'CAYDENDIR_SD_META_OPTION',   'CAYDENDIR_sd_sync_meta' );
 define( 'CAYDENDIR_SD_SETTINGS',      'CAYDENDIR_sd_settings' );
 
 /**
- * Shared Beaver Builder group ("tab") for all Cayden plugins. Any Cayden
- * plugin that registers a Beaver Builder module with this exact group string
- * will appear together under the "Caydens Plugins" tab in the content panel.
- * Keep it a plain, untranslated string so grouping stays consistent across
- * plugins and site locales.
+ * Shared Beaver Builder category for all Cayden plugins. Modules stay in the
+ * default (Standard) module group, but any Cayden plugin that registers its
+ * Beaver Builder module with this exact category string appears together under
+ * the "Caydens Plugins" category heading in the content panel. Keep it a plain,
+ * untranslated string so the category stays consistent across plugins and site
+ * locales.
  */
-if ( ! defined( 'CAYDENDIR_BB_GROUP' ) ) {
-	define( 'CAYDENDIR_BB_GROUP', 'Caydens Plugins' );
+if ( ! defined( 'CAYDENDIR_BB_CATEGORY' ) ) {
+	define( 'CAYDENDIR_BB_CATEGORY', 'Caydens Plugins' );
 }
 
 
@@ -1965,7 +1966,7 @@ function CAYDENDIR_sd_settings_page() {
 		<hr>
 		<h2>Usage</h2>
         <p>Editing the Naming Schemes for Jobs and Department Names can be done here https://script.google.com/a/acpsmd.org/macros/s/AKfycbwnGz3D1Nxepbh2lA0bcpv7XGyiyuEMczvG_NiQAhpsSmMgO6XUft2TBwo-phDAYhN5Qw/exec?id=SS-64344-AL-1921216158201-P </p>
-		<p><strong>Beaver Builder:</strong> in the builder, open the content panel and drag the <strong>Staff Directory</strong> module (under the <em>Caydens Plugins</em> tab) onto the page — no shortcode needed. Its settings (heading, layout, tag match) are on the module.</p>
+		<p><strong>Beaver Builder:</strong> in the builder, open the content panel and drag the <strong>Staff Directory</strong> module (in the <em>Caydens Plugins</em> category) onto the page — no shortcode needed. Its settings (heading, layout, tag match) are on the module.</p>
 		<p><strong>Shortcode</strong> (any page, block, or an HTML module):</p>
 		<p><code>[CAYDENDIR_staff_directory heading="Search People"]</code></p>
 		<p class="description">Optional <code>layout="cards"</code> or <code>layout="table"</code> overrides the setting per placement. <code>match="all"</code> requires every selected tag.</p>
@@ -2032,13 +2033,13 @@ function CAYDENDIR_sd_help_page() {
 		<div class="card">
 			<h2 id="place">Putting the directory on a page</h2>
 			<h3>Beaver Builder module <?php echo $bb_active ? '' : '<span class="description">(Beaver Builder is not active on this site right now)</span>'; ?></h3>
-			<p>In the builder, open the <strong>+</strong> content panel, find the <strong>Staff Directory</strong> module under the <strong>Caydens Plugins</strong> tab, and drag it onto the page. No shortcode needed. In the module settings you can set:</p>
+			<p>In the builder, open the <strong>+</strong> content panel, find the <strong>Staff Directory</strong> module under the <strong>Caydens Plugins</strong> category, and drag it onto the page. No shortcode needed. In the module settings you can set:</p>
 			<ul>
 				<li><strong>Heading</strong> &mdash; the title shown above the search box.</li>
 				<li><strong>Layout</strong> &mdash; <em>Use the plugin setting</em>, <em>Table</em>, or <em>Cards</em> (overrides the global setting just for this placement).</li>
 				<li><strong>Tag match</strong> &mdash; <em>Any</em> or <em>All</em> when filtering by tags.</li>
 			</ul>
-			<p class="description"><strong>For other Cayden plugins:</strong> to share this same <em>Caydens Plugins</em> tab, register your Beaver Builder module with <code>'group' =&gt; 'Caydens Plugins'</code> (this plugin exposes the exact string as the <code>CAYDENDIR_BB_GROUP</code> constant). Any module using that group value appears together in this tab.</p>
+			<p class="description"><strong>For other Cayden plugins:</strong> to share this same <em>Caydens Plugins</em> category, register your Beaver Builder module with <code>'category' =&gt; 'Caydens Plugins'</code> (this plugin exposes the exact string as the <code>CAYDENDIR_BB_CATEGORY</code> constant). Any module using that category value appears together under this heading, in the default module group.</p>
 			<h3>Shortcode</h3>
 			<p>Works in any page, post, block, or an HTML module:</p>
 			<p><code>[CAYDENDIR_staff_directory heading="Search People"]</code></p>
@@ -2159,7 +2160,7 @@ function CAYDENDIR_sd_help_page() {
 			<h3>The Beaver Builder module isn&rsquo;t in the list</h3>
 			<div class="fix">
 				<p><strong>1.</strong> Beaver Builder must be active. <?php echo $bb_active ? 'It is active on this site.' : '<strong>It is not active on this site right now.</strong>'; ?></p>
-				<p><strong>2.</strong> Look under the <strong>Caydens Plugins</strong> tab (or use the module search) in the content panel.</p>
+				<p><strong>2.</strong> Look under the <strong>Caydens Plugins</strong> category (or use the module search) in the content panel.</p>
 				<p><strong>3.</strong> The shortcode always works as a fallback.</p>
 			</div>
 
