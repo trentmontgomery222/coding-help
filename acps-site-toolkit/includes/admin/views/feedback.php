@@ -44,7 +44,7 @@ if ( $view_id ) {
 	// Per-status default messages, so the box can prefill as the status changes.
 	$status_messages = array();
 	foreach ( array_keys( $statuses ) as $st ) {
-		$status_messages[ $st ] = \ACPS\SiteToolkit\Notifications::default_status_message( $st );
+		$status_messages[ $st ] = \ACPS\SiteToolkit\Notifications::status_message( $st );
 	}
 	?>
 	<div class="wrap acps-admin">

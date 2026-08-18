@@ -66,6 +66,8 @@ class Settings {
 
 			// Notifications.
 			'notify_recipients'     => '', // comma-separated; empty falls back to admin_email.
+			'email_reply_to'        => 'info@acpsmd.org', // Reply-To on all plugin emails.
+			'status_messages'       => array(), // per-status feedback email bodies (empty = built-in wording).
 
 			// Master switch for ALL analytics/visitor/page tracking. Individual
 			// features below can be toggled independently.
@@ -256,6 +258,30 @@ class Settings {
 		if ( ! empty( $input['notify_recipients'] ) ) {
 			$emails = array_filter( array_map( 'sanitize_email', preg_split( '/[\s,]+/', (string) $input['notify_recipients'] ) ), 'is_email' );
 			$out['notify_recipients'] = implode( ', ', $emails );
+		}
+
+		// Email Reply-To (blank = don't add a Reply-To header).
+		$out['email_reply_to'] = '';
+		if ( ! empty( $input['email_reply_to'] ) ) {
+			$maybe = sanitize_email( trim( (string) $input['email_reply_to'] ) );
+			$out['email_reply_to'] = is_email( $maybe ) ? $maybe : '';
+		}
+
+		// Per-status feedback email default messages. Only store a message when
+		// it is non-empty AND differs from the built-in wording, so leaving a box
+		// at its default keeps using the built-in text (which can then evolve).
+		$out['status_messages'] = array();
+		if ( isset( $input['status_messages'] ) && is_array( $input['status_messages'] ) ) {
+			foreach ( array_keys( \ACPS\SiteToolkit\Entries::feedback_status_labels() ) as $st ) {
+				if ( ! isset( $input['status_messages'][ $st ] ) ) {
+					continue;
+				}
+				$msg     = sanitize_textarea_field( (string) $input['status_messages'][ $st ] );
+				$builtin = \ACPS\SiteToolkit\Notifications::default_status_message( $st );
+				if ( '' !== trim( $msg ) && trim( $msg ) !== trim( $builtin ) ) {
+					$out['status_messages'][ $st ] = $msg;
+				}
+			}
 		}
 
 		$out['spam_blocklist'] = isset( $input['spam_blocklist'] ) ? sanitize_textarea_field( $input['spam_blocklist'] ) : '';

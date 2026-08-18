@@ -64,6 +64,7 @@ $checked = function ( $key ) use ( $s ) {
 		<a href="#acps-tab-features" class="nav-tab nav-tab-active"><?php esc_html_e( 'Features', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-feedback" class="nav-tab"><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-forms" class="nav-tab"><?php esc_html_e( 'Forms', 'acps-site-toolkit' ); ?></a>
+		<a href="#acps-tab-emails" class="nav-tab"><?php esc_html_e( 'Emails', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-analytics" class="nav-tab"><?php esc_html_e( 'Analytics', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-spam" class="nav-tab"><?php esc_html_e( 'Spam', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-appearance" class="nav-tab"><?php esc_html_e( 'Appearance', 'acps-site-toolkit' ); ?></a>
@@ -245,6 +246,40 @@ $checked = function ( $key ) use ( $s ) {
 						<p class="description"><?php esc_html_e( 'Create and edit forms, import a Google Form, set per-form confirmations, response limits and access.', 'acps-site-toolkit' ); ?></p>
 					</td>
 				</tr>
+			</table>
+		</div>
+
+		<!-- ============================= EMAILS ============================ -->
+		<div class="acps-tab-panel" id="acps-tab-emails" hidden>
+			<h2 class="title"><?php esc_html_e( 'Emails', 'acps-site-toolkit' ); ?></h2>
+			<p class="description" style="max-width:48rem"><?php esc_html_e( 'Reply address and the default wording sent to a submitter when you change a feedback item’s status. Every message the plugin sends is also blind-copied to the internal team automatically.', 'acps-site-toolkit' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="acps-reply-to"><?php esc_html_e( 'Reply-To address', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="email" id="acps-reply-to" name="<?php echo esc_attr( $name( 'email_reply_to' ) ); ?>" value="<?php echo esc_attr( $s['email_reply_to'] ); ?>" class="regular-text" placeholder="info@acpsmd.org">
+						<p class="description"><?php esc_html_e( 'When a recipient replies to any email the plugin sends, it goes here. Leave blank to add no Reply-To.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'Status update messages', 'acps-site-toolkit' ); ?></h3>
+			<p class="description" style="max-width:48rem"><?php esc_html_e( 'The default message offered when you email a submitter about a status change. You can still edit it per message before sending. Leave a box blank to use the built-in wording.', 'acps-site-toolkit' ); ?></p>
+			<table class="form-table" role="presentation">
+				<?php
+				$stored_msgs = is_array( $s['status_messages'] ) ? $s['status_messages'] : array();
+				foreach ( \ACPS\SiteToolkit\Entries::feedback_status_labels() as $st => $st_label ) :
+					$val = isset( $stored_msgs[ $st ] ) && '' !== $stored_msgs[ $st ]
+						? $stored_msgs[ $st ]
+						: \ACPS\SiteToolkit\Notifications::default_status_message( $st );
+					?>
+					<tr>
+						<th scope="row"><label for="acps-msg-<?php echo esc_attr( $st ); ?>"><?php echo esc_html( $st_label ); ?></label></th>
+						<td>
+							<textarea id="acps-msg-<?php echo esc_attr( $st ); ?>" name="<?php echo esc_attr( $name( 'status_messages' ) . '[' . $st . ']' ); ?>" rows="3" class="large-text"><?php echo esc_textarea( $val ); ?></textarea>
+						</td>
+					</tr>
+				<?php endforeach; ?>
 			</table>
 		</div>
 

