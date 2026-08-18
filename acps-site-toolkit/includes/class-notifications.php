@@ -84,7 +84,11 @@ class Notifications {
 		$body  = $message . "\n\n";
 		$body .= "— " . get_bloginfo( 'name' );
 
-		wp_mail( $to, wp_strip_all_tags( $subject ), $body );
+		// Route replies to a monitored inbox so "reply to this email" actually
+		// reaches the team (the From address is WordPress's unmonitored default).
+		$headers = array( 'Reply-To: info@acpsmd.org' );
+
+		wp_mail( $to, wp_strip_all_tags( $subject ), $body, $headers );
 		return 'sent';
 	}
 
@@ -108,6 +112,8 @@ class Notifications {
 				return __( 'Thanks for your feedback. We are still looking into what you reported and will update you when we know more.', 'acps-site-toolkit' );
 			case 'wont_fix':
 				return __( 'Thank you for your feedback. After review we are not able to make this change right now, but we appreciate you letting us know.', 'acps-site-toolkit' );
+			case 'spam':
+				return __( 'Your Response has been flagged as Spam if you believe this is not a accurate depiction of your feedback please contact info@acpsmd.org with your inquire', 'acps-site-toolkit' );
 			case 'new':
 				return __( 'Thank you for your feedback — we have received it and will review it soon.', 'acps-site-toolkit' );
 			default:
