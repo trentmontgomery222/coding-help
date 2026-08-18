@@ -49,12 +49,18 @@ class MCM_DB {
 			slug VARCHAR(191) NOT NULL,
 			label VARCHAR(255) NOT NULL DEFAULT '',
 			type VARCHAR(20) NOT NULL DEFAULT 'text',
+			source VARCHAR(20) NOT NULL DEFAULT 'custom',
+			post_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			node_id VARCHAR(191) NOT NULL DEFAULT '',
+			field_key VARCHAR(191) NOT NULL DEFAULT '',
 			content LONGTEXT NULL,
 			max_length INT NOT NULL DEFAULT 0,
 			updated_at DATETIME NULL,
 			updated_by VARCHAR(191) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
-			UNIQUE KEY slug (slug)
+			UNIQUE KEY slug (slug),
+			KEY source (source),
+			KEY post_id (post_id)
 		) {$charset_collate};";
 
 		$sql_editors = "CREATE TABLE {$editors} (
@@ -221,19 +227,166 @@ class MCM_DB {
 	}
 
 	/**
+	 * Create (or return existing) a block that points at a Beaver Builder
+	 * module field. Content lives in Beaver Builder, not our table; the
+	 * `content` column only caches the value for admin previews.
+	 *
+	 * @param array $data label, type, max_length, post_id, node_id, field_key, content
+	 * @return int|WP_Error block id
+	 */
+	public static function save_beaver_block( $data ) {
+		global $wpdb;
+
+		$post_id   = absint( $data['post_id'] ?? 0 );
+		$node_id   = sanitize_text_field( $data['node_id'] ?? '' );
+		$field_key = sanitize_key( $data['field_key'] ?? '' );
+
+		if ( ! $post_id || '' === $node_id || '' === $field_key ) {
+			return new WP_Error( 'mcm_bb_ref', __( 'Missing Beaver Builder field reference.', 'mcm' ) );
+		}
+
+		// One block per (post, node, field) — reuse if it already exists.
+		$existing = self::get_beaver_block( $post_id, $node_id, $field_key );
+		if ( $existing ) {
+			return (int) $existing->id;
+		}
+
+		$type = in_array( $data['type'] ?? 'text', array( 'text', 'textarea', 'richtext' ), true ) ? $data['type'] : 'text';
+
+		// Auto slug, kept unique.
+		$base = sanitize_title( 'bb-' . $node_id . '-' . $field_key );
+		$slug = $base;
+		$i    = 2;
+		while ( self::get_block_by_slug( $slug ) ) {
+			$slug = $base . '-' . $i;
+			++$i;
+		}
+
+		$row = array(
+			'slug'       => $slug,
+			'label'      => sanitize_text_field( $data['label'] ?? '' ),
+			'type'       => $type,
+			'source'     => 'beaver',
+			'post_id'    => $post_id,
+			'node_id'    => $node_id,
+			'field_key'  => $field_key,
+			'content'    => isset( $data['content'] ) ? wp_kses_post( (string) $data['content'] ) : '',
+			'max_length' => absint( $data['max_length'] ?? 0 ),
+			'updated_at' => current_time( 'mysql' ),
+			'updated_by' => sanitize_text_field( $data['updated_by'] ?? '' ),
+		);
+		$wpdb->insert(
+			self::blocks_table(),
+			$row,
+			array( '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%d', '%s', '%s' )
+		);
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Find a Beaver block by its module-field reference.
+	 *
+	 * @param int    $post_id
+	 * @param string $node_id
+	 * @param string $field_key
+	 * @return object|null
+	 */
+	public static function get_beaver_block( $post_id, $node_id, $field_key ) {
+		global $wpdb;
+		$table = self::blocks_table();
+		return $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE source = 'beaver' AND post_id = %d AND node_id = %s AND field_key = %s",
+				absint( $post_id ),
+				$node_id,
+				$field_key
+			)
+		);
+	}
+
+	/**
+	 * @param int    $post_id
+	 * @return array beaver blocks for a given post
+	 */
+	public static function get_beaver_blocks_for_post( $post_id ) {
+		global $wpdb;
+		$table = self::blocks_table();
+		return $wpdb->get_results(
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE source = 'beaver' AND post_id = %d ORDER BY label ASC", absint( $post_id ) )
+		);
+	}
+
+	/**
+	 * Update only the editable metadata of a block (label/type/max length).
+	 * Used when editing a Beaver block, whose content + reference must not be
+	 * rewritten here.
+	 *
+	 * @param int    $id
+	 * @param string $label
+	 * @param string $type
+	 * @param int    $max_length
+	 */
+	public static function update_block_meta( $id, $label, $type, $max_length ) {
+		global $wpdb;
+		$type = in_array( $type, array( 'text', 'textarea', 'richtext' ), true ) ? $type : 'text';
+		$wpdb->update(
+			self::blocks_table(),
+			array(
+				'label'      => sanitize_text_field( $label ),
+				'type'       => $type,
+				'max_length' => absint( $max_length ),
+			),
+			array( 'id' => absint( $id ) ),
+			array( '%s', '%s', '%d' ),
+			array( '%d' )
+		);
+	}
+
+	/**
+	 * Refresh the cached preview value + timestamp for a block (used after a
+	 * Beaver Builder field is saved through the portal).
+	 *
+	 * @param int    $id
+	 * @param string $cached_value already-sanitized value
+	 * @param string $editor_name
+	 */
+	public static function update_block_cache( $id, $cached_value, $editor_name ) {
+		global $wpdb;
+		$wpdb->update(
+			self::blocks_table(),
+			array(
+				'content'    => (string) $cached_value,
+				'updated_at' => current_time( 'mysql' ),
+				'updated_by' => sanitize_text_field( $editor_name ),
+			),
+			array( 'id' => absint( $id ) ),
+			array( '%s', '%s', '%s' ),
+			array( '%d' )
+		);
+	}
+
+	/**
 	 * Sanitize content according to the block's declared type. This is the
 	 * heart of "they can only edit how and what we want".
 	 *
 	 * @param string $type       text|textarea|richtext
 	 * @param string $raw
 	 * @param int    $max_length 0 = unlimited
+	 * @param string $rich_mode  'strict' (tiny allow-list, for custom blocks) or
+	 *                           'post' (wp_kses_post, used for Beaver Builder
+	 *                           rich-text so existing markup survives).
 	 * @return string
 	 */
-	public static function sanitize_block_content( $type, $raw, $max_length = 0 ) {
+	public static function sanitize_block_content( $type, $raw, $max_length = 0, $rich_mode = 'strict' ) {
 		$raw = (string) $raw;
 
 		switch ( $type ) {
 			case 'richtext':
+				if ( 'post' === $rich_mode ) {
+					// Permissive but still safe (strips scripts/onclick/etc.).
+					$clean = wp_kses_post( $raw );
+					break;
+				}
 				// A deliberately small allow-list. No scripts, no styles,
 				// no images, no arbitrary attributes.
 				$allowed = array(

@@ -14,6 +14,10 @@ of content you assign them, in the format you allow.
 - **Content Blocks** — named, editable pieces of content (single-line text,
   multi-line text, or *limited* rich text). Each renders on any page/post via a
   shortcode.
+- **Beaver Builder fields** — expose individual module fields from any
+  Beaver Builder page (headings, rich-text, callouts, buttons, etc.) as editable
+  blocks. Editors change the real page content; edits are written straight back
+  into Beaver Builder's layout data. See *Beaver Builder support* below.
 - **Editor accounts** — stored in the plugin's own database tables with hashed
   passwords, fully separate from WordPress users. No wp-admin, no dashboard, no
   WordPress capabilities.
@@ -21,7 +25,7 @@ of content you assign them, in the format you allow.
   with the correct input type and an enforced max length. They can't add, delete,
   reformat, or reach anything else.
 - **Admin control** — everything is configured from **Content Manager** in
-  wp-admin (blocks, editors, per-editor block assignments, settings).
+  wp-admin (blocks, Beaver fields, editors, per-editor assignments, settings).
 
 ## How it works (setup in 5 steps)
 
@@ -39,6 +43,54 @@ of content you assign them, in the format you allow.
 
 Editors visit the portal page, log in, and get a simple form for each block
 they're allowed to edit. That's it.
+
+## Beaver Builder support
+
+This plugin can hand editors control of content that already lives inside
+Beaver Builder modules — without giving them the Beaver Builder editor or
+wp-admin.
+
+**How it works**
+
+Beaver Builder stores each page's layout as a node tree in the
+`_fl_builder_data` post meta. Every module node carries a `settings` object
+whose `type` is the module slug (`heading`, `rich-text`, `callout`, …) and whose
+text lives in specific keys. This plugin reads that tree, lets you pick
+individual text fields, and writes edits back through Beaver Builder's own API
+(`FLBuilderModel::get_layout_data()` / `update_layout_data()`), falling back to
+the post meta directly. After a save it clears Beaver Builder's asset cache so
+the change shows immediately.
+
+**Setup**
+
+1. Go to *Content Manager → Beaver Builder*.
+2. Pick a page that's built with Beaver Builder.
+3. The screen lists every editable text field it found (module · field, with a
+   preview of the current value). Click **Add** on the ones you want editors to
+   control, choosing a label, field type, and optional max length.
+4. Assign those blocks to editors under *Content Manager → Editors*, exactly
+   like custom blocks.
+
+Editors then edit those fields from the portal; their changes update the live
+Beaver Builder page. Both the published layout and the working draft are updated.
+
+**Recognised modules** (others fall back to a generic content-field scan):
+`heading`, `rich-text`, `callout` (title / text / CTA text), `icon`, `button`,
+`button-group`, `photo` (caption), `testimonial`, `cta`, `html`, and more. The
+field map lives in `includes/class-mcm-beaver.php` (`field_map()`) and is easy to
+extend.
+
+**Field types & sanitising for Beaver fields**
+
+- A module's rich-text field (e.g. `rich-text → text`) is treated as **rich
+  text** and sanitised with `wp_kses_post` on save, so existing markup survives
+  but scripts/unsafe attributes are stripped.
+- Set a field to **single-line text** to force plain text (good for headings and
+  labels) — HTML the editor types is reduced to text.
+
+> Note: rich-text fields are edited as raw HTML in a textarea in this proof.
+> Dropping in a WYSIWYG editor (`wp_editor()` on the front end) is a natural
+> next step.
 
 ## Shortcodes
 
@@ -71,8 +123,9 @@ managed-content-manager/
 ├── managed-content-manager.php   # bootstrap, activation, single-site guard
 ├── includes/
 │   ├── class-mcm-db.php          # tables + all queries + content sanitizing
+│   ├── class-mcm-beaver.php      # Beaver Builder read/scan/write integration
 │   ├── class-mcm-auth.php        # editor login / sessions (separate from WP)
-│   ├── class-mcm-admin.php       # wp-admin screens (blocks, editors, settings)
+│   ├── class-mcm-admin.php       # wp-admin screens (blocks, Beaver, editors, settings)
 │   └── class-mcm-portal.php      # front-end portal + [managed_content]
 ├── assets/
 │   ├── admin.css

@@ -35,6 +35,7 @@ class MCM_Admin {
 		add_action( 'admin_post_mcm_save_editor', array( $this, 'handle_save_editor' ) );
 		add_action( 'admin_post_mcm_delete_editor', array( $this, 'handle_delete_editor' ) );
 		add_action( 'admin_post_mcm_save_settings', array( $this, 'handle_save_settings' ) );
+		add_action( 'admin_post_mcm_add_beaver_block', array( $this, 'handle_add_beaver_block' ) );
 	}
 
 	public function assets( $hook ) {
@@ -58,6 +59,7 @@ class MCM_Admin {
 			58
 		);
 		add_submenu_page( 'mcm-blocks', __( 'Content Blocks', 'mcm' ), __( 'Content Blocks', 'mcm' ), self::CAP, 'mcm-blocks', array( $this, 'render_blocks' ) );
+		add_submenu_page( 'mcm-blocks', __( 'Beaver Builder', 'mcm' ), __( 'Beaver Builder', 'mcm' ), self::CAP, 'mcm-beaver', array( $this, 'render_beaver' ) );
 		add_submenu_page( 'mcm-blocks', __( 'Editors', 'mcm' ), __( 'Editors', 'mcm' ), self::CAP, 'mcm-editors', array( $this, 'render_editors' ) );
 		add_submenu_page( 'mcm-blocks', __( 'Settings', 'mcm' ), __( 'Settings', 'mcm' ), self::CAP, 'mcm-settings', array( $this, 'render_settings' ) );
 	}
@@ -104,31 +106,55 @@ class MCM_Admin {
 	}
 
 	private function render_block_form( $edit_id = 0 ) {
-		$block = $edit_id ? MCM_DB::get_block( $edit_id ) : null;
-		$types = array(
+		$block     = $edit_id ? MCM_DB::get_block( $edit_id ) : null;
+		$is_beaver = $block && 'beaver' === $block->source;
+		$types     = array(
 			'text'     => __( 'Single line text', 'mcm' ),
 			'textarea' => __( 'Multi-line text', 'mcm' ),
-			'richtext' => __( 'Limited rich text (bold, italic, links, lists, H2/H3)', 'mcm' ),
+			'richtext' => __( 'Rich text', 'mcm' ),
 		);
 		?>
 		<div class="mcm-card">
-			<h2><?php echo $block ? esc_html__( 'Edit block', 'mcm' ) : esc_html__( 'Add a block', 'mcm' ); ?></h2>
+			<h2>
+				<?php
+				echo $block
+					? ( $is_beaver ? esc_html__( 'Edit Beaver Builder block', 'mcm' ) : esc_html__( 'Edit block', 'mcm' ) )
+					: esc_html__( 'Add a block', 'mcm' );
+				?>
+			</h2>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( 'mcm_save_block' ); ?>
 				<input type="hidden" name="action" value="mcm_save_block" />
 				<input type="hidden" name="id" value="<?php echo esc_attr( $block->id ?? 0 ); ?>" />
 				<table class="form-table" role="presentation">
+					<?php if ( $is_beaver ) : ?>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Beaver Builder source', 'mcm' ); ?></th>
+							<td>
+								<?php
+								$src_post  = get_post( (int) $block->post_id );
+								$src_title = $src_post ? $src_post->post_title : ( '#' . (int) $block->post_id );
+								?>
+								<code><?php echo esc_html( $src_title ); ?></code>
+								&nbsp;→&nbsp;
+								<code><?php echo esc_html( $block->node_id . ' · ' . $block->field_key ); ?></code>
+								<p class="description"><?php esc_html_e( 'This block edits a live Beaver Builder module field. Its content is stored by Beaver Builder, not here.', 'mcm' ); ?></p>
+							</td>
+						</tr>
+					<?php endif; ?>
 					<tr>
 						<th scope="row"><label for="mcm-label"><?php esc_html_e( 'Label', 'mcm' ); ?></label></th>
 						<td><input name="label" id="mcm-label" type="text" class="regular-text" required value="<?php echo esc_attr( $block->label ?? '' ); ?>" /></td>
 					</tr>
-					<tr>
-						<th scope="row"><label for="mcm-slug"><?php esc_html_e( 'Slug', 'mcm' ); ?></label></th>
-						<td>
-							<input name="slug" id="mcm-slug" type="text" class="regular-text" value="<?php echo esc_attr( $block->slug ?? '' ); ?>" placeholder="hero-title" />
-							<p class="description"><?php esc_html_e( 'Lowercase identifier used in the shortcode. Leave label filled and this can be derived automatically.', 'mcm' ); ?></p>
-						</td>
-					</tr>
+					<?php if ( ! $is_beaver ) : ?>
+						<tr>
+							<th scope="row"><label for="mcm-slug"><?php esc_html_e( 'Slug', 'mcm' ); ?></label></th>
+							<td>
+								<input name="slug" id="mcm-slug" type="text" class="regular-text" value="<?php echo esc_attr( $block->slug ?? '' ); ?>" placeholder="hero-title" />
+								<p class="description"><?php esc_html_e( 'Lowercase identifier used in the shortcode. Leave label filled and this can be derived automatically.', 'mcm' ); ?></p>
+							</td>
+						</tr>
+					<?php endif; ?>
 					<tr>
 						<th scope="row"><label for="mcm-type"><?php esc_html_e( 'Field type', 'mcm' ); ?></label></th>
 						<td>
@@ -146,10 +172,12 @@ class MCM_Admin {
 							<p class="description"><?php esc_html_e( '0 = no limit. Enforced both in the editor UI and on save.', 'mcm' ); ?></p>
 						</td>
 					</tr>
-					<tr>
-						<th scope="row"><label for="mcm-content"><?php esc_html_e( 'Content', 'mcm' ); ?></label></th>
-						<td><textarea name="content" id="mcm-content" rows="4" class="large-text"><?php echo esc_textarea( $block->content ?? '' ); ?></textarea></td>
-					</tr>
+					<?php if ( ! $is_beaver ) : ?>
+						<tr>
+							<th scope="row"><label for="mcm-content"><?php esc_html_e( 'Content', 'mcm' ); ?></label></th>
+							<td><textarea name="content" id="mcm-content" rows="4" class="large-text"><?php echo esc_textarea( $block->content ?? '' ); ?></textarea></td>
+						</tr>
+					<?php endif; ?>
 				</table>
 				<p class="submit">
 					<button type="submit" class="button button-primary"><?php echo $block ? esc_html__( 'Update block', 'mcm' ) : esc_html__( 'Add block', 'mcm' ); ?></button>
@@ -172,14 +200,15 @@ class MCM_Admin {
 		echo '<table class="widefat striped">';
 		echo '<thead><tr>';
 		echo '<th>' . esc_html__( 'Label', 'mcm' ) . '</th>';
-		echo '<th>' . esc_html__( 'Shortcode', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Source', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Where', 'mcm' ) . '</th>';
 		echo '<th>' . esc_html__( 'Type', 'mcm' ) . '</th>';
 		echo '<th>' . esc_html__( 'Preview', 'mcm' ) . '</th>';
 		echo '<th>' . esc_html__( 'Last updated', 'mcm' ) . '</th>';
 		echo '<th>' . esc_html__( 'Actions', 'mcm' ) . '</th>';
 		echo '</tr></thead><tbody>';
 		foreach ( $blocks as $b ) {
-			$shortcode = '[managed_content slug="' . $b->slug . '"]';
+			$is_beaver = 'beaver' === $b->source;
 			$preview   = wp_strip_all_tags( (string) $b->content );
 			$preview   = mb_strlen( $preview ) > 60 ? mb_substr( $preview, 0, 60 ) . '…' : $preview;
 			$updated   = $b->updated_at ? esc_html( $b->updated_at ) : '—';
@@ -188,9 +217,21 @@ class MCM_Admin {
 				$this->screen_url_admin_post( 'mcm_delete_block', array( 'id' => $b->id ) ),
 				'mcm_delete_block_' . $b->id
 			);
+
+			if ( $is_beaver ) {
+				$src_post = get_post( (int) $b->post_id );
+				$title    = $src_post ? $src_post->post_title : ( '#' . (int) $b->post_id );
+				$where    = esc_html( $title ) . ' <span class="mcm-muted">(' . esc_html( $b->field_key ) . ')</span>';
+				$source   = '<span class="mcm-tag mcm-tag-bb">' . esc_html__( 'Beaver Builder', 'mcm' ) . '</span>';
+			} else {
+				$where  = '<code class="mcm-code">[managed_content slug="' . esc_html( $b->slug ) . '"]</code>';
+				$source = '<span class="mcm-tag">' . esc_html__( 'Custom', 'mcm' ) . '</span>';
+			}
+
 			echo '<tr>';
 			echo '<td><strong>' . esc_html( $b->label ) . '</strong></td>';
-			echo '<td><code class="mcm-code">' . esc_html( $shortcode ) . '</code></td>';
+			echo '<td>' . $source . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped above.
+			echo '<td>' . $where . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped above.
 			echo '<td>' . esc_html( $b->type ) . '</td>';
 			echo '<td>' . esc_html( $preview ) . '</td>';
 			echo '<td>' . $updated . $by . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped above.
@@ -213,6 +254,23 @@ class MCM_Admin {
 	public function handle_save_block() {
 		$this->guard();
 		check_admin_referer( 'mcm_save_block' );
+
+		$id = isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
+
+		// Beaver-sourced blocks: only their label/type/max-length are editable
+		// here; slug, content and the module reference must not be rewritten.
+		if ( $id ) {
+			$existing = MCM_DB::get_block( $id );
+			if ( $existing && 'beaver' === $existing->source ) {
+				MCM_DB::update_block_meta(
+					$id,
+					isset( $_POST['label'] ) ? sanitize_text_field( wp_unslash( $_POST['label'] ) ) : $existing->label,
+					isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : $existing->type,
+					isset( $_POST['max_length'] ) ? absint( $_POST['max_length'] ) : (int) $existing->max_length
+				);
+				$this->redirect_back( 'mcm-blocks', array( 'mcm_msg' => __( 'Block saved.', 'mcm' ) ) );
+			}
+		}
 
 		$result = MCM_DB::save_block(
 			array(
@@ -463,6 +521,149 @@ class MCM_Admin {
 		);
 		update_option( 'mcm_settings', $settings );
 		$this->redirect_back( 'mcm-settings', array( 'mcm_msg' => __( 'Settings saved.', 'mcm' ) ) );
+	}
+
+	// =======================================================================
+	// BEAVER BUILDER
+	// =======================================================================
+	public function render_beaver() {
+		$this->guard();
+		echo '<div class="wrap mcm-wrap">';
+		echo '<h1>' . esc_html__( 'Beaver Builder content', 'mcm' ) . '</h1>';
+		$this->notice();
+
+		if ( ! MCM_Beaver::is_active() ) {
+			echo '<div class="notice notice-warning"><p>' .
+				esc_html__( 'Beaver Builder is not active. Activate Beaver Builder (or Beaver Builder Lite) to expose its module fields here.', 'mcm' ) .
+				'</p></div></div>';
+			return;
+		}
+
+		echo '<p class="description">' . esc_html__( 'Pick a page built with Beaver Builder, then choose which module fields your editors may change. Each one becomes an editable block you can assign under Editors — no Beaver Builder access required for them.', 'mcm' ) . '</p>';
+
+		$posts   = MCM_Beaver::get_bb_posts();
+		$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		// Page picker.
+		?>
+		<div class="mcm-card">
+			<form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>">
+				<input type="hidden" name="page" value="mcm-beaver" />
+				<label for="mcm-bb-post"><strong><?php esc_html_e( 'Page:', 'mcm' ); ?></strong></label>
+				<select name="post" id="mcm-bb-post" onchange="this.form.submit()">
+					<option value="0"><?php esc_html_e( '— select a Beaver Builder page —', 'mcm' ); ?></option>
+					<?php foreach ( $posts as $p ) : ?>
+						<option value="<?php echo esc_attr( $p->ID ); ?>" <?php selected( $post_id, (int) $p->ID ); ?>>
+							<?php echo esc_html( $p->post_title ? $p->post_title : ( '#' . $p->ID ) ); ?> (<?php echo esc_html( $p->post_status ); ?>)
+						</option>
+					<?php endforeach; ?>
+				</select>
+				<noscript><button class="button"><?php esc_html_e( 'Go', 'mcm' ); ?></button></noscript>
+			</form>
+			<?php if ( empty( $posts ) ) : ?>
+				<p class="mcm-muted"><?php esc_html_e( 'No Beaver Builder pages found on this site yet.', 'mcm' ); ?></p>
+			<?php endif; ?>
+		</div>
+		<?php
+
+		if ( ! $post_id ) {
+			echo '</div>';
+			return;
+		}
+
+		$fields   = MCM_Beaver::scan_fields( $post_id );
+		$existing = MCM_DB::get_beaver_blocks_for_post( $post_id );
+		$already  = array();
+		foreach ( $existing as $b ) {
+			$already[ $b->node_id . '|' . $b->field_key ] = $b;
+		}
+
+		echo '<h2 class="mcm-h2">' . esc_html__( 'Editable fields on this page', 'mcm' ) . '</h2>';
+
+		if ( empty( $fields ) ) {
+			echo '<p>' . esc_html__( 'No editable text fields were detected on this page. It may use only modules we do not recognise yet.', 'mcm' ) . '</p></div>';
+			return;
+		}
+
+		$types = array(
+			'text'     => __( 'Single line text', 'mcm' ),
+			'textarea' => __( 'Multi-line text', 'mcm' ),
+			'richtext' => __( 'Rich text', 'mcm' ),
+		);
+
+		echo '<table class="widefat striped mcm-bb-table">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Module · field', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Current value', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Make editable', 'mcm' ) . '</th>';
+		echo '</tr></thead><tbody>';
+
+		foreach ( $fields as $f ) {
+			$key = $f['node_id'] . '|' . $f['field_key'];
+			echo '<tr>';
+			echo '<td><strong>' . esc_html( $f['module_label'] ) . '</strong><br /><span class="mcm-muted">' . esc_html( $f['node_id'] ) . '</span></td>';
+			echo '<td>' . esc_html( $f['preview'] ) . '</td>';
+			echo '<td>';
+
+			if ( isset( $already[ $key ] ) ) {
+				$b = $already[ $key ];
+				echo '<span class="mcm-tag mcm-tag-bb">' . esc_html__( 'Added', 'mcm' ) . '</span> ';
+				echo '<a class="button button-small" href="' . esc_url( $this->screen_url( 'mcm-blocks', array( 'edit' => $b->id ) ) ) . '">' . esc_html__( 'Edit block', 'mcm' ) . '</a>';
+			} else {
+				?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mcm-bb-add">
+					<?php wp_nonce_field( 'mcm_add_beaver_block' ); ?>
+					<input type="hidden" name="action" value="mcm_add_beaver_block" />
+					<input type="hidden" name="post_id" value="<?php echo esc_attr( $post_id ); ?>" />
+					<input type="hidden" name="node_id" value="<?php echo esc_attr( $f['node_id'] ); ?>" />
+					<input type="hidden" name="field_key" value="<?php echo esc_attr( $f['field_key'] ); ?>" />
+					<input type="text" name="label" required placeholder="<?php esc_attr_e( 'Label for editors', 'mcm' ); ?>" value="<?php echo esc_attr( $f['module_label'] ); ?>" />
+					<select name="type">
+						<?php foreach ( $types as $tk => $tl ) : ?>
+							<option value="<?php echo esc_attr( $tk ); ?>" <?php selected( $f['suggested_type'], $tk ); ?>><?php echo esc_html( $tl ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<input type="number" name="max_length" min="0" value="0" title="<?php esc_attr_e( 'Max length (0 = unlimited)', 'mcm' ); ?>" style="width:80px" />
+					<button type="submit" class="button button-primary button-small"><?php esc_html_e( 'Add', 'mcm' ); ?></button>
+				</form>
+				<?php
+			}
+			echo '</td></tr>';
+		}
+		echo '</tbody></table>';
+		echo '</div>';
+	}
+
+	public function handle_add_beaver_block() {
+		$this->guard();
+		check_admin_referer( 'mcm_add_beaver_block' );
+
+		$post_id   = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+		$node_id   = isset( $_POST['node_id'] ) ? sanitize_text_field( wp_unslash( $_POST['node_id'] ) ) : '';
+		$field_key = isset( $_POST['field_key'] ) ? sanitize_key( wp_unslash( $_POST['field_key'] ) ) : '';
+
+		// Cache the current live value for previews.
+		$current = MCM_Beaver::get_field_value( $post_id, $node_id, $field_key );
+
+		$result = MCM_DB::save_beaver_block(
+			array(
+				'label'      => isset( $_POST['label'] ) ? sanitize_text_field( wp_unslash( $_POST['label'] ) ) : '',
+				'type'       => isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : 'text',
+				'max_length' => isset( $_POST['max_length'] ) ? absint( $_POST['max_length'] ) : 0,
+				'post_id'    => $post_id,
+				'node_id'    => $node_id,
+				'field_key'  => $field_key,
+				'content'    => $current,
+				'updated_by' => $this->current_admin_name(),
+			)
+		);
+
+		$args = is_wp_error( $result )
+			? array( 'mcm_err' => $result->get_error_message(), 'post' => $post_id )
+			: array( 'mcm_msg' => __( 'Field added. Now assign it to an editor.', 'mcm' ), 'post' => $post_id );
+
+		wp_safe_redirect( $this->screen_url( 'mcm-beaver', $args ) );
+		exit;
 	}
 
 	// -----------------------------------------------------------------------

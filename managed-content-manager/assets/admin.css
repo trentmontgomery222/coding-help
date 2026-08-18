@@ -34,3 +34,31 @@
 .button-link-delete {
 	color: #b32d2e;
 }
+.mcm-tag {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: .03em;
+	background: #f0f0f1;
+	color: #50575e;
+	border-radius: 3px;
+	padding: 2px 7px;
+}
+.mcm-tag-bb {
+	background: #e7f0f6;
+	color: #135e96;
+}
+.mcm-bb-table td {
+	vertical-align: middle;
+}
+.mcm-bb-add {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+	margin: 0;
+}
+.mcm-bb-add input[type="text"] {
+	min-width: 160px;
+}

@@ -33,12 +33,13 @@ define( 'MCM_FILE', __FILE__ );
 define( 'MCM_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MCM_URL', plugin_dir_url( __FILE__ ) );
 define( 'MCM_SESSION_COOKIE', 'mcm_editor_session' );
-define( 'MCM_DB_VERSION', '1' );
+define( 'MCM_DB_VERSION', '2' );
 
 // ---------------------------------------------------------------------------
 // Includes
 // ---------------------------------------------------------------------------
 require_once MCM_DIR . 'includes/class-mcm-db.php';
+require_once MCM_DIR . 'includes/class-mcm-beaver.php';
 require_once MCM_DIR . 'includes/class-mcm-auth.php';
 require_once MCM_DIR . 'includes/class-mcm-admin.php';
 require_once MCM_DIR . 'includes/class-mcm-portal.php';

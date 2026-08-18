@@ -81,11 +81,15 @@ class MCM_Portal {
 	 * @return string
 	 */
 	private function render_block_output( $block ) {
-		$content = (string) $block->content;
+		$is_bb   = 'beaver' === $block->source;
+		$content = $is_bb
+			? MCM_Beaver::get_field_value( (int) $block->post_id, $block->node_id, $block->field_key )
+			: (string) $block->content;
+
 		switch ( $block->type ) {
 			case 'richtext':
-				// Content was already sanitized on save with the same allow-list.
-				return MCM_DB::sanitize_block_content( 'richtext', $content, 0 );
+				// Re-sanitize on output. Beaver rich text keeps post-level markup.
+				return MCM_DB::sanitize_block_content( 'richtext', $content, 0, $is_bb ? 'post' : 'strict' );
 			case 'textarea':
 				return nl2br( esc_html( $content ) );
 			case 'text':
@@ -225,6 +229,8 @@ class MCM_Portal {
 	private function render_editor_field( $block ) {
 		$id      = 'mcm-f-' . (int) $block->id;
 		$maxattr = (int) $block->max_length > 0 ? ' maxlength="' . (int) $block->max_length . '"' : '';
+		$value   = $this->block_current_value( $block );
+		$is_bb   = 'beaver' === $block->source;
 
 		switch ( $block->type ) {
 			case 'richtext':
@@ -232,9 +238,13 @@ class MCM_Portal {
 					'<textarea id="%1$s" name="mcm_content" class="mcm-input mcm-richtext" rows="6" data-countsource="text"%2$s>%3$s</textarea>',
 					esc_attr( $id ),
 					$maxattr, // safe: literal maxlength attr.
-					esc_textarea( (string) $block->content )
+					esc_textarea( $value )
 				);
-				echo '<p class="mcm-help">' . esc_html__( 'Allowed: bold, italic, links, lists, H2/H3. Everything else is stripped on save.', 'mcm' ) . '</p>';
+				if ( $is_bb ) {
+					echo '<p class="mcm-help">' . esc_html__( 'HTML is allowed here (this is a rich-text area). Scripts and unsafe markup are removed on save.', 'mcm' ) . '</p>';
+				} else {
+					echo '<p class="mcm-help">' . esc_html__( 'Allowed: bold, italic, links, lists, H2/H3. Everything else is stripped on save.', 'mcm' ) . '</p>';
+				}
 				break;
 
 			case 'textarea':
@@ -242,7 +252,7 @@ class MCM_Portal {
 					'<textarea id="%1$s" name="mcm_content" class="mcm-input" rows="5"%2$s>%3$s</textarea>',
 					esc_attr( $id ),
 					$maxattr,
-					esc_textarea( (string) $block->content )
+					esc_textarea( $value )
 				);
 				break;
 
@@ -252,10 +262,24 @@ class MCM_Portal {
 					'<input id="%1$s" name="mcm_content" type="text" class="mcm-input"%2$s value="%3$s" />',
 					esc_attr( $id ),
 					$maxattr,
-					esc_attr( (string) $block->content )
+					esc_attr( $value )
 				);
 				break;
 		}
+	}
+
+	/**
+	 * The value to prefill into the editor: live from Beaver Builder for beaver
+	 * blocks, otherwise our stored content.
+	 *
+	 * @param object $block
+	 * @return string
+	 */
+	private function block_current_value( $block ) {
+		if ( 'beaver' === $block->source ) {
+			return MCM_Beaver::get_field_value( (int) $block->post_id, $block->node_id, $block->field_key );
+		}
+		return (string) $block->content;
 	}
 
 	private function type_label( $type ) {
@@ -317,10 +341,24 @@ class MCM_Portal {
 			$this->bounce( array( 'mcm_perr' => __( 'You are not allowed to edit that item.', 'mcm' ) ) );
 		}
 
-		$raw  = isset( $_POST['mcm_content'] ) ? (string) wp_unslash( $_POST['mcm_content'] ) : '';
-		$name = 'editor:' . $editor->username;
-		$res  = MCM_DB::save_block_content( $block_id, $raw, $name );
+		$raw   = isset( $_POST['mcm_content'] ) ? (string) wp_unslash( $_POST['mcm_content'] ) : '';
+		$name  = 'editor:' . $editor->username;
+		$block = MCM_DB::get_block( $block_id );
 
+		if ( $block && 'beaver' === $block->source ) {
+			// Rich-text Beaver fields keep their existing markup (wp_kses_post);
+			// text/textarea are reduced to plain text.
+			$clean = MCM_DB::sanitize_block_content( $block->type, $raw, (int) $block->max_length, 'post' );
+			$res   = MCM_Beaver::update_field_value( (int) $block->post_id, $block->node_id, $block->field_key, $clean );
+			if ( is_wp_error( $res ) ) {
+				$this->bounce( array( 'mcm_perr' => $res->get_error_message() ) );
+			}
+			// Refresh our cached preview value.
+			MCM_DB::update_block_cache( $block_id, $clean, $name );
+			$this->bounce( array( 'mcm_pmsg' => __( 'Saved to the page.', 'mcm' ) ) );
+		}
+
+		$res = MCM_DB::save_block_content( $block_id, $raw, $name );
 		if ( is_wp_error( $res ) ) {
 			$this->bounce( array( 'mcm_perr' => $res->get_error_message() ) );
 		}
