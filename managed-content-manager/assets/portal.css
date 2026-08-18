@@ -1,0 +1,168 @@
+/* Managed Content Manager — front-end portal styles */
+.mcm-portal {
+	max-width: 720px;
+	margin: 0 auto;
+	font-size: 16px;
+	line-height: 1.5;
+}
+.mcm-portal * {
+	box-sizing: border-box;
+}
+
+/* Flash messages */
+.mcm-flash {
+	padding: 10px 14px;
+	border-radius: 6px;
+	margin: 0 0 16px;
+	font-size: 14px;
+}
+.mcm-flash-ok {
+	background: #e6f4ea;
+	border: 1px solid #b7dfc1;
+	color: #1e4620;
+}
+.mcm-flash-err {
+	background: #fce8e6;
+	border: 1px solid #f3b8b3;
+	color: #611a15;
+}
+
+/* Login */
+.mcm-login {
+	max-width: 420px;
+	margin: 0 auto;
+	padding: 24px;
+	border: 1px solid #e2e2e2;
+	border-radius: 10px;
+	background: #fff;
+}
+.mcm-login h2 {
+	margin: 0 0 6px;
+}
+.mcm-sub {
+	color: #666;
+	margin: 0 0 18px;
+	font-size: 14px;
+}
+.mcm-login label,
+.mcm-field {
+	display: block;
+	margin-bottom: 14px;
+}
+.mcm-login label span {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 4px;
+	font-size: 14px;
+}
+.mcm-login input,
+.mcm-input {
+	width: 100%;
+	padding: 10px 12px;
+	border: 1px solid #c7c7c7;
+	border-radius: 6px;
+	font-size: 15px;
+	font-family: inherit;
+}
+.mcm-input:focus,
+.mcm-login input:focus {
+	outline: 2px solid #2271b1;
+	border-color: #2271b1;
+}
+
+/* Buttons */
+.mcm-btn {
+	display: inline-block;
+	padding: 9px 16px;
+	border-radius: 6px;
+	border: 1px solid transparent;
+	font-size: 14px;
+	cursor: pointer;
+	font-family: inherit;
+}
+.mcm-btn-primary {
+	background: #2271b1;
+	color: #fff;
+}
+.mcm-btn-primary:hover {
+	background: #135e96;
+}
+.mcm-btn-ghost {
+	background: transparent;
+	border-color: #c7c7c7;
+	color: #333;
+}
+
+/* Dashboard */
+.mcm-dash-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 12px;
+	border-bottom: 1px solid #eee;
+	padding-bottom: 14px;
+	margin-bottom: 18px;
+}
+.mcm-dash-head h2 {
+	margin: 0;
+}
+.mcm-logout-form {
+	margin: 0;
+}
+.mcm-block-form {
+	background: #fff;
+	border: 1px solid #e6e6e6;
+	border-radius: 10px;
+	padding: 16px 18px;
+	margin-bottom: 16px;
+}
+.mcm-field-label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 8px;
+}
+.mcm-type-badge {
+	display: inline-block;
+	font-weight: 500;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: .04em;
+	color: #555;
+	background: #f0f0f1;
+	border-radius: 999px;
+	padding: 2px 8px;
+	margin-left: 6px;
+	vertical-align: middle;
+}
+.mcm-help {
+	color: #777;
+	font-size: 12px;
+	margin: 6px 0 0;
+}
+.mcm-count {
+	font-size: 12px;
+	color: #777;
+	margin-top: 4px;
+}
+.mcm-count.mcm-over {
+	color: #b32d2e;
+	font-weight: 600;
+}
+.mcm-field-actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 12px;
+}
+.mcm-last {
+	font-size: 12px;
+	color: #999;
+}
+.mcm-empty {
+	color: #666;
+	background: #fafafa;
+	border: 1px dashed #ddd;
+	border-radius: 8px;
+	padding: 20px;
+	text-align: center;
+}

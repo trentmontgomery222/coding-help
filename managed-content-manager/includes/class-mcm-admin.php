@@ -1,0 +1,480 @@
+<?php
+/**
+ * wp-admin screens: content blocks, editor accounts, settings.
+ *
+ * All screens require the manage_options capability (i.e. real site admins).
+ *
+ * @package mcm
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+class MCM_Admin {
+
+	/** @var MCM_Admin|null */
+	private static $instance = null;
+
+	const CAP = 'manage_options';
+
+	public static function instance() {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
+	private function __construct() {
+		add_action( 'admin_menu', array( $this, 'menu' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
+
+		// Form handlers (admin-post.php).
+		add_action( 'admin_post_mcm_save_block', array( $this, 'handle_save_block' ) );
+		add_action( 'admin_post_mcm_delete_block', array( $this, 'handle_delete_block' ) );
+		add_action( 'admin_post_mcm_save_editor', array( $this, 'handle_save_editor' ) );
+		add_action( 'admin_post_mcm_delete_editor', array( $this, 'handle_delete_editor' ) );
+		add_action( 'admin_post_mcm_save_settings', array( $this, 'handle_save_settings' ) );
+	}
+
+	public function assets( $hook ) {
+		if ( false === strpos( $hook, 'mcm' ) ) {
+			return;
+		}
+		wp_enqueue_style( 'mcm-admin', MCM_URL . 'assets/admin.css', array(), MCM_VERSION );
+	}
+
+	// -----------------------------------------------------------------------
+	// Menu
+	// -----------------------------------------------------------------------
+	public function menu() {
+		add_menu_page(
+			__( 'Content Manager', 'mcm' ),
+			__( 'Content Manager', 'mcm' ),
+			self::CAP,
+			'mcm-blocks',
+			array( $this, 'render_blocks' ),
+			'dashicons-edit-page',
+			58
+		);
+		add_submenu_page( 'mcm-blocks', __( 'Content Blocks', 'mcm' ), __( 'Content Blocks', 'mcm' ), self::CAP, 'mcm-blocks', array( $this, 'render_blocks' ) );
+		add_submenu_page( 'mcm-blocks', __( 'Editors', 'mcm' ), __( 'Editors', 'mcm' ), self::CAP, 'mcm-editors', array( $this, 'render_editors' ) );
+		add_submenu_page( 'mcm-blocks', __( 'Settings', 'mcm' ), __( 'Settings', 'mcm' ), self::CAP, 'mcm-settings', array( $this, 'render_settings' ) );
+	}
+
+	private function guard() {
+		if ( ! current_user_can( self::CAP ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'mcm' ) );
+		}
+	}
+
+	/**
+	 * Small helper to build an admin URL back to one of our screens.
+	 */
+	private function screen_url( $page, $args = array() ) {
+		return add_query_arg( array_merge( array( 'page' => $page ), $args ), admin_url( 'admin.php' ) );
+	}
+
+	private function notice() {
+		if ( isset( $_GET['mcm_msg'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$msg = sanitize_text_field( wp_unslash( $_GET['mcm_msg'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $msg ) . '</p></div>';
+		}
+		if ( isset( $_GET['mcm_err'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$err = sanitize_text_field( wp_unslash( $_GET['mcm_err'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $err ) . '</p></div>';
+		}
+	}
+
+	// =======================================================================
+	// BLOCKS
+	// =======================================================================
+	public function render_blocks() {
+		$this->guard();
+		$edit_id = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		echo '<div class="wrap mcm-wrap">';
+		echo '<h1>' . esc_html__( 'Content Blocks', 'mcm' ) . '</h1>';
+		$this->notice();
+
+		echo '<p class="description">' . esc_html__( 'A content block is one editable piece of text. Drop it into any page or post with the shortcode shown below, then assign it to an editor so they can update it from the front-end portal.', 'mcm' ) . '</p>';
+
+		$this->render_block_form( $edit_id );
+		$this->render_block_list();
+		echo '</div>';
+	}
+
+	private function render_block_form( $edit_id = 0 ) {
+		$block = $edit_id ? MCM_DB::get_block( $edit_id ) : null;
+		$types = array(
+			'text'     => __( 'Single line text', 'mcm' ),
+			'textarea' => __( 'Multi-line text', 'mcm' ),
+			'richtext' => __( 'Limited rich text (bold, italic, links, lists, H2/H3)', 'mcm' ),
+		);
+		?>
+		<div class="mcm-card">
+			<h2><?php echo $block ? esc_html__( 'Edit block', 'mcm' ) : esc_html__( 'Add a block', 'mcm' ); ?></h2>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( 'mcm_save_block' ); ?>
+				<input type="hidden" name="action" value="mcm_save_block" />
+				<input type="hidden" name="id" value="<?php echo esc_attr( $block->id ?? 0 ); ?>" />
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="mcm-label"><?php esc_html_e( 'Label', 'mcm' ); ?></label></th>
+						<td><input name="label" id="mcm-label" type="text" class="regular-text" required value="<?php echo esc_attr( $block->label ?? '' ); ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-slug"><?php esc_html_e( 'Slug', 'mcm' ); ?></label></th>
+						<td>
+							<input name="slug" id="mcm-slug" type="text" class="regular-text" value="<?php echo esc_attr( $block->slug ?? '' ); ?>" placeholder="hero-title" />
+							<p class="description"><?php esc_html_e( 'Lowercase identifier used in the shortcode. Leave label filled and this can be derived automatically.', 'mcm' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-type"><?php esc_html_e( 'Field type', 'mcm' ); ?></label></th>
+						<td>
+							<select name="type" id="mcm-type">
+								<?php foreach ( $types as $key => $lbl ) : ?>
+									<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $block->type ?? 'text', $key ); ?>><?php echo esc_html( $lbl ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-max"><?php esc_html_e( 'Max length', 'mcm' ); ?></label></th>
+						<td>
+							<input name="max_length" id="mcm-max" type="number" min="0" value="<?php echo esc_attr( $block->max_length ?? 0 ); ?>" />
+							<p class="description"><?php esc_html_e( '0 = no limit. Enforced both in the editor UI and on save.', 'mcm' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-content"><?php esc_html_e( 'Content', 'mcm' ); ?></label></th>
+						<td><textarea name="content" id="mcm-content" rows="4" class="large-text"><?php echo esc_textarea( $block->content ?? '' ); ?></textarea></td>
+					</tr>
+				</table>
+				<p class="submit">
+					<button type="submit" class="button button-primary"><?php echo $block ? esc_html__( 'Update block', 'mcm' ) : esc_html__( 'Add block', 'mcm' ); ?></button>
+					<?php if ( $block ) : ?>
+						<a href="<?php echo esc_url( $this->screen_url( 'mcm-blocks' ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'mcm' ); ?></a>
+					<?php endif; ?>
+				</p>
+			</form>
+		</div>
+		<?php
+	}
+
+	private function render_block_list() {
+		$blocks = MCM_DB::get_blocks();
+		echo '<h2 class="mcm-h2">' . esc_html__( 'All blocks', 'mcm' ) . '</h2>';
+		if ( empty( $blocks ) ) {
+			echo '<p>' . esc_html__( 'No blocks yet.', 'mcm' ) . '</p>';
+			return;
+		}
+		echo '<table class="widefat striped">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Label', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Shortcode', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Type', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Preview', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Last updated', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Actions', 'mcm' ) . '</th>';
+		echo '</tr></thead><tbody>';
+		foreach ( $blocks as $b ) {
+			$shortcode = '[managed_content slug="' . $b->slug . '"]';
+			$preview   = wp_strip_all_tags( (string) $b->content );
+			$preview   = mb_strlen( $preview ) > 60 ? mb_substr( $preview, 0, 60 ) . '…' : $preview;
+			$updated   = $b->updated_at ? esc_html( $b->updated_at ) : '—';
+			$by        = $b->updated_by ? ' <span class="mcm-muted">(' . esc_html( $b->updated_by ) . ')</span>' : '';
+			$del_url   = wp_nonce_url(
+				$this->screen_url_admin_post( 'mcm_delete_block', array( 'id' => $b->id ) ),
+				'mcm_delete_block_' . $b->id
+			);
+			echo '<tr>';
+			echo '<td><strong>' . esc_html( $b->label ) . '</strong></td>';
+			echo '<td><code class="mcm-code">' . esc_html( $shortcode ) . '</code></td>';
+			echo '<td>' . esc_html( $b->type ) . '</td>';
+			echo '<td>' . esc_html( $preview ) . '</td>';
+			echo '<td>' . $updated . $by . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped above.
+			echo '<td>';
+			echo '<a class="button button-small" href="' . esc_url( $this->screen_url( 'mcm-blocks', array( 'edit' => $b->id ) ) ) . '">' . esc_html__( 'Edit', 'mcm' ) . '</a> ';
+			echo '<a class="button button-small button-link-delete" href="' . esc_url( $del_url ) . '" onclick="return confirm(\'' . esc_js( __( 'Delete this block?', 'mcm' ) ) . '\');">' . esc_html__( 'Delete', 'mcm' ) . '</a>';
+			echo '</td>';
+			echo '</tr>';
+		}
+		echo '</tbody></table>';
+	}
+
+	/**
+	 * Build an admin-post.php URL for a given action.
+	 */
+	private function screen_url_admin_post( $action, $args = array() ) {
+		return add_query_arg( array_merge( array( 'action' => $action ), $args ), admin_url( 'admin-post.php' ) );
+	}
+
+	public function handle_save_block() {
+		$this->guard();
+		check_admin_referer( 'mcm_save_block' );
+
+		$result = MCM_DB::save_block(
+			array(
+				'id'         => isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0,
+				'label'      => isset( $_POST['label'] ) ? sanitize_text_field( wp_unslash( $_POST['label'] ) ) : '',
+				'slug'       => isset( $_POST['slug'] ) && '' !== trim( (string) $_POST['slug'] )
+					? sanitize_title( wp_unslash( $_POST['slug'] ) )
+					: sanitize_title( isset( $_POST['label'] ) ? wp_unslash( $_POST['label'] ) : '' ),
+				'type'       => isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : 'text',
+				'max_length' => isset( $_POST['max_length'] ) ? absint( $_POST['max_length'] ) : 0,
+				'content'    => isset( $_POST['content'] ) ? wp_unslash( $_POST['content'] ) : '',
+			),
+			$this->current_admin_name()
+		);
+
+		if ( is_wp_error( $result ) ) {
+			$this->redirect_back( 'mcm-blocks', array( 'mcm_err' => $result->get_error_message() ) );
+		}
+		$this->redirect_back( 'mcm-blocks', array( 'mcm_msg' => __( 'Block saved.', 'mcm' ) ) );
+	}
+
+	public function handle_delete_block() {
+		$this->guard();
+		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+		check_admin_referer( 'mcm_delete_block_' . $id );
+		MCM_DB::delete_block( $id );
+		$this->redirect_back( 'mcm-blocks', array( 'mcm_msg' => __( 'Block deleted.', 'mcm' ) ) );
+	}
+
+	// =======================================================================
+	// EDITORS
+	// =======================================================================
+	public function render_editors() {
+		$this->guard();
+		$edit_id = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		echo '<div class="wrap mcm-wrap">';
+		echo '<h1>' . esc_html__( 'Editors', 'mcm' ) . '</h1>';
+		$this->notice();
+		echo '<p class="description">' . esc_html__( 'Editor accounts are completely separate from WordPress users. They log in through the front-end portal and can only touch the blocks you assign here.', 'mcm' ) . '</p>';
+		$this->render_editor_form( $edit_id );
+		$this->render_editor_list();
+		echo '</div>';
+	}
+
+	private function render_editor_form( $edit_id = 0 ) {
+		$editor  = $edit_id ? MCM_DB::get_editor( $edit_id ) : null;
+		$blocks  = MCM_DB::get_blocks();
+		$allowed = MCM_DB::editor_allowed_ids( $editor );
+		?>
+		<div class="mcm-card">
+			<h2><?php echo $editor ? esc_html__( 'Edit editor', 'mcm' ) : esc_html__( 'Add an editor', 'mcm' ); ?></h2>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( 'mcm_save_editor' ); ?>
+				<input type="hidden" name="action" value="mcm_save_editor" />
+				<input type="hidden" name="id" value="<?php echo esc_attr( $editor->id ?? 0 ); ?>" />
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="mcm-username"><?php esc_html_e( 'Username', 'mcm' ); ?></label></th>
+						<td><input name="username" id="mcm-username" type="text" class="regular-text" required value="<?php echo esc_attr( $editor->username ?? '' ); ?>" autocomplete="off" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-display"><?php esc_html_e( 'Display name', 'mcm' ); ?></label></th>
+						<td><input name="display_name" id="mcm-display" type="text" class="regular-text" value="<?php echo esc_attr( $editor->display_name ?? '' ); ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-password"><?php esc_html_e( 'Password', 'mcm' ); ?></label></th>
+						<td>
+							<input name="password" id="mcm-password" type="text" class="regular-text" autocomplete="new-password" value="" />
+							<p class="description">
+								<?php
+								echo $editor
+									? esc_html__( 'Leave blank to keep the current password.', 'mcm' )
+									: esc_html__( 'Required. Shown in the clear here so you can copy it to the editor.', 'mcm' );
+								?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Active', 'mcm' ); ?></th>
+						<td><label><input type="checkbox" name="active" value="1" <?php checked( 1, (int) ( $editor->active ?? 1 ) ); ?> /> <?php esc_html_e( 'This editor may log in', 'mcm' ); ?></label></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Allowed blocks', 'mcm' ); ?></th>
+						<td>
+							<?php if ( empty( $blocks ) ) : ?>
+								<p><?php esc_html_e( 'No blocks defined yet. Create some first.', 'mcm' ); ?></p>
+							<?php else : ?>
+								<fieldset class="mcm-checklist">
+									<?php foreach ( $blocks as $b ) : ?>
+										<label>
+											<input type="checkbox" name="allowed_blocks[]" value="<?php echo esc_attr( $b->id ); ?>" <?php checked( in_array( (int) $b->id, $allowed, true ) ); ?> />
+											<?php echo esc_html( $b->label ); ?> <span class="mcm-muted">(<?php echo esc_html( $b->slug ); ?>)</span>
+										</label>
+									<?php endforeach; ?>
+								</fieldset>
+							<?php endif; ?>
+						</td>
+					</tr>
+				</table>
+				<p class="submit">
+					<button type="submit" class="button button-primary"><?php echo $editor ? esc_html__( 'Update editor', 'mcm' ) : esc_html__( 'Add editor', 'mcm' ); ?></button>
+					<?php if ( $editor ) : ?>
+						<a href="<?php echo esc_url( $this->screen_url( 'mcm-editors' ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'mcm' ); ?></a>
+					<?php endif; ?>
+				</p>
+			</form>
+		</div>
+		<?php
+	}
+
+	private function render_editor_list() {
+		$editors = MCM_DB::get_editors();
+		echo '<h2 class="mcm-h2">' . esc_html__( 'All editors', 'mcm' ) . '</h2>';
+		if ( empty( $editors ) ) {
+			echo '<p>' . esc_html__( 'No editors yet.', 'mcm' ) . '</p>';
+			return;
+		}
+		echo '<table class="widefat striped">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Username', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Display name', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Blocks', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Active', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Last login', 'mcm' ) . '</th>';
+		echo '<th>' . esc_html__( 'Actions', 'mcm' ) . '</th>';
+		echo '</tr></thead><tbody>';
+		foreach ( $editors as $e ) {
+			$count   = count( MCM_DB::editor_allowed_ids( $e ) );
+			$del_url = wp_nonce_url(
+				$this->screen_url_admin_post( 'mcm_delete_editor', array( 'id' => $e->id ) ),
+				'mcm_delete_editor_' . $e->id
+			);
+			echo '<tr>';
+			echo '<td><strong>' . esc_html( $e->username ) . '</strong></td>';
+			echo '<td>' . esc_html( $e->display_name ) . '</td>';
+			echo '<td>' . esc_html( $count ) . '</td>';
+			echo '<td>' . ( (int) $e->active === 1 ? '✓' : '—' ) . '</td>';
+			echo '<td>' . ( $e->last_login ? esc_html( $e->last_login ) : '—' ) . '</td>';
+			echo '<td>';
+			echo '<a class="button button-small" href="' . esc_url( $this->screen_url( 'mcm-editors', array( 'edit' => $e->id ) ) ) . '">' . esc_html__( 'Edit', 'mcm' ) . '</a> ';
+			echo '<a class="button button-small button-link-delete" href="' . esc_url( $del_url ) . '" onclick="return confirm(\'' . esc_js( __( 'Delete this editor?', 'mcm' ) ) . '\');">' . esc_html__( 'Delete', 'mcm' ) . '</a>';
+			echo '</td>';
+			echo '</tr>';
+		}
+		echo '</tbody></table>';
+	}
+
+	public function handle_save_editor() {
+		$this->guard();
+		check_admin_referer( 'mcm_save_editor' );
+
+		$result = MCM_DB::save_editor(
+			array(
+				'id'             => isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0,
+				'username'       => isset( $_POST['username'] ) ? sanitize_user( wp_unslash( $_POST['username'] ), true ) : '',
+				'display_name'   => isset( $_POST['display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['display_name'] ) ) : '',
+				'password'       => isset( $_POST['password'] ) ? (string) wp_unslash( $_POST['password'] ) : '',
+				'allowed_blocks' => isset( $_POST['allowed_blocks'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['allowed_blocks'] ) ) : array(),
+				'active'         => isset( $_POST['active'] ) ? 1 : 0,
+			)
+		);
+
+		if ( is_wp_error( $result ) ) {
+			$this->redirect_back( 'mcm-editors', array( 'mcm_err' => $result->get_error_message() ) );
+		}
+		$this->redirect_back( 'mcm-editors', array( 'mcm_msg' => __( 'Editor saved.', 'mcm' ) ) );
+	}
+
+	public function handle_delete_editor() {
+		$this->guard();
+		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+		check_admin_referer( 'mcm_delete_editor_' . $id );
+		MCM_DB::delete_editor( $id );
+		$this->redirect_back( 'mcm-editors', array( 'mcm_msg' => __( 'Editor deleted.', 'mcm' ) ) );
+	}
+
+	// =======================================================================
+	// SETTINGS
+	// =======================================================================
+	public function render_settings() {
+		$this->guard();
+		$settings = mcm_get_settings();
+		$pages    = get_pages();
+		echo '<div class="wrap mcm-wrap">';
+		echo '<h1>' . esc_html__( 'Settings', 'mcm' ) . '</h1>';
+		$this->notice();
+		?>
+		<div class="mcm-card">
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( 'mcm_save_settings' ); ?>
+				<input type="hidden" name="action" value="mcm_save_settings" />
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="mcm-portal"><?php esc_html_e( 'Portal page', 'mcm' ); ?></label></th>
+						<td>
+							<select name="portal_page_id" id="mcm-portal">
+								<option value="0"><?php esc_html_e( '— none selected —', 'mcm' ); ?></option>
+								<?php foreach ( $pages as $p ) : ?>
+									<option value="<?php echo esc_attr( $p->ID ); ?>" <?php selected( (int) $settings['portal_page_id'], (int) $p->ID ); ?>><?php echo esc_html( $p->post_title ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<p class="description">
+								<?php esc_html_e( 'Create a page (e.g. "Editor Login") containing the shortcode', 'mcm' ); ?>
+								<code>[content_editor_portal]</code>
+								<?php esc_html_e( 'and select it here. Editors visit that page to log in.', 'mcm' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-lifetime"><?php esc_html_e( 'Session lifetime (hours)', 'mcm' ); ?></label></th>
+						<td><input name="session_lifetime" id="mcm-lifetime" type="number" min="1" max="720" value="<?php echo esc_attr( $settings['session_lifetime'] ); ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-maxfails"><?php esc_html_e( 'Max failed logins', 'mcm' ); ?></label></th>
+						<td><input name="max_login_fails" id="mcm-maxfails" type="number" min="1" max="50" value="<?php echo esc_attr( $settings['max_login_fails'] ); ?>" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="mcm-lockout"><?php esc_html_e( 'Lockout minutes', 'mcm' ); ?></label></th>
+						<td><input name="lockout_minutes" id="mcm-lockout" type="number" min="1" max="1440" value="<?php echo esc_attr( $settings['lockout_minutes'] ); ?>" /></td>
+					</tr>
+				</table>
+				<p class="submit"><button type="submit" class="button button-primary"><?php esc_html_e( 'Save settings', 'mcm' ); ?></button></p>
+			</form>
+		</div>
+
+		<div class="mcm-card">
+			<h2><?php esc_html_e( 'How to use', 'mcm' ); ?></h2>
+			<ol class="mcm-steps">
+				<li><?php esc_html_e( 'Create content blocks under Content Manager → Content Blocks.', 'mcm' ); ?></li>
+				<li><?php echo wp_kses_post( __( 'Place each block on any page/post with its shortcode, e.g. <code>[managed_content slug="hero-title"]</code>.', 'mcm' ) ); ?></li>
+				<li><?php echo wp_kses_post( __( 'Create a page containing <code>[content_editor_portal]</code> and pick it above.', 'mcm' ) ); ?></li>
+				<li><?php esc_html_e( 'Add editor accounts and tick the blocks each one is allowed to change.', 'mcm' ); ?></li>
+				<li><?php esc_html_e( 'Send editors the portal URL + their username/password. They edit only what you allowed — no wp-admin access at all.', 'mcm' ); ?></li>
+			</ol>
+		</div>
+		<?php
+		echo '</div>';
+	}
+
+	public function handle_save_settings() {
+		$this->guard();
+		check_admin_referer( 'mcm_save_settings' );
+		$settings = array(
+			'portal_page_id'   => isset( $_POST['portal_page_id'] ) ? absint( $_POST['portal_page_id'] ) : 0,
+			'session_lifetime' => isset( $_POST['session_lifetime'] ) ? max( 1, absint( $_POST['session_lifetime'] ) ) : 8,
+			'max_login_fails'  => isset( $_POST['max_login_fails'] ) ? max( 1, absint( $_POST['max_login_fails'] ) ) : 5,
+			'lockout_minutes'  => isset( $_POST['lockout_minutes'] ) ? max( 1, absint( $_POST['lockout_minutes'] ) ) : 15,
+		);
+		update_option( 'mcm_settings', $settings );
+		$this->redirect_back( 'mcm-settings', array( 'mcm_msg' => __( 'Settings saved.', 'mcm' ) ) );
+	}
+
+	// -----------------------------------------------------------------------
+	// Helpers
+	// -----------------------------------------------------------------------
+	private function current_admin_name() {
+		$user = wp_get_current_user();
+		return $user && $user->exists() ? 'admin:' . $user->user_login : 'admin';
+	}
+
+	private function redirect_back( $page, $args = array() ) {
+		wp_safe_redirect( $this->screen_url( $page, $args ) );
+		exit;
+	}
+}
