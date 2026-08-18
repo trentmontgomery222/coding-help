@@ -167,6 +167,33 @@
 	text-align: center;
 }
 
+/* Editable pages list */
+.mcm-pages {
+	margin-bottom: 22px;
+}
+.mcm-pages-h {
+	margin: 0 0 2px;
+}
+.mcm-page-list {
+	list-style: none;
+	margin: 12px 0 0;
+	padding: 0;
+}
+.mcm-page-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border: 1px solid #e6e6e6;
+	border-radius: 10px;
+	background: #fff;
+	margin-bottom: 10px;
+}
+.mcm-page-title {
+	font-weight: 600;
+}
+
 /* Whole-module editor */
 .mcm-module-form {
 	border-left: 4px solid #2271b1;

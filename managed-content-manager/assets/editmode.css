@@ -1,0 +1,205 @@
+/* Managed Content Manager — in-place page editing overlay.
+   Loaded only for a logged-in editor on a page they may edit (?mcm_edit=1). */
+
+/* Top toolbar */
+.mcm-em-bar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 46px;
+	background: #1d2327;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 14px;
+	z-index: 100000;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	font-size: 14px;
+	box-shadow: 0 1px 6px rgba(0, 0, 0, .3);
+}
+.mcm-em-badge {
+	background: #2271b1;
+	color: #fff;
+	border-radius: 3px;
+	padding: 3px 8px;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: .04em;
+}
+.mcm-em-title {
+	font-weight: 600;
+}
+.mcm-em-hint {
+	color: #b9c0c7;
+	font-size: 12px;
+}
+.mcm-em-done {
+	margin-left: auto;
+	background: #fff;
+	color: #1d2327;
+	text-decoration: none;
+	padding: 6px 14px;
+	border-radius: 5px;
+	font-weight: 600;
+}
+.mcm-em-done:hover {
+	background: #f0f0f1;
+	color: #1d2327;
+}
+
+/* Push the page down so the toolbar doesn't cover it */
+html.mcm-editing {
+	margin-top: 46px !important;
+}
+html.mcm-editing #wpadminbar {
+	display: none; /* avoid double bars if any */
+}
+
+/* Editable module affordance */
+.mcm-editing .fl-module.mcm-editable {
+	position: relative;
+	outline: 1px dashed transparent;
+	transition: outline-color .12s ease;
+}
+.mcm-editing .fl-module.mcm-editable:hover {
+	outline: 2px dashed #2271b1;
+	outline-offset: 2px;
+}
+.mcm-em-edit-btn {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	z-index: 99990;
+	background: #2271b1;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	padding: 4px 10px;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	opacity: 0;
+	transform: translateY(-2px);
+	transition: opacity .12s ease, transform .12s ease;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	line-height: 1.4;
+}
+.mcm-editing .fl-module.mcm-editable:hover .mcm-em-edit-btn,
+.mcm-em-edit-btn:focus {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+/* Scrim + drawer */
+.mcm-em-scrim {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, .35);
+	z-index: 100001;
+}
+.mcm-em-drawer {
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 420px;
+	max-width: 92vw;
+	background: #fff;
+	z-index: 100002;
+	box-shadow: -4px 0 20px rgba(0, 0, 0, .25);
+	display: flex;
+	flex-direction: column;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	color: #1d2327;
+}
+.mcm-em-drawer-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 16px;
+	border-bottom: 1px solid #e6e6e6;
+}
+.mcm-em-drawer-title {
+	font-size: 16px;
+}
+.mcm-em-close {
+	background: none;
+	border: none;
+	font-size: 26px;
+	line-height: 1;
+	cursor: pointer;
+	color: #666;
+}
+.mcm-em-form {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1;
+}
+.mcm-em-fields {
+	padding: 16px;
+	overflow-y: auto;
+	flex: 1;
+}
+.mcm-em-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 16px;
+	border-top: 1px solid #e6e6e6;
+	background: #fafafa;
+}
+.mcm-em-status {
+	font-size: 13px;
+	color: #666;
+}
+.mcm-em-status.mcm-em-ok { color: #1e7e34; }
+.mcm-em-status.mcm-em-err { color: #b32d2e; }
+
+/* --- Widgets inside the drawer (self-contained; portal.css isn't loaded here) --- */
+.mcm-em .mcm-field { margin-bottom: 14px; }
+.mcm-em .mcm-field-label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+.mcm-em .mcm-input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 9px 11px;
+	border: 1px solid #c7c7c7;
+	border-radius: 6px;
+	font-size: 14px;
+	font-family: inherit;
+}
+.mcm-em .mcm-input:focus { outline: 2px solid #2271b1; border-color: #2271b1; }
+.mcm-em textarea.mcm-input { resize: vertical; }
+.mcm-em .mcm-help { color: #777; font-size: 12px; margin: 5px 0 0; }
+.mcm-em .mcm-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.mcm-em .mcm-toggle input { width: auto; }
+.mcm-em .mcm-img-preview img {
+	max-width: 160px; max-height: 120px; border: 1px solid #e2e2e2;
+	border-radius: 6px; display: block; margin-bottom: 8px;
+}
+.mcm-em .mcm-btn {
+	display: inline-block; padding: 9px 16px; border-radius: 6px;
+	border: 1px solid transparent; font-size: 14px; cursor: pointer; font-family: inherit;
+}
+.mcm-em .mcm-btn-primary { background: #2271b1; color: #fff; }
+.mcm-em .mcm-btn-primary:hover { background: #135e96; }
+.mcm-em .mcm-btn-primary[disabled] { opacity: .6; cursor: default; }
+.mcm-em .mcm-btn-ghost { background: transparent; border-color: #c7c7c7; color: #333; }
+.mcm-em .mcm-advanced {
+	margin: 8px 0 4px; border: 1px solid #eee; border-radius: 8px;
+	padding: 10px 12px; background: #fbfbfc;
+}
+.mcm-em .mcm-advanced > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.mcm-em .mcm-adv-grid {
+	display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin-top: 10px;
+}
+.mcm-em .mcm-adv-field { margin-bottom: 0; }
+.mcm-em .mcm-adv-label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 3px; }
+.mcm-em .mcm-adv-field .mcm-input { padding: 6px 8px; font-size: 13px; }

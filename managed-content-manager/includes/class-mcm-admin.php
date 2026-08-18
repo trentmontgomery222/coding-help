@@ -328,9 +328,11 @@ class MCM_Admin {
 	}
 
 	private function render_editor_form( $edit_id = 0 ) {
-		$editor  = $edit_id ? MCM_DB::get_editor( $edit_id ) : null;
-		$blocks  = MCM_DB::get_blocks();
-		$allowed = MCM_DB::editor_allowed_ids( $editor );
+		$editor    = $edit_id ? MCM_DB::get_editor( $edit_id ) : null;
+		$blocks    = MCM_DB::get_blocks();
+		$allowed   = MCM_DB::editor_allowed_ids( $editor );
+		$pages     = MCM_Beaver::is_active() ? MCM_Beaver::get_bb_posts() : array();
+		$allow_pg  = MCM_DB::editor_allowed_page_ids( $editor );
 		?>
 		<div class="mcm-card">
 			<h2><?php echo $editor ? esc_html__( 'Edit editor', 'mcm' ) : esc_html__( 'Add an editor', 'mcm' ); ?></h2>
@@ -363,6 +365,24 @@ class MCM_Admin {
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Active', 'mcm' ); ?></th>
 						<td><label><input type="checkbox" name="active" value="1" <?php checked( 1, (int) ( $editor->active ?? 1 ) ); ?> /> <?php esc_html_e( 'This editor may log in', 'mcm' ); ?></label></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Editable pages', 'mcm' ); ?></th>
+						<td>
+							<?php if ( empty( $pages ) ) : ?>
+								<p class="mcm-muted"><?php esc_html_e( 'No Beaver Builder pages found (or Beaver Builder is inactive).', 'mcm' ); ?></p>
+							<?php else : ?>
+								<fieldset class="mcm-checklist">
+									<?php foreach ( $pages as $p ) : ?>
+										<label>
+											<input type="checkbox" name="allowed_pages[]" value="<?php echo esc_attr( $p->ID ); ?>" <?php checked( in_array( (int) $p->ID, $allow_pg, true ) ); ?> />
+											<?php echo esc_html( $p->post_title ? $p->post_title : ( '#' . $p->ID ) ); ?>
+										</label>
+									<?php endforeach; ?>
+								</fieldset>
+								<p class="description"><?php esc_html_e( 'The editor can open each of these pages and edit every module on it, live, in the exact page layout.', 'mcm' ); ?></p>
+							<?php endif; ?>
+						</td>
 					</tr>
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Allowed blocks', 'mcm' ); ?></th>
@@ -441,6 +461,7 @@ class MCM_Admin {
 				'display_name'   => isset( $_POST['display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['display_name'] ) ) : '',
 				'password'       => isset( $_POST['password'] ) ? (string) wp_unslash( $_POST['password'] ) : '',
 				'allowed_blocks' => isset( $_POST['allowed_blocks'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['allowed_blocks'] ) ) : array(),
+				'allowed_pages'  => isset( $_POST['allowed_pages'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['allowed_pages'] ) ) : array(),
 				'active'         => isset( $_POST['active'] ) ? 1 : 0,
 			)
 		);
@@ -515,6 +536,7 @@ class MCM_Admin {
 				<li><?php echo wp_kses_post( __( 'Place each block on any page/post with its shortcode, e.g. <code>[managed_content slug="hero-title"]</code>.', 'mcm' ) ); ?></li>
 				<li><?php echo wp_kses_post( __( 'Create a page containing <code>[content_editor_portal]</code> and pick it above.', 'mcm' ) ); ?></li>
 				<li><?php esc_html_e( 'Add editor accounts and tick the blocks each one is allowed to change.', 'mcm' ); ?></li>
+				<li><?php esc_html_e( 'For live per-page editing, tick “Editable pages” on the editor instead — they can then open those Beaver Builder pages and edit every module in place, in the exact page layout.', 'mcm' ); ?></li>
 				<li><?php esc_html_e( 'Send editors the portal URL + their username/password. They edit only what you allowed — no wp-admin access at all.', 'mcm' ); ?></li>
 			</ol>
 		</div>

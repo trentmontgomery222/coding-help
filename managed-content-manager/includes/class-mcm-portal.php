@@ -185,8 +185,12 @@ class MCM_Portal {
 				</form>
 			</div>
 
+			<?php $this->render_editable_pages( $editor ); ?>
+
 			<?php if ( empty( $blocks ) ) : ?>
-				<p class="mcm-empty"><?php esc_html_e( 'You have not been assigned any content to edit yet.', 'mcm' ); ?></p>
+				<?php if ( empty( MCM_DB::editor_allowed_page_ids( $editor ) ) ) : ?>
+					<p class="mcm-empty"><?php esc_html_e( 'You have not been assigned any content to edit yet.', 'mcm' ); ?></p>
+				<?php endif; ?>
 			<?php else : ?>
 				<?php
 				foreach ( $blocks as $block ) {
@@ -200,6 +204,34 @@ class MCM_Portal {
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * "Pages you can edit" — links that open the real page in in-place edit mode.
+	 *
+	 * @param object $editor
+	 */
+	private function render_editable_pages( $editor ) {
+		$ids = MCM_DB::editor_allowed_page_ids( $editor );
+		if ( empty( $ids ) ) {
+			return;
+		}
+		echo '<div class="mcm-pages">';
+		echo '<h3 class="mcm-pages-h">' . esc_html__( 'Pages you can edit', 'mcm' ) . '</h3>';
+		echo '<p class="mcm-sub">' . esc_html__( 'Open a page to edit it live, right on the page, exactly as it looks to visitors.', 'mcm' ) . '</p>';
+		echo '<ul class="mcm-page-list">';
+		foreach ( $ids as $pid ) {
+			$post = get_post( $pid );
+			if ( ! $post || 'trash' === $post->post_status ) {
+				continue;
+			}
+			$url = add_query_arg( 'mcm_edit', '1', get_permalink( $pid ) );
+			echo '<li class="mcm-page-item">';
+			echo '<span class="mcm-page-title">' . esc_html( get_the_title( $pid ) ) . '</span>';
+			echo '<a class="mcm-btn mcm-btn-primary" href="' . esc_url( $url ) . '">' . esc_html__( 'Edit page', 'mcm' ) . '</a>';
+			echo '</li>';
+		}
+		echo '</ul></div>';
 	}
 
 	/**

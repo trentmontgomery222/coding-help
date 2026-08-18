@@ -11,6 +11,10 @@ of content you assign them, in the format you allow.
 
 ## What you get
 
+- **Per-page live editing (recommended)** — assign an editor a **page**. They
+  open it from the portal and edit **every module on it in place, on the real
+  page, in the exact live layout** — hover any block, click *Edit*, change it in
+  a side drawer, save. See *Per-page live editing* below.
 - **Content Blocks** — named, editable pieces of content (single-line text,
   multi-line text, or *limited* rich text). Each renders on any page/post via a
   shortcode.
@@ -44,6 +48,42 @@ of content you assign them, in the format you allow.
 
 Editors visit the portal page, log in, and get a simple form for each block
 they're allowed to edit. That's it.
+
+## Per-page live editing
+
+This is the mode most people want: an editor is given a **page**, and can change
+anything on it, editing **the real page in its exact layout** — not a list of
+form fields.
+
+**Setup**
+
+1. *Content Manager → Editors* → edit an editor → tick pages under **Editable
+   pages** (the list is your Beaver Builder pages).
+2. Give the editor the portal URL + their login.
+
+**What the editor sees**
+
+1. They log into the portal and see **Pages you can edit** with an *Edit page*
+   button for each.
+2. Clicking it opens the actual page (with the theme, Beaver Builder styling,
+   everything — pixel-identical to what visitors see) with a slim editor toolbar
+   on top.
+3. Hovering any block outlines it and shows an **Edit** button. Clicking it opens
+   a side drawer with that module's fields (the same whole-module editor: image
+   upload, text, links, icons, toggles, colours, plus *Advanced* for the rest).
+4. **Save** writes the change back into Beaver Builder and reloads the page, so
+   they immediately see the true result. **Done** leaves edit mode.
+
+**How it works**
+
+The editing layer is injected over the live page only when a valid editor
+session is present *and* the page is one they're allowed to edit *and* the URL
+carries `?mcm_edit=1`. It targets Beaver Builder's own per-module `data-node`
+markup, so the page itself is untouched — the toolbar, outlines and Edit buttons
+are added in the browser and never saved. Loading a module's form and saving it
+go through `admin-ajax.php`, guarded on every call by the editor session, a
+per-session CSRF token, and a check that the module's page is in the editor's
+allowed list. Normal visitors get none of this — the assets don't even load.
 
 ## Beaver Builder support
 
@@ -148,11 +188,14 @@ managed-content-manager/
 │   ├── class-mcm-beaver.php      # Beaver Builder read/scan/write integration
 │   ├── class-mcm-auth.php        # editor login / sessions (separate from WP)
 │   ├── class-mcm-admin.php       # wp-admin screens (blocks, Beaver, editors, settings)
-│   └── class-mcm-portal.php      # front-end portal + [managed_content]
+│   ├── class-mcm-portal.php      # front-end portal + [managed_content]
+│   └── class-mcm-editmode.php    # in-place per-page live editing + AJAX
 ├── assets/
 │   ├── admin.css
 │   ├── portal.css
-│   └── portal.js                 # live character counters
+│   ├── portal.js                 # live character counters
+│   ├── editmode.css              # in-place editor toolbar + drawer
+│   └── editmode.js               # injects Edit buttons, drives the drawer
 ├── uninstall.php                 # drops tables + options on delete
 └── README.md
 ```

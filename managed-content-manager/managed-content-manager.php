@@ -33,7 +33,7 @@ define( 'MCM_FILE', __FILE__ );
 define( 'MCM_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MCM_URL', plugin_dir_url( __FILE__ ) );
 define( 'MCM_SESSION_COOKIE', 'mcm_editor_session' );
-define( 'MCM_DB_VERSION', '2' );
+define( 'MCM_DB_VERSION', '3' );
 
 // ---------------------------------------------------------------------------
 // Includes
@@ -43,6 +43,7 @@ require_once MCM_DIR . 'includes/class-mcm-beaver.php';
 require_once MCM_DIR . 'includes/class-mcm-auth.php';
 require_once MCM_DIR . 'includes/class-mcm-admin.php';
 require_once MCM_DIR . 'includes/class-mcm-portal.php';
+require_once MCM_DIR . 'includes/class-mcm-editmode.php';
 
 /**
  * Single-site guard. This plugin is deliberately NOT built for multisite /
@@ -124,6 +125,7 @@ add_action(
 
 		MCM_Auth::instance();
 		MCM_Portal::instance();
+		MCM_Editmode::instance();
 
 		if ( is_admin() ) {
 			MCM_Admin::instance();

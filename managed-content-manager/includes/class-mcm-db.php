@@ -69,6 +69,7 @@ class MCM_DB {
 			password_hash VARCHAR(255) NOT NULL,
 			display_name VARCHAR(255) NOT NULL DEFAULT '',
 			allowed_blocks TEXT NULL,
+			allowed_pages TEXT NULL,
 			active TINYINT(1) NOT NULL DEFAULT 1,
 			created_at DATETIME NULL,
 			last_login DATETIME NULL,
@@ -560,14 +561,16 @@ class MCM_DB {
 		}
 
 		$allowed = array_values( array_filter( array_map( 'absint', (array) ( $data['allowed_blocks'] ?? array() ) ) ) );
+		$pages   = array_values( array_filter( array_map( 'absint', (array) ( $data['allowed_pages'] ?? array() ) ) ) );
 
 		$row = array(
 			'username'       => $username,
 			'display_name'   => sanitize_text_field( $data['display_name'] ?? '' ),
 			'allowed_blocks' => wp_json_encode( $allowed ),
+			'allowed_pages'  => wp_json_encode( $pages ),
 			'active'         => empty( $data['active'] ) ? 0 : 1,
 		);
-		$formats = array( '%s', '%s', '%s', '%d' );
+		$formats = array( '%s', '%s', '%s', '%s', '%d' );
 
 		// Only (re)set the password when a non-empty one is supplied.
 		if ( ! empty( $data['password'] ) ) {
@@ -625,6 +628,21 @@ class MCM_DB {
 			return array();
 		}
 		$ids = json_decode( $editor->allowed_blocks, true );
+		return is_array( $ids ) ? array_map( 'intval', $ids ) : array();
+	}
+
+	/**
+	 * Decode the allowed_pages JSON into an int[] list of post IDs the editor
+	 * may edit in-place.
+	 *
+	 * @param object $editor
+	 * @return int[]
+	 */
+	public static function editor_allowed_page_ids( $editor ) {
+		if ( ! $editor || empty( $editor->allowed_pages ) ) {
+			return array();
+		}
+		$ids = json_decode( $editor->allowed_pages, true );
 		return is_array( $ids ) ? array_map( 'intval', $ids ) : array();
 	}
 
