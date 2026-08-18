@@ -15,11 +15,19 @@ if ( ! function_exists( 'CAYDENDIR_sd_render' ) ) {
 	return;
 }
 
-$CAYDENDIR_atts = array(
-	'heading' => isset( $settings->heading ) && '' !== $settings->heading ? $settings->heading : 'Staff Directory',
-	'layout'  => isset( $settings->layout ) ? $settings->layout : '',
-	'match'   => isset( $settings->match ) ? $settings->match : 'any',
-);
-
-// CAYDENDIR_sd_render() escapes everything it outputs.
-echo CAYDENDIR_sd_render( $CAYDENDIR_atts ); // phpcs:ignore WordPress.Security.EscapeOutput -- renderer returns escaped markup
+// CAYDENDIR_sd_render() is itself wrapped in a try/catch and always returns a
+// string, so a directory error can never break the page or the builder. The
+// extra guard here protects against anything unexpected in the settings object.
+try {
+	$CAYDENDIR_atts = array(
+		'heading' => isset( $settings->heading ) && '' !== $settings->heading ? $settings->heading : 'Staff Directory',
+		'layout'  => isset( $settings->layout ) ? $settings->layout : '',
+		'match'   => isset( $settings->match ) ? $settings->match : 'any',
+	);
+	// CAYDENDIR_sd_render() escapes everything it outputs.
+	echo CAYDENDIR_sd_render( $CAYDENDIR_atts ); // phpcs:ignore WordPress.Security.EscapeOutput -- renderer returns escaped markup
+} catch ( \Throwable $CAYDENDIR_e ) {
+	if ( function_exists( 'CAYDENDIR_sd_log' ) ) {
+		CAYDENDIR_sd_log( 'BB frontend', $CAYDENDIR_e );
+	}
+}

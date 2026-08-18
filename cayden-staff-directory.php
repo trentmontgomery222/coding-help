@@ -37,6 +37,26 @@ if ( ! defined( 'CAYDENDIR_BB_CATEGORY' ) ) {
 	define( 'CAYDENDIR_BB_CATEGORY', 'Caydens Plugins' );
 }
 
+/**
+ * Write a plugin error to the PHP error log without ever throwing itself.
+ *
+ * Used by the try/catch safety nets around every WordPress entry point
+ * (shortcode, Beaver Builder module, AJAX, sync, admin pages). The goal is
+ * that a bug in this plugin degrades gracefully — an empty spot, a logged
+ * message — instead of taking down the whole site with a fatal error.
+ *
+ * @param string     $where Short label for where the error happened.
+ * @param \Throwable $e     The caught error or exception.
+ */
+function CAYDENDIR_sd_log( $where, $e ) {
+	if ( ! function_exists( 'error_log' ) ) {
+		return;
+	}
+	$msg = is_object( $e ) && method_exists( $e, 'getMessage' ) ? $e->getMessage() : (string) $e;
+	// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+	error_log( sprintf( '[Cayden Staff Directory] %s: %s', $where, $msg ) );
+}
+
 
 
 //default settings
@@ -424,12 +444,17 @@ function CAYDENDIR_sd_get_settings() {
  * <style> element it is printed inside.
  */
 function CAYDENDIR_sd_get_css() {
-	$s   = CAYDENDIR_sd_get_settings();
-	$css = isset( $s['custom_css'] ) ? (string) $s['custom_css'] : '';
-	if ( '' === trim( $css ) ) {
-		$css = CAYDENDIR_sd_default_css();
+	try {
+		$s   = CAYDENDIR_sd_get_settings();
+		$css = isset( $s['custom_css'] ) ? (string) $s['custom_css'] : '';
+		if ( '' === trim( $css ) ) {
+			$css = CAYDENDIR_sd_default_css();
+		}
+		return str_ireplace( '</style', '<\/style', $css );
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'get_css', $e );
+		return CAYDENDIR_sd_default_css();
 	}
-	return str_ireplace( '</style', '<\/style', $css );
 }
 
 //handshake logic
@@ -506,7 +531,22 @@ function dis_dedupe_images( $images ) {
 	}
 	return $out;
 }
+/**
+ * Safe wrapper for the sync. Never lets an unexpected error escape (it runs on
+ * cron and from the admin), recording the failure instead so the site and the
+ * scheduler keep working.
+ */
 function CAYDENDIR_sd_sync() {
+	try {
+		return CAYDENDIR_sd_sync_run();
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'sync', $e );
+		CAYDENDIR_sd_record_sync( false, 'Unexpected error during sync: ' . $e->getMessage() );
+		return new WP_Error( 'CAYDENDIR_sd_exception', $e->getMessage() );
+	}
+}
+
+function CAYDENDIR_sd_sync_run() {
 	$settings = CAYDENDIR_sd_get_settings();
 
 	if ( empty( $settings['gas_url'] ) || empty( $settings['secret_key'] ) ) {
@@ -1056,6 +1096,14 @@ function CAYDENDIR_sd_row_response( $entry, $key, $manual ) {
 /* ---- AJAX: save a manual override ---- */
 add_action( 'wp_ajax_CAYDENDIR_sd_save_manual', 'CAYDENDIR_sd_ajax_save_manual' );
 function CAYDENDIR_sd_ajax_save_manual() {
+	try {
+		CAYDENDIR_sd_ajax_save_manual_run();
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'ajax save', $e );
+		wp_send_json_error( array( 'message' => 'Something went wrong saving. Please try again.' ), 500 );
+	}
+}
+function CAYDENDIR_sd_ajax_save_manual_run() {
 	if ( ! CAYDENDIR_sd_user_can_edit() ) {
 		wp_send_json_error( array( 'message' => 'You are not allowed to edit the directory.' ), 403 );
 	}
@@ -1111,6 +1159,14 @@ function CAYDENDIR_sd_ajax_save_manual() {
 /* ---- AJAX: remove a manual override (row goes back to synced data) ---- */
 add_action( 'wp_ajax_CAYDENDIR_sd_delete_manual', 'CAYDENDIR_sd_ajax_delete_manual' );
 function CAYDENDIR_sd_ajax_delete_manual() {
+	try {
+		CAYDENDIR_sd_ajax_delete_manual_run();
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'ajax delete', $e );
+		wp_send_json_error( array( 'message' => 'Something went wrong removing the override. Please try again.' ), 500 );
+	}
+}
+function CAYDENDIR_sd_ajax_delete_manual_run() {
 	if ( ! CAYDENDIR_sd_user_can_edit() ) {
 		wp_send_json_error( array( 'message' => 'You are not allowed to edit the directory.' ), 403 );
 	}
@@ -1221,7 +1277,36 @@ function CAYDENDIR_sd_photo_markup( $name, $photo ) {
 }
 
 add_shortcode( 'CAYDENDIR_staff_directory', 'CAYDENDIR_sd_render' );
-function CAYDENDIR_sd_render( $atts ) {
+
+/**
+ * Safe public entry point for the shortcode and the Beaver Builder module.
+ * Wraps the real renderer so a runtime error shows nothing (or a hidden note
+ * for editors) instead of white-screening the page it is placed on. Any
+ * output buffers opened by the renderer are unwound before returning.
+ */
+function CAYDENDIR_sd_render( $atts = array() ) {
+	$ob_level = ob_get_level();
+	try {
+		return CAYDENDIR_sd_render_directory( $atts );
+	} catch ( \Throwable $e ) {
+		// Discard a half-built buffer the renderer may have left open.
+		while ( ob_get_level() > $ob_level ) {
+			ob_end_clean();
+		}
+		CAYDENDIR_sd_log( 'shortcode render', $e );
+		// The fallback itself must never throw, so guard the editor check.
+		try {
+			if ( function_exists( 'CAYDENDIR_sd_user_can_edit' ) && CAYDENDIR_sd_user_can_edit() ) {
+				return '<p style="padding:1rem;border:1px dashed #c00;color:#c00;">The Staff Directory could not be displayed. The error was logged for the site administrator.</p>';
+			}
+		} catch ( \Throwable $ignored ) {
+			// fall through
+		}
+		return '';
+	}
+}
+
+function CAYDENDIR_sd_render_directory( $atts ) {
 	$settings = CAYDENDIR_sd_get_settings();
 	$atts = shortcode_atts(
 		array(
@@ -1617,10 +1702,23 @@ function CAYDENDIR_sd_admin_menu() {
  * ---------------------------------------------------------------------- */
 add_action( 'init', 'CAYDENDIR_sd_register_bb_module' );
 function CAYDENDIR_sd_register_bb_module() {
-	if ( ! class_exists( 'FLBuilderModule' ) ) {
-		return; // Beaver Builder is not active.
+	// This runs on every request. Guard hard: a missing module file or a
+	// Beaver Builder API change must never fatal the whole site.
+	try {
+		if ( ! class_exists( 'FLBuilderModule' ) || ! class_exists( 'FLBuilder' ) ) {
+			return; // Beaver Builder is not active.
+		}
+		$module_file = CAYDENDIR_SD_DIR . 'modules/cayden-staff-directory/cayden-staff-directory.php';
+		if ( ! is_readable( $module_file ) ) {
+			// The module folder was not uploaded — skip it. The shortcode
+			// still works, and the rest of the site keeps running.
+			CAYDENDIR_sd_log( 'BB module', 'module file missing: ' . $module_file );
+			return;
+		}
+		require_once $module_file;
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'BB module registration', $e );
 	}
-	require_once CAYDENDIR_SD_DIR . 'modules/cayden-staff-directory/cayden-staff-directory.php';
 }
 
 add_action( 'admin_enqueue_scripts', 'CAYDENDIR_sd_admin_assets' );
@@ -1642,6 +1740,19 @@ function CAYDENDIR_sd_register_settings() {
 }
 
 function CAYDENDIR_sd_sanitize_settings( $input ) {
+	try {
+		return CAYDENDIR_sd_sanitize_settings_run( $input );
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'settings sanitize', $e );
+		if ( function_exists( 'add_settings_error' ) ) {
+			add_settings_error( 'CAYDENDIR_sd', 'sanitize_failed', 'Settings could not be saved because of an unexpected error. Your previous settings were kept.', 'error' );
+		}
+		// Return the last-known-good settings so nothing is corrupted.
+		return CAYDENDIR_sd_get_settings();
+	}
+}
+
+function CAYDENDIR_sd_sanitize_settings_run( $input ) {
 	$out = CAYDENDIR_sd_get_settings();
 	$in  = is_array( $input ) ? $input : array();
 
@@ -1722,6 +1833,15 @@ function CAYDENDIR_sd_settings_page() {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
+	try {
+		CAYDENDIR_sd_settings_page_run();
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'settings page', $e );
+		echo '<div class="wrap"><h1>CAYDENDIR Staff Directory</h1><div class="notice notice-error"><p>The settings screen hit an unexpected error. It has been logged. The rest of your site is unaffected.</p></div></div>';
+	}
+}
+
+function CAYDENDIR_sd_settings_page_run() {
 
 	if ( isset( $_POST['CAYDENDIR_sd_sync_now'] ) && check_admin_referer( 'CAYDENDIR_sd_sync_now_action', 'CAYDENDIR_sd_sync_now_nonce' ) ) {
 		$result = CAYDENDIR_sd_sync();
@@ -1984,6 +2104,15 @@ function CAYDENDIR_sd_help_page() {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
+	try {
+		CAYDENDIR_sd_help_page_run();
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'help page', $e );
+		echo '<div class="wrap"><h1>Staff Directory &mdash; Help</h1><div class="notice notice-error"><p>The help screen hit an unexpected error. It has been logged.</p></div></div>';
+	}
+}
+
+function CAYDENDIR_sd_help_page_run() {
 	$settings_url = admin_url( 'options-general.php?page=CAYDENDIR-staff-directory' );
 	$bb_active    = class_exists( 'FLBuilderModule' );
 	?>
