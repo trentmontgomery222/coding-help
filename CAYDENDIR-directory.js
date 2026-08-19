@@ -165,7 +165,7 @@
 		var announceEl = root.querySelector( '[data-CAYDENDIR-announce]' );
 
 		var fields = {};
-		[ 'key', 'name', 'email', 'photo', 'publictitle', 'job', 'location', 'tags', 'id', 'hidden' ].forEach( function ( k ) {
+		[ 'key', 'firstname', 'lastname', 'email', 'photo', 'publictitle', 'job', 'location', 'tags', 'id', 'hidden' ].forEach( function ( k ) {
 			fields[ k ] = form.querySelector( '[data-CAYDENDIR-f="' + k + '"]' );
 		} );
 
@@ -213,6 +213,8 @@
 				key: r.key || '',
 				manual: !! r.manual,
 				name: r.name || '',
+				firstname: r.firstname || '',
+				lastname: r.lastname || '',
 				email: r.email || '',
 				photo: r.photo || '',
 				publictitle: r.publictitle || '',
@@ -236,7 +238,8 @@
 			lastTrigger = trigger || null;
 			var r = readRecord( item );
 			fields.key.value = r.key || '';
-			fields.name.value = r.name || '';
+			fields.firstname.value = r.firstname || '';
+			fields.lastname.value = r.lastname || '';
 			fields.email.value = r.email || '';
 			fields.photo.value = r.photo || '';
 			fields.publictitle.value = r.publictitle || '';
@@ -257,7 +260,7 @@
 			setBusy( false );
 			overlay.hidden = false;
 			document.body.classList.add( 'CAYDENDIR-noscroll' );
-			fields.name.focus();
+			fields.firstname.focus();
 		}
 
 		function close() {
@@ -336,12 +339,15 @@
 		}
 
 		function applyRecordToItem( item, d ) {
-			setFieldText( item, 'name', d.name, true );
-			setFieldText( item, 'publictitle', d.publictitle, true );
-			setFieldText( item, 'job', d.job, true );
-			setFieldText( item, 'location', d.location, true );
+			// Use the server's templated display strings (fall back to the raw
+			// field if a display value was not provided).
+			setFieldText( item, 'name', d.name_display !== undefined ? d.name_display : d.name, true );
+			setFieldText( item, 'publictitle', d.publictitle_display !== undefined ? d.publictitle_display : d.publictitle, true );
+			setFieldText( item, 'job', d.job_display !== undefined ? d.job_display : d.job, true );
+			setFieldText( item, 'location', d.location_display !== undefined ? d.location_display : d.location, true );
 
-			// Email (rebuilt with DOM APIs — no HTML injection).
+			// Email (rebuilt with DOM APIs — no HTML injection). The link text
+			// is the templated display; the href is always the real address.
 			var emailWrap = item.querySelector( '[data-CAYDENDIR-email-wrap]' );
 			if ( emailWrap ) {
 				emailWrap.textContent = '';
@@ -349,7 +355,7 @@
 					var a = document.createElement( 'a' );
 					a.className = 'CAYDENDIR-sd__email';
 					a.href = 'mailto:' + d.email;
-					a.textContent = d.email;
+					a.textContent = ( d.email_display !== undefined && d.email_display !== '' ) ? d.email_display : d.email;
 					emailWrap.appendChild( a );
 				} else if ( emailWrap.getAttribute( 'data-dash' ) === '1' ) {
 					emailWrap.textContent = '—';
@@ -408,7 +414,8 @@
 			setStatus( 'Saving…' );
 			post( 'CAYDENDIR_sd_save_manual', {
 				key: fields.key.value,
-				name: fields.name.value,
+				firstname: fields.firstname.value,
+				lastname: fields.lastname.value,
 				email: fields.email.value,
 				photo: fields.photo.value,
 				publictitle: fields.publictitle.value,

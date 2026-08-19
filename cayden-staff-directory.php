@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cayden  Staff Directory
  * Description:       Staff Directory system for the website
- * Version:           2.5.0
+ * Version:           2.6.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; //no access
 }
 
-define( 'CAYDENDIR_SD_VERSION',       '2.5.0' );
+define( 'CAYDENDIR_SD_VERSION',       '2.6.0' );
 define( 'CAYDENDIR_SD_DIR',           plugin_dir_path( __FILE__ ) );
 define( 'CAYDENDIR_SD_URL',           plugin_dir_url( __FILE__ ) );
 define( 'CAYDENDIR_SD_CRON_HOOK',     'CAYDENDIR_sd_daily_sync' );
@@ -403,6 +403,7 @@ function CAYDENDIR_sd_get_settings() {
 		'custom_css'     => CAYDENDIR_sd_default_css(),
 		'sort_rules'     => CAYDENDIR_sd_default_sort_rules(),
 		'handshake_id'   => '',
+		'column_templates' => CAYDENDIR_sd_default_column_templates(),
 	);
 	$saved = get_option( CAYDENDIR_SD_SETTINGS, array() );
 	$saved = is_array( $saved ) ? $saved : array();
@@ -434,6 +435,10 @@ function CAYDENDIR_sd_get_settings() {
 		$out['handshake_id'] = CAYDENDIR_sd_compose_legacy_id( $out );
 	}
 
+	if ( ! is_array( $out['column_templates'] ) ) {
+		$out['column_templates'] = CAYDENDIR_sd_default_column_templates();
+	}
+
 	return $out;
 }
 
@@ -454,6 +459,108 @@ function CAYDENDIR_sd_get_css() {
 	} catch ( \Throwable $e ) {
 		CAYDENDIR_sd_log( 'get_css', $e );
 		return CAYDENDIR_sd_default_css();
+	}
+}
+
+/* -------------------------------------------------------------------------
+ * Column display templates
+ *
+ * Each visible text column is rendered from a small template that the admin
+ * can edit in Settings › Staff Directory › Column display. A template is plain
+ * text with {placeholders} that are replaced by the row's fields:
+ *   {firstname} {lastname} {name} {publictitle} {job} {location} {email} {id}
+ * After substitution, whitespace is collapsed and stray separators left by an
+ * empty field are trimmed, so e.g. "{lastname}, {firstname}" degrades cleanly
+ * to just the first name when there is no last name. The defaults reproduce the
+ * directory exactly as it looked before the First/Last split.
+ * ---------------------------------------------------------------------- */
+
+/** Which columns are template-driven => their admin labels. */
+function CAYDENDIR_sd_template_columns() {
+	return array(
+		'name'        => 'Name',
+		'publictitle' => 'Title',
+		'job'         => 'Job',
+		'location'    => 'Location',
+		'email'       => 'Email (link text)',
+	);
+}
+
+/** Default template per column — these keep today's display unchanged. */
+function CAYDENDIR_sd_default_column_templates() {
+	return array(
+		'name'        => '{firstname} {lastname}',
+		'publictitle' => '{publictitle}',
+		'job'         => '{job}',
+		'location'    => '{location}',
+		'email'       => '{email}',
+	);
+}
+
+/** Saved templates merged over the defaults (blank falls back to default). */
+function CAYDENDIR_sd_get_column_templates( $settings = null ) {
+	if ( null === $settings ) {
+		$settings = CAYDENDIR_sd_get_settings();
+	}
+	$saved = ( isset( $settings['column_templates'] ) && is_array( $settings['column_templates'] ) ) ? $settings['column_templates'] : array();
+	$out   = array();
+	foreach ( CAYDENDIR_sd_default_column_templates() as $col => $default ) {
+		$val        = isset( $saved[ $col ] ) ? (string) $saved[ $col ] : '';
+		$out[ $col ] = ( '' !== trim( $val ) ) ? $val : $default;
+	}
+	return $out;
+}
+
+/** Placeholder => value map for one row. */
+function CAYDENDIR_sd_column_placeholders( $row ) {
+	$row = CAYDENDIR_sd_normalize_record( $row );
+	return array(
+		'firstname'   => (string) $row['firstname'],
+		'lastname'    => (string) $row['lastname'],
+		'name'        => (string) $row['name'],
+		'publictitle' => (string) $row['publictitle'],
+		'job'         => (string) $row['job'],
+		'location'    => (string) $row['location'],
+		'email'       => (string) $row['email'],
+		'id'          => (string) $row['id'],
+	);
+}
+
+/** Substitute {placeholders} in a template and tidy the result. */
+function CAYDENDIR_sd_apply_template( $template, $row ) {
+	$vals = CAYDENDIR_sd_column_placeholders( $row );
+	$out  = preg_replace_callback(
+		'/\{([a-z_]+)\}/',
+		function ( $m ) use ( $vals ) {
+			return isset( $vals[ $m[1] ] ) ? $vals[ $m[1] ] : '';
+		},
+		(string) $template
+	);
+	$out = preg_replace( '/\s+/', ' ', (string) $out );
+	// Collapse a separator left stranded between two now-empty fields.
+	$out = preg_replace( '/\s*([,\/|·•])\s*\1\s*/', '$1 ', $out );
+	$out = trim( $out );
+	// Trim separators left dangling at either end by an empty field.
+	$out = trim( $out, " \t,|/·•-" );
+	return trim( $out );
+}
+
+/**
+ * The text to display for a column of a row, using its template (or the raw
+ * field value if the template was cleared). Never throws.
+ */
+function CAYDENDIR_sd_column_display( $col, $row, $settings = null ) {
+	try {
+		$templates = CAYDENDIR_sd_get_column_templates( $settings );
+		if ( isset( $templates[ $col ] ) && '' !== trim( $templates[ $col ] ) ) {
+			return CAYDENDIR_sd_apply_template( $templates[ $col ], $row );
+		}
+		$row = CAYDENDIR_sd_normalize_record( $row );
+		return isset( $row[ $col ] ) ? (string) $row[ $col ] : '';
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'column display', $e );
+		$row = is_array( $row ) ? $row : array();
+		return isset( $row[ $col ] ) ? (string) $row[ $col ] : '';
 	}
 }
 
@@ -644,7 +751,9 @@ function CAYDENDIR_sd_sanitize_records( $data ) {
 			continue;
 		}
 		$entry = array(
-			'name'  => '',
+			'name'      => '',
+			'firstname' => '',
+			'lastname'  => '',
 			'email' => '',
 			'photo' => '',
             'publictitle' => '',
@@ -659,6 +768,10 @@ function CAYDENDIR_sd_sanitize_records( $data ) {
 
 			if ( in_array( $k, array( 'name', 'fullname', 'full name' ), true ) ) {
 				$entry['name'] = sanitize_text_field( $v );
+			} elseif ( in_array( $k, array( 'firstname', 'first name', 'first', 'fname', 'givenname', 'given name' ), true ) ) {
+				$entry['firstname'] = sanitize_text_field( $v );
+			} elseif ( in_array( $k, array( 'lastname', 'last name', 'last', 'lname', 'surname', 'familyname', 'family name' ), true ) ) {
+				$entry['lastname'] = sanitize_text_field( $v );
 			} elseif ( in_array( $k, array( 'email', 'e-mail' ), true ) ) {
 				$entry['email'] = sanitize_email( $v );
 			} elseif ( in_array( $k, array( 'photo', 'photoid', 'photo id', 'image', 'drive', 'driveid', 'drive id' ), true ) ) {
@@ -675,12 +788,52 @@ function CAYDENDIR_sd_sanitize_records( $data ) {
 				$entry['id'] = sanitize_text_field( $v );
 			}
 		}
+		// Fill in whichever of name / firstname / lastname is missing so every
+		// downstream consumer (search, sorting, templates) has a full name and
+		// both parts to work with.
+		$entry = CAYDENDIR_sd_fill_name_parts( $entry );
+
 		if ( '' === $entry['name'] && '' === $entry['email'] ) {
 			continue;
 		}
 		$clean[] = $entry;
 	}
 	return $clean;
+}
+
+/**
+ * Keep name / firstname / lastname consistent on a record.
+ *
+ * The sheet may send a combined "name", or split "First"/"Last" columns, or
+ * both. This fills the gaps so every consumer has all three:
+ *   - name blank but a part present  -> name = "First Last"
+ *   - both parts blank but name set  -> split name on the first space
+ * The combined name stays authoritative for search, sorting and match keys, so
+ * splitting is only a display/edit convenience and never changes the name.
+ */
+function CAYDENDIR_sd_fill_name_parts( $row ) {
+	$row   = is_array( $row ) ? $row : array();
+	$name  = isset( $row['name'] ) ? trim( (string) $row['name'] ) : '';
+	$first = isset( $row['firstname'] ) ? trim( (string) $row['firstname'] ) : '';
+	$last  = isset( $row['lastname'] ) ? trim( (string) $row['lastname'] ) : '';
+
+	if ( '' === $name && ( '' !== $first || '' !== $last ) ) {
+		$name = trim( $first . ' ' . $last );
+	} elseif ( '' === $first && '' === $last && '' !== $name ) {
+		$sp = strpos( $name, ' ' );
+		if ( false === $sp ) {
+			$first = $name;
+			$last  = '';
+		} else {
+			$first = substr( $name, 0, $sp );
+			$last  = trim( substr( $name, $sp + 1 ) );
+		}
+	}
+
+	$row['name']      = $name;
+	$row['firstname'] = $first;
+	$row['lastname']  = $last;
+	return $row;
 }
 
 function CAYDENDIR_sd_parse_tags( $value ) {
@@ -766,7 +919,9 @@ function CAYDENDIR_sd_user_can_edit() {
 
 function CAYDENDIR_sd_normalize_record( $row ) {
 	$defaults = array(
-		'name'     => '',
+		'name'      => '',
+		'firstname' => '',
+		'lastname'  => '',
 		'email'    => '',
 		'photo'    => '',
         'publictitle' => '',
@@ -781,6 +936,8 @@ function CAYDENDIR_sd_normalize_record( $row ) {
 	if ( ! is_array( $row['tags'] ) ) {
 		$row['tags'] = array();
 	}
+	// Keep name / first / last consistent (fills gaps in either direction).
+	$row = CAYDENDIR_sd_fill_name_parts( $row );
 	return $row;
 }
 
@@ -1072,12 +1229,18 @@ function CAYDENDIR_sd_row_response( $entry, $key, $manual ) {
 		$terms[] = $entry['job'];
 	}
 	$terms_lower = array_map( 'strtolower', $terms );
-	$blob        = strtolower( trim( $entry['name'] . ' ' . $entry['publictitle'] . ' ' . $entry['job'] . ' ' . $entry['location'] . ' ' . $entry['email'] . ' ' . $entry['id'] . ' ' . implode( ' ', $entry['tags'] ) ) );
+	$blob        = strtolower( trim( $entry['name'] . ' ' . $entry['firstname'] . ' ' . $entry['lastname'] . ' ' . $entry['publictitle'] . ' ' . $entry['job'] . ' ' . $entry['location'] . ' ' . $entry['email'] . ' ' . $entry['id'] . ' ' . implode( ' ', $entry['tags'] ) ) );
+
+	// Templated display strings so the front end shows edits exactly as the
+	// server would render them.
+	$d_email = CAYDENDIR_sd_column_display( 'email', $entry );
 
 	return array(
 		'key'         => (string) $key,
 		'manual'      => (bool) $manual,
 		'name'        => $entry['name'],
+		'firstname'   => $entry['firstname'],
+		'lastname'    => $entry['lastname'],
 		'email'       => $entry['email'],
 		'photo'       => $entry['photo'],
         'publictitle' => $entry['publictitle'],
@@ -1090,6 +1253,12 @@ function CAYDENDIR_sd_row_response( $entry, $key, $manual ) {
 		'tagstr'      => implode( '|', $terms_lower ),
 		'photo_html'  => CAYDENDIR_sd_photo_markup( $entry['name'], $entry['photo'] ),
 		'hidden'      => isset( $entry['hidden'] ) ? (string) $entry['hidden'] : '0',
+		// Templated display text per column (what the visible cells should show).
+		'name_display'        => CAYDENDIR_sd_column_display( 'name', $entry ),
+		'publictitle_display' => CAYDENDIR_sd_column_display( 'publictitle', $entry ),
+		'job_display'         => CAYDENDIR_sd_column_display( 'job', $entry ),
+		'location_display'    => CAYDENDIR_sd_column_display( 'location', $entry ),
+		'email_display'       => '' !== $d_email ? $d_email : $entry['email'],
 	);
 }
 
@@ -1123,7 +1292,9 @@ function CAYDENDIR_sd_ajax_save_manual_run() {
 	}
 
 	$entry = array(
-		'name'     => $text( 'name' ),
+		'name'      => $text( 'name' ),
+		'firstname' => $text( 'firstname' ),
+		'lastname'  => $text( 'lastname' ),
 		'email'    => $email,
 		'photo'    => $text( 'photo' ),
         'publictitle' => $text('publictitle'),
@@ -1134,8 +1305,12 @@ function CAYDENDIR_sd_ajax_save_manual_run() {
 		'hidden'   => ( isset( $_POST['hidden'] ) && '1' === $_POST['hidden'] ) ? '1' : '0',
 	);
 
+	// Combine First/Last into the stored name (and split when only a name was
+	// given), so the record is consistent no matter which fields were filled.
+	$entry = CAYDENDIR_sd_fill_name_parts( $entry );
+
 	if ( '' === $entry['name'] && '' === $entry['email'] ) {
-		wp_send_json_error( array( 'message' => 'Enter at least a name or an email address.' ) );
+		wp_send_json_error( array( 'message' => 'Enter at least a first or last name, or an email address.' ) );
 	}
 
 	// The match key is the row's ORIGINAL identity — it never changes when
@@ -1443,7 +1618,10 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 						$i = 0;
 						foreach ( $data as $row ) :
 							$i++;
-							$name  = isset( $row['name'] ) ? $row['name'] : '';
+							$row   = CAYDENDIR_sd_normalize_record( $row );
+							$name  = $row['name'];
+							$firstname = $row['firstname'];
+							$lastname  = $row['lastname'];
 							$email = isset( $row['email'] ) ? $row['email'] : '';
 							$location = isset( $row['location'] ) ? $row['location'] : '';
     						$publictitle = isset($row['publictitle']) ? $row['publictitle'] : '';
@@ -1455,12 +1633,19 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 							$is_manual = ! empty( $row['_manual'] );
 							$key       = isset( $row['_key'] ) ? $row['_key'] : CAYDENDIR_sd_row_key( $row );
 
+							// Templated display text per column.
+							$d_name  = CAYDENDIR_sd_column_display( 'name', $row, $settings );
+							$d_title = CAYDENDIR_sd_column_display( 'publictitle', $row, $settings );
+							$d_job   = CAYDENDIR_sd_column_display( 'job', $row, $settings );
+							$d_loc   = CAYDENDIR_sd_column_display( 'location', $row, $settings );
+							$d_email = CAYDENDIR_sd_column_display( 'email', $row, $settings );
+
 							$filter_terms = $tags;
 							if ( '' !== $job ) {
 								$filter_terms[] = $job;
 							}
 							$terms_lower = array_map( 'strtolower', $filter_terms );
-							$search_blob = strtolower( trim( $name . ' ' . $publictitle . ' ' . $job . ' ' . $location . ' ' . $email . ' ' . $rid . ' ' . implode( ' ', $tags ) ) );
+							$search_blob = strtolower( trim( $name . ' ' . $firstname . ' ' . $lastname . ' ' . $publictitle . ' ' . $job . ' ' . $location . ' ' . $email . ' ' . $rid . ' ' . implode( ' ', $tags ) ) );
 							$place         = preg_replace( '/[^0-9+]/', '', $location );
 							$rowid       = $uid . '-r' . $i;
 
@@ -1470,6 +1655,8 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 									'key'      => $key,
 									'manual'   => $is_manual,
 									'name'     => $name,
+									'firstname' => $firstname,
+									'lastname'  => $lastname,
 									'email'    => $email,
 									'photo'    => $photo,
                                     'publictitle' => $publictitle,
@@ -1495,24 +1682,24 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 									<td class="CAYDENDIR-sd__cell-photo" data-CAYDENDIR-photo-wrap><?php echo CAYDENDIR_sd_photo_markup( $name, $photo ); // phpcs:ignore WordPress.Security.EscapeOutput ?></td>
 								<?php endif; ?>
 								<th scope="row" class="CAYDENDIR-sd__cell-name">
-									<span data-CAYDENDIR-field="name"><?php echo esc_html( $name ); ?></span>
+									<span data-CAYDENDIR-field="name"><?php echo esc_html( $d_name ); ?></span>
 									<?php if ( $can_edit ) : ?>
 										<span class="CAYDENDIR-sd__badge" data-CAYDENDIR-manual-badge<?php echo $is_manual ? '' : ' hidden'; ?>>Edited</span>
 										<span class="CAYDENDIR-sd__badge" data-CAYDENDIR-hidden-badge<?php echo $hidden ? '' : ' hidden'; ?>>Hidden</span>
 									<?php endif; ?>
 								</th>
 								<?php if ( $show_publictitle || $can_edit ) : ?>
-									<td data-label="publictitle"><span data-CAYDENDIR-field="publictitle"><?php echo '' !== $publictitle ? esc_html( $publictitle ) : '&mdash;'; ?></span></td>
+									<td data-label="publictitle"><span data-CAYDENDIR-field="publictitle"><?php echo '' !== $d_title ? esc_html( $d_title ) : '&mdash;'; ?></span></td>
 								<?php endif; ?>
 								<?php if ( $show_job || $can_edit ) : ?>
-									<td data-label="Job"><span data-CAYDENDIR-field="job"><?php echo '' !== $job ? esc_html( $job ) : '&mdash;'; ?></span></td>
+									<td data-label="Job"><span data-CAYDENDIR-field="job"><?php echo '' !== $d_job ? esc_html( $d_job ) : '&mdash;'; ?></span></td>
 								<?php endif; ?>
 								<?php if ( $show_location ) : ?>
-									<td class="CAYDENDIR-sd__location" data-label="Location"><span data-CAYDENDIR-field="location"><?php echo '' !== $location ? esc_html( $location ) : '&mdash;'; ?></span></td>
+									<td class="CAYDENDIR-sd__location" data-label="Location"><span data-CAYDENDIR-field="location"><?php echo '' !== $d_loc ? esc_html( $d_loc ) : '&mdash;'; ?></span></td>
 								<?php endif; ?>
 								<?php if ( $show_email || $can_edit) : ?>
 									<td data-label="Email">
-										<span data-CAYDENDIR-email-wrap data-dash="1"><?php if ( '' !== $email ) : ?><a class="CAYDENDIR-sd__email" href="<?php echo esc_url( 'mailto:' . $email ); ?>"><?php echo esc_html( $email ); ?></a><?php else : ?>&mdash;<?php endif; ?></span>
+										<span data-CAYDENDIR-email-wrap data-dash="1"><?php if ( '' !== $email ) : ?><a class="CAYDENDIR-sd__email" href="<?php echo esc_url( 'mailto:' . $email ); ?>"><?php echo esc_html( '' !== $d_email ? $d_email : $email ); ?></a><?php else : ?>&mdash;<?php endif; ?></span>
 									</td>
 								<?php endif; ?>
 								<?php if ( $can_edit ) : ?>
@@ -1531,7 +1718,10 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 			<ul class="CAYDENDIR-sd__list" data-CAYDENDIR-list>
 				<?php
 				foreach ( $data as $row ) :
-					$name  = isset( $row['name'] ) ? $row['name'] : '';
+					$row   = CAYDENDIR_sd_normalize_record( $row );
+					$name  = $row['name'];
+					$firstname = $row['firstname'];
+					$lastname  = $row['lastname'];
 					$email = isset( $row['email'] ) ? $row['email'] : '';
 					$location = isset( $row['location'] ) ? $row['location'] : '';
 					$job  = isset( $row['job'] ) ? $row['job'] : '';
@@ -1543,12 +1733,19 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 					$is_manual = ! empty( $row['_manual'] );
 					$key       = isset( $row['_key'] ) ? $row['_key'] : CAYDENDIR_sd_row_key( $row );
 
+					// Templated display text per column.
+					$d_name  = CAYDENDIR_sd_column_display( 'name', $row, $settings );
+					$d_title = CAYDENDIR_sd_column_display( 'publictitle', $row, $settings );
+					$d_job   = CAYDENDIR_sd_column_display( 'job', $row, $settings );
+					$d_loc   = CAYDENDIR_sd_column_display( 'location', $row, $settings );
+					$d_email = CAYDENDIR_sd_column_display( 'email', $row, $settings );
+
 					$filter_terms = $tags;
 					if ( '' !== $job ) {
 						$filter_terms[] = $job;
 					}
 					$terms_lower = array_map( 'strtolower', $filter_terms );
-					$search_blob = strtolower( trim( $name . ' ' . $publictitle . ' ' . $job . ' ' . $location . ' ' . $email . ' ' . $rid . ' ' . implode( ' ', $tags ) ) );
+					$search_blob = strtolower( trim( $name . ' ' . $firstname . ' ' . $lastname . ' ' . $publictitle . ' ' . $job . ' ' . $location . ' ' . $email . ' ' . $rid . ' ' . implode( ' ', $tags ) ) );
 					$place         = preg_replace( '/[^0-9+]/', '', $location );
 
 					$record_attr = '';
@@ -1557,6 +1754,8 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 							'key'      => $key,
 							'manual'   => $is_manual,
 							'name'     => $name,
+							'firstname' => $firstname,
+							'lastname'  => $lastname,
 							'email'    => $email,
 							'photo'    => $photo,
                             'publictitle' => $publictitle,
@@ -1574,24 +1773,24 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 							<span class="CAYDENDIR-sd__photo-wrap" data-CAYDENDIR-photo-wrap><?php echo CAYDENDIR_sd_photo_markup( $name, $photo ); // phpcs:ignore WordPress.Security.EscapeOutput ?></span>
 						<?php endif; ?>
 						<div class="CAYDENDIR-sd__body">
-							<h3 class="CAYDENDIR-sd__name" data-CAYDENDIR-wrap="name"<?php echo '' !== $name ? '' : ' hidden'; ?>>
-								<span data-CAYDENDIR-field="name"><?php echo esc_html( $name ); ?></span>
+							<h3 class="CAYDENDIR-sd__name" data-CAYDENDIR-wrap="name"<?php echo '' !== $d_name ? '' : ' hidden'; ?>>
+								<span data-CAYDENDIR-field="name"><?php echo esc_html( $d_name ); ?></span>
 								<?php if ( $can_edit ) : ?>
 									<span class="CAYDENDIR-sd__badge" data-CAYDENDIR-manual-badge<?php echo $is_manual ? '' : ' hidden'; ?>>Edited</span>
 									<span class="CAYDENDIR-sd__badge" data-CAYDENDIR-hidden-badge<?php echo $hidden ? '' : ' hidden'; ?>>Hidden</span>
 								<?php endif; ?>
 							</h3>
 							<?php if ( $show_publictitle || $can_edit ) : ?>
-								<p class="CAYDENDIR-sd__job" data-CAYDENDIR-wrap="publictitle"<?php echo '' !== $publictitle ? '' : ' hidden'; ?>><span data-CAYDENDIR-field="publictitle"><?php echo esc_html( $publictitle ); ?></span></p>
+								<p class="CAYDENDIR-sd__job" data-CAYDENDIR-wrap="publictitle"<?php echo '' !== $d_title ? '' : ' hidden'; ?>><span data-CAYDENDIR-field="publictitle"><?php echo esc_html( $d_title ); ?></span></p>
 							<?php endif; ?>
 							<?php if ( $show_job || $can_edit) : ?>
-								<p class="CAYDENDIR-sd__job" data-CAYDENDIR-wrap="job"<?php echo '' !== $job ? '' : ' hidden'; ?>><span data-CAYDENDIR-field="job"><?php echo esc_html( $job ); ?></span></p>
+								<p class="CAYDENDIR-sd__job" data-CAYDENDIR-wrap="job"<?php echo '' !== $d_job ? '' : ' hidden'; ?>><span data-CAYDENDIR-field="job"><?php echo esc_html( $d_job ); ?></span></p>
 							<?php endif; ?>
 							<?php if ( $show_location || $can_edit) : ?>
-								<p class="CAYDENDIR-sd__location" data-CAYDENDIR-wrap="location"<?php echo '' !== $location ? '' : ' hidden'; ?>><span data-CAYDENDIR-field="location"><?php echo esc_html( $location ); ?></span></p>
+								<p class="CAYDENDIR-sd__location" data-CAYDENDIR-wrap="location"<?php echo '' !== $d_loc ? '' : ' hidden'; ?>><span data-CAYDENDIR-field="location"><?php echo esc_html( $d_loc ); ?></span></p>
 							<?php endif; ?>
 							<?php if ( $show_email || $can_edit) : ?>
-								<span data-CAYDENDIR-email-wrap><?php if ( '' !== $email ) : ?><a class="CAYDENDIR-sd__email" href="<?php echo esc_url( 'mailto:' . $email ); ?>"><?php echo esc_html( $email ); ?></a><?php endif; ?></span>
+								<span data-CAYDENDIR-email-wrap><?php if ( '' !== $email ) : ?><a class="CAYDENDIR-sd__email" href="<?php echo esc_url( 'mailto:' . $email ); ?>"><?php echo esc_html( '' !== $d_email ? $d_email : $email ); ?></a><?php endif; ?></span>
 							<?php endif; ?>
 							<ul class="CAYDENDIR-sd__tags" aria-label="Tags" data-CAYDENDIR-tags<?php echo ! empty( $tags ) ? '' : ' hidden'; ?>>
 								<?php foreach ( $tags as $t ) : ?>
@@ -1621,8 +1820,13 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 					<form data-CAYDENDIR-edit-form novalidate>
 						<input type="hidden" data-CAYDENDIR-f="key">
 						<p class="CAYDENDIR-sd__field">
-							<label for="<?php echo esc_attr( $uid ); ?>-f-name">Name</label>
-							<input type="text" id="<?php echo esc_attr( $uid ); ?>-f-name" data-CAYDENDIR-f="name" autocomplete="off">
+							<label for="<?php echo esc_attr( $uid ); ?>-f-firstname">First name</label>
+							<input type="text" id="<?php echo esc_attr( $uid ); ?>-f-firstname" data-CAYDENDIR-f="firstname" autocomplete="off">
+						</p>
+						<p class="CAYDENDIR-sd__field">
+							<label for="<?php echo esc_attr( $uid ); ?>-f-lastname">Last name</label>
+							<input type="text" id="<?php echo esc_attr( $uid ); ?>-f-lastname" data-CAYDENDIR-f="lastname" autocomplete="off" aria-describedby="<?php echo esc_attr( $uid ); ?>-f-lastname-hint">
+							<span class="CAYDENDIR-sd__hint" id="<?php echo esc_attr( $uid ); ?>-f-lastname-hint">First and Last combine into the displayed name. How they show is set under Settings &rsaquo; Column display.</span>
 						</p>
 						<p class="CAYDENDIR-sd__field">
 							<label for="<?php echo esc_attr( $uid ); ?>-f-email">Email</label>
@@ -1816,6 +2020,17 @@ function CAYDENDIR_sd_sanitize_settings_run( $input ) {
 		$out['sort_rules'] = array();
 	}
 
+	// Column display templates — one plain-text template per column. Blank
+	// falls back to that column's default (handled by get_column_templates).
+	if ( isset( $in['column_templates'] ) && is_array( $in['column_templates'] ) ) {
+		$tpl_in  = $in['column_templates'];
+		$tpl_out = array();
+		foreach ( CAYDENDIR_sd_default_column_templates() as $col => $default ) {
+			$tpl_out[ $col ] = isset( $tpl_in[ $col ] ) ? sanitize_text_field( $tpl_in[ $col ] ) : $default;
+		}
+		$out['column_templates'] = $tpl_out;
+	}
+
 	// Colors
 	$defaults_colors = CAYDENDIR_sd_default_colors();
 	$colors_in       = isset( $in['colors'] ) && is_array( $in['colors'] ) ? $in['colors'] : array();
@@ -1957,6 +2172,30 @@ function CAYDENDIR_sd_settings_page_run() {
 					</td>
 				</tr>
 			</table>
+
+			<h2>Column display</h2>
+			<p class="description">Control exactly what text each column shows. Type a template using any of these placeholders &mdash; they are replaced with that person&rsquo;s data:
+				<code>{firstname}</code> <code>{lastname}</code> <code>{name}</code> <code>{publictitle}</code> <code>{job}</code> <code>{location}</code> <code>{email}</code> <code>{id}</code>.
+				Empty pieces are tidied up automatically (for example <code>{lastname}, {firstname}</code> shows just the first name when there is no last name). Leave a box blank to restore its default. The <strong>Name</strong> column is built from First and Last so it still reads the same as before.</p>
+			<table class="form-table" role="presentation">
+				<?php
+				$tpl_vals   = CAYDENDIR_sd_get_column_templates( $s );
+				$tpl_defs   = CAYDENDIR_sd_default_column_templates();
+				foreach ( CAYDENDIR_sd_template_columns() as $tcol => $tlabel ) :
+					?>
+					<tr>
+						<th scope="row"><label for="CAYDENDIR_tpl_<?php echo esc_attr( $tcol ); ?>"><?php echo esc_html( $tlabel ); ?></label></th>
+						<td>
+							<input type="text" id="CAYDENDIR_tpl_<?php echo esc_attr( $tcol ); ?>" class="regular-text code"
+								name="<?php echo esc_attr( $opt ); ?>[column_templates][<?php echo esc_attr( $tcol ); ?>]"
+								value="<?php echo esc_attr( isset( $tpl_vals[ $tcol ] ) ? $tpl_vals[ $tcol ] : '' ); ?>"
+								spellcheck="false" autocomplete="off">
+							<span class="description">Default: <code><?php echo esc_html( $tpl_defs[ $tcol ] ); ?></code></span>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+			</table>
+			<p class="description">Tip: to show &ldquo;Last, First&rdquo; set the <strong>Name</strong> template to <code>{lastname}, {firstname}</code>. The <strong>Email</strong> template only changes the visible link text; the link still points at the person&rsquo;s email address.</p>
 
 			<h2>Sort rules</h2>
 			<p class="description">The directory is sorted by these rules, in order. The first rule sorts everyone; each rule below only breaks the ties left by the rules above it (so two &ldquo;priority&rdquo; rules on Job then Location give the classic ordering). For each rule pick a <strong>field</strong> and how it sorts: a <strong>Custom priority list</strong> (type the order, one label per line, highest first — anything not listed sinks to the bottom, which handily flags typos), <strong>A&nbsp;&rarr;&nbsp;Z</strong>, or <strong>Z&nbsp;&rarr;&nbsp;A</strong>. Priority-list labels must match the displayed text for that field (case doesn&rsquo;t matter). Drag the <span aria-hidden="true">&#9776;</span> handle to reorder, remove a rule to drop that level, and add as many levels as you like. Remove every rule to leave people in their synced order.</p>
@@ -2143,6 +2382,7 @@ function CAYDENDIR_sd_help_page_run() {
 				<li><a href="#editing">Editing people (manual overrides)</a></li>
 				<li><a href="#sorting">Sort rules</a></li>
 				<li><a href="#columns">Layout &amp; columns</a></li>
+				<li><a href="#display">Column display &amp; name split</a></li>
 				<li><a href="#css">Colours &amp; Custom CSS</a></li>
 				<li><a href="#trouble">Troubleshooting &mdash; steps to fix</a></li>
 			</ul>
@@ -2217,6 +2457,7 @@ function CAYDENDIR_sd_help_page_run() {
 			<p>Logged-in administrators see an <strong>Edit</strong> button on every row of the public directory. Saving an edit stores that person as a <strong>manual override</strong>:</p>
 			<ul>
 				<li>Overrides are <strong>permanent</strong> and always beat the synced data &mdash; the daily sync can never change or delete them.</li>
+				<li><strong>First name</strong> and <strong>Last name</strong> combine into the displayed name (formatted by <a href="#display">Column display</a>).</li>
 				<li><strong>Title</strong> is what shows publicly; <strong>Job</strong> is the HR title that drives sorting (case- and spelling-sensitive).</li>
 				<li>Tick <strong>Hide from directory</strong> to remove someone from the public list; editors still see them with a <em>Hidden</em> badge and can un-hide later.</li>
 				<li>To hand a row back to the automatic data, open it and choose <strong>Remove manual override</strong>. You can also remove overrides from the list at the bottom of the Settings page.</li>
@@ -2236,6 +2477,20 @@ function CAYDENDIR_sd_help_page_run() {
 		<div class="card">
 			<h2 id="columns">Layout &amp; columns</h2>
 			<p><strong>Layout</strong> chooses Table or Cards. <strong>Columns to show</strong> picks which fields appear (Name is always shown). <strong>Row behaviour</strong> toggles hover highlighting and selectable rows. A Beaver Builder module or shortcode <code>layout=""</code> attribute can override the layout per placement.</p>
+		</div>
+
+		<div class="card">
+			<h2 id="display">Column display &amp; the First/Last name split</h2>
+			<p>People now have a <strong>First name</strong> and a <strong>Last name</strong> (the sheet can send them as separate columns, and the Edit dialog has both). They are combined for display, so by default the directory reads exactly as before.</p>
+			<p><strong>Column display</strong> (in Settings) lets you control what text each column shows, using a small template with placeholders that are swapped for the person&rsquo;s data:</p>
+			<p><code>{firstname}</code> <code>{lastname}</code> <code>{name}</code> <code>{publictitle}</code> <code>{job}</code> <code>{location}</code> <code>{email}</code> <code>{id}</code></p>
+			<ul>
+				<li>The <strong>Name</strong> column defaults to <code>{firstname} {lastname}</code>. Set it to <code>{lastname}, {firstname}</code> for &ldquo;Doe, Jane&rdquo;.</li>
+				<li>Empty pieces are tidied automatically &mdash; <code>{lastname}, {firstname}</code> shows just the first name when there is no last name, with no stray comma.</li>
+				<li>The <strong>Email</strong> template changes only the visible link text; the link still points at the real email address (e.g. <code>{firstname} {lastname}</code> shows the name but still emails them).</li>
+				<li>Leave a box blank and save to restore that column&rsquo;s default.</li>
+			</ul>
+			<p>Search still matches on the full name, first name, last name and every other field regardless of how the columns are displayed.</p>
 		</div>
 
 		<div class="card">
