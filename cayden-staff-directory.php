@@ -1116,7 +1116,9 @@ function CAYDENDIR_sd_get_merged_data() {
 /** Fields a sort rule may target => their admin labels. */
 function CAYDENDIR_sd_sort_fields() {
 	return array(
-		'name'        => 'Name',
+		'name'        => 'Name (full)',
+		'lastname'    => 'Last name',
+		'firstname'   => 'First name',
 		'publictitle' => 'Title',
 		'job'         => 'Job',
 		'location'    => 'Location',
