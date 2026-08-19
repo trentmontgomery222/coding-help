@@ -105,15 +105,38 @@
 			} );
 		}
 
+		function evalCond( cond, data ) {
+			cond = String( cond ).trim();
+			var field = cond, op = '', value = '', m;
+			if ( ( m = cond.match( /^([a-z_]+)\s*(==|!=)\s*([\s\S]*)$/i ) ) ) {
+				field = m[ 1 ]; op = m[ 2 ]; value = m[ 3 ];
+			} else if ( ( m = cond.match( /^([a-z_]+)\s+contains\s+([\s\S]*)$/i ) ) ) {
+				field = m[ 1 ]; op = 'contains'; value = m[ 2 ];
+			}
+			field = field.toLowerCase().trim();
+			value = value.trim();
+			if ( value.length >= 2 ) {
+				var q = value.charAt( 0 );
+				if ( ( q === '"' || q === "'" ) && value.slice( -1 ) === q ) {
+					value = value.slice( 1, -1 );
+				}
+			}
+			var fv = ( data[ field ] != null ? String( data[ field ] ) : '' ).trim();
+			if ( op === '==' ) { return fv.toLowerCase() === value.toLowerCase(); }
+			if ( op === '!=' ) { return fv.toLowerCase() !== value.toLowerCase(); }
+			if ( op === 'contains' ) { return value !== '' && fv.toLowerCase().indexOf( value.toLowerCase() ) !== -1; }
+			return fv !== '';
+		}
+
 		function renderTemplate( tpl, data ) {
 			var s = String( tpl == null ? '' : tpl );
 
 			// Conditionals, innermost first.
-			var re = /\[if\s+([a-z_]+)\]((?:(?!\[if\s|\[\/if\])[\s\S])*?)\[\/if\]/i;
+			var re = /\[if\s+([^\]]+?)\]((?:(?!\[if\s|\[\/if\])[\s\S])*?)\[\/if\]/i;
 			var guard = 0;
 			while ( re.test( s ) && guard++ < 50 ) {
-				s = s.replace( new RegExp( re.source, 'i' ), function ( whole, field, body ) {
-					var has = data[ field ] != null && String( data[ field ] ).trim() !== '';
+				s = s.replace( new RegExp( re.source, 'i' ), function ( whole, cond, body ) {
+					var has = evalCond( cond, data );
 					var parts = body.split( /\[else\]/i );
 					return has ? parts[ 0 ] : ( parts[ 1 ] || '' );
 				} );

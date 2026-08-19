@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cayden  Staff Directory
  * Description:       Staff Directory system for the website
- * Version:           2.7.0
+ * Version:           2.7.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; //no access
 }
 
-define( 'CAYDENDIR_SD_VERSION',       '2.7.0' );
+define( 'CAYDENDIR_SD_VERSION',       '2.7.1' );
 define( 'CAYDENDIR_SD_DIR',           plugin_dir_path( __FILE__ ) );
 define( 'CAYDENDIR_SD_URL',           plugin_dir_url( __FILE__ ) );
 define( 'CAYDENDIR_SD_CRON_HOOK',     'CAYDENDIR_sd_daily_sync' );
@@ -558,6 +558,59 @@ function CAYDENDIR_sd_column_placeholders( $row ) {
 }
 
 /**
+ * Evaluate an [if …] condition against a row's raw values.
+ *
+ * Forms:
+ *   field                 true when the field is non-empty
+ *   field == value        true when the field equals value
+ *   field != value        true when the field does not equal value
+ *   field contains value  true when the field contains value
+ *
+ * Comparisons are trimmed and case-insensitive. The value may be wrapped in
+ * single or double quotes (useful for values with leading/trailing spaces).
+ */
+function CAYDENDIR_sd_eval_condition( $cond, $vals ) {
+	$cond  = trim( (string) $cond );
+	$field = $cond;
+	$op    = '';
+	$value = '';
+
+	if ( preg_match( '/^([a-z_]+)\s*(==|!=)\s*(.*)$/is', $cond, $c ) ) {
+		$field = $c[1];
+		$op    = $c[2];
+		$value = $c[3];
+	} elseif ( preg_match( '/^([a-z_]+)\s+contains\s+(.*)$/is', $cond, $c ) ) {
+		$field = $c[1];
+		$op    = 'contains';
+		$value = $c[2];
+	}
+
+	$field = strtolower( trim( $field ) );
+	$value = trim( $value );
+
+	// Strip one layer of surrounding quotes from the comparison value.
+	if ( strlen( $value ) >= 2 ) {
+		$q = $value[0];
+		if ( ( '"' === $q || "'" === $q ) && substr( $value, -1 ) === $q ) {
+			$value = substr( $value, 1, -1 );
+		}
+	}
+
+	$fieldval = isset( $vals[ $field ] ) ? trim( (string) $vals[ $field ] ) : '';
+
+	switch ( $op ) {
+		case '==':
+			return 0 === strcasecmp( $fieldval, $value );
+		case '!=':
+			return 0 !== strcasecmp( $fieldval, $value );
+		case 'contains':
+			return '' !== $value && false !== stripos( $fieldval, $value );
+		default:
+			return '' !== $fieldval;
+	}
+}
+
+/**
  * Render a template for a row into safe HTML.
  *
  * Steps: resolve [if]/[else] blocks against the raw values, substitute
@@ -568,16 +621,17 @@ function CAYDENDIR_sd_apply_template( $template, $row ) {
 	$vals     = CAYDENDIR_sd_column_placeholders( $row );
 	$template = (string) $template;
 
-	// ---- 1. Conditionals: [if field]…[else]…[/if] (innermost first). ----
+	// ---- 1. Conditionals: [if CONDITION]…[else]…[/if] (innermost first).
+	// CONDITION is "field" (non-empty), "field == value", "field != value" or
+	// "field contains value" — comparisons are trimmed and case-insensitive. ----
+	$re    = '/\[if\s+([^\]]+?)\]((?:(?!\[if\s|\[\/if\]).)*?)\[\/if\]/is';
 	$guard = 0;
-	while ( preg_match( '/\[if\s+([a-z_]+)\]((?:(?!\[if\s|\[\/if\]).)*?)\[\/if\]/is', $template ) && $guard++ < 50 ) {
+	while ( preg_match( $re, $template ) && $guard++ < 50 ) {
 		$template = preg_replace_callback(
-			'/\[if\s+([a-z_]+)\]((?:(?!\[if\s|\[\/if\]).)*?)\[\/if\]/is',
+			$re,
 			function ( $m ) use ( $vals ) {
-				$field = $m[1];
-				$body  = $m[2];
-				$has   = isset( $vals[ $field ] ) && '' !== trim( (string) $vals[ $field ] );
-				$parts = preg_split( '/\[else\]/i', $body, 2 );
+				$has   = CAYDENDIR_sd_eval_condition( $m[1], $vals );
+				$parts = preg_split( '/\[else\]/i', $m[2], 2 );
 				$yes   = isset( $parts[0] ) ? $parts[0] : '';
 				$no    = isset( $parts[1] ) ? $parts[1] : '';
 				return $has ? $yes : $no;
@@ -2255,6 +2309,7 @@ function CAYDENDIR_sd_settings_page_run() {
 				<li><code>{field|fallback}</code> &mdash; the value, or <em>fallback</em> text when it&rsquo;s empty</li>
 				<li><code>[if field]&hellip;[/if]</code> &mdash; show the block only when the field has a value</li>
 				<li><code>[if field]&hellip;[else]&hellip;[/if]</code> &mdash; show one thing or another</li>
+				<li><code>[if field == value]</code>, <code>[if field != value]</code>, <code>[if field contains value]</code> &mdash; compare a field (case-insensitive)</li>
 			</ul>
 			<p class="description">Field values are always escaped, so data can never break your layout; only safe HTML is kept. Leave a box blank and save to restore its default. Click a field button to insert it into the box your cursor is in.</p>
 			<?php
@@ -2304,7 +2359,9 @@ function CAYDENDIR_sd_settings_page_run() {
 				<code>&lt;strong&gt;{name}&lt;/strong&gt;</code> &middot;
 				<code>[if publictitle]{publictitle}[else]{job}[/if]</code> &middot;
 				<code>[if location]📍 {location}[/if]</code> &middot;
-				<code>&lt;a href="mailto:{email}"&gt;Email {firstname}&lt;/a&gt;</code>
+				<code>&lt;a href="mailto:{email}"&gt;Email {firstname}&lt;/a&gt;</code> &middot;
+				<code>[if job == Principal]⭐ {name}[else]{name}[/if]</code> &middot;
+				<code>[if location contains Elementary]🍎[/if]</code>
 			</p>
 
 			<h2>Sort rules</h2>
@@ -2599,6 +2656,9 @@ function CAYDENDIR_sd_help_page_run() {
 				<tr><td><code>{field|fallback}</code></td><td>The value, or the <em>fallback</em> text when the field is empty.</td></tr>
 				<tr><td><code>[if field]&hellip;[/if]</code></td><td>Shows the block only when the field has a value.</td></tr>
 				<tr><td><code>[if field]&hellip;[else]&hellip;[/if]</code></td><td>Shows one thing or the other.</td></tr>
+				<tr><td><code>[if field == value]</code></td><td>Shows the block only when the field equals <em>value</em> (case-insensitive; use quotes for values with spaces).</td></tr>
+				<tr><td><code>[if field != value]</code></td><td>&hellip; when the field does <strong>not</strong> equal <em>value</em>.</td></tr>
+				<tr><td><code>[if field contains value]</code></td><td>&hellip; when the field contains <em>value</em>.</td></tr>
 			</table>
 			<p>Fields you can use: <code>{firstname}</code> <code>{lastname}</code> <code>{name}</code> <code>{publictitle}</code> <code>{job}</code> <code>{location}</code> <code>{email}</code> <code>{id}</code> <code>{tags}</code> <code>{initials}</code> <code>{photo_url}</code>.</p>
 			<p><strong>Examples:</strong></p>
@@ -2608,6 +2668,8 @@ function CAYDENDIR_sd_help_page_run() {
 				<li><code>[if publictitle]{publictitle}[else]{job}[/if]</code> &rarr; the public title, or the job when there is no title.</li>
 				<li><code>[if location]📍 {location}[/if]</code> &rarr; a pin and the location, or nothing.</li>
 				<li><code>&lt;a href="mailto:{email}"&gt;Email {firstname}&lt;/a&gt;</code> &rarr; a custom email link.</li>
+				<li><code>[if job == Principal]&lt;strong&gt;{name}&lt;/strong&gt;[else]{name}[/if]</code> &rarr; bold the principals only.</li>
+				<li><code>[if location contains Elementary]🍎 {location}[else]{location}[/if]</code> &rarr; an apple for elementary schools.</li>
 			</ul>
 			<p>Each template box has a row of field buttons that insert a <code>{field}</code> at your cursor, and a <strong>live preview</strong> that updates as you type. Leave a box blank and save to restore its default.</p>
 			<p><strong>Safety:</strong> a person&rsquo;s data is always escaped, so nothing in the spreadsheet can break your layout or inject code; only safe HTML in the template itself is kept (scripts are removed). Search still matches the full name, first name, last name and every other field no matter how the columns are displayed.</p>
