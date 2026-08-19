@@ -72,4 +72,97 @@
 
 		renumber();
 	} );
+
+	/* ---------------------------------------------------------------------
+	 * Column display editor: insert-field buttons + live preview.
+	 * The preview is an approximate, client-side mirror of the PHP template
+	 * engine (conditionals, fallbacks, {field} substitution) run against a
+	 * sample person, so admins can see roughly what a template produces.
+	 * ------------------------------------------------------------------- */
+	$( function () {
+		var $box = $( '#CAYDENDIR-col-templates' );
+		if ( ! $box.length ) {
+			return;
+		}
+
+		var SAMPLE = {
+			firstname: 'Jane',
+			lastname: 'Doe',
+			name: 'Jane Doe',
+			publictitle: 'Math Teacher',
+			job: 'Teacher',
+			location: 'Beall Elementary School',
+			email: 'jane.doe@acpsmd.org',
+			id: 'WP-12345-SD-1-E',
+			tags: 'Science, PTA',
+			initials: 'JD',
+			photo_url: ''
+		};
+
+		function esc( s ) {
+			return String( s ).replace( /[&<>"']/g, function ( c ) {
+				return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[ c ];
+			} );
+		}
+
+		function renderTemplate( tpl, data ) {
+			var s = String( tpl == null ? '' : tpl );
+
+			// Conditionals, innermost first.
+			var re = /\[if\s+([a-z_]+)\]((?:(?!\[if\s|\[\/if\])[\s\S])*?)\[\/if\]/i;
+			var guard = 0;
+			while ( re.test( s ) && guard++ < 50 ) {
+				s = s.replace( new RegExp( re.source, 'i' ), function ( whole, field, body ) {
+					var has = data[ field ] != null && String( data[ field ] ).trim() !== '';
+					var parts = body.split( /\[else\]/i );
+					return has ? parts[ 0 ] : ( parts[ 1 ] || '' );
+				} );
+			}
+
+			// {field} and {field|fallback}, values escaped.
+			s = s.replace( /\{([a-z_]+)(?:\|([^{}]*))?\}/g, function ( whole, field, fallback ) {
+				var v = data[ field ] != null ? String( data[ field ] ) : '';
+				if ( v.trim() === '' ) {
+					return esc( fallback || '' );
+				}
+				return esc( v );
+			} );
+
+			// Tidy plain-text templates only.
+			if ( s.indexOf( '<' ) === -1 ) {
+				s = s.replace( /\s+/g, ' ' )
+					.replace( /\s*([,|·•])\s*\1\s*/g, '$1 ' )
+					.replace( /^[\s,|·•-]+|[\s,|·•-]+$/g, '' );
+			}
+			s = s.replace( /<\s*script/gi, '&lt;script' ); // never run scripts in the preview
+			return s.trim();
+		}
+
+		function insertAtCursor( el, text ) {
+			var start = el.selectionStart != null ? el.selectionStart : el.value.length;
+			var end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+			el.value = el.value.slice( 0, start ) + text + el.value.slice( end );
+			var pos = start + text.length;
+			el.focus();
+			try { el.setSelectionRange( pos, pos ); } catch ( e ) {}
+		}
+
+		$box.find( '[data-CAYDENDIR-tpl]' ).each( function () {
+			var $row = $( this );
+			var input = $row.find( '[data-CAYDENDIR-tpl-input]' ).get( 0 );
+			var preview = $row.find( '[data-CAYDENDIR-tpl-preview]' ).get( 0 );
+			if ( ! input || ! preview ) {
+				return;
+			}
+			function refresh() {
+				preview.innerHTML = renderTemplate( input.value, SAMPLE );
+			}
+			$row.find( '[data-CAYDENDIR-insert]' ).on( 'click', function () {
+				insertAtCursor( input, $( this ).attr( 'data-CAYDENDIR-insert' ) );
+				refresh();
+			} );
+			$( input ).on( 'input', refresh );
+			refresh();
+		} );
+	} );
 })( jQuery );

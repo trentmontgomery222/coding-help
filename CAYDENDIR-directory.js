@@ -327,10 +327,14 @@
 			} );
 		}
 
-		function setFieldText( item, field, value, dashWhenEmpty ) {
+		// The display columns hold server-rendered, server-sanitised HTML
+		// (wp_kses_post), so it is safe to place with innerHTML. In a table the
+		// cell shows an em dash when empty; in cards the wrapper is hidden.
+		function setFieldHtml( item, field, html, dashWhenEmpty ) {
+			var value = ( html == null ) ? '' : String( html );
 			var el = item.querySelector( '[data-CAYDENDIR-field="' + field + '"]' );
 			if ( el ) {
-				el.textContent = value || ( dashWhenEmpty ? '—' : '' );
+				el.innerHTML = value || ( dashWhenEmpty ? '—' : '' );
 			}
 			var wrap = item.querySelector( '[data-CAYDENDIR-wrap="' + field + '"]' );
 			if ( wrap ) {
@@ -339,28 +343,12 @@
 		}
 
 		function applyRecordToItem( item, d ) {
-			// Use the server's templated display strings (fall back to the raw
-			// field if a display value was not provided).
-			setFieldText( item, 'name', d.name_display !== undefined ? d.name_display : d.name, true );
-			setFieldText( item, 'publictitle', d.publictitle_display !== undefined ? d.publictitle_display : d.publictitle, true );
-			setFieldText( item, 'job', d.job_display !== undefined ? d.job_display : d.job, true );
-			setFieldText( item, 'location', d.location_display !== undefined ? d.location_display : d.location, true );
-
-			// Email (rebuilt with DOM APIs — no HTML injection). The link text
-			// is the templated display; the href is always the real address.
-			var emailWrap = item.querySelector( '[data-CAYDENDIR-email-wrap]' );
-			if ( emailWrap ) {
-				emailWrap.textContent = '';
-				if ( d.email ) {
-					var a = document.createElement( 'a' );
-					a.className = 'CAYDENDIR-sd__email';
-					a.href = 'mailto:' + d.email;
-					a.textContent = ( d.email_display !== undefined && d.email_display !== '' ) ? d.email_display : d.email;
-					emailWrap.appendChild( a );
-				} else if ( emailWrap.getAttribute( 'data-dash' ) === '1' ) {
-					emailWrap.textContent = '—';
-				}
-			}
+			// Server-templated HTML per column.
+			setFieldHtml( item, 'name', d.name_display, true );
+			setFieldHtml( item, 'publictitle', d.publictitle_display, true );
+			setFieldHtml( item, 'job', d.job_display, true );
+			setFieldHtml( item, 'location', d.location_display, true );
+			setFieldHtml( item, 'email', d.email_display, true );
 
 			// Photo (server-rendered, server-escaped markup).
 			var photoWrap = item.querySelector( '[data-CAYDENDIR-photo-wrap]' );
