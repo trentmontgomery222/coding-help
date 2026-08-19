@@ -666,7 +666,8 @@ function CAYDENDIR_sd_apply_template( $template, $row ) {
 	}
 	$out = trim( $out );
 
-	// ---- 4. Safety net: allow only post-safe HTML (strips <script> etc.). ----
+	// ---- 4. Safety net: allow only post-safe HTML (strips scripts, event
+	// handlers and other unsafe markup via wp_kses_post). ----
 	return wp_kses_post( $out );
 }
 
