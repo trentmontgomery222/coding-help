@@ -59,8 +59,8 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.4.0' );
-define( 'ACPS_LS_DB_VERSION', '1.2.0' );
+define( 'ACPS_LS_VERSION', '1.5.0' );
+define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
 define( 'ACPS_LS_FILE', __FILE__ );

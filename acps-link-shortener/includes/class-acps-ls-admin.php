@@ -31,6 +31,7 @@ class ACPS_LS_Admin {
 		add_action( 'admin_menu', array( $this, 'add_menu' ) );
 		add_action( 'admin_init', array( $this, 'handle_actions' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'wp_dashboard_setup', array( $this, 'maybe_add_dashboard_widget' ) );
 	}
 
 	/**
@@ -405,9 +406,33 @@ class ACPS_LS_Admin {
 		}
 
 		// Link checker settings.
-		$check_enabled = isset( $_POST['check_enabled'] ) ? 1 : 0;
-		$scan_content  = isset( $_POST['scan_content'] ) ? 1 : 0;
-		$recheck_hours = isset( $_POST['recheck_hours'] ) ? max( 1, absint( wp_unslash( $_POST['recheck_hours'] ) ) ) : 72;
+		$check_enabled  = isset( $_POST['check_enabled'] ) ? 1 : 0;
+		$scan_content   = isset( $_POST['scan_content'] ) ? 1 : 0;
+		$scan_comments  = isset( $_POST['scan_comments'] ) ? 1 : 0;
+		$recheck_hours  = isset( $_POST['recheck_hours'] ) ? max( 1, absint( wp_unslash( $_POST['recheck_hours'] ) ) ) : 72;
+		$timeout        = isset( $_POST['timeout'] ) ? max( 1, absint( wp_unslash( $_POST['timeout'] ) ) ) : 15;
+		$warnings       = isset( $_POST['warnings'] ) ? 1 : 0;
+		$notify_admin   = isset( $_POST['notify_admin'] ) ? 1 : 0;
+		$notify_authors = isset( $_POST['notify_authors'] ) ? 1 : 0;
+		$notify_email   = isset( $_POST['notify_email'] ) ? sanitize_email( wp_unslash( $_POST['notify_email'] ) ) : '';
+		$link_html      = isset( $_POST['link_html'] ) ? 1 : 0;
+		$link_images    = isset( $_POST['link_images'] ) ? 1 : 0;
+		$link_plaintext = isset( $_POST['link_plaintext'] ) ? 1 : 0;
+		$widget_enabled = isset( $_POST['widget_enabled'] ) ? 1 : 0;
+
+		$exclusions = array();
+		if ( isset( $_POST['exclusions'] ) ) {
+			$lines = preg_split( '/[\r\n]+/', sanitize_textarea_field( wp_unslash( $_POST['exclusions'] ) ) );
+			foreach ( (array) $lines as $line ) {
+				$line = trim( $line );
+				if ( '' !== $line ) {
+					$exclusions[] = $line;
+				}
+			}
+		}
+
+		$scan_types    = isset( $_POST['scan_types'] ) && is_array( $_POST['scan_types'] ) ? array_map( 'sanitize_key', wp_unslash( $_POST['scan_types'] ) ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$scan_statuses = isset( $_POST['scan_statuses'] ) && is_array( $_POST['scan_statuses'] ) ? array_map( 'sanitize_key', wp_unslash( $_POST['scan_statuses'] ) ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 		// Replacement rules.
 		$rules = array();
@@ -442,7 +467,20 @@ class ACPS_LS_Admin {
 		$settings['sheet_secret']   = $sheet_secret;
 		$settings['check_enabled']  = $check_enabled;
 		$settings['scan_content']   = $scan_content;
+		$settings['scan_comments']  = $scan_comments;
 		$settings['recheck_hours']  = $recheck_hours;
+		$settings['timeout']        = $timeout;
+		$settings['warnings']       = $warnings;
+		$settings['notify_admin']   = $notify_admin;
+		$settings['notify_authors'] = $notify_authors;
+		$settings['notify_email']   = $notify_email;
+		$settings['link_html']      = $link_html;
+		$settings['link_images']    = $link_images;
+		$settings['link_plaintext'] = $link_plaintext;
+		$settings['widget_enabled'] = $widget_enabled;
+		$settings['exclusions']     = $exclusions;
+		$settings['scan_types']     = $scan_types;
+		$settings['scan_statuses']  = $scan_statuses;
 		$settings['rules']          = $rules;
 		unset( $settings['default_type'] ); // obsolete
 
@@ -564,6 +602,51 @@ class ACPS_LS_Admin {
 			case 'apply_rules':
 				$n   = $checker->apply_rules_to_shortener();
 				$msg = sprintf( /* translators: %d: count. */ __( 'Applied rewrite rules to %d short links.', 'acps-link-shortener' ), $n );
+				break;
+
+			case 'dismiss':
+				$id = isset( $_POST['url_id'] ) ? absint( wp_unslash( $_POST['url_id'] ) ) : 0;
+				if ( $id ) {
+					ACPS_LS_Checker::set_flag( $id, 'dismissed', 1 );
+					$msg = __( 'Link dismissed (hidden).', 'acps-link-shortener' );
+				}
+				break;
+
+			case 'restore':
+				$id = isset( $_POST['url_id'] ) ? absint( wp_unslash( $_POST['url_id'] ) ) : 0;
+				if ( $id ) {
+					ACPS_LS_Checker::set_flag( $id, 'dismissed', 0 );
+					$msg = __( 'Link restored.', 'acps-link-shortener' );
+				}
+				break;
+
+			case 'not_broken':
+				$id = isset( $_POST['url_id'] ) ? absint( wp_unslash( $_POST['url_id'] ) ) : 0;
+				if ( $id ) {
+					ACPS_LS_Checker::set_flag( $id, 'false_positive', 1 );
+					$msg = __( 'Marked as not broken.', 'acps-link-shortener' );
+				}
+				break;
+
+			case 'unlink':
+				$hash = isset( $_POST['url_hash'] ) ? sanitize_text_field( wp_unslash( $_POST['url_hash'] ) ) : '';
+				if ( $hash ) {
+					$n   = $checker->unlink_everywhere( $hash );
+					$msg = sprintf( /* translators: %d: count. */ __( 'Unlinked in %d place(s).', 'acps-link-shortener' ), $n );
+				}
+				break;
+
+			case 'fix_redirect':
+				$id = isset( $_POST['url_id'] ) ? absint( wp_unslash( $_POST['url_id'] ) ) : 0;
+				if ( $id ) {
+					$n   = $checker->fix_redirect( $id );
+					$msg = sprintf( /* translators: %d: count. */ __( 'Updated %d place(s) to the redirect target.', 'acps-link-shortener' ), $n );
+				}
+				break;
+
+			case 'forced_recheck':
+				$checker->forced_recheck();
+				$msg = __( 'Database cleared. The whole site will be rediscovered and rechecked.', 'acps-link-shortener' );
 				break;
 
 			case 'replace':
@@ -889,9 +972,9 @@ class ACPS_LS_Admin {
 		$sheet_url    = ! empty( $settings['sheet_url'] ) ? $settings['sheet_url'] : '';
 		$sheet_secret = ! empty( $settings['sheet_secret'] ) ? $settings['sheet_secret'] : '';
 		$last_sync    = get_option( 'acps_ls_last_sync' );
-		$check_enabled = ! empty( $settings['check_enabled'] );
-		$scan_content  = ! isset( $settings['scan_content'] ) || ! empty( $settings['scan_content'] );
-		$recheck_hours = isset( $settings['recheck_hours'] ) ? (int) $settings['recheck_hours'] : 72;
+		$chk           = ACPS_LS_Checker::settings();
+		$notify_email  = $chk['notify_email'] ? $chk['notify_email'] : get_option( 'admin_email' );
+		$exclusions    = implode( "\n", $chk['exclusions'] );
 		$rules         = acps_ls_get_rules();
 		$rule_rows     = array_merge( $rules, array( array( 'type' => 'contains', 'pattern' => '', 'replace' => '', 'mode' => 'rewrite', 'enabled' => false ), array( 'type' => 'contains', 'pattern' => '', 'replace' => '', 'mode' => 'rewrite', 'enabled' => false ) ) );
 		$people       = acps_ls_get_people();
@@ -1092,32 +1175,108 @@ class ACPS_LS_Admin {
 
 				<h2><?php esc_html_e( 'Link checker', 'acps-link-shortener' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'Verifies that links are alive and applies your replacement rules. Checks each unique URL once and works in small batches for efficiency.', 'acps-link-shortener' ); ?></p>
+				<?php
+				$all_types    = get_post_types( array( 'public' => true ), 'objects' );
+				$all_statuses = array( 'publish' => __( 'Published', 'acps-link-shortener' ), 'future' => __( 'Scheduled', 'acps-link-shortener' ), 'draft' => __( 'Draft', 'acps-link-shortener' ), 'pending' => __( 'Pending', 'acps-link-shortener' ), 'private' => __( 'Private', 'acps-link-shortener' ) );
+				?>
 				<table class="form-table" role="presentation">
 					<tbody>
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Enable checker', 'acps-link-shortener' ); ?></th>
 							<td>
-								<label for="acps-ls-check-enabled">
-									<input type="checkbox" name="check_enabled" id="acps-ls-check-enabled" value="1" <?php checked( true, $check_enabled ); ?> />
-									<?php esc_html_e( 'Automatically scan and check links every 10 minutes.', 'acps-link-shortener' ); ?>
-								</label>
+								<label><input type="checkbox" name="check_enabled" value="1" <?php checked( 1, $chk['check_enabled'] ); ?> /> <?php esc_html_e( 'Run automatically every 10 minutes (scan + check).', 'acps-link-shortener' ); ?></label>
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><?php esc_html_e( 'Scan site content', 'acps-link-shortener' ); ?></th>
+							<th scope="row"><?php esc_html_e( 'Look for links in', 'acps-link-shortener' ); ?></th>
 							<td>
-								<label for="acps-ls-scan-content">
-									<input type="checkbox" name="scan_content" id="acps-ls-scan-content" value="1" <?php checked( true, $scan_content ); ?> />
-									<?php esc_html_e( 'Also check links inside posts, pages, and comments (not just the shortener’s destinations).', 'acps-link-shortener' ); ?>
-								</label>
+								<fieldset>
+									<label><input type="checkbox" name="scan_content" value="1" <?php checked( 1, $chk['scan_content'] ); ?> /> <?php esc_html_e( 'Posts and pages (content)', 'acps-link-shortener' ); ?></label><br />
+									<label><input type="checkbox" name="scan_comments" value="1" <?php checked( 1, $chk['scan_comments'] ); ?> /> <?php esc_html_e( 'Comments', 'acps-link-shortener' ); ?></label>
+									<p class="description"><?php esc_html_e( 'The shortener’s own destinations are always checked.', 'acps-link-shortener' ); ?></p>
+								</fieldset>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Post types', 'acps-link-shortener' ); ?></th>
+							<td>
+								<fieldset>
+									<?php foreach ( $all_types as $pt ) : ?>
+										<label style="display:inline-block;min-width:160px;">
+											<input type="checkbox" name="scan_types[]" value="<?php echo esc_attr( $pt->name ); ?>" <?php checked( in_array( $pt->name, $chk['scan_types'], true ) ); ?> />
+											<?php echo esc_html( $pt->labels->name ); ?>
+										</label>
+									<?php endforeach; ?>
+								</fieldset>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Post statuses', 'acps-link-shortener' ); ?></th>
+							<td>
+								<fieldset>
+									<?php foreach ( $all_statuses as $key => $label ) : ?>
+										<label style="display:inline-block;min-width:130px;">
+											<input type="checkbox" name="scan_statuses[]" value="<?php echo esc_attr( $key ); ?>" <?php checked( in_array( $key, $chk['scan_statuses'], true ) ); ?> />
+											<?php echo esc_html( $label ); ?>
+										</label>
+									<?php endforeach; ?>
+								</fieldset>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Link types', 'acps-link-shortener' ); ?></th>
+							<td>
+								<fieldset>
+									<label><input type="checkbox" name="link_html" value="1" <?php checked( 1, $chk['link_html'] ); ?> /> <?php esc_html_e( 'HTML links (a href)', 'acps-link-shortener' ); ?></label><br />
+									<label><input type="checkbox" name="link_images" value="1" <?php checked( 1, $chk['link_images'] ); ?> /> <?php esc_html_e( 'HTML images (img src)', 'acps-link-shortener' ); ?></label><br />
+									<label><input type="checkbox" name="link_plaintext" value="1" <?php checked( 1, $chk['link_plaintext'] ); ?> /> <?php esc_html_e( 'Plain-text URLs', 'acps-link-shortener' ); ?></label>
+								</fieldset>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Warnings', 'acps-link-shortener' ); ?></th>
+							<td>
+								<label><input type="checkbox" name="warnings" value="1" <?php checked( 1, $chk['warnings'] ); ?> /> <?php esc_html_e( 'Show uncertain problems (timeouts, connection errors) as “warnings” instead of “broken”.', 'acps-link-shortener' ); ?></label>
 							</td>
 						</tr>
 						<tr>
 							<th scope="row"><label for="acps-ls-recheck-hours"><?php esc_html_e( 'Recheck every', 'acps-link-shortener' ); ?></label></th>
 							<td>
-								<input type="number" min="1" step="1" style="width:6em;" name="recheck_hours" id="acps-ls-recheck-hours" value="<?php echo esc_attr( $recheck_hours ); ?>" />
-								<?php esc_html_e( 'hours', 'acps-link-shortener' ); ?>
+								<input type="number" min="1" step="1" style="width:6em;" name="recheck_hours" id="acps-ls-recheck-hours" value="<?php echo esc_attr( $chk['recheck_hours'] ); ?>" /> <?php esc_html_e( 'hours', 'acps-link-shortener' ); ?>
 								<p class="description"><?php esc_html_e( 'How long a result is trusted before the URL is checked again.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-timeout"><?php esc_html_e( 'Timeout', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="number" min="1" step="1" style="width:6em;" name="timeout" id="acps-ls-timeout" value="<?php echo esc_attr( $chk['timeout'] ); ?>" /> <?php esc_html_e( 'seconds', 'acps-link-shortener' ); ?>
+								<p class="description"><?php esc_html_e( 'Links slower than this are treated as failing.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-exclusions"><?php esc_html_e( 'Exclusion list', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<textarea name="exclusions" id="acps-ls-exclusions" rows="4" class="large-text code" placeholder="example.com/skip"><?php echo esc_textarea( $exclusions ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'One URL fragment per line. Any link whose URL contains one of these is skipped.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'E-mail notifications', 'acps-link-shortener' ); ?></th>
+							<td>
+								<fieldset>
+									<label><input type="checkbox" name="notify_admin" value="1" <?php checked( 1, $chk['notify_admin'] ); ?> /> <?php esc_html_e( 'E-mail me when new broken links are detected.', 'acps-link-shortener' ); ?></label><br />
+									<label><input type="checkbox" name="notify_authors" value="1" <?php checked( 1, $chk['notify_authors'] ); ?> /> <?php esc_html_e( 'E-mail authors about broken links in their own posts.', 'acps-link-shortener' ); ?></label>
+									<p>
+										<label for="acps-ls-notify-email"><?php esc_html_e( 'Notification e-mail:', 'acps-link-shortener' ); ?></label>
+										<input type="email" name="notify_email" id="acps-ls-notify-email" class="regular-text" value="<?php echo esc_attr( $chk['notify_email'] ); ?>" placeholder="<?php echo esc_attr( $notify_email ); ?>" />
+									</p>
+								</fieldset>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Dashboard widget', 'acps-link-shortener' ); ?></th>
+							<td>
+								<label><input type="checkbox" name="widget_enabled" value="1" <?php checked( 1, $chk['widget_enabled'] ); ?> /> <?php esc_html_e( 'Show a “Broken links” widget on the admin dashboard.', 'acps-link-shortener' ); ?></label>
 							</td>
 						</tr>
 					</tbody>
@@ -1196,10 +1355,13 @@ class ACPS_LS_Admin {
 		$tabs = array(
 			''          => sprintf( /* translators: %d: count. */ __( 'All (%d)', 'acps-link-shortener' ), $counts['all'] ),
 			'broken'    => sprintf( __( 'Broken (%d)', 'acps-link-shortener' ), $counts['broken'] ),
+			'warning'   => sprintf( __( 'Warnings (%d)', 'acps-link-shortener' ), $counts['warning'] ),
 			'redirect'  => sprintf( __( 'Redirects (%d)', 'acps-link-shortener' ), $counts['redirect'] ),
 			'ok'        => sprintf( __( 'OK (%d)', 'acps-link-shortener' ), $counts['ok'] ),
 			'unchecked' => sprintf( __( 'Unchecked (%d)', 'acps-link-shortener' ), $counts['unchecked'] ),
+			'dismissed' => sprintf( __( 'Dismissed (%d)', 'acps-link-shortener' ), $counts['dismissed'] ),
 		);
+		$info = ACPS_LS_Checker::status_info();
 		?>
 		<div class="wrap acps-ls-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Link Checker', 'acps-link-shortener' ); ?></h1>
@@ -1219,11 +1381,20 @@ class ACPS_LS_Admin {
 				</p></div>
 			<?php endif; ?>
 
+			<div class="acps-ls-status-panel" style="background:#fff;border:1px solid #dcdcde;border-radius:6px;padding:.75rem 1rem;margin:.75rem 0;display:flex;flex-wrap:wrap;gap:1.5rem;">
+				<span><strong><?php echo esc_html( number_format_i18n( $info['broken'] ) ); ?></strong> <?php esc_html_e( 'broken', 'acps-link-shortener' ); ?></span>
+				<span><strong><?php echo esc_html( number_format_i18n( $info['queue'] ) ); ?></strong> <?php esc_html_e( 'in the check queue', 'acps-link-shortener' ); ?></span>
+				<span><strong><?php echo esc_html( number_format_i18n( $info['unique'] ) ); ?></strong> <?php esc_html_e( 'unique URLs', 'acps-link-shortener' ); ?> (<?php echo esc_html( number_format_i18n( $info['occ_total'] ) ); ?> <?php esc_html_e( 'occurrences', 'acps-link-shortener' ); ?>)</span>
+				<span class="description">PHP <?php echo esc_html( $info['php'] ); ?> · MySQL <?php echo esc_html( $info['mysql'] ); ?> · cURL <?php echo esc_html( $info['curl'] ); ?> · <?php printf( esc_html__( 'timeout %ds', 'acps-link-shortener' ), (int) $info['timeout'] ); ?></span>
+				<span class="description"><?php printf( esc_html__( 'Last e-mail: %s', 'acps-link-shortener' ), esc_html( $info['last_email'] ) ); ?></span>
+			</div>
+
 			<p>
 				<?php $this->checker_button( 'scan_now', __( 'Scan now', 'acps-link-shortener' ), $state ); ?>
 				<?php $this->checker_button( 'check_now', __( 'Check now', 'acps-link-shortener' ), $state ); ?>
 				<?php $this->checker_button( 'recheck_all', __( 'Recheck all', 'acps-link-shortener' ), $state ); ?>
 				<?php $this->checker_button( 'apply_rules', __( 'Apply rewrite rules to short links', 'acps-link-shortener' ), $state ); ?>
+				<?php $this->checker_button( 'forced_recheck', __( 'Forced recheck (clear & rescan)', 'acps-link-shortener' ), $state, __( 'This clears the checker database and rechecks the whole site from scratch. Continue?', 'acps-link-shortener' ) ); ?>
 				<?php if ( is_array( $last ) && ! empty( $last['time'] ) ) : ?>
 					<span class="description" style="margin-left:.5rem;"><?php printf( esc_html__( 'Last check: %s', 'acps-link-shortener' ), esc_html( $last['time'] ) ); ?></span>
 				<?php endif; ?>
@@ -1300,9 +1471,10 @@ class ACPS_LS_Admin {
 	 * @param string $label  Button label.
 	 * @param string $state  Current state filter (preserved on redirect).
 	 */
-	private function checker_button( $action, $label, $state ) {
+	private function checker_button( $action, $label, $state, $confirm = '' ) {
+		$onsubmit = $confirm ? ' onsubmit="return confirm(\'' . esc_js( $confirm ) . '\');"' : '';
 		?>
-		<form method="post" action="<?php echo esc_url( $this->checker_url() ); ?>" style="display:inline;">
+		<form method="post" action="<?php echo esc_url( $this->checker_url() ); ?>" style="display:inline;"<?php echo $onsubmit; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 			<?php wp_nonce_field( 'acps_ls_checker', 'acps_ls_checker_nonce' ); ?>
 			<input type="hidden" name="acps_ls_checker_action" value="<?php echo esc_attr( $action ); ?>" />
 			<input type="hidden" name="return_state" value="<?php echo esc_attr( $state ); ?>" />
@@ -1380,8 +1552,84 @@ class ACPS_LS_Admin {
 					<input type="url" id="acps-ls-new-<?php echo (int) $row->id; ?>" name="new_url" class="regular-text" style="max-width:170px;" placeholder="<?php esc_attr_e( 'replace with…', 'acps-link-shortener' ); ?>" />
 					<button type="submit" class="button button-small"><?php esc_html_e( 'Replace', 'acps-link-shortener' ); ?></button>
 				</form>
+				<div style="margin-top:.35rem;font-size:.85em;">
+					<?php if ( 'redirect' === $row->state && $row->final_url ) : ?>
+						<?php $this->row_action_link( 'fix_redirect', __( 'Fix redirect', 'acps-link-shortener' ), $row, $state ); ?> |
+					<?php endif; ?>
+					<?php $this->row_action_link( 'unlink', __( 'Unlink', 'acps-link-shortener' ), $row, $state, __( 'Remove this link from your content, keeping the text?', 'acps-link-shortener' ) ); ?> |
+					<?php if ( $row->false_positive ) : ?>
+						<span class="description"><?php esc_html_e( 'marked OK', 'acps-link-shortener' ); ?></span> |
+					<?php else : ?>
+						<?php $this->row_action_link( 'not_broken', __( 'Not broken', 'acps-link-shortener' ), $row, $state ); ?> |
+					<?php endif; ?>
+					<?php if ( $row->dismissed ) : ?>
+						<?php $this->row_action_link( 'restore', __( 'Restore', 'acps-link-shortener' ), $row, $state ); ?>
+					<?php else : ?>
+						<?php $this->row_action_link( 'dismiss', __( 'Dismiss', 'acps-link-shortener' ), $row, $state ); ?>
+					<?php endif; ?>
+				</div>
 			</td>
 		</tr>
 		<?php
+	}
+
+	/**
+	 * A small inline link-styled POST action inside a checker row.
+	 *
+	 * @param string $action  Action key.
+	 * @param string $label   Label.
+	 * @param object $row      URL row.
+	 * @param string $state   Current state filter.
+	 * @param string $confirm Optional confirm message.
+	 */
+	private function row_action_link( $action, $label, $row, $state, $confirm = '' ) {
+		$onsubmit = $confirm ? ' onsubmit="return confirm(\'' . esc_js( $confirm ) . '\');"' : '';
+		?>
+		<form method="post" action="<?php echo esc_url( $this->checker_url() ); ?>" style="display:inline;"<?php echo $onsubmit; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+			<?php wp_nonce_field( 'acps_ls_checker', 'acps_ls_checker_nonce' ); ?>
+			<input type="hidden" name="acps_ls_checker_action" value="<?php echo esc_attr( $action ); ?>" />
+			<input type="hidden" name="url_id" value="<?php echo (int) $row->id; ?>" />
+			<input type="hidden" name="url_hash" value="<?php echo esc_attr( $row->url_hash ); ?>" />
+			<input type="hidden" name="return_state" value="<?php echo esc_attr( $state ); ?>" />
+			<button type="submit" class="button-link" style="color:#2271b1;"><?php echo esc_html( $label ); ?></button>
+		</form>
+		<?php
+	}
+
+	/**
+	 * Register + render the dashboard "Broken links" widget.
+	 */
+	public function maybe_add_dashboard_widget() {
+		$settings = ACPS_LS_Checker::settings();
+		if ( empty( $settings['widget_enabled'] ) || ! current_user_can( acps_ls_manage_capability() ) ) {
+			return;
+		}
+		wp_add_dashboard_widget(
+			'acps_ls_broken_links',
+			__( 'Broken links', 'acps-link-shortener' ),
+			array( $this, 'render_dashboard_widget' )
+		);
+	}
+
+	/**
+	 * Dashboard widget body.
+	 */
+	public function render_dashboard_widget() {
+		$counts = ACPS_LS_Checker::counts();
+		$url    = $this->checker_url();
+		echo '<p>';
+		if ( $counts['broken'] > 0 ) {
+			printf(
+				wp_kses_post( _n( '<strong>%1$d</strong> broken link found. <a href="%2$s">Review</a>', '<strong>%1$d</strong> broken links found. <a href="%2$s">Review</a>', $counts['broken'], 'acps-link-shortener' ) ),
+				(int) $counts['broken'],
+				esc_url( add_query_arg( 'state', 'broken', $url ) )
+			);
+		} else {
+			esc_html_e( 'No broken links detected. 🎉', 'acps-link-shortener' );
+		}
+		echo '</p>';
+		if ( $counts['warning'] > 0 ) {
+			echo '<p>' . sprintf( esc_html__( '%d warnings.', 'acps-link-shortener' ), (int) $counts['warning'] ) . ' <a href="' . esc_url( add_query_arg( 'state', 'warning', $url ) ) . '">' . esc_html__( 'View', 'acps-link-shortener' ) . '</a></p>';
+		}
 	}
 }

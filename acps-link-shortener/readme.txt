@@ -3,7 +3,7 @@ Contributors: acps
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,19 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.5.0 =
+* Link checker settings expanded: status panel (broken count, queue, unique URLs,
+  PHP/MySQL/cURL versions, last e-mail); e-mail notifications to admin and to
+  post authors; warnings vs broken; request timeout; exclusion list; link types
+  (HTML links, images, plain-text URLs); which post types, post statuses, and
+  comments to scan; a dashboard "Broken links" widget.
+* New per-link actions on the checker screen: Dismiss / Restore, Not broken
+  (false positive), Unlink (remove the link, keep the text), Fix redirect
+  (repoint to the final URL), plus a "Forced recheck" that clears and rescans.
+* Deliberately not included (host-specific or very heavy): server-load limiter,
+  continuous in-browser monitor, custom log file, embedded-video/ACF parsers,
+  and in-content broken-link CSS styling.
 
 = 1.4.0 =
 * Link checker: verifies that links are alive (HEAD then GET; broken / redirect /
