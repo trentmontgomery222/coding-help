@@ -64,7 +64,35 @@ class ACPS_LS_Checker {
 			'scan_types'     => isset( $saved['scan_types'] ) && is_array( $saved['scan_types'] ) ? $saved['scan_types'] : array( 'post', 'page' ),
 			'scan_statuses'  => isset( $saved['scan_statuses'] ) && is_array( $saved['scan_statuses'] ) ? $saved['scan_statuses'] : array( 'publish' ),
 			'widget_enabled' => ! empty( $saved['widget_enabled'] ) ? 1 : 0,
+			// Quiet hours: hold automatic e-mails overnight and send after the
+			// window ends (default 8 PM -> 8 AM, using the site's timezone).
+			'quiet_enabled'  => ! isset( $saved['quiet_enabled'] ) || ! empty( $saved['quiet_enabled'] ) ? 1 : 0,
+			'quiet_start'    => isset( $saved['quiet_start'] ) ? min( 23, max( 0, (int) $saved['quiet_start'] ) ) : 20,
+			'quiet_end'      => isset( $saved['quiet_end'] ) ? min( 23, max( 0, (int) $saved['quiet_end'] ) ) : 8,
 		);
+	}
+
+	/**
+	 * Whether "now" (site timezone) falls inside the quiet-hours window.
+	 *
+	 * @return bool
+	 */
+	private function in_quiet_hours() {
+		$s = self::settings();
+		if ( empty( $s['quiet_enabled'] ) ) {
+			return false;
+		}
+		$start = (int) $s['quiet_start'];
+		$end   = (int) $s['quiet_end'];
+		if ( $start === $end ) {
+			return false; // No window.
+		}
+		$hour = (int) current_time( 'G' ); // 0-23, site timezone.
+		if ( $start < $end ) {
+			return $hour >= $start && $hour < $end;
+		}
+		// Window wraps past midnight (e.g. 20 -> 8).
+		return $hour >= $start || $hour < $end;
 	}
 
 	/**
@@ -649,6 +677,12 @@ class ACPS_LS_Checker {
 	public function maybe_notify() {
 		$s = self::settings();
 		if ( empty( $s['notify_admin'] ) && empty( $s['notify_authors'] ) ) {
+			return 0;
+		}
+		// Quiet hours: hold overnight and send after the window ends (e.g. 8 AM).
+		// Broken links stay un-notified until then, so they go out in the first
+		// send after quiet hours end.
+		if ( $this->in_quiet_hours() ) {
 			return 0;
 		}
 		// Batch: don't send more than once an hour automatically.

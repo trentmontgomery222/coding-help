@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,12 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.7.0 =
+* Quiet hours for automatic broken-link e-mails: hold notifications overnight
+  and send anything found in the first check after quiet hours end. Default
+  window 8 PM–8 AM in the site timezone; configurable start/end. The manual
+  "Force notify" button ignores quiet hours.
 
 = 1.6.0 =
 * Add a "Force notify" button on the Link Checker screen that immediately

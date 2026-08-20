@@ -415,6 +415,9 @@ class ACPS_LS_Admin {
 		$notify_admin   = isset( $_POST['notify_admin'] ) ? 1 : 0;
 		$notify_authors = isset( $_POST['notify_authors'] ) ? 1 : 0;
 		$notify_email   = isset( $_POST['notify_email'] ) ? sanitize_email( wp_unslash( $_POST['notify_email'] ) ) : '';
+		$quiet_enabled  = isset( $_POST['quiet_enabled'] ) ? 1 : 0;
+		$quiet_start    = isset( $_POST['quiet_start'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['quiet_start'] ) ) ) ) : 20;
+		$quiet_end      = isset( $_POST['quiet_end'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['quiet_end'] ) ) ) ) : 8;
 		$link_html      = isset( $_POST['link_html'] ) ? 1 : 0;
 		$link_images    = isset( $_POST['link_images'] ) ? 1 : 0;
 		$link_plaintext = isset( $_POST['link_plaintext'] ) ? 1 : 0;
@@ -474,6 +477,9 @@ class ACPS_LS_Admin {
 		$settings['notify_admin']   = $notify_admin;
 		$settings['notify_authors'] = $notify_authors;
 		$settings['notify_email']   = $notify_email;
+		$settings['quiet_enabled']  = $quiet_enabled;
+		$settings['quiet_start']    = $quiet_start;
+		$settings['quiet_end']      = $quiet_end;
 		$settings['link_html']      = $link_html;
 		$settings['link_images']    = $link_images;
 		$settings['link_plaintext'] = $link_plaintext;
@@ -1281,6 +1287,29 @@ class ACPS_LS_Admin {
 							</td>
 						</tr>
 						<tr>
+							<th scope="row"><?php esc_html_e( 'Quiet hours', 'acps-link-shortener' ); ?></th>
+							<td>
+								<fieldset>
+									<label><input type="checkbox" name="quiet_enabled" value="1" <?php checked( 1, $chk['quiet_enabled'] ); ?> /> <?php esc_html_e( 'Don’t e-mail overnight. Hold anything found and send it after quiet hours end.', 'acps-link-shortener' ); ?></label>
+									<p>
+										<label for="acps-ls-quiet-start"><?php esc_html_e( 'Quiet from', 'acps-link-shortener' ); ?></label>
+										<?php $this->hour_select( 'quiet_start', 'acps-ls-quiet-start', (int) $chk['quiet_start'] ); ?>
+										<label for="acps-ls-quiet-end"><?php esc_html_e( 'until', 'acps-link-shortener' ); ?></label>
+										<?php $this->hour_select( 'quiet_end', 'acps-ls-quiet-end', (int) $chk['quiet_end'] ); ?>
+									</p>
+									<p class="description">
+										<?php
+										printf(
+											/* translators: %s: site timezone string. */
+											esc_html__( 'Uses the site timezone (%s). With the default 8 PM–8 AM, overnight breakages are e-mailed in the first check after 8 AM.', 'acps-link-shortener' ),
+											esc_html( wp_timezone_string() )
+										);
+										?>
+									</p>
+								</fieldset>
+							</td>
+						</tr>
+						<tr>
 							<th scope="row"><?php esc_html_e( 'Dashboard widget', 'acps-link-shortener' ); ?></th>
 							<td>
 								<label><input type="checkbox" name="widget_enabled" value="1" <?php checked( 1, $chk['widget_enabled'] ); ?> /> <?php esc_html_e( 'Show a “Broken links” widget on the admin dashboard.', 'acps-link-shortener' ); ?></label>
@@ -1479,6 +1508,22 @@ class ACPS_LS_Admin {
 	 * @param string $label  Button label.
 	 * @param string $state  Current state filter (preserved on redirect).
 	 */
+	/**
+	 * Render an hour-of-day (0–23) select control.
+	 *
+	 * @param string $name     Field name.
+	 * @param string $id       Field id.
+	 * @param int    $selected Currently selected hour.
+	 */
+	private function hour_select( $name, $id, $selected ) {
+		echo '<select name="' . esc_attr( $name ) . '" id="' . esc_attr( $id ) . '">';
+		for ( $h = 0; $h < 24; $h++ ) {
+			$ampm  = ( 0 === $h ) ? '12 AM' : ( 12 === $h ? '12 PM' : ( $h < 12 ? $h . ' AM' : ( $h - 12 ) . ' PM' ) );
+			echo '<option value="' . esc_attr( $h ) . '" ' . selected( $h, $selected, false ) . '>' . esc_html( $ampm ) . '</option>';
+		}
+		echo '</select>';
+	}
+
 	private function checker_button( $action, $label, $state, $confirm = '' ) {
 		$onsubmit = $confirm ? ' onsubmit="return confirm(\'' . esc_js( $confirm ) . '\');"' : '';
 		?>
