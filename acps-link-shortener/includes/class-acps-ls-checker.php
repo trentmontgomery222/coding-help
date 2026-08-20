@@ -122,33 +122,41 @@ class ACPS_LS_Checker {
 	 * @return array Summary.
 	 */
 	public function run() {
-		$settings = self::settings();
-		if ( empty( $settings['check_enabled'] ) ) {
-			return array( 'skipped' => true );
-		}
-
-		$this->collect_shortener_occurrences();
-
-		if ( ! empty( $settings['scan_content'] ) ) {
-			$this->scan_content_batch();
-			if ( ! empty( $settings['scan_comments'] ) ) {
-				$this->scan_comment_batch();
+		try {
+			$settings = self::settings();
+			if ( empty( $settings['check_enabled'] ) ) {
+				return array( 'skipped' => true );
 			}
+
+			$this->collect_shortener_occurrences();
+
+			if ( ! empty( $settings['scan_content'] ) ) {
+				$this->scan_content_batch();
+				if ( ! empty( $settings['scan_comments'] ) ) {
+					$this->scan_comment_batch();
+				}
+			}
+
+			$checked = $this->check_batch( self::CHECK_BATCH, (int) $settings['recheck_hours'] );
+
+			$this->maybe_notify();
+
+			update_option(
+				'acps_ls_last_check',
+				array(
+					'time'    => current_time( 'mysql' ),
+					'checked' => $checked,
+				)
+			);
+
+			return array( 'checked' => $checked );
+		} catch ( Throwable $e ) {
+			// A checker error must never break the request that triggered cron.
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'checker run', $e );
+			}
+			return array( 'error' => true );
 		}
-
-		$checked = $this->check_batch( self::CHECK_BATCH, (int) $settings['recheck_hours'] );
-
-		$this->maybe_notify();
-
-		update_option(
-			'acps_ls_last_check',
-			array(
-				'time'    => current_time( 'mysql' ),
-				'checked' => $checked,
-			)
-		);
-
-		return array( 'checked' => $checked );
 	}
 
 	/* --------------------------------------------------------------------- */

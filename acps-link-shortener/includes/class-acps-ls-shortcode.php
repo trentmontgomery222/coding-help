@@ -44,8 +44,26 @@ class ACPS_LS_Shortcode {
 	 * Hook shortcode + submission handler.
 	 */
 	public function register() {
-		add_shortcode( 'acps_link_shortener', array( $this, 'render' ) );
+		add_shortcode( 'acps_link_shortener', array( $this, 'render_shortcode' ) );
 		add_action( 'template_redirect', array( $this, 'handle_submit' ) );
+	}
+
+	/**
+	 * Crash-safe wrapper around render(): a rendering error shows a small note
+	 * instead of breaking the whole page the shortcode is on.
+	 *
+	 * @param array $atts Attributes.
+	 * @return string
+	 */
+	public function render_shortcode( $atts = array() ) {
+		try {
+			return $this->render( $atts );
+		} catch ( Throwable $e ) {
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'shortcode render', $e );
+			}
+			return '<p>' . esc_html__( 'The link tool is temporarily unavailable. Please try again later.', 'acps-link-shortener' ) . '</p>';
+		}
 	}
 
 	/* --------------------------------------------------------------------- */
@@ -134,6 +152,20 @@ class ACPS_LS_Shortcode {
 	 * Handle a front-end submission, then redirect back with a result token.
 	 */
 	public function handle_submit() {
+		try {
+			$this->handle_submit_inner();
+		} catch ( Throwable $e ) {
+			// A submission error must not break the page load.
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'shortcode submit', $e );
+			}
+		}
+	}
+
+	/**
+	 * The actual submission logic (wrapped by handle_submit()).
+	 */
+	private function handle_submit_inner() {
 		if ( empty( $_POST['acps_ls_shortcode'] ) ) {
 			return;
 		}

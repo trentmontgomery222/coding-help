@@ -59,21 +59,30 @@ class ACPS_LS_Sync {
 	 * @return array|WP_Error Summary or error.
 	 */
 	public function run() {
-		$settings = $this->settings();
+		try {
+			$settings = $this->settings();
 
-		if ( empty( $settings['sync_enabled'] ) || empty( $settings['sheet_url'] ) ) {
-			return new WP_Error( 'acps_ls_sync_disabled', __( 'Sheet sync is not configured.', 'acps-link-shortener' ) );
+			if ( empty( $settings['sync_enabled'] ) || empty( $settings['sheet_url'] ) ) {
+				return new WP_Error( 'acps_ls_sync_disabled', __( 'Sheet sync is not configured.', 'acps-link-shortener' ) );
+			}
+
+			$response = $this->exchange( $settings['sheet_url'], $settings['sheet_secret'] );
+			if ( is_wp_error( $response ) ) {
+				$this->record( array( 'error' => $response->get_error_message() ) );
+				return $response;
+			}
+
+			$summary = $this->reconcile( $response );
+			$this->record( $summary );
+			return $summary;
+		} catch ( Throwable $e ) {
+			// A sync error must never break the request that triggered cron.
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'sheet sync', $e );
+			}
+			$this->record( array( 'error' => $e->getMessage() ) );
+			return new WP_Error( 'acps_ls_sync_exception', $e->getMessage() );
 		}
-
-		$response = $this->exchange( $settings['sheet_url'], $settings['sheet_secret'] );
-		if ( is_wp_error( $response ) ) {
-			$this->record( array( 'error' => $response->get_error_message() ) );
-			return $response;
-		}
-
-		$summary = $this->reconcile( $response );
-		$this->record( $summary );
-		return $summary;
 	}
 
 	/**

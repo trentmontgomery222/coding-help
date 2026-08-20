@@ -1,12 +1,12 @@
 <?php
 /**
- * Plugin Name:       Cayden Riddle Link Shortener
+ * Plugin Name:       Cayden Link Shortener
  * Plugin URI:        https://caydenriddle.com/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.7.0
+ * Version:           1.8.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
- * Author:            Cayden Riddle
+ * Author:            Cayden
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       acps-link-shortener
@@ -31,7 +31,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
 			echo esc_html(
 				sprintf(
 					/* translators: %s: current PHP version. */
-					__( 'Cayden Riddle Link Shortener requires PHP 7.4 or newer. This server runs PHP %s. Please update PHP, then activate the plugin.', 'acps-link-shortener' ),
+					__( 'Cayden Link Shortener requires PHP 7.4 or newer. This server runs PHP %s. Please update PHP, then activate the plugin.', 'acps-link-shortener' ),
 					PHP_VERSION
 				)
 			);
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.7.0' );
+define( 'ACPS_LS_VERSION', '1.8.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -82,15 +82,72 @@ define( 'ACPS_LS_CHECK_HOOK', 'acps_ls_link_check' );
 define( 'ACPS_LS_CHECK_INTERVAL', 'acps_ls_ten_minutes' );
 
 /**
- * Load plugin classes.
+ * Log a plugin error without ever surfacing it to visitors.
+ *
+ * @param string    $context Where it happened.
+ * @param Throwable $e       The error/exception.
  */
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-install.php';
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-db.php';
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-rewrite.php';
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-redirect.php';
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-shortcode.php';
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-sync.php';
-require_once ACPS_LS_PATH . 'includes/class-acps-ls-checker.php';
+function acps_ls_log_error( $context, $e ) {
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( sprintf( '[Cayden Link Shortener] %s: %s in %s:%d', $context, $e->getMessage(), $e->getFile(), $e->getLine() ) );
+	}
+}
+
+/**
+ * Safely load the plugin's class files.
+ *
+ * If any file is missing (e.g. an incomplete/failed upload) the plugin does NOT
+ * fatal the whole site — it logs, shows an admin notice, and simply does not
+ * boot. The rest of WordPress keeps working normally.
+ *
+ * @return bool True if every required file loaded.
+ */
+function acps_ls_load_files() {
+	$files = array(
+		'includes/class-acps-ls-install.php',
+		'includes/class-acps-ls-db.php',
+		'includes/class-acps-ls-rewrite.php',
+		'includes/class-acps-ls-redirect.php',
+		'includes/class-acps-ls-shortcode.php',
+		'includes/class-acps-ls-sync.php',
+		'includes/class-acps-ls-checker.php',
+	);
+
+	$missing = array();
+	foreach ( $files as $rel ) {
+		$path = ACPS_LS_PATH . $rel;
+		if ( is_readable( $path ) ) {
+			try {
+				require_once $path;
+			} catch ( Throwable $e ) {
+				acps_ls_log_error( 'load ' . $rel, $e );
+				$missing[] = $rel;
+			}
+		} else {
+			$missing[] = $rel;
+		}
+	}
+
+	if ( $missing ) {
+		add_action(
+			'admin_notices',
+			function () use ( $missing ) {
+				if ( ! current_user_can( 'activate_plugins' ) ) {
+					return;
+				}
+				echo '<div class="notice notice-error"><p><strong>Cayden Link Shortener</strong> could not load and has been paused to protect your site. Missing file(s): ';
+				echo esc_html( implode( ', ', $missing ) );
+				echo '. Re-upload the plugin (Plugins → Add New → Upload Plugin) to fix it.</p></div>';
+			}
+		);
+		return false;
+	}
+
+	return true;
+}
+
+$acps_ls_loaded = acps_ls_load_files();
 
 /**
  * Return the capability required to manage links.
@@ -479,10 +536,18 @@ function acps_ls_flagging_rule( $url ) {
 /**
  * Activation: build the table, seed options, flush rewrite rules, schedule cron.
  *
- * Rewrite rules are flushed here ONLY (never on every load).
+ * Wrapped so a hiccup during activation shows a readable failure instead of a
+ * fatal. Rewrite rules are flushed here ONLY (never on every load).
  */
 function acps_ls_activate() {
-	ACPS_LS_Install::activate();
+	if ( ! class_exists( 'ACPS_LS_Install' ) ) {
+		return;
+	}
+	try {
+		ACPS_LS_Install::activate();
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'activate', $e );
+	}
 }
 register_activation_hook( __FILE__, 'acps_ls_activate' );
 
@@ -490,43 +555,60 @@ register_activation_hook( __FILE__, 'acps_ls_activate' );
  * Deactivation: clear the scheduled sync. Data + table are preserved.
  */
 function acps_ls_deactivate() {
-	ACPS_LS_Install::deactivate();
+	if ( ! class_exists( 'ACPS_LS_Install' ) ) {
+		return;
+	}
+	try {
+		ACPS_LS_Install::deactivate();
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'deactivate', $e );
+	}
 }
 register_deactivation_hook( __FILE__, 'acps_ls_deactivate' );
 
 /**
  * Boot the runtime pieces on every request.
+ *
+ * The whole body is wrapped: if anything throws (a broken file, a bad option,
+ * an unexpected environment) it is logged and swallowed so the plugin can never
+ * take the site down. WordPress continues to load normally.
  */
 function acps_ls_bootstrap() {
-	// Run migrations if the stored DB version is behind the code.
-	ACPS_LS_Install::maybe_upgrade();
+	if ( empty( $GLOBALS['acps_ls_loaded'] ) ) {
+		return; // A required file was missing; stay out of the way.
+	}
 
-	// Rewrite rule + query var so /link/{slug} routes to us.
-	$rewrite = new ACPS_LS_Rewrite();
-	$rewrite->register();
+	try {
+		// Run migrations if the stored DB version is behind the code.
+		ACPS_LS_Install::maybe_upgrade();
 
-	// Redirect handler.
-	$redirect = new ACPS_LS_Redirect();
-	$redirect->register();
+		// Rewrite rule + query var so /link/{slug} routes to us.
+		( new ACPS_LS_Rewrite() )->register();
 
-	// Front-end shortcode (password-gated link creator). Runs on the front end
-	// and handles its own form submission, so it is always registered.
-	$shortcode = new ACPS_LS_Shortcode();
-	$shortcode->register();
+		// Redirect handler.
+		( new ACPS_LS_Redirect() )->register();
 
-	// Two-way Google Sheet sync (WP-Cron + REST test endpoint).
-	$sync = new ACPS_LS_Sync();
-	$sync->register();
+		// Front-end shortcode (password-gated link creator).
+		( new ACPS_LS_Shortcode() )->register();
 
-	// Link checker (scan + HTTP checks + replacement rules).
-	$checker = new ACPS_LS_Checker();
-	$checker->register();
+		// Two-way Google Sheet sync (WP-Cron).
+		( new ACPS_LS_Sync() )->register();
 
-	// Admin UI; load it lazily.
-	if ( is_admin() ) {
-		require_once ACPS_LS_PATH . 'includes/class-acps-ls-admin.php';
-		$admin = new ACPS_LS_Admin();
-		$admin->register();
+		// Link checker (scan + HTTP checks + replacement rules).
+		( new ACPS_LS_Checker() )->register();
+
+		// Admin UI; load it lazily.
+		if ( is_admin() ) {
+			$admin_file = ACPS_LS_PATH . 'includes/class-acps-ls-admin.php';
+			if ( is_readable( $admin_file ) ) {
+				require_once $admin_file;
+				if ( class_exists( 'ACPS_LS_Admin' ) ) {
+					( new ACPS_LS_Admin() )->register();
+				}
+			}
+		}
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'bootstrap', $e );
 	}
 }
 add_action( 'plugins_loaded', 'acps_ls_bootstrap' );
@@ -540,11 +622,11 @@ add_action( 'plugins_loaded', 'acps_ls_bootstrap' );
 function acps_ls_cron_schedules( $schedules ) {
 	$schedules[ ACPS_LS_CRON_INTERVAL ] = array(
 		'interval' => 3 * MINUTE_IN_SECONDS,
-		'display'  => __( 'Every 3 minutes (Cayden Riddle Link Shortener sync)', 'acps-link-shortener' ),
+		'display'  => __( 'Every 3 minutes (Cayden Link Shortener sync)', 'acps-link-shortener' ),
 	);
 	$schedules[ ACPS_LS_CHECK_INTERVAL ] = array(
 		'interval' => 10 * MINUTE_IN_SECONDS,
-		'display'  => __( 'Every 10 minutes (Cayden Riddle Link Shortener checker)', 'acps-link-shortener' ),
+		'display'  => __( 'Every 10 minutes (Cayden Link Shortener checker)', 'acps-link-shortener' ),
 	);
 	return $schedules;
 }

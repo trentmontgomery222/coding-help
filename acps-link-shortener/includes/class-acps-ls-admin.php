@@ -158,8 +158,23 @@ class ACPS_LS_Admin {
 
 	/**
 	 * Route non-render actions (save, delete, toggle, settings save).
+	 *
+	 * Wrapped so an admin action error is logged instead of breaking wp-admin.
 	 */
 	public function handle_actions() {
+		try {
+			$this->handle_actions_inner();
+		} catch ( Throwable $e ) {
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'admin action', $e );
+			}
+		}
+	}
+
+	/**
+	 * The actual action router (wrapped by handle_actions()).
+	 */
+	private function handle_actions_inner() {
 		if ( ! isset( $_GET['page'] ) ) {
 			return;
 		}
@@ -1653,22 +1668,36 @@ class ACPS_LS_Admin {
 	 * Register + render the dashboard "Broken links" widget.
 	 */
 	public function maybe_add_dashboard_widget() {
-		$settings = ACPS_LS_Checker::settings();
-		if ( empty( $settings['widget_enabled'] ) || ! current_user_can( acps_ls_manage_capability() ) ) {
-			return;
+		try {
+			$settings = ACPS_LS_Checker::settings();
+			if ( empty( $settings['widget_enabled'] ) || ! current_user_can( acps_ls_manage_capability() ) ) {
+				return;
+			}
+			wp_add_dashboard_widget(
+				'acps_ls_broken_links',
+				__( 'Broken links', 'acps-link-shortener' ),
+				array( $this, 'render_dashboard_widget' )
+			);
+		} catch ( Throwable $e ) {
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'dashboard widget', $e );
+			}
 		}
-		wp_add_dashboard_widget(
-			'acps_ls_broken_links',
-			__( 'Broken links', 'acps-link-shortener' ),
-			array( $this, 'render_dashboard_widget' )
-		);
 	}
 
 	/**
 	 * Dashboard widget body.
 	 */
 	public function render_dashboard_widget() {
-		$counts = ACPS_LS_Checker::counts();
+		try {
+			$counts = ACPS_LS_Checker::counts();
+		} catch ( Throwable $e ) {
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'dashboard widget render', $e );
+			}
+			echo '<p>' . esc_html__( 'Link status is temporarily unavailable.', 'acps-link-shortener' ) . '</p>';
+			return;
+		}
 		$url    = $this->checker_url();
 		echo '<p>';
 		if ( $counts['broken'] > 0 ) {

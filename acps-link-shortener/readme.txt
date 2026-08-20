@@ -1,9 +1,9 @@
-=== Cayden Riddle Link Shortener ===
+=== Cayden Link Shortener ===
 Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -83,6 +83,18 @@ Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
 
+= 1.8.0 =
+* Rebrand to "Cayden Link Shortener" (first name).
+* Crash-proofing so the plugin can never white-screen the whole site:
+  - Missing class files (e.g. an incomplete/failed upload) no longer fatal —
+    the plugin pauses itself, shows an admin notice naming the missing file(s),
+    and WordPress keeps running.
+  - Every runtime entry point (front-end redirect handler, shortcode render +
+    submission, WP-Cron sync and link checker, admin action router, dashboard
+    widget) is wrapped in try/catch: any unexpected error is logged (when
+    WP_DEBUG is on) and swallowed instead of taking the site down.
+  - Activation/deactivation guarded too, so a hiccup there fails gracefully.
+
 = 1.7.0 =
 * Quiet hours for automatic broken-link e-mails: hold notifications overnight
   and send anything found in the first check after quiet hours end. Default
@@ -93,7 +105,7 @@ Filter `acps_ls_reserved_slugs`.
 * Add a "Force notify" button on the Link Checker screen that immediately
   e-mails a report of every currently broken link (ignores the once-an-hour
   throttle and the per-link notified flag).
-* Rebrand: plugin name and author are now "Cayden Riddle Link Shortener" by
+* Rebrand: plugin name and author are now "Cayden Link Shortener" by
   Cayden Riddle. Internal identifiers and stored data are unchanged.
 
 = 1.5.0 =

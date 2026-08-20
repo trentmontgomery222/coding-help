@@ -1,5 +1,5 @@
 /**
- * Cayden Riddle Link Shortener — two-way Google Sheet bridge (companion web app).
+ * Cayden Link Shortener — two-way Google Sheet bridge (companion web app).
  *
  * WordPress POSTs its links here every few minutes. This script:
  *   1. Returns the spreadsheet's current rows so WordPress can apply the sheet's

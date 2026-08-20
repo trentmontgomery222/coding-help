@@ -44,23 +44,30 @@ class ACPS_LS_Redirect {
 	 * @param WP $wp Current WP environment.
 	 */
 	public function maybe_redirect( $wp ) {
-		if ( empty( $wp->query_vars[ ACPS_LS_QUERY_VAR ] ) ) {
-			return;
+		try {
+			if ( empty( $wp->query_vars[ ACPS_LS_QUERY_VAR ] ) ) {
+				return;
+			}
+
+			$slug = ACPS_LS_DB::sanitize_slug_path( wp_unslash( $wp->query_vars[ ACPS_LS_QUERY_VAR ] ) );
+			if ( '' === $slug ) {
+				return;
+			}
+
+			$link = ACPS_LS_DB::get_active_by_slug( $slug );
+
+			if ( ! $link ) {
+				$this->send_404();
+				return;
+			}
+
+			$this->do_redirect( $link );
+		} catch ( Throwable $e ) {
+			// Never let a redirect error break the request; fall through to WP.
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'redirect', $e );
+			}
 		}
-
-		$slug = ACPS_LS_DB::sanitize_slug_path( wp_unslash( $wp->query_vars[ ACPS_LS_QUERY_VAR ] ) );
-		if ( '' === $slug ) {
-			return;
-		}
-
-		$link = ACPS_LS_DB::get_active_by_slug( $slug );
-
-		if ( ! $link ) {
-			$this->send_404();
-			return;
-		}
-
-		$this->do_redirect( $link );
 	}
 
 	/**
@@ -68,31 +75,38 @@ class ACPS_LS_Redirect {
 	 * slug. Real content never reaches here because it is not a 404.
 	 */
 	public function maybe_redirect_bare() {
-		if ( is_admin() || ! is_404() ) {
-			return;
-		}
+		try {
+			if ( is_admin() || ! is_404() ) {
+				return;
+			}
 
-		global $wp;
-		$request = isset( $wp->request ) ? trim( (string) $wp->request, '/' ) : '';
-		if ( '' === $request ) {
-			return;
-		}
+			global $wp;
+			$request = isset( $wp->request ) ? trim( (string) $wp->request, '/' ) : '';
+			if ( '' === $request ) {
+				return;
+			}
 
-		// The whole path is the candidate slug, so single-segment slugs AND
-		// per-user namespaced slugs (e.g. "katherine/my-link") both resolve.
-		// Real pages never reach here because they are not 404s.
-		$slug = ACPS_LS_DB::sanitize_slug_path( $request );
-		if ( '' === $slug ) {
-			return;
-		}
+			// The whole path is the candidate slug, so single-segment slugs AND
+			// per-user namespaced slugs (e.g. "katherine/my-link") both resolve.
+			// Real pages never reach here because they are not 404s.
+			$slug = ACPS_LS_DB::sanitize_slug_path( $request );
+			if ( '' === $slug ) {
+				return;
+			}
 
-		$link = ACPS_LS_DB::get_active_by_slug( $slug );
-		if ( ! $link ) {
-			// Leave the natural WordPress 404 in place.
-			return;
-		}
+			$link = ACPS_LS_DB::get_active_by_slug( $slug );
+			if ( ! $link ) {
+				// Leave the natural WordPress 404 in place.
+				return;
+			}
 
-		$this->do_redirect( $link );
+			$this->do_redirect( $link );
+		} catch ( Throwable $e ) {
+			// Never break the front end; leave the natural 404/page in place.
+			if ( function_exists( 'acps_ls_log_error' ) ) {
+				acps_ls_log_error( 'redirect_bare', $e );
+			}
+		}
 	}
 
 	/**
