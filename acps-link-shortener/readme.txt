@@ -1,9 +1,9 @@
-=== ACPS Link Shortener ===
-Contributors: acps
+=== Cayden Riddle Link Shortener ===
+Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,16 +12,16 @@ and a password-gated front-end shortcode so staff can make links without Bitly.
 
 == Description ==
 
-A custom single-site shortener built for the ACPS environment (WP Engine behind
+A custom single-site shortener built for the operator (WP Engine behind
 Cloudflare / Global Edge Security). It stores every short link in one database
 table and serves links from the site (or a custom short domain).
 
 Features:
 
 * Single link table on the active site.
-* URL format acpsmd.org/{slug} (the path prefix is a single constant; set it to
-  a value like "link" for acpsmd.org/link/{slug} if you prefer).
-* Optional custom short-link domain (e.g. go.acpsmd.org) set in Settings.
+* URL format example.com/{slug} (the path prefix is a single constant; set it to
+  a value like "link" for example.com/link/{slug} if you prefer).
+* Optional custom short-link domain (e.g. go.example.com) set in Settings.
 * 301/302 redirects. Permanent (301) is disabled by default so edits take effect
   instantly; re-enable with the `acps_ls_allow_permanent` filter.
 * Locked destinations: once a short link exists, its slug and destination cannot
@@ -82,6 +82,13 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.6.0 =
+* Add a "Force notify" button on the Link Checker screen that immediately
+  e-mails a report of every currently broken link (ignores the once-an-hour
+  throttle and the per-link notified flag).
+* Rebrand: plugin name and author are now "Cayden Riddle Link Shortener" by
+  Cayden Riddle. Internal identifiers and stored data are unchanged.
 
 = 1.5.0 =
 * Link checker settings expanded: status panel (broken count, queue, unique URLs,

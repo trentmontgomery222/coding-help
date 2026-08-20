@@ -1,12 +1,12 @@
 <?php
 /**
- * Plugin Name:       ACPS Link Shortener
- * Plugin URI:        https://acpsmd.org/
+ * Plugin Name:       Cayden Riddle Link Shortener
+ * Plugin URI:        https://caydenriddle.com/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.4.0
+ * Version:           1.6.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
- * Author:            ACPS
+ * Author:            Cayden Riddle
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       acps-link-shortener
@@ -31,7 +31,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
 			echo esc_html(
 				sprintf(
 					/* translators: %s: current PHP version. */
-					__( 'ACPS Link Shortener requires PHP 7.4 or newer. This server runs PHP %s. Please update PHP, then activate the plugin.', 'acps-link-shortener' ),
+					__( 'Cayden Riddle Link Shortener requires PHP 7.4 or newer. This server runs PHP %s. Please update PHP, then activate the plugin.', 'acps-link-shortener' ),
 					PHP_VERSION
 				)
 			);
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.5.0' );
+define( 'ACPS_LS_VERSION', '1.6.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -540,11 +540,11 @@ add_action( 'plugins_loaded', 'acps_ls_bootstrap' );
 function acps_ls_cron_schedules( $schedules ) {
 	$schedules[ ACPS_LS_CRON_INTERVAL ] = array(
 		'interval' => 3 * MINUTE_IN_SECONDS,
-		'display'  => __( 'Every 3 minutes (ACPS Link Shortener sync)', 'acps-link-shortener' ),
+		'display'  => __( 'Every 3 minutes (Cayden Riddle Link Shortener sync)', 'acps-link-shortener' ),
 	);
 	$schedules[ ACPS_LS_CHECK_INTERVAL ] = array(
 		'interval' => 10 * MINUTE_IN_SECONDS,
-		'display'  => __( 'Every 10 minutes (ACPS Link Shortener checker)', 'acps-link-shortener' ),
+		'display'  => __( 'Every 10 minutes (Cayden Riddle Link Shortener checker)', 'acps-link-shortener' ),
 	);
 	return $schedules;
 }

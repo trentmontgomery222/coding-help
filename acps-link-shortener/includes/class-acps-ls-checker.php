@@ -490,7 +490,7 @@ class ACPS_LS_Checker {
 			'timeout'     => (int) $settings['timeout'],
 			'redirection' => 0, // Inspect redirects ourselves.
 			'sslverify'   => true,
-			'user-agent'  => 'ACPS-LinkChecker/1.0 (+' . home_url( '/' ) . ')',
+			'user-agent'  => 'CaydenRiddle-LinkChecker/1.0 (+' . home_url( '/' ) . ')',
 		);
 
 		$resp = wp_remote_head( $url, $args );
@@ -644,46 +644,76 @@ class ACPS_LS_Checker {
 	/* --------------------------------------------------------------------- */
 
 	/**
-	 * E-mail notifications for newly detected broken links.
+	 * Automatic notification for NEWLY detected broken links (throttled).
 	 */
 	public function maybe_notify() {
 		$s = self::settings();
 		if ( empty( $s['notify_admin'] ) && empty( $s['notify_authors'] ) ) {
-			return;
+			return 0;
 		}
-
-		// Batch: don't send more than once an hour.
+		// Batch: don't send more than once an hour automatically.
 		$last = get_option( 'acps_ls_last_email' );
 		if ( is_array( $last ) && ! empty( $last['ts'] ) && ( time() - (int) $last['ts'] ) < HOUR_IN_SECONDS ) {
-			return;
+			return 0;
 		}
+		return $this->send_broken_report( false );
+	}
 
+	/**
+	 * Force a report of ALL current broken links, on demand.
+	 *
+	 * Sends regardless of the once-an-hour throttle and the per-link "notified"
+	 * flag, and always e-mails the notification address even if the automatic
+	 * admin toggle is off (this is an explicit button press).
+	 *
+	 * @return int Number of broken links reported.
+	 */
+	public function force_notify() {
+		return $this->send_broken_report( true );
+	}
+
+	/**
+	 * Build and send the broken-links e-mail report.
+	 *
+	 * @param bool $force When true, include EVERY broken link and ignore toggles.
+	 * @return int Number of broken links reported.
+	 */
+	private function send_broken_report( $force ) {
 		global $wpdb;
+		$s    = self::settings();
 		$urls = acps_ls_urls_table();
+
+		// Forced: every current broken link. Automatic: only un-notified ones.
+		$where = $force
+			? "state = 'broken' AND dismissed = 0 AND false_positive = 0"
+			: "state = 'broken' AND notified = 0 AND dismissed = 0 AND false_positive = 0";
+
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
-		$new = $wpdb->get_results( "SELECT * FROM {$urls} WHERE state = 'broken' AND notified = 0 AND dismissed = 0 AND false_positive = 0 LIMIT 200" );
-		if ( ! $new ) {
-			return;
+		$broken = $wpdb->get_results( "SELECT * FROM {$urls} WHERE {$where} LIMIT 500" );
+		if ( ! $broken ) {
+			return 0;
 		}
 
 		$site = get_bloginfo( 'name' );
-		$link = admin_url( 'admin.php?page=' . 'acps-link-shortener-checker&state=broken' );
+		$link = admin_url( 'admin.php?page=acps-link-shortener-checker&state=broken' );
 
-		if ( ! empty( $s['notify_admin'] ) ) {
+		// Admin/notification address: always on force; on the toggle otherwise.
+		if ( $force || ! empty( $s['notify_admin'] ) ) {
 			$to    = $s['notify_email'] ? $s['notify_email'] : get_option( 'admin_email' );
 			$lines = array();
-			foreach ( $new as $u ) {
+			foreach ( $broken as $u ) {
 				$lines[] = '• ' . $u->url . ' — ' . ( $u->status_text ? $u->status_text : ( 'HTTP ' . (int) $u->http_code ) );
 			}
-			$body = __( 'The following links were detected as broken:', 'acps-link-shortener' ) . "\n\n"
-				. implode( "\n", $lines ) . "\n\n"
-				. __( 'Review them here:', 'acps-link-shortener' ) . ' ' . $link;
-			wp_mail( $to, '[' . $site . '] ' . __( 'Broken links detected', 'acps-link-shortener' ), $body );
+			$intro = $force
+				? __( 'All currently broken links:', 'acps-link-shortener' )
+				: __( 'The following links were detected as broken:', 'acps-link-shortener' );
+			$body  = $intro . "\n\n" . implode( "\n", $lines ) . "\n\n" . __( 'Review them here:', 'acps-link-shortener' ) . ' ' . $link;
+			wp_mail( $to, '[' . $site . '] ' . __( 'Broken links report', 'acps-link-shortener' ), $body );
 		}
 
 		if ( ! empty( $s['notify_authors'] ) ) {
 			$by_author = array();
-			foreach ( $new as $u ) {
+			foreach ( $broken as $u ) {
 				foreach ( self::occurrences_for( $u->url_hash ) as $o ) {
 					if ( 'post' === $o->source_type ) {
 						$author = (int) get_post_field( 'post_author', $o->source_id );
@@ -703,8 +733,10 @@ class ACPS_LS_Checker {
 		}
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
-		$wpdb->query( "UPDATE {$urls} SET notified = 1 WHERE state = 'broken' AND notified = 0" );
-		update_option( 'acps_ls_last_email', array( 'ts' => time(), 'time' => current_time( 'mysql' ), 'count' => count( $new ) ) );
+		$wpdb->query( "UPDATE {$urls} SET notified = 1 WHERE state = 'broken'" );
+		update_option( 'acps_ls_last_email', array( 'ts' => time(), 'time' => current_time( 'mysql' ), 'count' => count( $broken ) ) );
+
+		return count( $broken );
 	}
 
 	/**

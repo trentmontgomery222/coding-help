@@ -649,6 +649,13 @@ class ACPS_LS_Admin {
 				$msg = __( 'Database cleared. The whole site will be rediscovered and rechecked.', 'acps-link-shortener' );
 				break;
 
+			case 'force_notify':
+				$n   = $checker->force_notify();
+				$msg = $n
+					? sprintf( /* translators: %d: count. */ __( 'Sent a report of %d broken link(s).', 'acps-link-shortener' ), $n )
+					: __( 'No broken links to report.', 'acps-link-shortener' );
+				break;
+
 			case 'replace':
 				$hash    = isset( $_POST['url_hash'] ) ? sanitize_text_field( wp_unslash( $_POST['url_hash'] ) ) : '';
 				$new_url = isset( $_POST['new_url'] ) ? esc_url_raw( wp_unslash( $_POST['new_url'] ) ) : '';
@@ -775,7 +782,7 @@ class ACPS_LS_Admin {
 			<p class="description">
 				<?php
 				printf(
-					/* translators: %s: short-link base such as acpsmd.org/link/. */
+					/* translators: %s: short-link base such as example.com/link/. */
 					esc_html__( 'Short links are served from %s.', 'acps-link-shortener' ),
 					'<code>' . esc_html( acps_ls_link_base() . '/' . ( '' !== ACPS_LS_SLUG_PREFIX ? ACPS_LS_SLUG_PREFIX . '/' : '' ) ) . '</code>'
 				);
@@ -1000,7 +1007,7 @@ class ACPS_LS_Admin {
 							<td>
 								<input type="url" name="link_domain" id="acps-ls-link-domain" class="regular-text"
 									value="<?php echo esc_attr( $link_domain ); ?>"
-									placeholder="https://go.acpsmd.org"
+									placeholder="https://go.example.com"
 									aria-describedby="acps-ls-link-domain-desc" />
 								<p class="description" id="acps-ls-link-domain-desc">
 									<?php esc_html_e( 'Optional. The domain short links are built on. Leave blank to use this site’s own address. The domain must point to this WordPress install (DNS + WP Engine domain mapping) or the links will not resolve.', 'acps-link-shortener' ); ?>
@@ -1091,7 +1098,7 @@ class ACPS_LS_Admin {
 					</tbody>
 				</table>
 				<p class="description">
-					<?php esc_html_e( 'Passwords are hashed and cannot be shown again. Max links = 0 means unlimited (counts only links a person made via the shortcode). URL namespace forces the first path segment, e.g. “katherine” makes their links look like acpsmd.org/katherine/name.', 'acps-link-shortener' ); ?>
+					<?php esc_html_e( 'Passwords are hashed and cannot be shown again. Max links = 0 means unlimited (counts only links a person made via the shortcode). URL namespace forces the first path segment, e.g. “katherine” makes their links look like example.com/katherine/name.', 'acps-link-shortener' ); ?>
 				</p>
 
 				<h3><?php esc_html_e( 'Send a one-time setup link', 'acps-link-shortener' ); ?></h3>
@@ -1394,6 +1401,7 @@ class ACPS_LS_Admin {
 				<?php $this->checker_button( 'check_now', __( 'Check now', 'acps-link-shortener' ), $state ); ?>
 				<?php $this->checker_button( 'recheck_all', __( 'Recheck all', 'acps-link-shortener' ), $state ); ?>
 				<?php $this->checker_button( 'apply_rules', __( 'Apply rewrite rules to short links', 'acps-link-shortener' ), $state ); ?>
+				<?php $this->checker_button( 'force_notify', __( 'Force notify (e-mail all broken links)', 'acps-link-shortener' ), $state, __( 'E-mail a report of every currently broken link now?', 'acps-link-shortener' ) ); ?>
 				<?php $this->checker_button( 'forced_recheck', __( 'Forced recheck (clear & rescan)', 'acps-link-shortener' ), $state, __( 'This clears the checker database and rechecks the whole site from scratch. Continue?', 'acps-link-shortener' ) ); ?>
 				<?php if ( is_array( $last ) && ! empty( $last['time'] ) ) : ?>
 					<span class="description" style="margin-left:.5rem;"><?php printf( esc_html__( 'Last check: %s', 'acps-link-shortener' ), esc_html( $last['time'] ) ); ?></span>
