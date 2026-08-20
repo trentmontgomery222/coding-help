@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Link Shortener
  * Plugin URI:        https://acpsmd.org/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.3.0
+ * Version:           1.4.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -59,8 +59,8 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.3.0' );
-define( 'ACPS_LS_DB_VERSION', '1.1.0' );
+define( 'ACPS_LS_VERSION', '1.4.0' );
+define( 'ACPS_LS_DB_VERSION', '1.2.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
 define( 'ACPS_LS_FILE', __FILE__ );
@@ -77,6 +77,10 @@ define( 'ACPS_LS_OPT_SETUP_TOKENS', 'acps_ls_setup_tokens' );
 define( 'ACPS_LS_CRON_HOOK', 'acps_ls_sheet_sync' );
 define( 'ACPS_LS_CRON_INTERVAL', 'acps_ls_three_minutes' );
 
+// WP-Cron hook + interval for the link checker (scan + HTTP checks).
+define( 'ACPS_LS_CHECK_HOOK', 'acps_ls_link_check' );
+define( 'ACPS_LS_CHECK_INTERVAL', 'acps_ls_ten_minutes' );
+
 /**
  * Load plugin classes.
  */
@@ -86,6 +90,7 @@ require_once ACPS_LS_PATH . 'includes/class-acps-ls-rewrite.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-redirect.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-shortcode.php';
 require_once ACPS_LS_PATH . 'includes/class-acps-ls-sync.php';
+require_once ACPS_LS_PATH . 'includes/class-acps-ls-checker.php';
 
 /**
  * Return the capability required to manage links.
@@ -346,6 +351,132 @@ function acps_ls_table_name() {
 }
 
 /**
+ * Checker table: one row per unique URL.
+ *
+ * @return string
+ */
+function acps_ls_urls_table() {
+	global $wpdb;
+	return $wpdb->prefix . 'acps_link_urls';
+}
+
+/**
+ * Checker table: where each URL was found.
+ *
+ * @return string
+ */
+function acps_ls_occ_table() {
+	global $wpdb;
+	return $wpdb->prefix . 'acps_link_occurrences';
+}
+
+/**
+ * Return the configured link-replacement rules.
+ *
+ * @return array[] Each: [
+ *     'type'    => 'exact'|'contains'|'regex',
+ *     'pattern' => string,
+ *     'replace' => string,
+ *     'mode'    => 'rewrite'|'flag',
+ *     'enabled' => bool,
+ * ].
+ */
+function acps_ls_get_rules() {
+	$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
+	$rules    = ( is_array( $settings ) && ! empty( $settings['rules'] ) && is_array( $settings['rules'] ) )
+		? $settings['rules']
+		: array();
+
+	$clean = array();
+	foreach ( $rules as $rule ) {
+		if ( empty( $rule['pattern'] ) ) {
+			continue;
+		}
+		$clean[] = array(
+			'type'    => in_array( ( $rule['type'] ?? '' ), array( 'exact', 'contains', 'regex' ), true ) ? $rule['type'] : 'contains',
+			'pattern' => (string) $rule['pattern'],
+			'replace' => isset( $rule['replace'] ) ? (string) $rule['replace'] : '',
+			'mode'    => ( 'flag' === ( $rule['mode'] ?? '' ) ) ? 'flag' : 'rewrite',
+			'enabled' => ! empty( $rule['enabled'] ),
+		);
+	}
+	return $clean;
+}
+
+/**
+ * Whether a URL matches a single rule.
+ *
+ * @param array  $rule Rule.
+ * @param string $url  URL.
+ * @return bool
+ */
+function acps_ls_rule_matches( $rule, $url ) {
+	switch ( $rule['type'] ) {
+		case 'exact':
+			return $url === $rule['pattern'];
+		case 'regex':
+			$delim   = "\1";
+			$pattern = $delim . str_replace( $delim, '\\' . $delim, $rule['pattern'] ) . $delim;
+			// Suppress warnings on an invalid pattern; treat as no match.
+			return (bool) @preg_match( $pattern, $url ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		case 'contains':
+		default:
+			return '' !== $rule['pattern'] && false !== strpos( $url, $rule['pattern'] );
+	}
+}
+
+/**
+ * Apply all enabled REWRITE rules to a URL, returning the (possibly) new URL.
+ *
+ * @param string $url Original URL.
+ * @return string
+ */
+function acps_ls_apply_rules( $url ) {
+	foreach ( acps_ls_get_rules() as $rule ) {
+		if ( ! $rule['enabled'] || 'rewrite' !== $rule['mode'] ) {
+			continue;
+		}
+		switch ( $rule['type'] ) {
+			case 'exact':
+				if ( $url === $rule['pattern'] ) {
+					$url = $rule['replace'];
+				}
+				break;
+			case 'regex':
+				$delim   = "\1";
+				$pattern = $delim . str_replace( $delim, '\\' . $delim, $rule['pattern'] ) . $delim;
+				$result  = @preg_replace( $pattern, $rule['replace'], $url ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				if ( null !== $result ) {
+					$url = $result;
+				}
+				break;
+			case 'contains':
+			default:
+				if ( '' !== $rule['pattern'] ) {
+					$url = str_replace( $rule['pattern'], $rule['replace'], $url );
+				}
+				break;
+		}
+	}
+	return $url;
+}
+
+/**
+ * The first enabled FLAG rule a URL matches, or null.
+ *
+ * @param string $url URL.
+ * @return array|null
+ */
+function acps_ls_flagging_rule( $url ) {
+	foreach ( acps_ls_get_rules() as $rule ) {
+		if ( $rule['enabled'] && 'flag' === $rule['mode'] && acps_ls_rule_matches( $rule, $url ) ) {
+			return $rule;
+		}
+	}
+	return null;
+}
+
+/**
  * Activation: build the table, seed options, flush rewrite rules, schedule cron.
  *
  * Rewrite rules are flushed here ONLY (never on every load).
@@ -387,6 +518,10 @@ function acps_ls_bootstrap() {
 	$sync = new ACPS_LS_Sync();
 	$sync->register();
 
+	// Link checker (scan + HTTP checks + replacement rules).
+	$checker = new ACPS_LS_Checker();
+	$checker->register();
+
 	// Admin UI; load it lazily.
 	if ( is_admin() ) {
 		require_once ACPS_LS_PATH . 'includes/class-acps-ls-admin.php';
@@ -406,6 +541,10 @@ function acps_ls_cron_schedules( $schedules ) {
 	$schedules[ ACPS_LS_CRON_INTERVAL ] = array(
 		'interval' => 3 * MINUTE_IN_SECONDS,
 		'display'  => __( 'Every 3 minutes (ACPS Link Shortener sync)', 'acps-link-shortener' ),
+	);
+	$schedules[ ACPS_LS_CHECK_INTERVAL ] = array(
+		'interval' => 10 * MINUTE_IN_SECONDS,
+		'display'  => __( 'Every 10 minutes (ACPS Link Shortener checker)', 'acps-link-shortener' ),
 	);
 	return $schedules;
 }

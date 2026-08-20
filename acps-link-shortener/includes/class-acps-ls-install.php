@@ -35,6 +35,12 @@ class ACPS_LS_Install {
 		if ( ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
 			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CRON_INTERVAL, ACPS_LS_CRON_HOOK );
 		}
+
+		// Schedule the link checker (scan + HTTP checks) every 10 minutes; it
+		// works in small batches and no-ops unless enabled.
+		if ( ! wp_next_scheduled( ACPS_LS_CHECK_HOOK ) ) {
+			wp_schedule_event( time() + ( 2 * MINUTE_IN_SECONDS ), ACPS_LS_CHECK_INTERVAL, ACPS_LS_CHECK_HOOK );
+		}
 	}
 
 	/**
@@ -42,6 +48,7 @@ class ACPS_LS_Install {
 	 */
 	public static function deactivate() {
 		wp_clear_scheduled_hook( ACPS_LS_CRON_HOOK );
+		wp_clear_scheduled_hook( ACPS_LS_CHECK_HOOK );
 		flush_rewrite_rules();
 	}
 
@@ -78,6 +85,56 @@ class ACPS_LS_Install {
 		) {$charset_collate};";
 
 		dbDelta( $sql );
+
+		self::create_checker_tables();
+	}
+
+	/**
+	 * Create the link-checker tables (deduped URLs + occurrences).
+	 */
+	public static function create_checker_tables() {
+		global $wpdb;
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+		$charset_collate = $wpdb->get_charset_collate();
+		$urls            = acps_ls_urls_table();
+		$occ             = acps_ls_occ_table();
+
+		// One row per unique URL (checked once, however many places it appears).
+		$sql_urls = "CREATE TABLE {$urls} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			url_hash CHAR(32) NOT NULL,
+			url TEXT NOT NULL,
+			state VARCHAR(20) NOT NULL DEFAULT 'unchecked',
+			http_code SMALLINT NOT NULL DEFAULT 0,
+			final_url TEXT NULL,
+			status_text VARCHAR(191) NOT NULL DEFAULT '',
+			fail_count INT UNSIGNED NOT NULL DEFAULT 0,
+			last_checked DATETIME NULL DEFAULT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY url_hash (url_hash),
+			KEY state (state),
+			KEY last_checked (last_checked)
+		) {$charset_collate};";
+		dbDelta( $sql_urls );
+
+		// Where each URL was found (post/comment/shortener), deduped by occ_hash.
+		$sql_occ = "CREATE TABLE {$occ} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			occ_hash CHAR(32) NOT NULL,
+			url_hash CHAR(32) NOT NULL,
+			source_type VARCHAR(20) NOT NULL DEFAULT '',
+			source_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			source_field VARCHAR(40) NOT NULL DEFAULT '',
+			anchor VARCHAR(255) NOT NULL DEFAULT '',
+			seen_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
+			PRIMARY KEY  (id),
+			UNIQUE KEY occ_hash (occ_hash),
+			KEY url_hash (url_hash),
+			KEY source (source_type, source_id)
+		) {$charset_collate};";
+		dbDelta( $sql_occ );
 	}
 
 	/**

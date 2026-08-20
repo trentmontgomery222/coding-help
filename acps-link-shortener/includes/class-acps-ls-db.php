@@ -287,11 +287,14 @@ class ACPS_LS_DB {
 
 		$redirect_type = ( 302 === (int) $data['redirect_type'] ) ? 302 : 301;
 
+		// Replacement rules (rewrite mode) are applied to every saved destination.
+		$destination = apply_filters( 'acps_ls_filter_destination', $data['destination'] );
+
 		$result = $wpdb->insert(
 			$table,
 			array(
 				'slug'          => $data['slug'],
-				'destination'   => $data['destination'],
+				'destination'   => $destination,
 				'title'         => isset( $data['title'] ) ? $data['title'] : '',
 				'redirect_type' => $redirect_type,
 				'is_active'     => empty( $data['is_active'] ) ? 0 : 1,
@@ -330,7 +333,7 @@ class ACPS_LS_DB {
 			$formats[]      = '%s';
 		}
 		if ( isset( $data['destination'] ) ) {
-			$fields['destination'] = $data['destination'];
+			$fields['destination'] = apply_filters( 'acps_ls_filter_destination', $data['destination'] );
 			$formats[]             = '%s';
 		}
 		if ( isset( $data['title'] ) ) {

@@ -3,7 +3,7 @@ Contributors: acps
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,19 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.4.0 =
+* Link checker: verifies that links are alive (HEAD then GET; broken / redirect /
+  OK states) and flags problems on a new "Link Checker" admin screen. Checks the
+  shortener's destinations plus, optionally, all links in posts, pages, and
+  comments. Each unique URL is checked once (deduped) and work runs in small
+  WP-Cron batches every 10 minutes.
+* Replacement rules (Settings): match a URL by contains / exact / regex and
+  either rewrite it or flag it. Rewrite rules auto-apply to every saved
+  destination and can be swept across existing short links; you can also replace
+  a broken URL everywhere it appears (destinations + content) from the checker.
+
+= 1.3.0 =
 
 = 1.2.0 =
 * Front-end: separate sign-in from creating. Signing in opens a dashboard where
