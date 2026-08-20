@@ -433,6 +433,9 @@ class ACPS_LS_Admin {
 		$quiet_enabled  = isset( $_POST['quiet_enabled'] ) ? 1 : 0;
 		$quiet_start    = isset( $_POST['quiet_start'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['quiet_start'] ) ) ) ) : 20;
 		$quiet_end      = isset( $_POST['quiet_end'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['quiet_end'] ) ) ) ) : 8;
+		$check_night    = isset( $_POST['check_night_only'] ) ? 1 : 0;
+		$check_start    = isset( $_POST['check_start'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['check_start'] ) ) ) ) : 0;
+		$check_end      = isset( $_POST['check_end'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['check_end'] ) ) ) ) : 6;
 		$link_html      = isset( $_POST['link_html'] ) ? 1 : 0;
 		$link_images    = isset( $_POST['link_images'] ) ? 1 : 0;
 		$link_plaintext = isset( $_POST['link_plaintext'] ) ? 1 : 0;
@@ -495,6 +498,9 @@ class ACPS_LS_Admin {
 		$settings['quiet_enabled']  = $quiet_enabled;
 		$settings['quiet_start']    = $quiet_start;
 		$settings['quiet_end']      = $quiet_end;
+		$settings['check_night_only'] = $check_night;
+		$settings['check_start']      = $check_start;
+		$settings['check_end']        = $check_end;
 		$settings['link_html']      = $link_html;
 		$settings['link_images']    = $link_images;
 		$settings['link_plaintext'] = $link_plaintext;
@@ -1213,6 +1219,21 @@ class ACPS_LS_Admin {
 							<th scope="row"><?php esc_html_e( 'Enable checker', 'acps-link-shortener' ); ?></th>
 							<td>
 								<label><input type="checkbox" name="check_enabled" value="1" <?php checked( 1, $chk['check_enabled'] ); ?> /> <?php esc_html_e( 'Run automatically every 10 minutes (scan + check).', 'acps-link-shortener' ); ?></label>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Check links only at night', 'acps-link-shortener' ); ?></th>
+							<td>
+								<fieldset>
+									<label><input type="checkbox" name="check_night_only" value="1" <?php checked( 1, $chk['check_night_only'] ); ?> /> <?php esc_html_e( 'Run the outbound link checks only during this window (avoids extra load during the day).', 'acps-link-shortener' ); ?></label>
+									<p>
+										<label for="acps-ls-check-start"><?php esc_html_e( 'Check from', 'acps-link-shortener' ); ?></label>
+										<?php $this->hour_select( 'check_start', 'acps-ls-check-start', (int) $chk['check_start'] ); ?>
+										<label for="acps-ls-check-end"><?php esc_html_e( 'until', 'acps-link-shortener' ); ?></label>
+										<?php $this->hour_select( 'check_end', 'acps-ls-check-end', (int) $chk['check_end'] ); ?>
+									</p>
+									<p class="description"><?php esc_html_e( 'Site timezone. New links are still discovered any time; only the link checks (which make outbound requests) are held to this window. The manual “Check now” button on the Link Checker screen ignores it.', 'acps-link-shortener' ); ?></p>
+								</fieldset>
 							</td>
 						</tr>
 						<tr>

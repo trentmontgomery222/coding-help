@@ -69,7 +69,35 @@ class ACPS_LS_Checker {
 			'quiet_enabled'  => ! isset( $saved['quiet_enabled'] ) || ! empty( $saved['quiet_enabled'] ) ? 1 : 0,
 			'quiet_start'    => isset( $saved['quiet_start'] ) ? min( 23, max( 0, (int) $saved['quiet_start'] ) ) : 20,
 			'quiet_end'      => isset( $saved['quiet_end'] ) ? min( 23, max( 0, (int) $saved['quiet_end'] ) ) : 8,
+			// Night-only checking: run the outbound HTTP checks only inside this
+			// window (default 12 AM -> 6 AM). Discovery/scanning still runs any
+			// time so the queue stays fresh; manual "Check now" ignores this.
+			'check_night_only' => ! isset( $saved['check_night_only'] ) || ! empty( $saved['check_night_only'] ) ? 1 : 0,
+			'check_start'      => isset( $saved['check_start'] ) ? min( 23, max( 0, (int) $saved['check_start'] ) ) : 0,
+			'check_end'        => isset( $saved['check_end'] ) ? min( 23, max( 0, (int) $saved['check_end'] ) ) : 6,
 		);
+	}
+
+	/**
+	 * Whether "now" (site timezone) is inside the link-checking window.
+	 *
+	 * @return bool
+	 */
+	private function in_check_window() {
+		$s = self::settings();
+		if ( empty( $s['check_night_only'] ) ) {
+			return true; // Check any time.
+		}
+		$start = (int) $s['check_start'];
+		$end   = (int) $s['check_end'];
+		if ( $start === $end ) {
+			return true; // Degenerate window = always.
+		}
+		$hour = (int) current_time( 'G' );
+		if ( $start < $end ) {
+			return $hour >= $start && $hour < $end;
+		}
+		return $hour >= $start || $hour < $end; // Wraps midnight.
 	}
 
 	/**
@@ -137,7 +165,14 @@ class ACPS_LS_Checker {
 				}
 			}
 
-			$checked = $this->check_batch( self::CHECK_BATCH, (int) $settings['recheck_hours'] );
+			// Only run the outbound HTTP checks during the checking window
+			// (default overnight) so the site isn't loaded during the day.
+			// Discovery/scanning above still runs any time, keeping the queue
+			// ready; the manual "Check now" button bypasses this window.
+			$checked = 0;
+			if ( $this->in_check_window() ) {
+				$checked = $this->check_batch( self::CHECK_BATCH, (int) $settings['recheck_hours'] );
+			}
 
 			$this->maybe_notify();
 

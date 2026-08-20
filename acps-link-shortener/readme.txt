@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,12 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.9.0 =
+* Night-only link checking: the outbound HTTP checks now run only inside a
+  configurable window (default 12 AM–6 AM, site timezone) so the site isn't
+  loaded during the day. New links are still discovered any time, keeping the
+  queue ready; the manual "Check now" / "Recheck" buttons ignore the window.
 
 = 1.8.0 =
 * Rebrand to "Cayden Link Shortener" (first name).
