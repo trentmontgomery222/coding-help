@@ -100,8 +100,8 @@ class ACPS_LS_Admin {
 
 		add_submenu_page(
 			self::MENU_SLUG,
-			__( 'Link Checker', 'acps-link-shortener' ),
-			__( 'Link Checker', 'acps-link-shortener' ),
+			__( 'Link Manager', 'acps-link-shortener' ),
+			__( 'Link Manager', 'acps-link-shortener' ),
 			$cap,
 			self::MENU_SLUG . '-checker',
 			array( $this, 'render_checker_page' )
@@ -436,6 +436,7 @@ class ACPS_LS_Admin {
 		$check_night    = isset( $_POST['check_night_only'] ) ? 1 : 0;
 		$check_start    = isset( $_POST['check_start'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['check_start'] ) ) ) ) : 0;
 		$check_end      = isset( $_POST['check_end'] ) ? min( 23, max( 0, absint( wp_unslash( $_POST['check_end'] ) ) ) ) : 6;
+		$scan_idle_min  = isset( $_POST['scan_idle_minutes'] ) ? max( 10, absint( wp_unslash( $_POST['scan_idle_minutes'] ) ) ) : 60;
 		$link_html      = isset( $_POST['link_html'] ) ? 1 : 0;
 		$link_images    = isset( $_POST['link_images'] ) ? 1 : 0;
 		$link_plaintext = isset( $_POST['link_plaintext'] ) ? 1 : 0;
@@ -501,6 +502,7 @@ class ACPS_LS_Admin {
 		$settings['check_night_only'] = $check_night;
 		$settings['check_start']      = $check_start;
 		$settings['check_end']        = $check_end;
+		$settings['scan_idle_minutes'] = $scan_idle_min;
 		$settings['link_html']      = $link_html;
 		$settings['link_images']    = $link_images;
 		$settings['link_plaintext'] = $link_plaintext;
@@ -1207,7 +1209,7 @@ class ACPS_LS_Admin {
 					</tbody>
 				</table>
 
-				<h2><?php esc_html_e( 'Link checker', 'acps-link-shortener' ); ?></h2>
+				<h2><?php esc_html_e( 'Link Manager', 'acps-link-shortener' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'Verifies that links are alive and applies your replacement rules. Checks each unique URL once and works in small batches for efficiency.', 'acps-link-shortener' ); ?></p>
 				<?php
 				$all_types    = get_post_types( array( 'public' => true ), 'objects' );
@@ -1232,8 +1234,17 @@ class ACPS_LS_Admin {
 										<label for="acps-ls-check-end"><?php esc_html_e( 'until', 'acps-link-shortener' ); ?></label>
 										<?php $this->hour_select( 'check_end', 'acps-ls-check-end', (int) $chk['check_end'] ); ?>
 									</p>
-									<p class="description"><?php esc_html_e( 'Site timezone. New links are still discovered any time; only the link checks (which make outbound requests) are held to this window. The manual “Check now” button on the Link Checker screen ignores it.', 'acps-link-shortener' ); ?></p>
+									<p class="description"><?php esc_html_e( 'Site timezone. New links are still discovered any time; only the link checks (which make outbound requests) are held to this window. The manual “Check now” button on the Link Manager screen ignores it.', 'acps-link-shortener' ); ?></p>
 								</fieldset>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-scan-idle"><?php esc_html_e( 'Scan when not checking', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<?php esc_html_e( 'Every', 'acps-link-shortener' ); ?>
+								<input type="number" min="10" step="5" style="width:6em;" name="scan_idle_minutes" id="acps-ls-scan-idle" value="<?php echo esc_attr( $chk['scan_idle_minutes'] ); ?>" />
+								<?php esc_html_e( 'minutes', 'acps-link-shortener' ); ?>
+								<p class="description"><?php esc_html_e( 'Outside the checking window the plugin only looks for new/changed links this often (default 60 min) instead of every 10 minutes. During the checking window it scans every run.', 'acps-link-shortener' ); ?></p>
 							</td>
 						</tr>
 						<tr>
@@ -1436,7 +1447,7 @@ class ACPS_LS_Admin {
 		$info = ACPS_LS_Checker::status_info();
 		?>
 		<div class="wrap acps-ls-wrap">
-			<h1 class="wp-heading-inline"><?php esc_html_e( 'Link Checker', 'acps-link-shortener' ); ?></h1>
+			<h1 class="wp-heading-inline"><?php esc_html_e( 'Link Manager', 'acps-link-shortener' ); ?></h1>
 			<hr class="wp-header-end" />
 
 			<?php $this->render_notice_from_query(); ?>
@@ -1446,7 +1457,7 @@ class ACPS_LS_Admin {
 					<?php
 					printf(
 						/* translators: %s: settings link. */
-						wp_kses_post( __( 'The link checker is turned off. Enable it under %s to run automatically every 10 minutes.', 'acps-link-shortener' ) ),
+						wp_kses_post( __( 'The link checker is turned off. Enable it under %s to run automatically in the background.', 'acps-link-shortener' ) ),
 						'<a href="' . esc_url( $this->settings_url() ) . '">' . esc_html__( 'Settings → Link Shortener', 'acps-link-shortener' ) . '</a>'
 					);
 					?>

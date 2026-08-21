@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.9.0
+Stable tag: 1.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,13 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.10.0 =
+* Renamed the "Link Checker" admin menu to "Link Manager".
+* Idle scan cadence: outside the checking window the plugin no longer scans on
+  every 10-minute cron tick — it scans at most once per "scan when not checking"
+  interval (default 60 minutes, configurable). During the checking window it
+  still scans every run so checks have a fresh queue.
 
 = 1.9.0 =
 * Night-only link checking: the outbound HTTP checks now run only inside a

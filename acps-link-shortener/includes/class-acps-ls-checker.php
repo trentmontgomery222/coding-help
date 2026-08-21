@@ -75,6 +75,10 @@ class ACPS_LS_Checker {
 			'check_night_only' => ! isset( $saved['check_night_only'] ) || ! empty( $saved['check_night_only'] ) ? 1 : 0,
 			'check_start'      => isset( $saved['check_start'] ) ? min( 23, max( 0, (int) $saved['check_start'] ) ) : 0,
 			'check_end'        => isset( $saved['check_end'] ) ? min( 23, max( 0, (int) $saved['check_end'] ) ) : 6,
+			// How often to scan for links when NOT in the checking window. During
+			// the window it scans every cron tick; outside it, no more often than
+			// this many minutes (default 60).
+			'scan_idle_minutes' => isset( $saved['scan_idle_minutes'] ) ? max( 10, (int) $saved['scan_idle_minutes'] ) : 60,
 		);
 	}
 
@@ -156,21 +160,34 @@ class ACPS_LS_Checker {
 				return array( 'skipped' => true );
 			}
 
-			$this->collect_shortener_occurrences();
+			$in_window = $this->in_check_window();
 
-			if ( ! empty( $settings['scan_content'] ) ) {
-				$this->scan_content_batch();
-				if ( ! empty( $settings['scan_comments'] ) ) {
-					$this->scan_comment_batch();
+			// Scan cadence: every tick while checking (the window), but only
+			// once per "scan_idle_minutes" the rest of the time — no reason to
+			// re-scan every 10 minutes when we aren't checking anyway.
+			$do_scan = $in_window;
+			if ( ! $do_scan ) {
+				$last = (int) get_option( 'acps_ls_last_scan_ts', 0 );
+				$gap  = (int) $settings['scan_idle_minutes'] * MINUTE_IN_SECONDS;
+				$do_scan = ( time() - $last ) >= $gap;
+			}
+
+			if ( $do_scan ) {
+				$this->collect_shortener_occurrences();
+				if ( ! empty( $settings['scan_content'] ) ) {
+					$this->scan_content_batch();
+					if ( ! empty( $settings['scan_comments'] ) ) {
+						$this->scan_comment_batch();
+					}
 				}
+				update_option( 'acps_ls_last_scan_ts', time() );
 			}
 
 			// Only run the outbound HTTP checks during the checking window
 			// (default overnight) so the site isn't loaded during the day.
-			// Discovery/scanning above still runs any time, keeping the queue
-			// ready; the manual "Check now" button bypasses this window.
+			// The manual "Check now" button bypasses this window.
 			$checked = 0;
-			if ( $this->in_check_window() ) {
+			if ( $in_window ) {
 				$checked = $this->check_batch( self::CHECK_BATCH, (int) $settings['recheck_hours'] );
 			}
 
@@ -184,7 +201,10 @@ class ACPS_LS_Checker {
 				)
 			);
 
-			return array( 'checked' => $checked );
+			return array(
+				'checked' => $checked,
+				'scanned' => $do_scan,
+			);
 		} catch ( Throwable $e ) {
 			// A checker error must never break the request that triggered cron.
 			if ( function_exists( 'acps_ls_log_error' ) ) {
