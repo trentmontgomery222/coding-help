@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.10.0
+Stable tag: 1.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,12 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.11.0 =
+* Link Manager "Found in" links: pages now open in the Beaver Builder editor
+  (front-end URL + ?fl_builder) when Beaver Builder is active; posts keep opening
+  in the normal WordPress editor. Falls back to the WordPress editor for pages
+  when Beaver Builder is not active.
 
 = 1.10.0 =
 * Renamed the "Link Checker" admin menu to "Link Manager".

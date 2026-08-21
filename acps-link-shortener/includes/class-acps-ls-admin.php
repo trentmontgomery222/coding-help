@@ -1562,6 +1562,29 @@ class ACPS_LS_Admin {
 	 * @param string $id       Field id.
 	 * @param int    $selected Currently selected hour.
 	 */
+	/**
+	 * Edit URL for a piece of content.
+	 *
+	 * Pages open in the Beaver Builder editor (the page's front-end URL with
+	 * ?fl_builder), when Beaver Builder is active; posts (and everything else)
+	 * open in the normal WordPress editor.
+	 *
+	 * @param int $post_id Post/page id.
+	 * @return string
+	 */
+	private function edit_url_for( $post_id ) {
+		$bb_active = class_exists( 'FLBuilderModel' ) || defined( 'FL_BUILDER_VERSION' );
+
+		if ( $bb_active && 'page' === get_post_type( $post_id ) ) {
+			$permalink = get_permalink( $post_id );
+			if ( $permalink ) {
+				return add_query_arg( 'fl_builder', '', $permalink );
+			}
+		}
+
+		return (string) get_edit_post_link( $post_id, 'raw' );
+	}
+
 	private function hour_select( $name, $id, $selected ) {
 		echo '<select name="' . esc_attr( $name ) . '" id="' . esc_attr( $id ) . '">';
 		for ( $h = 0; $h < 24; $h++ ) {
@@ -1607,7 +1630,10 @@ class ACPS_LS_Admin {
 			if ( 'shortener' === $o->source_type ) {
 				$sources[] = esc_html__( 'Short link', 'acps-link-shortener' ) . ' /' . esc_html( $o->anchor );
 			} elseif ( 'post' === $o->source_type ) {
-				$sources[] = '<a href="' . esc_url( get_edit_post_link( $o->source_id ) ) . '">' . esc_html( get_the_title( $o->source_id ) ? get_the_title( $o->source_id ) : ( 'post #' . $o->source_id ) ) . '</a>';
+				$title    = get_the_title( $o->source_id );
+				$title    = $title ? $title : 'post #' . $o->source_id;
+				$edit_url = $this->edit_url_for( (int) $o->source_id );
+				$sources[] = '<a href="' . esc_url( $edit_url ) . '">' . esc_html( $title ) . '</a>';
 			} elseif ( 'comment' === $o->source_type ) {
 				$sources[] = esc_html__( 'Comment', 'acps-link-shortener' ) . ' #' . (int) $o->source_id;
 			}
