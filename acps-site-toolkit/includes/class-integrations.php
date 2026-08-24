@@ -28,6 +28,12 @@ class Integrations {
 
 		add_action( 'init', array( $this, 'register_block' ) );
 		add_action( 'init', array( $this, 'register_beaver_module' ) );
+
+		// Elementor widget — registered only when Elementor is present. Every
+		// other builder is already covered: GeneratePress/GenerateBlocks and the
+		// block editor via the Gutenberg block, Beaver via its module, and any
+		// builder with an HTML/shortcode widget via [acps_form].
+		add_action( 'elementor/widgets/register', array( $this, 'register_elementor_widget' ) );
 	}
 
 	/**
@@ -155,6 +161,30 @@ class Integrations {
 	public function register_beaver_module() {
 		if ( class_exists( 'FLBuilder' ) && ! class_exists( __NAMESPACE__ . '\\ACPS_Form_Module' ) ) {
 			require_once ACPS_ST_PATH . 'includes/beaver/class-acps-form-module.php';
+		}
+	}
+
+	/**
+	 * Register the Elementor widget when Elementor is active. Fired on
+	 * 'elementor/widgets/register', which only runs when Elementor is loaded, so
+	 * this is a no-op on sites without it.
+	 *
+	 * @param mixed $widgets_manager Elementor's widgets manager.
+	 */
+	public function register_elementor_widget( $widgets_manager ) {
+		if ( ! class_exists( '\Elementor\Widget_Base' ) ) {
+			return;
+		}
+		require_once ACPS_ST_PATH . 'includes/elementor/class-acps-form-widget.php';
+		if ( ! class_exists( __NAMESPACE__ . '\\ACPS_Form_Widget' ) ) {
+			return;
+		}
+		$widget = new ACPS_Form_Widget();
+		// register() is Elementor 3.5+; older versions use register_widget_type().
+		if ( method_exists( $widgets_manager, 'register' ) ) {
+			$widgets_manager->register( $widget );
+		} elseif ( method_exists( $widgets_manager, 'register_widget_type' ) ) {
+			$widgets_manager->register_widget_type( $widget );
 		}
 	}
 }
