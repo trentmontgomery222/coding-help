@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.11.0
+Stable tag: 1.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,17 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.12.0 =
+* Link Manager "Found in" links now auto-detect the page builder for each item
+  and open it in the right editor — no configuration needed:
+  - Beaver Builder pages open in the Beaver Builder editor (front-end + ?fl_builder).
+  - Elementor pages open in the Elementor editor (action=elementor).
+  - Divi pages open in the Divi Builder (front-end + ?et_fb=1).
+  - Everything else (GeneratePress/GenerateBlocks, the block editor, classic
+    posts) opens in the normal WordPress editor.
+  Detection is per item, so a mixed site (some Beaver, some Elementor, some plain)
+  is handled automatically. Filter `acps_ls_edit_url` overrides the chosen URL.
 
 = 1.11.0 =
 * Link Manager "Found in" links: pages now open in the Beaver Builder editor

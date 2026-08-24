@@ -1563,26 +1563,67 @@ class ACPS_LS_Admin {
 	 * @param int    $selected Currently selected hour.
 	 */
 	/**
-	 * Edit URL for a piece of content.
+	 * Edit URL for a piece of content — automatically the editor that actually
+	 * built it, based on which page builder is installed AND enabled for it.
 	 *
-	 * Pages open in the Beaver Builder editor (the page's front-end URL with
-	 * ?fl_builder), when Beaver Builder is active; posts (and everything else)
-	 * open in the normal WordPress editor.
+	 * Detection order (each only used when that builder is active for this item):
+	 *   1. Beaver Builder  -> front-end editor (permalink + ?fl_builder)
+	 *   2. Elementor       -> Elementor editor (post.php?action=elementor)
+	 *   3. Divi            -> front-end builder (permalink + ?et_fb=1)
+	 * Anything else — the classic/block editor, GenerateBlocks blocks, a
+	 * GeneratePress-themed page, etc. — opens the normal WordPress editor, since
+	 * those are edited in the standard editor and have no separate builder URL.
+	 *
+	 * Extend for other builders with the `acps_ls_edit_url` filter.
 	 *
 	 * @param int $post_id Post/page id.
 	 * @return string
 	 */
 	private function edit_url_for( $post_id ) {
-		$bb_active = class_exists( 'FLBuilderModel' ) || defined( 'FL_BUILDER_VERSION' );
+		$post_id = (int) $post_id;
+		$url     = '';
 
-		if ( $bb_active && 'page' === get_post_type( $post_id ) ) {
+		// 1. Beaver Builder — only if this item is actually a BB layout.
+		if ( '' === $url
+			&& class_exists( 'FLBuilderModel' )
+			&& method_exists( 'FLBuilderModel', 'is_builder_enabled' )
+			&& FLBuilderModel::is_builder_enabled( $post_id ) ) {
 			$permalink = get_permalink( $post_id );
 			if ( $permalink ) {
-				return add_query_arg( 'fl_builder', '', $permalink );
+				$url = add_query_arg( 'fl_builder', '', $permalink );
 			}
 		}
 
-		return (string) get_edit_post_link( $post_id, 'raw' );
+		// 2. Elementor — only if this item was built with Elementor.
+		if ( '' === $url
+			&& ( class_exists( '\Elementor\Plugin' ) || defined( 'ELEMENTOR_VERSION' ) )
+			&& 'builder' === get_post_meta( $post_id, '_elementor_edit_mode', true ) ) {
+			$url = admin_url( 'post.php?post=' . $post_id . '&action=elementor' );
+		}
+
+		// 3. Divi — only if this item uses the Divi Builder.
+		if ( '' === $url
+			&& ( defined( 'ET_BUILDER_VERSION' ) || function_exists( 'et_pb_is_pagebuilder_used' ) )
+			&& 'on' === get_post_meta( $post_id, '_et_pb_use_builder', true ) ) {
+			$permalink = get_permalink( $post_id );
+			if ( $permalink ) {
+				$url = add_query_arg( 'et_fb', '1', $permalink );
+			}
+		}
+
+		// Fallback: the standard WordPress editor (also correct for the block
+		// editor, GenerateBlocks, GeneratePress, classic editor, etc.).
+		if ( '' === $url ) {
+			$url = (string) get_edit_post_link( $post_id, 'raw' );
+		}
+
+		/**
+		 * Filter the resolved edit URL so any other builder can be supported.
+		 *
+		 * @param string $url     The edit URL.
+		 * @param int    $post_id The content id.
+		 */
+		return (string) apply_filters( 'acps_ls_edit_url', $url, $post_id );
 	}
 
 	private function hour_select( $name, $id, $selected ) {
