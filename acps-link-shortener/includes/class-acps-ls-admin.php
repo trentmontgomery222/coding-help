@@ -1695,6 +1695,18 @@ class ACPS_LS_Admin {
 				<span style="font-weight:600;color:<?php echo esc_attr( $b[0] ); ?>;"><?php echo esc_html( $b[1] ); ?></span>
 				<?php if ( $row->http_code ) : ?><br /><span class="description"><?php echo esc_html( 'HTTP ' . (int) $row->http_code ); ?></span><?php endif; ?>
 				<?php if ( $row->status_text && 0 === (int) $row->http_code ) : ?><br /><span class="description"><?php echo esc_html( $row->status_text ); ?></span><?php endif; ?>
+				<?php if ( 'broken' === $row->state && ! empty( $row->first_failure ) && '0000-00-00 00:00:00' !== $row->first_failure ) : ?>
+					<?php
+					$since   = strtotime( $row->first_failure );
+					$now_ts  = (int) current_time( 'timestamp' );
+					$howlong = ( $since && $now_ts > $since ) ? human_time_diff( $since, $now_ts ) : '';
+					?>
+					<?php if ( $howlong ) : ?>
+						<br /><span class="description" style="color:#b32d2e;" title="<?php echo esc_attr( sprintf( __( 'First failed %s', 'acps-link-shortener' ), $row->first_failure ) ); ?>">
+							<?php printf( esc_html__( 'Broken for %s', 'acps-link-shortener' ), esc_html( $howlong ) ); ?>
+						</span>
+					<?php endif; ?>
+				<?php endif; ?>
 			</td>
 			<td>
 				<?php echo wp_kses_post( implode( '<br />', $sources ) ); ?>

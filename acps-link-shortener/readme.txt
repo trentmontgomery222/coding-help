@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.12.0
+Stable tag: 1.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,13 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.13.0 =
+* Link Manager now shows how long each broken link has been broken. Every row in
+  the "Broken" state displays "Broken for <duration>" (e.g. "Broken for 3 days")
+  under its status, measured from when the checker first saw it fail; hover to
+  see the exact first-failure date/time. The duration resets automatically if a
+  link recovers and later breaks again.
 
 = 1.12.0 =
 * Link Manager "Found in" links now auto-detect the page builder for each item
