@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cayden  Staff Directory
  * Description:       Staff Directory system for the website
- * Version:           2.7.1
+ * Version:           2.8.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; //no access
 }
 
-define( 'CAYDENDIR_SD_VERSION',       '2.7.1' );
+define( 'CAYDENDIR_SD_VERSION',       '2.8.0' );
 define( 'CAYDENDIR_SD_DIR',           plugin_dir_path( __FILE__ ) );
 define( 'CAYDENDIR_SD_URL',           plugin_dir_url( __FILE__ ) );
 define( 'CAYDENDIR_SD_CRON_HOOK',     'CAYDENDIR_sd_daily_sync' );
@@ -2053,6 +2053,132 @@ function CAYDENDIR_sd_register_bb_module() {
 	}
 }
 
+/* -------------------------------------------------------------------------
+ * Gutenberg block (block editor: works with the stock editor, GenerateBlocks,
+ * GeneratePress, Kadence, etc.). Server-rendered, so it always matches the
+ * front end. Only registers when the block API is present.
+ * ---------------------------------------------------------------------- */
+add_action( 'init', 'CAYDENDIR_sd_register_block' );
+function CAYDENDIR_sd_register_block() {
+	try {
+		if ( ! function_exists( 'register_block_type' ) ) {
+			return; // Block editor not available (very old WordPress).
+		}
+		$block_js = CAYDENDIR_SD_DIR . 'block.js';
+		if ( is_readable( $block_js ) ) {
+			wp_register_script(
+				'caydendir-block',
+				CAYDENDIR_SD_URL . 'block.js',
+				array( 'wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-server-side-render', 'wp-i18n' ),
+				CAYDENDIR_SD_VERSION,
+				true
+			);
+		}
+		register_block_type(
+			'caydendir/staff-directory',
+			array(
+				'api_version'     => 2,
+				'editor_script'   => 'caydendir-block',
+				'attributes'      => array(
+					'heading' => array( 'type' => 'string', 'default' => 'Staff Directory' ),
+					'layout'  => array( 'type' => 'string', 'default' => '' ),
+					'match'   => array( 'type' => 'string', 'default' => 'any' ),
+				),
+				'render_callback' => 'CAYDENDIR_sd_block_render',
+			)
+		);
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'block register', $e );
+	}
+}
+
+/** Server render for the Gutenberg block — wraps the shared renderer. */
+function CAYDENDIR_sd_block_render( $attrs ) {
+	$attrs = is_array( $attrs ) ? $attrs : array();
+	return CAYDENDIR_sd_render( array(
+		'heading' => isset( $attrs['heading'] ) ? $attrs['heading'] : 'Staff Directory',
+		'layout'  => isset( $attrs['layout'] ) ? $attrs['layout'] : '',
+		'match'   => isset( $attrs['match'] ) ? $attrs['match'] : 'any',
+	) );
+}
+
+/** Add a shared "Caydens Plugins" block category so Cayden blocks group there. */
+add_filter( 'block_categories_all', 'CAYDENDIR_sd_block_category', 10, 1 );
+function CAYDENDIR_sd_block_category( $categories ) {
+	try {
+		if ( ! is_array( $categories ) ) {
+			return $categories;
+		}
+		foreach ( $categories as $c ) {
+			if ( isset( $c['slug'] ) && 'caydens-plugins' === $c['slug'] ) {
+				return $categories; // already added (by another Cayden plugin)
+			}
+		}
+		$categories[] = array(
+			'slug'  => 'caydens-plugins',
+			'title' => 'Caydens Plugins',
+		);
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'block category', $e );
+	}
+	return $categories;
+}
+
+/* -------------------------------------------------------------------------
+ * Elementor widget. Registers a native "Staff Directory" widget when
+ * Elementor is active. The widget class lives in its own file because it
+ * extends an Elementor class that only exists when Elementor is loaded.
+ * ---------------------------------------------------------------------- */
+add_action( 'elementor/widgets/register', 'CAYDENDIR_sd_register_elementor_widget' );          // Elementor 3.5+
+add_action( 'elementor/widgets/widgets_registered', 'CAYDENDIR_sd_register_elementor_widget' ); // older Elementor
+function CAYDENDIR_sd_register_elementor_widget( $widgets_manager = null ) {
+	static $done = false;
+	if ( $done ) {
+		return; // both hooks can fire — register only once
+	}
+	try {
+		if ( ! class_exists( '\Elementor\Widget_Base' ) ) {
+			return; // Elementor not active.
+		}
+		$file = CAYDENDIR_SD_DIR . 'integrations/elementor-widget.php';
+		if ( ! is_readable( $file ) ) {
+			CAYDENDIR_sd_log( 'elementor widget', 'widget file missing: ' . $file );
+			return;
+		}
+		require_once $file; // defines CAYDENDIR_Elementor_Widget
+		if ( ! class_exists( 'CAYDENDIR_Elementor_Widget' ) ) {
+			return;
+		}
+		$widget = new CAYDENDIR_Elementor_Widget();
+		if ( $widgets_manager && method_exists( $widgets_manager, 'register' ) ) {
+			$widgets_manager->register( $widget );
+		} elseif ( class_exists( '\Elementor\Plugin' ) ) {
+			$mgr = \Elementor\Plugin::instance()->widgets_manager;
+			if ( $mgr && method_exists( $mgr, 'register_widget_type' ) ) {
+				$mgr->register_widget_type( $widget );
+			}
+		}
+		$done = true;
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'elementor widget registration', $e );
+	}
+}
+
+/** Register a shared "Caydens Plugins" Elementor category. */
+add_action( 'elementor/elements/categories_registered', 'CAYDENDIR_sd_elementor_category' );
+function CAYDENDIR_sd_elementor_category( $manager ) {
+	try {
+		if ( $manager && method_exists( $manager, 'add_category' ) ) {
+			$manager->add_category( 'caydendir', array(
+				'title' => 'Caydens Plugins',
+				'icon'  => 'fa fa-plug',
+			) );
+		}
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'elementor category', $e );
+	}
+}
+
 add_action( 'admin_enqueue_scripts', 'CAYDENDIR_sd_admin_assets' );
 function CAYDENDIR_sd_admin_assets( $hook ) {
 	if ( 'settings_page_CAYDENDIR-staff-directory' !== $hook ) {
@@ -2493,8 +2619,14 @@ function CAYDENDIR_sd_settings_page_run() {
 		<hr>
 		<h2>Usage</h2>
         <p>Editing the Naming Schemes for Jobs and Department Names can be done here https://script.google.com/a/acpsmd.org/macros/s/AKfycbwnGz3D1Nxepbh2lA0bcpv7XGyiyuEMczvG_NiQAhpsSmMgO6XUft2TBwo-phDAYhN5Qw/exec?id=SS-64344-AL-1921216158201-P </p>
-		<p><strong>Beaver Builder:</strong> in the builder, open the content panel and drag the <strong>Staff Directory</strong> module (in the <em>Caydens Plugins</em> category) onto the page — no shortcode needed. Its settings (heading, layout, tag match) are on the module.</p>
-		<p><strong>Shortcode</strong> (any page, block, or an HTML module):</p>
+		<p>The plugin detects your page builder and offers a native block/module/widget automatically &mdash; or use the shortcode anywhere:</p>
+		<ul style="list-style:disc;margin-left:1.5em;">
+			<li><strong>Block editor</strong> (stock WordPress, GenerateBlocks, GeneratePress, Kadence&hellip;): add the <strong>Staff Directory</strong> block (under the <em>Caydens Plugins</em> category). It previews live and has Heading / Layout / Tag&nbsp;match controls.</li>
+			<li><strong>Elementor</strong>: drag the <strong>Staff Directory</strong> widget (in the <em>Caydens Plugins</em> category) onto the page.</li>
+			<li><strong>Beaver Builder</strong>: drag the <strong>Staff Directory</strong> module (in the <em>Caydens Plugins</em> category).</li>
+			<li><strong>Any theme or builder</strong>: paste the shortcode below.</li>
+		</ul>
+		<p><strong>Shortcode</strong> (works everywhere):</p>
 		<p><code>[CAYDENDIR_staff_directory heading="Search People"]</code></p>
 		<p class="description">Optional <code>layout="cards"</code> or <code>layout="table"</code> overrides the setting per placement. <code>match="all"</code> requires every selected tag.</p>
 		<p class="description">Logged-in administrators see an <strong>Edit</strong> button on every row of the public directory. Edits are saved as manual overrides (see above), can hide a person from the public, and re-sort into place automatically. Change who may edit with the <code>CAYDENDIR_sd_edit_cap</code> filter.</p>
@@ -2569,16 +2701,20 @@ function CAYDENDIR_sd_help_page_run() {
 
 		<div class="card">
 			<h2 id="place">Putting the directory on a page</h2>
-			<h3>Beaver Builder module <?php echo $bb_active ? '' : '<span class="description">(Beaver Builder is not active on this site right now)</span>'; ?></h3>
-			<p>In the builder, open the <strong>+</strong> content panel, find the <strong>Staff Directory</strong> module under the <strong>Caydens Plugins</strong> category, and drag it onto the page. No shortcode needed. In the module settings you can set:</p>
-			<ul>
-				<li><strong>Heading</strong> &mdash; the title shown above the search box.</li>
-				<li><strong>Layout</strong> &mdash; <em>Use the plugin setting</em>, <em>Table</em>, or <em>Cards</em> (overrides the global setting just for this placement).</li>
-				<li><strong>Tag match</strong> &mdash; <em>Any</em> or <em>All</em> when filtering by tags.</li>
-			</ul>
-			<p class="description"><strong>For other Cayden plugins:</strong> to share this same <em>Caydens Plugins</em> category, register your Beaver Builder module with <code>'category' =&gt; 'Caydens Plugins'</code> (this plugin exposes the exact string as the <code>CAYDENDIR_BB_CATEGORY</code> constant). Any module using that category value appears together under this heading, in the default module group.</p>
+			<p>The plugin <strong>auto-detects your page builder</strong> and offers a matching native block, widget or module &mdash; whichever you have. You never need to install anything extra, and the shortcode works everywhere as a fallback. All of them share the same three settings: <strong>Heading</strong>, <strong>Layout</strong> (Use plugin setting / Table / Cards), and <strong>Tag match</strong> (Any / All).</p>
+
+			<h3>Block editor &mdash; GenerateBlocks, GeneratePress, Kadence, stock WordPress</h3>
+			<p>Add a block, search <strong>Staff Directory</strong> (under the <strong>Caydens Plugins</strong> category), and drop it in. It shows a live preview and its settings are in the block sidebar. This is the one to use with GenerateBlocks / GeneratePress.</p>
+
+			<h3>Elementor <?php echo class_exists( '\Elementor\Widget_Base' ) ? '' : '<span class="description">(Elementor is not active right now)</span>'; ?></h3>
+			<p>In the Elementor panel, search <strong>Staff Directory</strong> (in the <strong>Caydens Plugins</strong> category) and drag it onto the canvas.</p>
+
+			<h3>Beaver Builder <?php echo $bb_active ? '' : '<span class="description">(Beaver Builder is not active right now)</span>'; ?></h3>
+			<p>Open the <strong>+</strong> content panel, find the <strong>Staff Directory</strong> module under the <strong>Caydens Plugins</strong> category, and drag it on.</p>
+			<p class="description"><strong>For other Cayden plugins:</strong> the shared <em>Caydens Plugins</em> grouping is exposed as the <code>CAYDENDIR_BB_CATEGORY</code> constant (Beaver Builder), the <code>caydens-plugins</code> block category, and the <code>caydendir</code> Elementor category, so sibling plugins can register into the same place.</p>
+
 			<h3>Shortcode</h3>
-			<p>Works in any page, post, block, or an HTML module:</p>
+			<p>Works in any page, post, block, widget area, or an HTML module &mdash; any theme, any builder:</p>
 			<p><code>[CAYDENDIR_staff_directory heading="Search People"]</code></p>
 			<table class="kv">
 				<tr><th>Attribute</th><th>Values</th><th>What it does</th></tr>
