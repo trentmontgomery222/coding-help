@@ -1,18 +1,14 @@
 <?php
 /**
- * In-place, per-page editing.
+ * In-place, per-page editing — builder-agnostic.
  *
  * When a logged-in editor (separate MCM session) opens a page they're allowed
- * to edit with ?mcm_edit=1, this class:
- *   - loads a thin CSS/JS layer over the REAL, fully-rendered page (so the
- *     editing screen is pixel-identical to the live page),
- *   - puts an "Edit" affordance on every Beaver Builder module (targeting BB's
- *     own data-node markup),
- *   - opens a drawer with that module's fields (reusing the whole-module
- *     schema), and
- *   - saves changes back into Beaver Builder over AJAX.
- *
- * Permission is per PAGE: an editor assigned a page may edit any module on it.
+ * to edit with ?mcm_edit=1, this class detects which page builder built that
+ * page (Beaver Builder, Elementor, or the block editor) and lets them edit it:
+ *   - builders that mark each unit in the DOM (Beaver Builder, Elementor) get
+ *     click-on-the-page editing,
+ *   - the block editor gets a "choose a block" list in the same drawer,
+ * both over the REAL, fully-rendered page so the screen matches the live page.
  *
  * @package mcm
  */
@@ -37,14 +33,14 @@ class MCM_Editmode {
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue' ) );
 		add_action( 'wp_footer', array( $this, 'render_chrome' ) );
 
-		foreach ( array( 'mcm_edit_form', 'mcm_edit_save' ) as $action ) {
+		foreach ( array( 'mcm_edit_list', 'mcm_edit_form', 'mcm_edit_save' ) as $action ) {
 			add_action( 'wp_ajax_' . $action, array( $this, 'ajax_' . $action ) );
 			add_action( 'wp_ajax_nopriv_' . $action, array( $this, 'ajax_' . $action ) );
 		}
 	}
 
 	/**
-	 * Post the editor is currently allowed to edit in-place, or 0.
+	 * The post the current editor may edit in place (0 if none).
 	 *
 	 * @return int
 	 */
@@ -65,9 +61,9 @@ class MCM_Editmode {
 	}
 
 	/**
-	 * Are we actively in edit mode (allowed + the ?mcm_edit flag set)?
+	 * Post id if edit mode is active (allowed + ?mcm_edit flag), else 0.
 	 *
-	 * @return int post id or 0
+	 * @return int
 	 */
 	public function active_post_id() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -82,12 +78,23 @@ class MCM_Editmode {
 		if ( ! $post_id ) {
 			return;
 		}
+		$provider = MCM_Providers::for_post( $post_id );
 
 		wp_enqueue_style( 'mcm-editmode', MCM_URL . 'assets/editmode.css', array(), MCM_VERSION );
 		wp_enqueue_script( 'mcm-editmode', MCM_URL . 'assets/editmode.js', array(), MCM_VERSION, true );
 
 		$settings   = mcm_get_settings();
 		$portal_url = $settings['portal_page_id'] ? get_permalink( (int) $settings['portal_page_id'] ) : home_url( '/' );
+
+		$provider_cfg = $provider
+			? array(
+				'key'      => $provider->key(),
+				'name'     => $provider->name(),
+				'inplace'  => $provider->supports_inplace(),
+				'selector' => $provider->dom_selector(),
+				'idAttr'   => $provider->dom_id_attr(),
+			)
+			: array( 'key' => '', 'name' => '', 'inplace' => false, 'selector' => '', 'idAttr' => '' );
 
 		wp_localize_script(
 			'mcm-editmode',
@@ -97,35 +104,39 @@ class MCM_Editmode {
 				'csrf'      => MCM_Auth::instance()->csrf_token(),
 				'postId'    => $post_id,
 				'portalUrl' => $portal_url,
-				'pageTitle' => get_the_title( $post_id ),
+				'provider'  => $provider_cfg,
 				'i18n'      => array(
-					'edit'    => __( 'Edit', 'mcm' ),
-					'editing' => __( 'Editing', 'mcm' ),
-					'done'    => __( 'Done', 'mcm' ),
-					'save'    => __( 'Save', 'mcm' ),
-					'cancel'  => __( 'Cancel', 'mcm' ),
-					'saving'  => __( 'Saving…', 'mcm' ),
-					'loading' => __( 'Loading…', 'mcm' ),
-					'error'   => __( 'Something went wrong. Please try again.', 'mcm' ),
+					'edit'      => __( 'Edit', 'mcm' ),
+					'done'      => __( 'Done', 'mcm' ),
+					'save'      => __( 'Save', 'mcm' ),
+					'cancel'    => __( 'Cancel', 'mcm' ),
+					'saving'    => __( 'Saving…', 'mcm' ),
+					'loading'   => __( 'Loading…', 'mcm' ),
+					'chooseBlk' => __( 'Choose a block', 'mcm' ),
+					'noBlocks'  => __( 'No editable content found on this page.', 'mcm' ),
+					'error'     => __( 'Something went wrong. Please try again.', 'mcm' ),
 				),
 			)
 		);
 	}
 
 	/**
-	 * Output the edit toolbar + drawer shell into the footer (edit mode only).
+	 * Toolbar + drawer shell (edit mode only).
 	 */
 	public function render_chrome() {
 		$post_id = $this->active_post_id();
 		if ( ! $post_id ) {
 			return;
 		}
+		$provider = MCM_Providers::for_post( $post_id );
+		$bname    = $provider ? $provider->name() : __( 'Unknown builder', 'mcm' );
 		?>
 		<div id="mcm-editmode" class="mcm-em" aria-hidden="false">
 			<div class="mcm-em-bar">
 				<span class="mcm-em-badge"><?php esc_html_e( 'Content editor', 'mcm' ); ?></span>
 				<span class="mcm-em-title"><?php echo esc_html( get_the_title( $post_id ) ); ?></span>
-				<span class="mcm-em-hint"><?php esc_html_e( 'Hover a block and click Edit', 'mcm' ); ?></span>
+				<span class="mcm-em-builder"><?php echo esc_html( $bname ); ?></span>
+				<button type="button" class="mcm-em-list-btn"><?php esc_html_e( 'Choose a block', 'mcm' ); ?></button>
 				<a class="mcm-em-done" href="<?php echo esc_url( remove_query_arg( 'mcm_edit' ) ); ?>"><?php esc_html_e( 'Done', 'mcm' ); ?></a>
 			</div>
 			<div class="mcm-em-drawer" role="dialog" aria-modal="true" hidden>
@@ -133,7 +144,8 @@ class MCM_Editmode {
 					<strong class="mcm-em-drawer-title"></strong>
 					<button type="button" class="mcm-em-close" aria-label="<?php esc_attr_e( 'Close', 'mcm' ); ?>">&times;</button>
 				</div>
-				<form class="mcm-em-form" enctype="multipart/form-data">
+				<div class="mcm-em-list" hidden></div>
+				<form class="mcm-em-form" enctype="multipart/form-data" hidden>
 					<div class="mcm-em-fields"></div>
 					<div class="mcm-em-actions">
 						<button type="submit" class="mcm-btn mcm-btn-primary mcm-em-save"><?php esc_html_e( 'Save', 'mcm' ); ?></button>
@@ -152,7 +164,7 @@ class MCM_Editmode {
 	// =======================================================================
 
 	/**
-	 * Shared guard: returns [ editor, post_id, node_id ] or sends a JSON error.
+	 * Shared guard. Returns [ editor, post_id, provider ] or sends JSON error.
 	 *
 	 * @return array
 	 */
@@ -161,58 +173,61 @@ class MCM_Editmode {
 		if ( ! $editor ) {
 			wp_send_json_error( array( 'message' => __( 'Your session has expired. Please log in again.', 'mcm' ) ), 403 );
 		}
-
 		$csrf = isset( $_POST['csrf'] ) ? sanitize_text_field( wp_unslash( $_POST['csrf'] ) ) : '';
 		if ( ! MCM_Auth::instance()->verify_csrf( $csrf ) ) {
 			wp_send_json_error( array( 'message' => __( 'Security check failed. Please reload the page.', 'mcm' ) ), 403 );
 		}
-
 		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
-		$node_id = isset( $_POST['node_id'] ) ? sanitize_text_field( wp_unslash( $_POST['node_id'] ) ) : '';
-
 		$allowed = MCM_DB::editor_allowed_page_ids( $editor );
 		if ( ! $post_id || ! in_array( $post_id, $allowed, true ) ) {
 			wp_send_json_error( array( 'message' => __( 'You are not allowed to edit this page.', 'mcm' ) ), 403 );
 		}
-		if ( '' === $node_id ) {
-			wp_send_json_error( array( 'message' => __( 'Missing module reference.', 'mcm' ) ), 400 );
+		$provider = MCM_Providers::for_post( $post_id );
+		if ( ! $provider ) {
+			wp_send_json_error( array( 'message' => __( 'No supported page builder was detected on this page.', 'mcm' ) ), 400 );
 		}
-
-		return array( $editor, $post_id, $node_id );
+		return array( $editor, $post_id, $provider );
 	}
 
-	/**
-	 * Return the drawer field HTML for one module.
-	 */
-	public function ajax_mcm_edit_form() {
-		list( , $post_id, $node_id ) = $this->ajax_guard();
+	/** Return the list of editable nodes for the page. */
+	public function ajax_mcm_edit_list() {
+		list( , $post_id, $provider ) = $this->ajax_guard();
+		wp_send_json_success( array( 'nodes' => array_values( $provider->list_nodes( $post_id ) ) ) );
+	}
 
-		$desc = MCM_Beaver::describe_module( $post_id, $node_id );
+	/** Return the drawer field HTML for one node. */
+	public function ajax_mcm_edit_form() {
+		list( , $post_id, $provider ) = $this->ajax_guard();
+		$node_id = isset( $_POST['node_id'] ) ? sanitize_text_field( wp_unslash( $_POST['node_id'] ) ) : '';
+		if ( '' === $node_id ) {
+			wp_send_json_error( array( 'message' => __( 'Missing block reference.', 'mcm' ) ), 400 );
+		}
+		$desc = $provider->describe_node( $post_id, $node_id );
 		if ( is_wp_error( $desc ) ) {
 			wp_send_json_error( array( 'message' => $desc->get_error_message() ), 404 );
 		}
-
 		wp_send_json_success(
 			array(
 				'title' => $desc['label'],
-				'html'  => $this->render_fields_html( $post_id, $node_id, $desc ),
+				'html'  => $this->render_fields_html( $provider, $post_id, $node_id, $desc ),
 			)
 		);
 	}
 
-	/**
-	 * Save one module's edited settings.
-	 */
+	/** Save one node's edited settings. */
 	public function ajax_mcm_edit_save() {
-		list( $editor, $post_id, $node_id ) = $this->ajax_guard();
-
-		$desc = MCM_Beaver::describe_module( $post_id, $node_id );
+		list( , $post_id, $provider ) = $this->ajax_guard();
+		$node_id = isset( $_POST['node_id'] ) ? sanitize_text_field( wp_unslash( $_POST['node_id'] ) ) : '';
+		if ( '' === $node_id ) {
+			wp_send_json_error( array( 'message' => __( 'Missing block reference.', 'mcm' ) ), 400 );
+		}
+		$desc = $provider->describe_node( $post_id, $node_id );
 		if ( is_wp_error( $desc ) ) {
 			wp_send_json_error( array( 'message' => $desc->get_error_message() ), 404 );
 		}
 
 		$posted = isset( $_POST['mcm_fields'] ) && is_array( $_POST['mcm_fields'] ) ? wp_unslash( $_POST['mcm_fields'] ) : array(); // phpcs:ignore WordPress.Security.ValidationSanitization.InputNotSanitized,WordPress.Security.ValidationSanitization.MissingUnslash -- sanitized per-widget below.
-		$assoc  = array();
+		$values = array();
 		$images = array();
 
 		foreach ( array_merge( $desc['primary'], $desc['advanced'] ) as $f ) {
@@ -223,63 +238,50 @@ class MCM_Editmode {
 			if ( ! array_key_exists( $f['key'], $posted ) ) {
 				continue;
 			}
-			$assoc[ $f['key'] ] = MCM_Beaver::sanitize_widget_value( $f['widget'], $posted[ $f['key'] ], $f );
+			$values[ $f['key'] ] = MCM_Beaver::sanitize_widget_value( $f['widget'], $posted[ $f['key'] ], $f );
 		}
 
-		// Image uploads last, so a fresh upload wins over any posted photo_src.
+		// Image uploads become a normalized { id, url } the provider maps itself.
 		foreach ( $images as $key ) {
 			$upload = $this->upload_image( $key );
 			if ( is_wp_error( $upload ) ) {
 				wp_send_json_error( array( 'message' => $upload->get_error_message() ), 400 );
 			}
 			if ( is_array( $upload ) ) {
-				$assoc['photo']        = (int) $upload['id'];
-				$assoc['photo_src']    = $upload['url'];
-				$assoc['photo_source'] = 'library';
+				$values[ $key ] = array( 'id' => (int) $upload['id'], 'url' => $upload['url'] );
 			}
 		}
 
-		if ( empty( $assoc ) ) {
+		if ( empty( $values ) ) {
 			wp_send_json_success( array( 'message' => __( 'Nothing to change.', 'mcm' ) ) );
 		}
 
-		$res = MCM_Beaver::update_module_settings( $post_id, $node_id, $assoc );
+		$res = $provider->update_node( $post_id, $node_id, $values );
 		if ( is_wp_error( $res ) ) {
 			wp_send_json_error( array( 'message' => $res->get_error_message() ), 500 );
 		}
-
 		wp_send_json_success( array( 'message' => __( 'Saved.', 'mcm' ) ) );
 	}
 
 	// =======================================================================
-	// Field rendering (server side, injected into the drawer)
+	// Field rendering
 	// =======================================================================
 
-	/**
-	 * Build the drawer form body for a module: primary widgets + an advanced
-	 * <details> with the rest.
-	 *
-	 * @param int    $post_id
-	 * @param string $node_id
-	 * @param array  $desc describe_module() output
-	 * @return string
-	 */
-	private function render_fields_html( $post_id, $node_id, $desc ) {
+	private function render_fields_html( $provider, $post_id, $node_id, $desc ) {
 		ob_start();
 		foreach ( $desc['primary'] as $f ) {
 			echo '<div class="mcm-field">';
 			echo '<label class="mcm-field-label">' . esc_html( $f['label'] ) . '</label>';
-			echo $this->widget_html( $post_id, $node_id, $f ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built with esc_* internally.
+			echo $this->widget_html( $provider, $post_id, $node_id, $f ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			echo '</div>';
 		}
-
 		if ( ! empty( $desc['advanced'] ) ) {
 			echo '<details class="mcm-advanced"><summary>' . esc_html__( 'Advanced — all other settings', 'mcm' ) . '</summary>';
 			echo '<div class="mcm-adv-grid">';
 			foreach ( $desc['advanced'] as $f ) {
 				echo '<div class="mcm-field mcm-adv-field">';
 				echo '<label class="mcm-adv-label">' . esc_html( $f['label'] ) . '</label>';
-				echo $this->widget_html( $post_id, $node_id, $f ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built with esc_* internally.
+				echo $this->widget_html( $provider, $post_id, $node_id, $f ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				echo '</div>';
 			}
 			echo '</div></details>';
@@ -287,22 +289,14 @@ class MCM_Editmode {
 		return ob_get_clean();
 	}
 
-	/**
-	 * Render a single widget's HTML.
-	 *
-	 * @param int    $post_id
-	 * @param string $node_id
-	 * @param array  $f descriptor
-	 * @return string
-	 */
-	private function widget_html( $post_id, $node_id, $f ) {
+	private function widget_html( $provider, $post_id, $node_id, $f ) {
 		$name  = 'mcm_fields[' . $f['key'] . ']';
 		$value = (string) $f['value'];
 
 		ob_start();
 		switch ( $f['widget'] ) {
 			case 'image':
-				$src = MCM_Beaver::module_image_src( $post_id, $node_id );
+				$src = $provider->node_image_src( $post_id, $node_id );
 				if ( $src ) {
 					echo '<div class="mcm-img-preview"><img src="' . esc_url( $src ) . '" alt="" /></div>';
 				}
@@ -346,7 +340,7 @@ class MCM_Editmode {
 
 			case 'icon':
 				echo '<input type="text" name="' . esc_attr( $name ) . '" class="mcm-input" value="' . esc_attr( $value ) . '" placeholder="fas fa-star" />';
-				echo '<p class="mcm-help">' . esc_html__( 'Font Awesome class, e.g. "fas fa-phone".', 'mcm' ) . '</p>';
+				echo '<p class="mcm-help">' . esc_html__( 'Icon class, e.g. "fas fa-phone".', 'mcm' ) . '</p>';
 				break;
 
 			case 'text':

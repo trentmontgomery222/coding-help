@@ -12,9 +12,11 @@ of content you assign them, in the format you allow.
 ## What you get
 
 - **Per-page live editing (recommended)** — assign an editor a **page**. They
-  open it from the portal and edit **every module on it in place, on the real
-  page, in the exact live layout** — hover any block, click *Edit*, change it in
-  a side drawer, save. See *Per-page live editing* below.
+  open it from the portal and edit its content **in place, on the real page, in
+  the exact live layout**. The plugin **auto-detects the page builder** (Beaver
+  Builder, Elementor, or the block editor / GenerateBlocks) and edits it the
+  right way — no builder is required beyond whatever the site already uses. See
+  *Works with your page builder automatically* below.
 - **Content Blocks** — named, editable pieces of content (single-line text,
   multi-line text, or *limited* rich text). Each renders on any page/post via a
   shortcode.
@@ -49,6 +51,28 @@ of content you assign them, in the format you allow.
 Editors visit the portal page, log in, and get a simple form for each block
 they're allowed to edit. That's it.
 
+## Works with your page builder automatically
+
+The plugin **detects which builder rendered each page** and edits it the right
+way — you don't configure anything:
+
+| Builder | Detected by | Editing style |
+|---------|-------------|---------------|
+| **Beaver Builder** | `_fl_builder_data` / `_fl_builder_enabled` | Click any module on the page |
+| **Elementor** | `_elementor_data` / edit mode | Click any widget on the page |
+| **Block editor** (Gutenberg, **GenerateBlocks**, GeneratePress, any block theme) | `has_blocks()` on the content | **Choose a block** from the toolbar list |
+
+Beaver Builder and Elementor mark every unit in the page's HTML (`data-node` /
+`data-id`), so editors click the thing on the page. The block editor has no
+reliable per-block hook, so those pages use a **Choose a block** button in the
+toolbar that lists the editable blocks — still on the real page, in its real
+layout. If a builder isn't installed, its provider simply stays dormant; the
+block-editor provider is always available, so the plugin works on a plain
+WordPress site with no page builder at all.
+
+Adding another builder is just a new class implementing `MCM_Provider`
+(`includes/providers/`), registered via the `mcm_providers` filter.
+
 ## Per-page live editing
 
 This is the mode most people want: an editor is given a **page**, and can change
@@ -68,22 +92,25 @@ form fields.
 2. Clicking it opens the actual page (with the theme, Beaver Builder styling,
    everything — pixel-identical to what visitors see) with a slim editor toolbar
    on top.
-3. Hovering any block outlines it and shows an **Edit** button. Clicking it opens
-   a side drawer with that module's fields (the same whole-module editor: image
-   upload, text, links, icons, toggles, colours, plus *Advanced* for the rest).
-4. **Save** writes the change back into Beaver Builder and reloads the page, so
+3. On Beaver Builder / Elementor pages, hovering any block outlines it and shows
+   an **Edit** button. On block-editor pages, they click **Choose a block** in
+   the toolbar and pick from the list. Either opens a side drawer with that
+   unit's fields (image upload, text, links, icons, toggles, colours, plus
+   *Advanced* where the builder exposes more).
+4. **Save** writes the change back into the builder and reloads the page, so
    they immediately see the true result. **Done** leaves edit mode.
 
 **How it works**
 
 The editing layer is injected over the live page only when a valid editor
 session is present *and* the page is one they're allowed to edit *and* the URL
-carries `?mcm_edit=1`. It targets Beaver Builder's own per-module `data-node`
-markup, so the page itself is untouched — the toolbar, outlines and Edit buttons
-are added in the browser and never saved. Loading a module's form and saving it
-go through `admin-ajax.php`, guarded on every call by the editor session, a
-per-session CSRF token, and a check that the module's page is in the editor's
-allowed list. Normal visitors get none of this — the assets don't even load.
+carries `?mcm_edit=1`. The plugin picks the provider for that page and (for
+Beaver Builder / Elementor) targets the builder's own per-unit DOM markup, so
+the page itself is untouched — the toolbar, outlines and Edit buttons are added
+in the browser and never saved. Loading a unit's form and saving it go through
+`admin-ajax.php`, guarded on every call by the editor session, a per-session
+CSRF token, and a check that the page is in the editor's allowed list. Normal
+visitors get none of this — the assets don't even load.
 
 ## Beaver Builder support
 
@@ -185,11 +212,17 @@ managed-content-manager/
 ├── managed-content-manager.php   # bootstrap, activation, single-site guard
 ├── includes/
 │   ├── class-mcm-db.php          # tables + all queries + content sanitizing
-│   ├── class-mcm-beaver.php      # Beaver Builder read/scan/write integration
+│   ├── class-mcm-beaver.php      # Beaver Builder read/scan/write engine
+│   ├── class-mcm-providers.php   # builder auto-detection + registry
+│   ├── providers/
+│   │   ├── abstract-mcm-provider.php
+│   │   ├── class-mcm-provider-beaver.php     # Beaver Builder (click-in-place)
+│   │   ├── class-mcm-provider-elementor.php  # Elementor (click-in-place)
+│   │   └── class-mcm-provider-gutenberg.php  # block editor / GenerateBlocks (list)
 │   ├── class-mcm-auth.php        # editor login / sessions (separate from WP)
 │   ├── class-mcm-admin.php       # wp-admin screens (blocks, Beaver, editors, settings)
 │   ├── class-mcm-portal.php      # front-end portal + [managed_content]
-│   └── class-mcm-editmode.php    # in-place per-page live editing + AJAX
+│   └── class-mcm-editmode.php    # in-place per-page live editing + AJAX (provider-driven)
 ├── assets/
 │   ├── admin.css
 │   ├── portal.css

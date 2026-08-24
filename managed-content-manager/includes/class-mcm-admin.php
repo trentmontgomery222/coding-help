@@ -331,7 +331,7 @@ class MCM_Admin {
 		$editor    = $edit_id ? MCM_DB::get_editor( $edit_id ) : null;
 		$blocks    = MCM_DB::get_blocks();
 		$allowed   = MCM_DB::editor_allowed_ids( $editor );
-		$pages     = MCM_Beaver::is_active() ? MCM_Beaver::get_bb_posts() : array();
+		$pages     = MCM_Providers::all_pages(); // union across every detected builder
 		$allow_pg  = MCM_DB::editor_allowed_page_ids( $editor );
 		?>
 		<div class="mcm-card">
@@ -370,17 +370,18 @@ class MCM_Admin {
 						<th scope="row"><?php esc_html_e( 'Editable pages', 'mcm' ); ?></th>
 						<td>
 							<?php if ( empty( $pages ) ) : ?>
-								<p class="mcm-muted"><?php esc_html_e( 'No Beaver Builder pages found (or Beaver Builder is inactive).', 'mcm' ); ?></p>
+								<p class="mcm-muted"><?php esc_html_e( 'No builder pages detected yet (Beaver Builder, Elementor, or block-editor pages will appear here automatically).', 'mcm' ); ?></p>
 							<?php else : ?>
 								<fieldset class="mcm-checklist">
 									<?php foreach ( $pages as $p ) : ?>
 										<label>
-											<input type="checkbox" name="allowed_pages[]" value="<?php echo esc_attr( $p->ID ); ?>" <?php checked( in_array( (int) $p->ID, $allow_pg, true ) ); ?> />
-											<?php echo esc_html( $p->post_title ? $p->post_title : ( '#' . $p->ID ) ); ?>
+											<input type="checkbox" name="allowed_pages[]" value="<?php echo esc_attr( $p['id'] ); ?>" <?php checked( in_array( (int) $p['id'], $allow_pg, true ) ); ?> />
+											<?php echo esc_html( $p['title'] ); ?>
+											<span class="mcm-tag mcm-tag-bb"><?php echo esc_html( $p['builder'] ); ?></span>
 										</label>
 									<?php endforeach; ?>
 								</fieldset>
-								<p class="description"><?php esc_html_e( 'The editor can open each of these pages and edit every module on it, live, in the exact page layout.', 'mcm' ); ?></p>
+								<p class="description"><?php esc_html_e( 'The editor can open each of these pages and edit its content live, in the exact page layout. The builder is detected automatically per page.', 'mcm' ); ?></p>
 							<?php endif; ?>
 						</td>
 					</tr>

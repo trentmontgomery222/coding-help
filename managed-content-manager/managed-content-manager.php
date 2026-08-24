@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Managed Content Manager
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
- * Description:       Let non-WordPress users edit specific, pre-defined pieces of page content through a separate, restricted front-end portal with their own logins. Single-site only (not multisite / not network aware).
+ * Description:       Let non-WordPress users edit page content through a separate, restricted front-end portal with their own logins. Auto-detects the page builder (Beaver Builder, Elementor, or the block editor / GenerateBlocks) and edits the real page in place. Single-site only (not multisite / not network aware).
  * Version:           0.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
@@ -40,6 +40,11 @@ define( 'MCM_DB_VERSION', '3' );
 // ---------------------------------------------------------------------------
 require_once MCM_DIR . 'includes/class-mcm-db.php';
 require_once MCM_DIR . 'includes/class-mcm-beaver.php';
+require_once MCM_DIR . 'includes/providers/abstract-mcm-provider.php';
+require_once MCM_DIR . 'includes/providers/class-mcm-provider-beaver.php';
+require_once MCM_DIR . 'includes/providers/class-mcm-provider-elementor.php';
+require_once MCM_DIR . 'includes/providers/class-mcm-provider-gutenberg.php';
+require_once MCM_DIR . 'includes/class-mcm-providers.php';
 require_once MCM_DIR . 'includes/class-mcm-auth.php';
 require_once MCM_DIR . 'includes/class-mcm-admin.php';
 require_once MCM_DIR . 'includes/class-mcm-portal.php';

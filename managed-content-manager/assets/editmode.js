@@ -1,10 +1,11 @@
 /**
- * Managed Content Manager — in-place page editing.
+ * Managed Content Manager — in-place page editing (builder-agnostic).
  *
- * Runs on the real, fully-rendered page. Finds every Beaver Builder module
- * (BB marks each with a data-node attribute), adds an "Edit" button, and opens
- * a drawer that loads/saves that module's fields over AJAX. On success the page
- * reloads so the editor sees the true, updated layout.
+ * Beaver Builder / Elementor: each unit is marked in the DOM, so we add an Edit
+ * button on hover (provider.inplace = true, using provider.selector/idAttr).
+ * Block editor: no per-block DOM hook, so editors pick a block from a list
+ * (the "Choose a block" toolbar button). Either way, the drawer loads/saves one
+ * node over AJAX and reloads on success so the true layout is shown.
  */
 ( function () {
 	'use strict';
@@ -14,20 +15,16 @@
 	}
 	var CFG = window.MCM_EDIT;
 	var I18N = CFG.i18n || {};
+	var P = CFG.provider || {};
 
-	var root, drawer, scrim, form, fieldsBox, titleEl, statusEl, saveBtn;
+	var root, drawer, scrim, form, fieldsBox, listBox, titleEl, statusEl, saveBtn, listBtn;
 	var currentNode = null;
 
-	function t( key, fallback ) {
-		return I18N[ key ] || fallback;
-	}
+	function t( key, fb ) { return I18N[ key ] || fb; }
 
 	function ready( fn ) {
-		if ( document.readyState !== 'loading' ) {
-			fn();
-		} else {
-			document.addEventListener( 'DOMContentLoaded', fn );
-		}
+		if ( document.readyState !== 'loading' ) { fn(); }
+		else { document.addEventListener( 'DOMContentLoaded', fn ); }
 	}
 
 	function post( action, formData ) {
@@ -38,33 +35,27 @@
 			method: 'POST',
 			credentials: 'same-origin',
 			body: formData
-		} ).then( function ( r ) {
-			return r.json();
-		} );
+		} ).then( function ( r ) { return r.json(); } );
 	}
 
-	// --- Decorate modules with Edit buttons ---------------------------------
+	// --- In-place decoration (Beaver Builder / Elementor) -------------------
 	function decorate() {
-		document.documentElement.classList.add( 'mcm-editing' );
-
-		var modules = document.querySelectorAll( '.fl-module[data-node]' );
-		Array.prototype.forEach.call( modules, function ( mod ) {
-			if ( mod.classList.contains( 'mcm-editable' ) ) {
-				return;
-			}
-			mod.classList.add( 'mcm-editable' );
-
+		if ( ! P.inplace || ! P.selector ) { return; }
+		var attr = P.idAttr || 'data-node';
+		var units = document.querySelectorAll( P.selector );
+		Array.prototype.forEach.call( units, function ( el ) {
+			if ( el.classList.contains( 'mcm-editable' ) ) { return; }
+			el.classList.add( 'mcm-editable' );
 			var btn = document.createElement( 'button' );
 			btn.type = 'button';
 			btn.className = 'mcm-em-edit-btn';
 			btn.textContent = '✎ ' + t( 'edit', 'Edit' );
-			btn.setAttribute( 'data-node', mod.getAttribute( 'data-node' ) );
 			btn.addEventListener( 'click', function ( e ) {
 				e.preventDefault();
 				e.stopPropagation();
-				openModule( mod.getAttribute( 'data-node' ) );
+				openNode( el.getAttribute( attr ) );
 			} );
-			mod.appendChild( btn );
+			el.appendChild( btn );
 		} );
 	}
 
@@ -76,38 +67,75 @@
 		scrim = root.querySelector( '.mcm-em-scrim' );
 		form = root.querySelector( '.mcm-em-form' );
 		fieldsBox = root.querySelector( '.mcm-em-fields' );
+		listBox = root.querySelector( '.mcm-em-list' );
 		titleEl = root.querySelector( '.mcm-em-drawer-title' );
 		statusEl = root.querySelector( '.mcm-em-status' );
 		saveBtn = root.querySelector( '.mcm-em-save' );
+		listBtn = root.querySelector( '.mcm-em-list-btn' );
 		return true;
 	}
 
-	function openDrawer() {
-		drawer.hidden = false;
-		scrim.hidden = false;
-	}
+	function openDrawer() { drawer.hidden = false; scrim.hidden = false; }
 	function closeDrawer() {
-		drawer.hidden = true;
-		scrim.hidden = true;
-		currentNode = null;
-		fieldsBox.innerHTML = '';
+		drawer.hidden = true; scrim.hidden = true;
+		currentNode = null; fieldsBox.innerHTML = ''; listBox.innerHTML = '';
 		setStatus( '', '' );
 	}
-
+	function showForm() { form.hidden = false; listBox.hidden = true; }
+	function showList() { form.hidden = true; listBox.hidden = false; }
 	function setStatus( msg, kind ) {
 		statusEl.textContent = msg || '';
 		statusEl.className = 'mcm-em-status' + ( kind ? ' mcm-em-' + kind : '' );
 	}
 
-	function openModule( node ) {
-		currentNode = node;
+	// Load the list of editable nodes into the drawer.
+	function openList() {
+		titleEl.textContent = t( 'chooseBlk', 'Choose a block' );
+		listBox.innerHTML = '<p class="mcm-help">' + t( 'loading', 'Loading…' ) + '</p>';
+		showList();
+		openDrawer();
+
+		post( 'mcm_edit_list', new FormData() ).then( function ( res ) {
+			if ( ! res || ! res.success ) {
+				listBox.innerHTML = '<p class="mcm-em-status mcm-em-err">' + ( ( res && res.data && res.data.message ) || t( 'error', 'Error' ) ) + '</p>';
+				return;
+			}
+			var nodes = res.data.nodes || [];
+			if ( ! nodes.length ) {
+				listBox.innerHTML = '<p class="mcm-help">' + t( 'noBlocks', 'No editable content found.' ) + '</p>';
+				return;
+			}
+			var ul = document.createElement( 'div' );
+			ul.className = 'mcm-em-node-list';
+			nodes.forEach( function ( n ) {
+				var item = document.createElement( 'button' );
+				item.type = 'button';
+				item.className = 'mcm-em-node';
+				item.innerHTML = '<span class="mcm-em-node-label"></span><span class="mcm-em-node-prev"></span>';
+				item.querySelector( '.mcm-em-node-label' ).textContent = n.label || '';
+				item.querySelector( '.mcm-em-node-prev' ).textContent = n.preview || '';
+				item.addEventListener( 'click', function () { openNode( n.node_id ); } );
+				ul.appendChild( item );
+			} );
+			listBox.innerHTML = '';
+			listBox.appendChild( ul );
+		} ).catch( function () {
+			listBox.innerHTML = '<p class="mcm-em-status mcm-em-err">' + t( 'error', 'Error' ) + '</p>';
+		} );
+	}
+
+	// Load one node's form into the drawer.
+	function openNode( node ) {
+		if ( node === null || typeof node === 'undefined' ) { return; }
+		currentNode = String( node );
 		titleEl.textContent = t( 'loading', 'Loading…' );
 		fieldsBox.innerHTML = '';
 		setStatus( '', '' );
+		showForm();
 		openDrawer();
 
 		var fd = new FormData();
-		fd.append( 'node_id', node );
+		fd.append( 'node_id', currentNode );
 		post( 'mcm_edit_form', fd ).then( function ( res ) {
 			if ( ! res || ! res.success ) {
 				titleEl.textContent = t( 'edit', 'Edit' );
@@ -124,7 +152,6 @@
 	function submit( e ) {
 		e.preventDefault();
 		if ( ! currentNode ) { return; }
-
 		var fd = new FormData( form );
 		fd.append( 'node_id', currentNode );
 		saveBtn.disabled = true;
@@ -133,7 +160,6 @@
 		post( 'mcm_edit_save', fd ).then( function ( res ) {
 			if ( res && res.success ) {
 				setStatus( t( 'save', 'Saved' ), 'ok' );
-				// Reload so the real, updated layout is shown.
 				window.location.reload();
 			} else {
 				saveBtn.disabled = false;
@@ -151,6 +177,7 @@
 
 		form.addEventListener( 'submit', submit );
 		scrim.addEventListener( 'click', closeDrawer );
+		listBtn.addEventListener( 'click', openList );
 		root.querySelector( '.mcm-em-close' ).addEventListener( 'click', closeDrawer );
 		root.querySelector( '.mcm-em-cancel' ).addEventListener( 'click', closeDrawer );
 		document.addEventListener( 'keydown', function ( e ) {
