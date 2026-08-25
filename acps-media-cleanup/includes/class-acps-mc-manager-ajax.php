@@ -24,10 +24,23 @@ class ACPS_MC_Manager_Ajax {
 			'where_used',
 			'upload_saved',
 			'convert_heic',
+			'rename_file',
+			'rename_folder',
+			'delete_folder',
+			'pages',
 		);
 		foreach ( $actions as $a ) {
 			add_action( 'wp_ajax_acps_mm_' . $a, array( $this, $a ) );
 		}
+	}
+
+	/** Version counter — bumped on any change so grid caches invalidate. */
+	protected function version() {
+		return (int) get_option( 'acps_mm_version', 1 );
+	}
+	protected function bump_version() {
+		update_option( 'acps_mm_version', $this->version() + 1, false );
+		delete_transient( 'acps_mm_stemmap' );
 	}
 
 	protected function guard() {
@@ -122,6 +135,11 @@ class ACPS_MC_Manager_Ajax {
 			return $out;
 		}
 
+		// "Used on page" filter: folder = "page:123".
+		if ( 0 === strpos( $folder, 'page:' ) ) {
+			return $this->attachment_ids_for_post( (int) substr( $folder, 5 ) );
+		}
+
 		$target = $recursive ? $folders->descendants( (int) $folder ) : array( (int) $folder );
 		$target = array_map( 'intval', $target );
 		$out    = array();
@@ -189,22 +207,41 @@ class ACPS_MC_Manager_Ajax {
 				$order = 'p.post_date DESC';
 		}
 
-		$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p WHERE {$where_sql}" ); // phpcs:ignore
-		$offset = ( $paged - 1 ) * $per;
+		// Serve the heavy card list from a short-lived cache (rebuilt only when
+		// something changes, via the version counter) so repeat loads are fast.
+		$sig  = md5( wp_json_encode( array( $folder, $search, $type, $sort, $per, $this->version() ) ) );
+		$ckey = 'acps_mm_q_' . $sig;
+		$cache = get_transient( $ckey );
 
-		$rows = $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p WHERE {$where_sql} ORDER BY {$order} LIMIT {$per} OFFSET {$offset}" ); // phpcs:ignore
-		$rows = array_map( 'intval', (array) $rows );
+		if ( is_array( $cache ) && isset( $cache['items'], $cache['total'] ) ) {
+			$items = $cache['items'];
+			$total = (int) $cache['total'];
+		} else {
+			$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p WHERE {$where_sql}" ); // phpcs:ignore
+			$offset = ( $paged - 1 ) * $per;
 
-		// Warm caches so per-card lookups don't each hit the DB.
-		if ( $rows ) {
-			_prime_post_caches( $rows, false, true );
+			$rows = $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p WHERE {$where_sql} ORDER BY {$order} LIMIT {$per} OFFSET {$offset}" ); // phpcs:ignore
+			$rows = array_map( 'intval', (array) $rows );
+
+			if ( $rows ) {
+				_prime_post_caches( $rows, false, true );
+			}
+
+			$items = array();
+			foreach ( $rows as $id ) {
+				$items[] = $this->card( (int) $id );
+			}
+			set_transient( $ckey, array( 'items' => $items, 'total' => $total ), 30 * MINUTE_IN_SECONDS );
 		}
 
+		// Overlay the used/unused colour fresh every time (cheap; reflects the
+		// latest scan without rebuilding the whole card list).
 		$used_map = $this->results_map();
-		$items    = array();
-		foreach ( $rows as $id ) {
-			$items[] = $this->card( (int) $id, $used_map );
+		foreach ( $items as &$it ) {
+			$id = (int) $it['id'];
+			$it['state'] = array_key_exists( $id, $used_map ) ? ( $used_map[ $id ] ? 'used' : 'unused' ) : 'unknown';
 		}
+		unset( $it );
 
 		wp_send_json_success(
 			array(
@@ -217,30 +254,21 @@ class ACPS_MC_Manager_Ajax {
 	}
 
 	/**
-	 * @param int   $id       Attachment ID.
-	 * @param array $used_map id => used(bool) from last scan.
+	 * Build a lightweight card (no used-state; that is overlaid per request).
+	 *
+	 * @param int $id Attachment ID.
 	 */
-	protected function card( $id, $used_map = array() ) {
-		$mime  = get_post_mime_type( $id );
-		$thumb = $this->best_thumb( $id );
-		$file  = get_post_meta( $id, '_wp_attached_file', true );
-
-		// Used state colour: used | unused | unknown (not in last scan).
-		if ( array_key_exists( $id, $used_map ) ) {
-			$state = $used_map[ $id ] ? 'used' : 'unused';
-		} else {
-			$state = 'unknown';
-		}
-
+	protected function card( $id ) {
+		$file = get_post_meta( $id, '_wp_attached_file', true );
 		return array(
 			'id'       => $id,
 			'title'    => get_the_title( $id ),
 			'filename' => $file ? wp_basename( $file ) : '',
-			'mime'     => $mime,
+			'mime'     => get_post_mime_type( $id ),
 			'isImage'  => wp_attachment_is_image( $id ),
-			'thumb'    => $thumb,
+			'thumb'    => $this->best_thumb( $id ),
 			'url'      => wp_get_attachment_url( $id ),
-			'state'    => $state,
+			'state'    => 'unknown',
 		);
 	}
 
@@ -335,6 +363,7 @@ class ACPS_MC_Manager_Ajax {
 		if ( is_wp_error( $res ) ) {
 			wp_send_json_error( array( 'message' => $res->get_error_message() ) );
 		}
+		$this->bump_version();
 		wp_send_json_success(
 			array(
 				'id'    => $id,
@@ -375,6 +404,7 @@ class ACPS_MC_Manager_Ajax {
 		if ( isset( $_POST['alt'] ) ) {
 			update_post_meta( $id, '_wp_attachment_image_alt', sanitize_text_field( wp_unslash( $_POST['alt'] ) ) );
 		}
+		$this->bump_version();
 		wp_send_json_success( array( 'id' => $id ) );
 	}
 
@@ -396,6 +426,7 @@ class ACPS_MC_Manager_Ajax {
 		if ( $folder_id > 0 ) {
 			$folders->remember_recent( $folder_id );
 		}
+		$this->bump_version();
 		wp_send_json_success( array( 'moved' => $done ) );
 	}
 
@@ -409,6 +440,7 @@ class ACPS_MC_Manager_Ajax {
 		if ( is_wp_error( $res ) ) {
 			wp_send_json_error( array( 'message' => $res->get_error_message() ) );
 		}
+		$this->bump_version();
 		wp_send_json_success( array( 'id' => (int) $res, 'name' => $name ) );
 	}
 
@@ -500,6 +532,7 @@ class ACPS_MC_Manager_Ajax {
 			}
 		}
 
+		$this->bump_version();
 		wp_send_json_success( array( 'deleted' => $deleted, 'items' => $items ) );
 	}
 
@@ -519,13 +552,225 @@ class ACPS_MC_Manager_Ajax {
 			$folders->assign( $id, $folder_id );
 			$folders->remember_recent( $folder_id );
 		}
+		$this->bump_version();
 		wp_send_json_success(
 			array(
-				'id'      => $id,
-				'url'     => wp_get_attachment_url( $id ),
-				'common'  => $folders->common_folders( 8 ),
-				'folders' => $this->folder_options( $folders ),
+				'id'       => $id,
+				'url'      => wp_get_attachment_url( $id ),
+				'filename' => wp_basename( (string) get_post_meta( $id, '_wp_attached_file', true ) ),
+				'common'   => $folders->common_folders( 8 ),
+				'folders'  => $this->folder_options( $folders ),
 			)
 		);
+	}
+
+	/**
+	 * Rename an attachment's file on disk (keeps the same ID). Warns first if the
+	 * file appears to be in use, because renaming breaks hard-coded links.
+	 */
+	public function rename_file() {
+		$this->guard();
+		global $wpdb;
+
+		$id      = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+		$newbase = isset( $_POST['name'] ) ? (string) wp_unslash( $_POST['name'] ) : '';
+		$confirm = ! empty( $_POST['confirm'] );
+
+		if ( 'attachment' !== get_post_type( $id ) || ! current_user_can( 'edit_post', $id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'acps-media-cleanup' ) ) );
+		}
+
+		// Clean the requested base name; the extension is preserved from the file.
+		$newbase = sanitize_file_name( $newbase );
+		$newbase = preg_replace( '/\.[^.]+$/', '', $newbase ); // drop any typed extension
+		$newbase = trim( $newbase );
+		if ( '' === $newbase ) {
+			wp_send_json_error( array( 'message' => __( 'Please enter a valid file name.', 'acps-media-cleanup' ) ) );
+		}
+
+		// Usage warning.
+		if ( ! $confirm ) {
+			$locs = ACPS_MC_Usage::for_attachment( $id );
+			if ( ! empty( $locs ) ) {
+				wp_send_json_success( array( 'needs_confirm' => true, 'count' => count( $locs ) ) );
+			}
+		}
+
+		$old = get_attached_file( $id );
+		if ( ! $old || ! file_exists( $old ) ) {
+			wp_send_json_error( array( 'message' => __( 'Original file not found.', 'acps-media-cleanup' ) ) );
+		}
+		$dir      = trailingslashit( dirname( $old ) );
+		$ext      = pathinfo( $old, PATHINFO_EXTENSION );
+		$new_name = wp_unique_filename( dirname( $old ), $newbase . ( $ext ? '.' . $ext : '' ) );
+		$new_path = $dir . $new_name;
+
+		if ( ! @rename( $old, $new_path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			wp_send_json_error( array( 'message' => __( 'Could not rename the file on disk.', 'acps-media-cleanup' ) ) );
+		}
+
+		// Remove the now-orphaned old size files and original.
+		$meta_old = wp_get_attachment_metadata( $id );
+		if ( is_array( $meta_old ) ) {
+			if ( ! empty( $meta_old['sizes'] ) ) {
+				foreach ( $meta_old['sizes'] as $s ) {
+					if ( ! empty( $s['file'] ) && file_exists( $dir . $s['file'] ) ) {
+						@unlink( $dir . $s['file'] ); // phpcs:ignore
+					}
+				}
+			}
+			if ( ! empty( $meta_old['original_image'] ) && file_exists( $dir . $meta_old['original_image'] ) ) {
+				@unlink( $dir . $meta_old['original_image'] ); // phpcs:ignore
+			}
+		}
+
+		$uploads = wp_get_upload_dir();
+		$rel     = ltrim( str_replace( $uploads['basedir'], '', $new_path ), '/\\' );
+		update_post_meta( $id, '_wp_attached_file', $rel );
+		$wpdb->update( $wpdb->posts, array( 'guid' => trailingslashit( $uploads['baseurl'] ) . $rel ), array( 'ID' => $id ), array( '%s' ), array( '%d' ) );
+
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+		$md = wp_generate_attachment_metadata( $id, $new_path );
+		if ( is_array( $md ) ) {
+			wp_update_attachment_metadata( $id, $md );
+		}
+		clean_post_cache( $id );
+
+		$this->bump_version();
+		wp_send_json_success(
+			array(
+				'id'       => $id,
+				'filename' => $new_name,
+				'url'      => wp_get_attachment_url( $id ),
+				'thumb'    => $this->best_thumb( $id ),
+			)
+		);
+	}
+
+	public function rename_folder() {
+		$this->guard();
+		$id   = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+		$name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+		$res  = $this->folders_obj()->rename_folder( $id, $name );
+		if ( is_wp_error( $res ) ) {
+			wp_send_json_error( array( 'message' => $res->get_error_message() ) );
+		}
+		$this->bump_version();
+		wp_send_json_success( array( 'id' => $id, 'name' => $name ) );
+	}
+
+	public function delete_folder() {
+		$this->guard();
+		$id  = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+		$res = $this->folders_obj()->delete_folder( $id );
+		if ( is_wp_error( $res ) ) {
+			wp_send_json_error( array( 'message' => $res->get_error_message() ) );
+		}
+		$this->bump_version();
+		wp_send_json_success( array( 'id' => $id ) );
+	}
+
+	/**
+	 * List pages/posts for the "used on page" filter.
+	 */
+	public function pages() {
+		$this->guard();
+		$posts = get_posts(
+			array(
+				'post_type'      => array( 'page', 'post' ),
+				'post_status'    => 'publish',
+				'posts_per_page' => 400,
+				'orderby'        => 'title',
+				'order'          => 'ASC',
+				'fields'         => 'ids',
+			)
+		);
+		$out = array();
+		foreach ( (array) $posts as $pid ) {
+			$out[] = array( 'id' => (int) $pid, 'title' => get_the_title( $pid ) );
+		}
+		wp_send_json_success( array( 'pages' => $out ) );
+	}
+
+	/**
+	 * Map of filename-stem => array of attachment ids (cached, version-busted).
+	 *
+	 * @return array
+	 */
+	protected function stem_map() {
+		$cached = get_transient( 'acps_mm_stemmap' );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		global $wpdb;
+		$scanner = new ACPS_MC_Scanner();
+		$rows    = $wpdb->get_results( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file'", ARRAY_A );
+		$map     = array();
+		foreach ( (array) $rows as $r ) {
+			$stem = $scanner->stem( wp_basename( (string) $r['meta_value'] ) );
+			if ( '' !== $stem ) {
+				$map[ $stem ][] = (int) $r['post_id'];
+			}
+		}
+		set_transient( 'acps_mm_stemmap', $map, 30 * MINUTE_IN_SECONDS );
+		return $map;
+	}
+
+	/**
+	 * Attachment ids referenced by a given post (content + meta).
+	 *
+	 * @param int $post_id Post id.
+	 * @return int[]
+	 */
+	protected function attachment_ids_for_post( $post_id ) {
+		$post_id = (int) $post_id;
+		$post    = get_post( $post_id );
+		if ( ! $post ) {
+			return array();
+		}
+		global $wpdb;
+
+		$text  = (string) $post->post_content . ' ' . (string) $post->post_excerpt;
+		$metas = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key NOT IN ('_wp_attached_file','_wp_attachment_metadata','_wp_attachment_backup_sizes')",
+				$post_id
+			)
+		);
+		foreach ( (array) $metas as $mv ) {
+			$text .= ' ' . (string) $mv;
+		}
+		// Featured image id.
+		$thumb = get_post_thumbnail_id( $post_id );
+
+		$scanner = new ACPS_MC_Scanner();
+		$refs    = $scanner->extract_refs( $text );
+
+		$ids = array();
+		if ( $thumb ) {
+			$ids[ (int) $thumb ] = true;
+		}
+		foreach ( $refs['ids'] as $rid ) {
+			$ids[ (int) $rid ] = true;
+		}
+		if ( ! empty( $refs['urls'] ) ) {
+			$stem_map = $this->stem_map();
+			foreach ( $refs['urls'] as $stem ) {
+				if ( isset( $stem_map[ $stem ] ) ) {
+					foreach ( $stem_map[ $stem ] as $aid ) {
+						$ids[ (int) $aid ] = true;
+					}
+				}
+			}
+		}
+
+		// Only real, non-trashed attachments.
+		$ids = array_keys( $ids );
+		if ( empty( $ids ) ) {
+			return array();
+		}
+		$in    = implode( ',', array_map( 'intval', $ids ) );
+		$valid = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type='attachment' AND post_status<>'trash' AND ID IN ($in)" ); // phpcs:ignore
+		return array_map( 'intval', (array) $valid );
 	}
 }

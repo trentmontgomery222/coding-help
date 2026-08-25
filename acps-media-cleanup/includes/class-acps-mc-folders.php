@@ -620,6 +620,85 @@ class ACPS_MC_Folders {
 	}
 
 	/**
+	 * Rename a folder.
+	 *
+	 * @param int    $id   Folder id.
+	 * @param string $name New name.
+	 * @return true|WP_Error
+	 */
+	public function rename_folder( $id, $name ) {
+		$id   = (int) $id;
+		$name = trim( wp_strip_all_tags( (string) $name ) );
+		if ( $id <= 0 || '' === $name ) {
+			return new WP_Error( 'invalid', __( 'A folder and a name are required.', 'acps-media-cleanup' ) );
+		}
+		if ( 'filebird_tax' === $this->backend ) {
+			$res = wp_update_term( $id, 'filebird_folder', array( 'name' => $name ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$this->flush_cache();
+			return true;
+		}
+		if ( 'filebird_table' === $this->backend ) {
+			global $wpdb;
+			$wpdb->update( $wpdb->prefix . 'fbv', array( 'name' => $name ), array( 'id' => $id ), array( '%s' ), array( '%d' ) );
+			$this->flush_cache();
+			return true;
+		}
+		return new WP_Error( 'unsupported', __( 'Folders are read-only for this setup.', 'acps-media-cleanup' ) );
+	}
+
+	/**
+	 * Delete a folder. Files are NEVER deleted: attachments and any child
+	 * folders are moved up to the folder's parent (or unfiled at the root).
+	 *
+	 * @param int $id Folder id.
+	 * @return true|WP_Error
+	 */
+	public function delete_folder( $id ) {
+		$id = (int) $id;
+		if ( $id <= 0 ) {
+			return new WP_Error( 'invalid', __( 'A folder is required.', 'acps-media-cleanup' ) );
+		}
+		$folders = $this->folders();
+		$parent  = isset( $folders[ $id ]['parent'] ) ? (int) $folders[ $id ]['parent'] : 0;
+
+		if ( 'filebird_tax' === $this->backend ) {
+			// wp_delete_term reparents child terms and drops object relationships
+			// (so attachments simply become unfiled).
+			$res = wp_delete_term( $id, 'filebird_folder' );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$this->flush_cache();
+			return true;
+		}
+
+		if ( 'filebird_table' === $this->backend ) {
+			global $wpdb;
+			$fbv = $wpdb->prefix . 'fbv';
+			$rel = $wpdb->prefix . 'fbv_attachment_folder';
+
+			// Re-parent child folders.
+			$wpdb->update( $fbv, array( 'parent' => $parent ), array( 'parent' => $id ), array( '%d' ), array( '%d' ) );
+
+			// Move the folder's files up (or unfile them if it was a root folder).
+			if ( $parent > 0 ) {
+				$wpdb->update( $rel, array( 'folder_id' => $parent ), array( 'folder_id' => $id ), array( '%d' ), array( '%d' ) );
+			} else {
+				$wpdb->delete( $rel, array( 'folder_id' => $id ), array( '%d' ) );
+			}
+
+			$wpdb->delete( $fbv, array( 'id' => $id ), array( '%d' ) );
+			$this->flush_cache();
+			return true;
+		}
+
+		return new WP_Error( 'unsupported', __( 'Folders are read-only for this setup.', 'acps-media-cleanup' ) );
+	}
+
+	/**
 	 * Remember a folder as recently used (per-user).
 	 *
 	 * @param int $folder_id Folder ID.

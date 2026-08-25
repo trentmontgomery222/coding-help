@@ -333,6 +333,20 @@ class ACPS_MC_Scanner {
 	 * ----------------------------------------------------------------- */
 
 	/**
+	 * Public helper: extract referenced filename-stems and attachment IDs from
+	 * a blob of text (used by the "used on page" filter).
+	 *
+	 * @param string $text Haystack.
+	 * @return array array( 'urls' => string[], 'ids' => int[] )
+	 */
+	public function extract_refs( $text ) {
+		$urls = array();
+		$ids  = array();
+		$this->collect( $text, $urls, $ids );
+		return array( 'urls' => array_keys( $urls ), 'ids' => array_map( 'intval', array_keys( $ids ) ) );
+	}
+
+	/**
 	 * Collect media filenames and attachment IDs from a blob of text.
 	 *
 	 * @param string $text Haystack.

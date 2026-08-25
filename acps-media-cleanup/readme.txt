@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,23 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.4.0 =
+* Cleanup fully merged into the Media Manager: it is now the single top-level
+  menu, with Trash and Settings as sub-pages (no separate "Media Cleanup" tab).
+* File renaming (with a warning if the file is in use, since renaming breaks
+  hard-coded links) and folder renaming / deleting (folder delete keeps every
+  file — contents move up a level).
+* Upload guard: uploading a file with a generic camera name (IMG_1234, DSC_,
+  PXL_, Screenshot…) now requires a descriptive rename before you can continue.
+* Folders are collapsed by default and expand on demand; the folder sidebar is
+  a fixed 300px, never clips names (they wrap) and never hides content behind a
+  scrollbar. "All media" and "Uncategorized" sit at the top.
+* Adjustable preview size (Small / Medium / Large) with a smaller default, and a
+  copy-link button in the top-right of every thumbnail.
+* "Used on page" filter: pick a page and see just the media used on it.
+* Faster grid: the file list is cached and only rebuilt when something changes,
+  so repeat loads are near-instant.
 
 = 1.3.0 =
 * Media Manager grid: fixed 250×250 square previews, every file shown at once

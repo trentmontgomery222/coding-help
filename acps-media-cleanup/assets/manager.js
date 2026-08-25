@@ -12,7 +12,8 @@
 	var writable = false;
 	var uploadQueue = [];
 	var uploadRows = {};      // plupload file id -> jQuery row
-	var COLLAPSE_KEY = 'acps_mm_collapsed';
+	var EXPAND_KEY = 'acps_mm_expanded';   // folders are collapsed by default
+	var SIZE_KEY = 'acps_mm_size';
 
 	function post( action, data ) {
 		data = data || {};
@@ -23,19 +24,27 @@
 	function esc( s ) { return $( '<div/>' ).text( s == null ? '' : String( s ) ).html(); }
 	function indent( d ) { var s = ''; for ( var i = 0; i < d; i++ ) { s += '— '; } return s; }
 
-	/* collapsed folder ids in localStorage */
-	function getCollapsed() {
-		try { return JSON.parse( window.localStorage.getItem( COLLAPSE_KEY ) || '[]' ) || []; } catch ( e ) { return []; }
+	/* expanded folder ids in localStorage (default = collapsed) */
+	function getExpanded() {
+		try { return JSON.parse( window.localStorage.getItem( EXPAND_KEY ) || '[]' ) || []; } catch ( e ) { return []; }
 	}
-	function setCollapsed( arr ) {
-		try { window.localStorage.setItem( COLLAPSE_KEY, JSON.stringify( arr ) ); } catch ( e ) {}
+	function setExpanded( arr ) {
+		try { window.localStorage.setItem( EXPAND_KEY, JSON.stringify( arr ) ); } catch ( e ) {}
 	}
-	function isCollapsed( id ) { return getCollapsed().indexOf( String( id ) ) !== -1; }
-	function toggleCollapsed( id ) {
-		var arr = getCollapsed(); id = String( id );
+	function isExpanded( id ) { return getExpanded().indexOf( String( id ) ) !== -1; }
+	function toggleExpanded( id ) {
+		var arr = getExpanded(); id = String( id );
 		var i = arr.indexOf( id );
 		if ( i === -1 ) { arr.push( id ); } else { arr.splice( i, 1 ); }
-		setCollapsed( arr );
+		setExpanded( arr );
+	}
+
+	function baseNameNoExt( name ) { return String( name || '' ).replace( /\.[^.]+$/, '' ); }
+	function isGeneric( name ) {
+		return /(^|[^a-z0-9])(img|dsc|dcim|pxl|mvimg|image|photo|screenshot|untitled|scan)[-_ ]?\d/i.test( String( name || '' ) );
+	}
+	function applyCardSize( px ) {
+		try { document.documentElement.style.setProperty( '--acps-card', parseInt( px, 10 ) + 'px' ); } catch ( e ) {}
 	}
 
 	/* ---------------- Folders sidebar ---------------- */
@@ -74,11 +83,11 @@
 	function renderSidebar( data ) {
 		var html = '<ul class="acps-mm-folderlist">';
 		html += specialItem( 'all', ( i18n.allMedia || 'All media' ) + ' (' + data.total + ')', state.folder === 'all' );
+		html += specialItem( 'unfiled', ( i18n.unfiled || 'Uncategorized' ), state.folder === 'unfiled' );
 		if ( data.hasScan ) {
 			html += specialItem( 'unused', ( i18n.unused || 'Unused' ) + ' (' + data.unused + ')', state.folder === 'unused' );
 			html += specialItem( 'used', ( i18n.used || 'Used' ), state.folder === 'used' );
 		}
-		html += specialItem( 'unfiled', ( i18n.unfiled || 'Unfiled' ), state.folder === 'unfiled' );
 
 		// Build hierarchy for collapsible tree.
 		var byParent = {};
@@ -99,17 +108,22 @@
 		var html = '';
 		kids.forEach( function ( f ) {
 			var hasKids = !! byParent[ f.id ];
-			var collapsed = isCollapsed( f.id );
+			var expanded = isExpanded( f.id );
 			var active = String( state.folder ) === String( f.id );
 			html += '<li class="acps-mm-folder' + ( active ? ' is-active' : '' ) + '" data-folder="' + f.id + '" style="padding-left:' + ( 8 + f.depth * 16 ) + 'px">';
 			if ( hasKids ) {
-				html += '<span class="acps-mm-caret' + ( collapsed ? ' collapsed' : '' ) + '" data-fid="' + f.id + '"></span>';
+				html += '<span class="acps-mm-caret' + ( expanded ? '' : ' collapsed' ) + '" data-fid="' + f.id + '"></span>';
 			} else {
 				html += '<span class="acps-mm-caret empty"></span>';
 			}
 			html += '<span class="acps-mm-fname"><span class="dashicons dashicons-portfolio"></span> ' + esc( f.name ) + '</span>';
+			if ( writable ) {
+				html += '<span class="acps-mm-factions">' +
+					'<button type="button" class="acps-mm-frename" title="' + esc( i18n.renameFolder || 'Rename' ) + '" data-fid="' + f.id + '" data-name="' + esc( f.name ) + '"><span class="dashicons dashicons-edit"></span></button>' +
+					'<button type="button" class="acps-mm-fdelete" title="' + esc( i18n.deleteFolder || 'Delete' ) + '" data-fid="' + f.id + '"><span class="dashicons dashicons-trash"></span></button></span>';
+			}
 			html += '<span class="acps-mm-fcount">' + f.total + '</span></li>';
-			if ( hasKids && ! collapsed ) {
+			if ( hasKids && expanded ) {
 				html += renderFolderNodes( byParent, f.id );
 			}
 		} );
@@ -141,6 +155,7 @@
 		var sel = selection[ f.id ] ? ' is-selected' : '';
 		var h = '<div class="acps-mm-card state-' + esc( f.state ) + sel + '" data-id="' + f.id + '" title="' + esc( stateLabel( f.state ) ) + '">';
 		h += '<label class="acps-mm-check"><input type="checkbox" class="acps-mm-cb" value="' + f.id + '"' + ( selection[ f.id ] ? ' checked' : '' ) + '></label>';
+		h += '<button type="button" class="acps-mm-cardcopy" data-url="' + esc( f.url ) + '" title="' + esc( i18n.copyLink || 'Copy link' ) + '"><span class="dashicons dashicons-admin-links"></span></button>';
 		h += '<span class="acps-mm-state-dot"></span>';
 		h += '<div class="acps-mm-thumb-wrap">';
 		if ( f.thumb ) {
@@ -253,6 +268,7 @@
 		h += '<div class="acps-mm-where-out"></div></div>';
 
 		h += '<div class="acps-mm-drawer-actions">';
+		h += '<button type="button" class="button acps-mm-rename" data-id="' + d.id + '" data-name="' + esc( baseNameNoExt( d.filename ) ) + '">' + esc( i18n.rename || 'Rename file' ) + '</button>';
 		if ( d.imageEdit ) { h += '<a class="button" href="' + esc( d.imageEdit ) + '">' + esc( 'Edit image' ) + '</a>'; }
 		h += '<button type="button" class="button button-link-delete acps-mm-detail-delete" data-id="' + d.id + '">' + esc( 'Delete' ) + '</button>';
 		h += '</div>';
@@ -387,7 +403,15 @@
 		post( 'upload_saved', { id: id, folder_id: 0 } ).done( function ( res ) {
 			if ( ! res || ! res.success ) { uploadQueue.shift(); showUploadPopup(); return; }
 			var d = res.data;
+			var generic = isGeneric( d.filename || '' );
 			var h = '<div class="acps-mm-modal"><div class="acps-mm-modal-box"><h3>' + esc( i18n.uploaded ) + '</h3>';
+
+			// Filename (with generic-name guard).
+			h += '<div class="acps-mm-field"><label>' + esc( 'File name' ) + '</label><div class="acps-mm-urlrow">';
+			h += '<input type="text" class="acps-mm-upfname" value="' + esc( baseNameNoExt( d.filename ) ) + '">';
+			h += '<button type="button" class="button acps-mm-uprename" data-id="' + id + '">' + esc( i18n.rename || 'Rename' ) + '</button></div>';
+			h += '<p class="acps-mm-genwarn" style="' + ( generic ? '' : 'display:none' ) + '">' + esc( i18n.genericName ) + '</p></div>';
+
 			h += '<div class="acps-mm-field"><label>' + esc( 'File URL' ) + '</label><div class="acps-mm-urlrow"><input type="text" readonly class="acps-mm-url" value="' + esc( d.url ) + '"><button type="button" class="button acps-mm-copy" data-url="' + esc( d.url ) + '">' + esc( i18n.copyUrl ) + '</button></div></div>';
 			if ( writable ) {
 				h += '<div class="acps-mm-field"><label>' + esc( i18n.placeInFolder ) + '</label>';
@@ -398,10 +422,22 @@
 				}
 				h += folderSelectHtml() + ' <button type="button" class="button acps-mm-place-sel" data-id="' + id + '">' + esc( i18n.move ) + '</button><span class="acps-mm-place-msg"></span>';
 			}
-			h += '<p class="acps-mm-modal-actions"><button type="button" class="button button-primary acps-mm-upnext">' + esc( i18n.done ) + '</button></p></div></div>';
+			h += '<p class="acps-mm-modal-actions"><button type="button" class="button button-primary acps-mm-upnext' + ( generic ? ' needs-rename' : '' ) + '"' + ( generic ? ' disabled' : '' ) + '>' + esc( i18n.done ) + '</button></p></div></div>';
 			var $m = $( h ).appendTo( 'body' );
 			$m.on( 'click', '.acps-mm-place-chip', function () { placeUpload( $( this ).data( 'id' ), $( this ).data( 'fid' ), $m ); } );
 			$m.on( 'click', '.acps-mm-place-sel', function () { placeUpload( $( this ).data( 'id' ), parseInt( $m.find( '.acps-mm-picker-select' ).val(), 10 ) || 0, $m ); } );
+			$m.on( 'click', '.acps-mm-uprename', function () {
+				var nb = $.trim( $m.find( '.acps-mm-upfname' ).val() );
+				if ( ! nb || isGeneric( nb ) ) { window.alert( i18n.genericName ); return; }
+				post( 'rename_file', { id: id, name: nb, confirm: 1 } ).done( function ( r ) {
+					if ( r && r.success ) {
+						$m.find( '.acps-mm-url' ).val( r.data.url );
+						$m.find( '.acps-mm-copy' ).data( 'url', r.data.url );
+						$m.find( '.acps-mm-genwarn' ).hide();
+						$m.find( '.acps-mm-upnext' ).prop( 'disabled', false ).removeClass( 'needs-rename' );
+					} else { window.alert( ( r && r.data && r.data.message ) || i18n.error ); }
+				} );
+			} );
 			$m.on( 'click', '.acps-mm-upnext', function () { $m.remove(); uploadQueue.shift(); showUploadPopup(); } );
 		} );
 	}
@@ -446,25 +482,108 @@
 		}
 	}
 
+	/* ---------------- Pages + rename helpers ---------------- */
+	function loadPages() {
+		post( 'pages' ).done( function ( res ) {
+			if ( ! res || ! res.success ) { return; }
+			var $s = $( '#acps-mm-page' );
+			( res.data.pages || [] ).forEach( function ( p ) {
+				$s.append( '<option value="page:' + p.id + '">' + esc( p.title ) + '</option>' );
+			} );
+		} );
+	}
+	function renameFile( id, name, confirm ) {
+		post( 'rename_file', { id: id, name: name, confirm: confirm ? 1 : 0 } ).done( function ( res ) {
+			if ( ! res || ! res.success ) { window.alert( ( res && res.data && res.data.message ) || i18n.error ); return; }
+			if ( res.data.needs_confirm ) {
+				if ( window.confirm( ( i18n.renameUsed || 'Used in %d place(s). Rename anyway?' ).replace( '%d', res.data.count ) ) ) {
+					renameFile( id, name, true );
+				}
+				return;
+			}
+			openDetail( id );
+			loadGrid();
+		} );
+	}
+
 	/* ---------------- Bindings ---------------- */
 	$( function () {
 		loadFolders();
 		loadGrid();
+		loadPages();
 		initUploader();
 
-		// Folder caret (collapse) — must not change the active folder.
+		// Apply saved card size.
+		var savedSize = 180;
+		try { savedSize = parseInt( window.localStorage.getItem( SIZE_KEY ), 10 ) || 180; } catch ( e ) {}
+		$( '#acps-mm-size' ).val( String( savedSize ) );
+		applyCardSize( savedSize );
+		$( '#acps-mm-size' ).on( 'change', function () {
+			applyCardSize( this.value );
+			try { window.localStorage.setItem( SIZE_KEY, this.value ); } catch ( e ) {}
+		} );
+
+		// "Used on page" filter.
+		$( '#acps-mm-page' ).on( 'change', function () {
+			var v = this.value;
+			$( '.acps-mm-folder' ).removeClass( 'is-active' );
+			state.folder = v ? v : 'all';
+			loadGrid();
+		} );
+
+		// Folder caret (expand/collapse) — must not change the active folder.
 		$( document ).on( 'click', '.acps-mm-caret', function ( e ) {
 			e.stopPropagation();
 			if ( $( this ).hasClass( 'empty' ) ) { return; }
-			toggleCollapsed( $( this ).data( 'fid' ) );
+			toggleExpanded( $( this ).data( 'fid' ) );
 			renderSidebarFromCache();
 		} );
 
 		$( document ).on( 'click', '.acps-mm-folder', function () {
 			state.folder = $( this ).data( 'folder' );
+			$( '#acps-mm-page' ).val( '' );
 			$( '.acps-mm-folder' ).removeClass( 'is-active' );
 			$( this ).addClass( 'is-active' );
 			loadGrid();
+		} );
+
+		// Folder rename / delete.
+		$( document ).on( 'click', '.acps-mm-frename', function ( e ) {
+			e.stopPropagation();
+			var fid = $( this ).data( 'fid' );
+			var name = window.prompt( ( i18n.renameFolder || 'Rename folder' ) + ':', $( this ).data( 'name' ) );
+			if ( ! name ) { return; }
+			post( 'rename_folder', { id: fid, name: name } ).done( function ( res ) {
+				if ( res && res.success ) { loadFolders(); } else { window.alert( ( res && res.data && res.data.message ) || i18n.error ); }
+			} );
+		} );
+		$( document ).on( 'click', '.acps-mm-fdelete', function ( e ) {
+			e.stopPropagation();
+			if ( ! window.confirm( i18n.deleteFolderQ || 'Delete this folder? Files are kept.' ) ) { return; }
+			var fid = $( this ).data( 'fid' );
+			post( 'delete_folder', { id: fid } ).done( function ( res ) {
+				if ( res && res.success ) {
+					if ( String( state.folder ) === String( fid ) ) { state.folder = 'all'; }
+					loadFolders();
+					loadGrid();
+				} else { window.alert( ( res && res.data && res.data.message ) || i18n.error ); }
+			} );
+		} );
+
+		// Copy link straight from a card.
+		$( document ).on( 'click', '.acps-mm-cardcopy', function ( e ) {
+			e.stopPropagation();
+			copyText( $( this ).data( 'url' ) );
+			var $b = $( this ).addClass( 'copied' );
+			setTimeout( function () { $b.removeClass( 'copied' ); }, 900 );
+		} );
+
+		// Rename file from the detail drawer.
+		$( document ).on( 'click', '.acps-mm-rename', function () {
+			var id = $( this ).data( 'id' );
+			var name = window.prompt( i18n.renamePrompt || 'New file name:', $( this ).data( 'name' ) );
+			if ( ! name ) { return; }
+			renameFile( id, name, false );
 		} );
 
 		$( document ).on( 'click', '#acps-mm-newfolder', function () {

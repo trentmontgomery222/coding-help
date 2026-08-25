@@ -167,7 +167,27 @@ acps-media-cleanup/
 
 - WordPress 5.6+
 - PHP 7.2+
-- Capability: `manage_options` (administrators)
+- Capabilities: `upload_files` to use the Media Manager; `manage_options`
+  (administrators) for scanning, Trash and Settings.
+- HEIC conversion additionally needs the server's **Imagick** to be built with
+  HEIC/libheif support (the Settings page shows whether it is).
+
+## Roadmap — Google Drive sync (not built yet)
+
+Syncing files from Google Drive is planned but **not implemented**, because it
+needs credentials that only you can create and authorize:
+
+1. A **Google Cloud project** with the **Drive API** enabled.
+2. An **OAuth 2.0 client** (client ID + secret) with this site's domain as an
+   authorized redirect URI.
+3. A one-time **"Connect Google Drive"** consent flow, after which the plugin
+   stores a refresh token and can list/pull files from a chosen Drive folder
+   into the WordPress media library (with the same folder-placement and
+   HEIC-conversion steps as a normal upload).
+
+Once you have the Google Cloud OAuth client, this can be added as a dedicated
+"Google Drive" tab in Settings. It is intentionally kept separate from the rest
+of the plugin so nothing here depends on external credentials to work.
 
 ## License
 

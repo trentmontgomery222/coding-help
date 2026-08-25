@@ -13,28 +13,19 @@ class ACPS_MC_Admin {
 
 	const MENU_SLUG = 'acps-media-cleanup';
 
+	/** Submenu page slugs (registered by the Media Manager). */
+	const TRASH_SLUG    = 'acps-mc-trash';
+	const SETTINGS_SLUG = 'acps-mc-settings';
+
 	public function __construct() {
-		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		// The menu itself is registered by ACPS_MC_Manager so everything lives
+		// under one "Media Manager" top-level menu (cleanup is not a separate tab).
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
 		add_action( 'admin_post_acps_mc_save_settings', array( $this, 'save_settings' ) );
 	}
 
-	public function register_menu() {
-		$hook = add_menu_page(
-			__( 'Unused Media Cleanup', 'acps-media-cleanup' ),
-			__( 'Media Cleanup', 'acps-media-cleanup' ),
-			ACPS_MC_CAP,
-			self::MENU_SLUG,
-			array( $this, 'render_page' ),
-			'dashicons-trash',
-			26
-		);
-
-		unset( $hook );
-	}
-
 	public function enqueue( $hook ) {
-		if ( false === strpos( (string) $hook, self::MENU_SLUG ) ) {
+		if ( false === strpos( (string) $hook, self::TRASH_SLUG ) && false === strpos( (string) $hook, self::SETTINGS_SLUG ) ) {
 			return;
 		}
 
@@ -104,63 +95,32 @@ class ACPS_MC_Admin {
 		return add_query_arg( $args, admin_url( 'admin.php' ) );
 	}
 
-	protected function current_tab() {
-		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'scan';
-		if ( ! in_array( $tab, array( 'scan', 'folders', 'trash', 'settings' ), true ) ) {
-			$tab = 'scan';
-		}
-		return $tab;
-	}
-
-	public function render_page() {
+	/**
+	 * Standalone "Trash & Log" page (submenu of the Media Manager).
+	 */
+	public function render_trash_page() {
 		if ( ! current_user_can( ACPS_MC_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'acps-media-cleanup' ) );
 		}
-		$tab      = $this->current_tab();
-		$base_url = self::page_url();
-		?>
-		<div class="wrap acps-mc">
-			<h1><span class="dashicons dashicons-trash"></span> <?php esc_html_e( 'Unused Media Cleanup', 'acps-media-cleanup' ); ?></h1>
-			<p class="acps-mc-tagline"><?php esc_html_e( 'Find media library files that are not used anywhere on your site, and clean them up safely — folder by folder.', 'acps-media-cleanup' ); ?></p>
+		echo '<div class="wrap acps-mc">';
+		echo '<h1><span class="dashicons dashicons-trash"></span> ' . esc_html__( 'Media Trash & Activity Log', 'acps-media-cleanup' ) . '</h1>';
+		echo '<p><a href="' . esc_url( ACPS_MC_Manager::page_url() ) . '">&larr; ' . esc_html__( 'Back to Media Manager', 'acps-media-cleanup' ) . '</a></p>';
+		$this->render_trash_tab();
+		echo '</div>';
+	}
 
-			<h2 class="nav-tab-wrapper">
-				<?php
-				$tabs = array(
-					'scan'     => __( 'Scan', 'acps-media-cleanup' ),
-					'folders'  => __( 'Unused by Folder', 'acps-media-cleanup' ),
-					'trash'    => __( 'Trash & Log', 'acps-media-cleanup' ),
-					'settings' => __( 'Settings', 'acps-media-cleanup' ),
-				);
-				foreach ( $tabs as $key => $label ) {
-					printf(
-						'<a href="%s" class="nav-tab %s">%s</a>',
-						esc_url( add_query_arg( 'tab', $key, $base_url ) ),
-						$tab === $key ? 'nav-tab-active' : '',
-						esc_html( $label )
-					);
-				}
-				?>
-			</h2>
-
-			<div class="acps-mc-body">
-				<?php
-				switch ( $tab ) {
-					case 'folders':
-						$this->render_folders_tab();
-						break;
-					case 'trash':
-						$this->render_trash_tab();
-						break;
-					case 'settings':
-						$this->render_settings_tab();
-						break;
-					default:
-						$this->render_scan_tab();
-				}
-				?>
-			</div>
-		</div>
-		<?php
+	/**
+	 * Standalone "Settings" page (submenu of the Media Manager).
+	 */
+	public function render_settings_page() {
+		if ( ! current_user_can( ACPS_MC_CAP ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'acps-media-cleanup' ) );
+		}
+		echo '<div class="wrap acps-mc">';
+		echo '<h1><span class="dashicons dashicons-admin-generic"></span> ' . esc_html__( 'Media Manager Settings', 'acps-media-cleanup' ) . '</h1>';
+		echo '<p><a href="' . esc_url( ACPS_MC_Manager::page_url() ) . '">&larr; ' . esc_html__( 'Back to Media Manager', 'acps-media-cleanup' ) . '</a></p>';
+		$this->render_settings_tab();
+		echo '</div>';
 	}
 
 	/* --------------------------------------------------------------- */
@@ -241,7 +201,7 @@ class ACPS_MC_Admin {
 			?>
 		</p>
 		<?php if ( $unused > 0 ) : ?>
-			<p><a class="button button-primary" href="<?php echo esc_url( self::page_url( 'folders' ) ); ?>"><?php esc_html_e( 'Review unused files by folder →', 'acps-media-cleanup' ); ?></a></p>
+			<p><a class="button button-primary" href="<?php echo esc_url( ACPS_MC_Manager::page_url() ); ?>"><?php esc_html_e( 'Review unused files in the Media Manager →', 'acps-media-cleanup' ); ?></a></p>
 		<?php endif; ?>
 
 		<div class="acps-mc-coverage">
@@ -497,7 +457,7 @@ class ACPS_MC_Admin {
 		<?php if ( ! empty( $s['excluded_ids'] ) ) : ?>
 			<div class="acps-mc-card">
 				<h3><?php esc_html_e( 'Individually protected files', 'acps-media-cleanup' ); ?></h3>
-				<p class="acps-mc-muted"><?php echo esc_html( count( $s['excluded_ids'] ) ); ?> <?php esc_html_e( 'file(s) are protected from deletion. Manage these from the "Unused by Folder" list.', 'acps-media-cleanup' ); ?></p>
+				<p class="acps-mc-muted"><?php echo esc_html( count( $s['excluded_ids'] ) ); ?> <?php esc_html_e( 'file(s) are protected from deletion.', 'acps-media-cleanup' ); ?></p>
 			</div>
 		<?php endif; ?>
 		<?php
@@ -519,7 +479,12 @@ class ACPS_MC_Admin {
 			ACPS_MC_Cron::unschedule();
 		}
 
-		wp_safe_redirect( add_query_arg( 'acps_mc_saved', 1, self::page_url( 'settings' ) ) );
+		wp_safe_redirect(
+			add_query_arg(
+				array( 'page' => self::SETTINGS_SLUG, 'acps_mc_saved' => 1 ),
+				admin_url( 'admin.php' )
+			)
+		);
 		exit;
 	}
 }

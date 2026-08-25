@@ -15,7 +15,11 @@ class ACPS_MC_Manager {
 
 	const SLUG = 'acps-media-manager';
 
-	public function __construct() {
+	/** @var ACPS_MC_Admin */
+	protected $admin;
+
+	public function __construct( $admin = null ) {
+		$this->admin = $admin;
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_modal' ) );
@@ -28,17 +32,45 @@ class ACPS_MC_Manager {
 	}
 
 	public function register_menu() {
-		// Under our own top-level menu.
+		// One top-level menu holds everything (manager + cleanup utilities).
+		add_menu_page(
+			__( 'Media Manager', 'acps-media-cleanup' ),
+			__( 'Media Manager', 'acps-media-cleanup' ),
+			'upload_files',
+			self::SLUG,
+			array( $this, 'render' ),
+			'dashicons-format-gallery',
+			26
+		);
 		add_submenu_page(
-			ACPS_MC_Admin::MENU_SLUG,
-			__( 'Media Manager', 'acps-media-cleanup' ),
-			__( 'Media Manager', 'acps-media-cleanup' ),
-			ACPS_MC_CAP,
+			self::SLUG,
+			__( 'Media Library', 'acps-media-cleanup' ),
+			__( 'Library', 'acps-media-cleanup' ),
+			'upload_files',
 			self::SLUG,
 			array( $this, 'render' )
 		);
 
-		// And under the core Media menu, so it sits right beside the library.
+		if ( $this->admin ) {
+			add_submenu_page(
+				self::SLUG,
+				__( 'Trash & Log', 'acps-media-cleanup' ),
+				__( 'Trash', 'acps-media-cleanup' ),
+				ACPS_MC_CAP,
+				ACPS_MC_Admin::TRASH_SLUG,
+				array( $this->admin, 'render_trash_page' )
+			);
+			add_submenu_page(
+				self::SLUG,
+				__( 'Settings', 'acps-media-cleanup' ),
+				__( 'Settings', 'acps-media-cleanup' ),
+				ACPS_MC_CAP,
+				ACPS_MC_Admin::SETTINGS_SLUG,
+				array( $this->admin, 'render_settings_page' )
+			);
+		}
+
+		// Also under the core Media menu, so it sits beside the classic library.
 		add_submenu_page(
 			'upload.php',
 			__( 'Media Manager', 'acps-media-cleanup' ),
@@ -93,7 +125,7 @@ class ACPS_MC_Manager {
 				'heicSupport'  => ACPS_MC_Heic::supported(),
 				'i18n'    => array(
 					'allMedia'      => __( 'All media', 'acps-media-cleanup' ),
-					'unfiled'       => __( 'Unfiled', 'acps-media-cleanup' ),
+					'unfiled'       => __( 'Uncategorized', 'acps-media-cleanup' ),
 					'unused'        => __( 'Unused', 'acps-media-cleanup' ),
 					'used'          => __( 'Used', 'acps-media-cleanup' ),
 					'loading'       => __( 'Loading…', 'acps-media-cleanup' ),
@@ -132,6 +164,19 @@ class ACPS_MC_Manager {
 					'usedItem'      => __( 'Used on the site', 'acps-media-cleanup' ),
 					'unusedItem'    => __( 'Not used anywhere', 'acps-media-cleanup' ),
 					'unknownItem'   => __( 'Usage unknown (run a scan)', 'acps-media-cleanup' ),
+					'rename'        => __( 'Rename file', 'acps-media-cleanup' ),
+					'renamePrompt'  => __( 'New file name (without extension):', 'acps-media-cleanup' ),
+					'renameUsed'    => __( 'This file is used in %d place(s). Renaming will break those links. Rename anyway?', 'acps-media-cleanup' ),
+					'renameFolder'  => __( 'Rename folder', 'acps-media-cleanup' ),
+					'deleteFolder'  => __( 'Delete folder', 'acps-media-cleanup' ),
+					'deleteFolderQ' => __( 'Delete this folder? Files inside are kept and moved up a level — nothing is deleted.', 'acps-media-cleanup' ),
+					'anyPage'       => __( '— Used on page: any —', 'acps-media-cleanup' ),
+					'copyLink'      => __( 'Copy link', 'acps-media-cleanup' ),
+					'genericName'   => __( 'This looks like a generic camera name (e.g. IMG_1234). Please give it a descriptive name before continuing.', 'acps-media-cleanup' ),
+					'renameToGo'    => __( 'Rename to continue', 'acps-media-cleanup' ),
+					'sizeSmall'     => __( 'Small', 'acps-media-cleanup' ),
+					'sizeMedium'    => __( 'Medium', 'acps-media-cleanup' ),
+					'sizeLarge'     => __( 'Large', 'acps-media-cleanup' ),
 				),
 			)
 		);
@@ -225,6 +270,8 @@ class ACPS_MC_Manager {
 		<div class="wrap acps-mm-wrap">
 			<h1 class="wp-heading-inline"><span class="dashicons dashicons-format-gallery"></span> <?php esc_html_e( 'Media Manager', 'acps-media-cleanup' ); ?></h1>
 			<button type="button" class="page-title-action" id="acps-mm-upload"><?php esc_html_e( 'Upload files', 'acps-media-cleanup' ); ?></button>
+			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-trash', admin_url( 'admin.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Trash', 'acps-media-cleanup' ); ?></a>
+			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-settings', admin_url( 'admin.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Settings', 'acps-media-cleanup' ); ?></a>
 			<a href="<?php echo esc_url( admin_url( 'upload.php?classic=1' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Classic library', 'acps-media-cleanup' ); ?></a>
 			<hr class="wp-header-end">
 
@@ -266,7 +313,15 @@ class ACPS_MC_Manager {
 							<option value="date_asc"><?php esc_html_e( 'Oldest first', 'acps-media-cleanup' ); ?></option>
 							<option value="title"><?php esc_html_e( 'Name A–Z', 'acps-media-cleanup' ); ?></option>
 						</select>
+						<select id="acps-mm-page"><option value=""><?php esc_html_e( '— Used on page: any —', 'acps-media-cleanup' ); ?></option></select>
 						<span class="acps-mm-toolbar-spacer"></span>
+						<label class="acps-mm-sizelbl"><?php esc_html_e( 'Size', 'acps-media-cleanup' ); ?>
+							<select id="acps-mm-size">
+								<option value="130"><?php esc_html_e( 'Small', 'acps-media-cleanup' ); ?></option>
+								<option value="180" selected><?php esc_html_e( 'Medium', 'acps-media-cleanup' ); ?></option>
+								<option value="250"><?php esc_html_e( 'Large', 'acps-media-cleanup' ); ?></option>
+							</select>
+						</label>
 						<label class="acps-mm-selectall-lbl"><input type="checkbox" id="acps-mm-selectall"> <?php esc_html_e( 'Select', 'acps-media-cleanup' ); ?></label>
 					</div>
 
