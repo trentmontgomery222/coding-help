@@ -1,0 +1,14 @@
+/* Enhancements injected into the core media modal / attachment edit screen */
+
+.compat-field-acps_copy_url .acps-mm-url-field { margin-bottom: 6px; }
+.compat-field-acps_copy_url .acps-mm-copy-btn,
+.compat-field-acps_where_used .acps-mm-where-btn { margin-top: 2px; }
+
+.acps-mm-inline-msg { color: #256b33; font-size: 12px; }
+
+.acps-mm-where-out { margin-top: 6px; font-size: 12px; }
+.acps-mm-where-ul { margin: 4px 0 0 0; }
+.acps-mm-where-ul li { margin: 2px 0; }
+.acps-mm-notused { color: #b32d2e; font-style: italic; }
+
+.acps-mm-folder-select { max-width: 100%; }

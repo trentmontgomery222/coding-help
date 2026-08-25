@@ -11,6 +11,19 @@ Built for the ACPS website (WordPress + **FileBird** media folders +
 > This is **not** a multisite/network plugin. Everything is managed from the
 > normal wp-admin of the site it is activated on, under **Media Cleanup**.
 
+## Two tools in one plugin
+
+1. **Unused Media Cleanup** (the *Media Cleanup* menu) — scans the whole site,
+   reports which files are unused and *where* the used ones are used, and lets
+   you trash them safely, folder by folder.
+2. **Media Manager** (the *Media Manager* screen, and optionally the default
+   *Media* screen) — a better day-to-day media library: FileBird folder sidebar,
+   search/filter, a thumbnail grid, a detail drawer with inline editing, copy-URL,
+   move-to-folder, on-demand "where used", an upload flow that files each new file
+   and hands you its URL, and bulk organize (move / set alt / trash). It also adds
+   Copy-URL, folder and "where used" controls **into** the normal media modal
+   without replacing it, so Beaver Builder and FileBird keep working as they are.
+
 ---
 
 ## Why it is safe

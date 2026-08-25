@@ -371,4 +371,308 @@ class ACPS_MC_Folders {
 
 		return $out;
 	}
+
+	/**
+	 * Which backend key is active (filebird_table | filebird_tax | dates).
+	 *
+	 * @return string
+	 */
+	public function backend() {
+		return $this->backend;
+	}
+
+	/**
+	 * True when folders can be written (files moved between them).
+	 *
+	 * @return bool
+	 */
+	public function is_writable() {
+		return in_array( $this->backend, array( 'filebird_table', 'filebird_tax' ), true );
+	}
+
+	/**
+	 * Clear cached folder/map data after a write.
+	 */
+	public function flush_cache() {
+		$this->folders = null;
+		$this->map     = null;
+	}
+
+	/**
+	 * Build a depth-ordered folder tree with total attachment counts (all
+	 * files, not just unused). Used by the media manager sidebar.
+	 *
+	 * @return array List of array( id, name, depth, total ).
+	 */
+	public function tree_all_counts() {
+		global $wpdb;
+		$folders = $this->folders();
+		$map     = $this->attachment_folder_map();
+
+		$ids = $wpdb->get_col(
+			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_status <> 'trash'"
+		);
+
+		$direct = array();
+		foreach ( $folders as $fid => $f ) {
+			$direct[ $fid ] = 0;
+		}
+		foreach ( (array) $ids as $id ) {
+			$fid = isset( $map[ (int) $id ] ) ? (int) $map[ (int) $id ] : self::UNCATEGORIZED;
+			if ( ! isset( $direct[ $fid ] ) ) {
+				$fid = self::UNCATEGORIZED;
+				if ( ! isset( $direct[ $fid ] ) ) {
+					$direct[ $fid ]  = 0;
+					$folders[ $fid ] = array( 'id' => $fid, 'name' => __( 'Uncategorized', 'acps-media-cleanup' ), 'parent' => 0 );
+				}
+			}
+			$direct[ $fid ]++;
+		}
+
+		$children = array();
+		foreach ( $folders as $f ) {
+			$children[ (int) $f['parent'] ][] = (int) $f['id'];
+		}
+
+		$agg     = array();
+		$compute = function( $fid ) use ( &$compute, &$agg, $direct, $children ) {
+			$t = isset( $direct[ $fid ] ) ? $direct[ $fid ] : 0;
+			if ( ! empty( $children[ $fid ] ) ) {
+				foreach ( $children[ $fid ] as $c ) {
+					$t += $compute( $c );
+				}
+			}
+			$agg[ $fid ] = $t;
+			return $t;
+		};
+
+		$out  = array();
+		$walk = function( $parent, $depth ) use ( &$walk, &$out, $children, $folders, &$agg, $compute ) {
+			if ( empty( $children[ $parent ] ) ) {
+				return;
+			}
+			$sibs = $children[ $parent ];
+			usort( $sibs, function( $a, $b ) use ( $folders ) {
+				if ( ACPS_MC_Folders::UNCATEGORIZED === $a ) { return 1; }
+				if ( ACPS_MC_Folders::UNCATEGORIZED === $b ) { return -1; }
+				$na = isset( $folders[ $a ]['name'] ) ? $folders[ $a ]['name'] : '';
+				$nb = isset( $folders[ $b ]['name'] ) ? $folders[ $b ]['name'] : '';
+				return strcasecmp( $na, $nb );
+			} );
+			foreach ( $sibs as $fid ) {
+				if ( ! isset( $agg[ $fid ] ) ) {
+					$compute( $fid );
+				}
+				$out[] = array(
+					'id'    => $fid,
+					'name'  => isset( $folders[ $fid ]['name'] ) ? $folders[ $fid ]['name'] : ( '#' . $fid ),
+					'depth' => $depth,
+					'total' => $agg[ $fid ],
+				);
+				$walk( $fid, $depth + 1 );
+			}
+		};
+		$walk( 0, 0 );
+
+		return $out;
+	}
+
+	/**
+	 * Depth-ordered folder list WITHOUT attachment counts (cheap; for dropdowns).
+	 *
+	 * @return array List of array( id, name, depth ).
+	 */
+	public function flat_tree() {
+		$folders  = $this->folders();
+		$children = array();
+		foreach ( $folders as $f ) {
+			$children[ (int) $f['parent'] ][] = (int) $f['id'];
+		}
+		$out  = array();
+		$walk = function( $parent, $depth ) use ( &$walk, &$out, $children, $folders ) {
+			if ( empty( $children[ $parent ] ) ) {
+				return;
+			}
+			$sibs = $children[ $parent ];
+			usort( $sibs, function( $a, $b ) use ( $folders ) {
+				if ( ACPS_MC_Folders::UNCATEGORIZED === $a ) { return 1; }
+				if ( ACPS_MC_Folders::UNCATEGORIZED === $b ) { return -1; }
+				$na = isset( $folders[ $a ]['name'] ) ? $folders[ $a ]['name'] : '';
+				$nb = isset( $folders[ $b ]['name'] ) ? $folders[ $b ]['name'] : '';
+				return strcasecmp( $na, $nb );
+			} );
+			foreach ( $sibs as $fid ) {
+				if ( ACPS_MC_Folders::UNCATEGORIZED === (int) $fid ) {
+					continue;
+				}
+				$out[] = array(
+					'id'    => (int) $fid,
+					'name'  => isset( $folders[ $fid ]['name'] ) ? $folders[ $fid ]['name'] : ( '#' . $fid ),
+					'depth' => $depth,
+				);
+				$walk( $fid, $depth + 1 );
+			}
+		};
+		$walk( 0, 0 );
+		return $out;
+	}
+
+	/**
+	 * Columns present on the FileBird folder table (cached).
+	 *
+	 * @return array
+	 */
+	protected function fbv_columns() {
+		global $wpdb;
+		static $cols = null;
+		if ( null !== $cols ) {
+			return $cols;
+		}
+		$cols = array();
+		$rows = $wpdb->get_col( 'SHOW COLUMNS FROM ' . ( $wpdb->prefix . 'fbv' ) ); // phpcs:ignore
+		if ( $rows ) {
+			$cols = array_map( 'strval', $rows );
+		}
+		return $cols;
+	}
+
+	/**
+	 * Create a folder. Returns the new folder id, or WP_Error.
+	 *
+	 * @param string $name   Folder name.
+	 * @param int    $parent Parent folder id (0 for root).
+	 * @return int|WP_Error
+	 */
+	public function create_folder( $name, $parent = 0 ) {
+		$name   = trim( wp_strip_all_tags( (string) $name ) );
+		$parent = max( 0, (int) $parent );
+		if ( '' === $name ) {
+			return new WP_Error( 'empty', __( 'Folder name is required.', 'acps-media-cleanup' ) );
+		}
+
+		if ( 'filebird_tax' === $this->backend ) {
+			$res = wp_insert_term( $name, 'filebird_folder', array( 'parent' => $parent ) );
+			if ( is_wp_error( $res ) ) {
+				return $res;
+			}
+			$this->flush_cache();
+			return (int) $res['term_id'];
+		}
+
+		if ( 'filebird_table' === $this->backend ) {
+			global $wpdb;
+			$cols = $this->fbv_columns();
+			$data = array( 'name' => $name, 'parent' => $parent );
+			if ( in_array( 'type', $cols, true ) ) {
+				$data['type'] = 0;
+			}
+			if ( in_array( 'ord', $cols, true ) ) {
+				$data['ord'] = 0;
+			}
+			if ( in_array( 'created_by', $cols, true ) ) {
+				$data['created_by'] = get_current_user_id();
+			}
+			$ok = $wpdb->insert( $wpdb->prefix . 'fbv', $data );
+			if ( ! $ok ) {
+				return new WP_Error( 'db', __( 'Could not create the folder.', 'acps-media-cleanup' ) );
+			}
+			$this->flush_cache();
+			return (int) $wpdb->insert_id;
+		}
+
+		return new WP_Error( 'unsupported', __( 'Folders are read-only for this setup.', 'acps-media-cleanup' ) );
+	}
+
+	/**
+	 * Assign an attachment to a folder (0 / UNCATEGORIZED = remove from folders).
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @param int $folder_id     Folder ID (0 or -1 to unfile).
+	 * @return bool
+	 */
+	public function assign( $attachment_id, $folder_id ) {
+		$attachment_id = (int) $attachment_id;
+		$folder_id     = (int) $folder_id;
+		if ( $attachment_id <= 0 ) {
+			return false;
+		}
+		$to_root = ( $folder_id <= 0 );
+
+		if ( 'filebird_tax' === $this->backend ) {
+			wp_set_object_terms( $attachment_id, $to_root ? array() : array( $folder_id ), 'filebird_folder', false );
+			$this->flush_cache();
+			return true;
+		}
+
+		if ( 'filebird_table' === $this->backend ) {
+			global $wpdb;
+			$rel = $wpdb->prefix . 'fbv_attachment_folder';
+			$wpdb->delete( $rel, array( 'attachment_id' => $attachment_id ), array( '%d' ) );
+			if ( ! $to_root ) {
+				$wpdb->insert( $rel, array( 'folder_id' => $folder_id, 'attachment_id' => $attachment_id ), array( '%d', '%d' ) );
+			}
+			$this->flush_cache();
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Remember a folder as recently used (per-user).
+	 *
+	 * @param int $folder_id Folder ID.
+	 */
+	public function remember_recent( $folder_id ) {
+		$folder_id = (int) $folder_id;
+		if ( $folder_id <= 0 ) {
+			return;
+		}
+		$uid    = get_current_user_id();
+		$recent = get_user_meta( $uid, 'acps_mm_recent_folders', true );
+		$recent = is_array( $recent ) ? $recent : array();
+		$recent = array_values( array_unique( array_merge( array( $folder_id ), $recent ) ) );
+		$recent = array_slice( $recent, 0, 8 );
+		update_user_meta( $uid, 'acps_mm_recent_folders', $recent );
+	}
+
+	/**
+	 * Folders to surface as "common": recently used first, then most-populated.
+	 *
+	 * @param int $limit Max folders.
+	 * @return array List of array( id, name ).
+	 */
+	public function common_folders( $limit = 8 ) {
+		$folders = $this->folders();
+		$order   = array();
+
+		$recent = get_user_meta( get_current_user_id(), 'acps_mm_recent_folders', true );
+		foreach ( (array) $recent as $fid ) {
+			if ( isset( $folders[ (int) $fid ] ) && self::UNCATEGORIZED !== (int) $fid ) {
+				$order[ (int) $fid ] = true;
+			}
+		}
+
+		// Most-populated next.
+		$map    = $this->attachment_folder_map();
+		$counts = array();
+		foreach ( $map as $fid ) {
+			$counts[ (int) $fid ] = ( isset( $counts[ (int) $fid ] ) ? $counts[ (int) $fid ] : 0 ) + 1;
+		}
+		arsort( $counts );
+		foreach ( array_keys( $counts ) as $fid ) {
+			if ( self::UNCATEGORIZED !== (int) $fid && isset( $folders[ (int) $fid ] ) ) {
+				$order[ (int) $fid ] = true;
+			}
+		}
+
+		$out = array();
+		foreach ( array_keys( $order ) as $fid ) {
+			$out[] = array( 'id' => (int) $fid, 'name' => $folders[ (int) $fid ]['name'] );
+			if ( count( $out ) >= $limit ) {
+				break;
+			}
+		}
+		return $out;
+	}
 }

@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,21 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.2.0 =
+* New Media Manager: a full-screen replacement for the Media Library screen with
+  a FileBird folder sidebar, search/type/sort filters, a fast thumbnail grid, and
+  a detail drawer for inline editing (title/alt/caption/description), copy-URL
+  (per size), move-to-folder, and on-demand "where is this used?".
+* Bulk organize: select many files and move them to a folder, set alt text, or
+  send to Trash in one action (with a safety warning if any look used).
+* Upload flow: after each upload the manager shows a popup to place the file in a
+  folder (recent/common folders as one-click chips) and copy its URL.
+* Core media modal enhanced (not replaced): the attachment details panel now has
+  a Copy-URL button, a folder selector, and a "Where is this used?" button, so
+  Beaver Builder / FileBird keep working unchanged.
+* Optional: make the Media Manager the default screen for the "Media" menu (the
+  classic library stays one click away).
 
 = 1.1.0 =
 * Fixed a major accuracy bug where nearly every file was reported as "used":

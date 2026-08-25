@@ -53,6 +53,9 @@ class ACPS_MC_Settings {
 
 			// Require the "I have a backup" acknowledgement before deleting.
 			'require_backup_ack'      => 1,
+
+			// Make the Media Manager the default screen for the Media menu.
+			'replace_media_screen'    => 1,
 		);
 	}
 
@@ -118,6 +121,7 @@ class ACPS_MC_Settings {
 			'scan_theme_files',
 			'scan_builder_cache',
 			'require_backup_ack',
+			'replace_media_screen',
 		) as $flag ) {
 			$clean[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;
 		}

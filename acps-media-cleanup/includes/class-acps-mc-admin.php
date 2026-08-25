@@ -426,6 +426,13 @@ class ACPS_MC_Admin {
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'Media Manager', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="replace_media_screen" value="1" <?php checked( $s['replace_media_screen'] ); ?>> <?php esc_html_e( 'Open the enhanced Media Manager when I click "Media"', 'acps-media-cleanup' ); ?></label>
+						<p class="description"><?php esc_html_e( 'The classic Media Library stays available via the "Classic library" link. The media picker inside the editor / Beaver Builder is never changed.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><label for="excluded_extensions"><?php esc_html_e( 'Never delete these file types', 'acps-media-cleanup' ); ?></label></th>
 					<td>
 						<input type="text" id="excluded_extensions" name="excluded_extensions" value="<?php echo esc_attr( implode( ', ', (array) $s['excluded_extensions'] ) ); ?>" class="regular-text" placeholder="pdf, svg">
