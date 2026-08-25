@@ -87,12 +87,15 @@ class ACPS_MC_Manager {
 			'acps-mm',
 			'ACPS_MM',
 			array(
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'acps_mm' ),
-				'perPage' => 60,
+				'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+				'nonce'        => wp_create_nonce( 'acps_mm' ),
+				'scanNonce'    => wp_create_nonce( 'acps_mc' ),
+				'heicSupport'  => ACPS_MC_Heic::supported(),
 				'i18n'    => array(
 					'allMedia'      => __( 'All media', 'acps-media-cleanup' ),
 					'unfiled'       => __( 'Unfiled', 'acps-media-cleanup' ),
+					'unused'        => __( 'Unused', 'acps-media-cleanup' ),
+					'used'          => __( 'Used', 'acps-media-cleanup' ),
 					'loading'       => __( 'Loading…', 'acps-media-cleanup' ),
 					'noResults'     => __( 'No media found here.', 'acps-media-cleanup' ),
 					'copied'        => __( 'Copied!', 'acps-media-cleanup' ),
@@ -119,6 +122,16 @@ class ACPS_MC_Manager {
 					'altPrompt'     => __( 'Alt text to apply to all selected files:', 'acps-media-cleanup' ),
 					'error'         => __( 'Something went wrong. Please try again.', 'acps-media-cleanup' ),
 					'readonly'      => __( 'Folders are read-only (no FileBird detected).', 'acps-media-cleanup' ),
+					'dropHere'      => __( 'Drop files to upload', 'acps-media-cleanup' ),
+					'uploading'     => __( 'Uploading…', 'acps-media-cleanup' ),
+					'scanNow'       => __( 'Scan usage now', 'acps-media-cleanup' ),
+					'scanning'      => __( 'Scanning…', 'acps-media-cleanup' ),
+					'scanDone'      => __( 'Scan complete', 'acps-media-cleanup' ),
+					'convertHeic'   => __( 'Convert to JPEG', 'acps-media-cleanup' ),
+					'converting'    => __( 'Converting…', 'acps-media-cleanup' ),
+					'usedItem'      => __( 'Used on the site', 'acps-media-cleanup' ),
+					'unusedItem'    => __( 'Not used anywhere', 'acps-media-cleanup' ),
+					'unknownItem'   => __( 'Usage unknown (run a scan)', 'acps-media-cleanup' ),
 				),
 			)
 		);
@@ -219,6 +232,19 @@ class ACPS_MC_Manager {
 				<div class="notice notice-info inline"><p><?php esc_html_e( 'No FileBird folders detected — files are grouped by upload date and cannot be moved between folders.', 'acps-media-cleanup' ); ?></p></div>
 			<?php endif; ?>
 
+			<!-- Cleanup / scan bar -->
+			<div class="acps-mm-scanbar">
+				<span class="acps-mm-legend">
+					<span class="acps-mm-dot used"></span> <?php esc_html_e( 'Used', 'acps-media-cleanup' ); ?>
+					<span class="acps-mm-dot unused"></span> <?php esc_html_e( 'Unused', 'acps-media-cleanup' ); ?>
+					<span class="acps-mm-dot unknown"></span> <?php esc_html_e( 'Not scanned', 'acps-media-cleanup' ); ?>
+				</span>
+				<span class="acps-mm-scaninfo" id="acps-mm-scaninfo"></span>
+				<span class="acps-mm-toolbar-spacer"></span>
+				<div class="acps-mm-scanprog" id="acps-mm-scanprog" style="display:none;"><div class="acps-mm-scanprog-fill"></div></div>
+				<button type="button" class="button" id="acps-mm-scannow"><?php esc_html_e( 'Scan usage now', 'acps-media-cleanup' ); ?></button>
+			</div>
+
 			<div class="acps-mm-layout">
 				<aside class="acps-mm-sidebar" id="acps-mm-folders">
 					<p class="acps-mm-muted"><?php esc_html_e( 'Loading folders…', 'acps-media-cleanup' ); ?></p>
@@ -254,13 +280,23 @@ class ACPS_MC_Manager {
 						<button type="button" class="button-link" id="acps-mm-bulk-clear"><?php esc_html_e( 'Clear', 'acps-media-cleanup' ); ?></button>
 					</div>
 
+					<div class="acps-mm-count" id="acps-mm-count"></div>
 					<div class="acps-mm-grid" id="acps-mm-grid"></div>
-					<div class="acps-mm-loadmore" id="acps-mm-loadmore" style="display:none;">
-						<button type="button" class="button" id="acps-mm-loadmore-btn"><?php esc_html_e( 'Load more', 'acps-media-cleanup' ); ?></button>
-					</div>
 				</main>
 			</div>
 		</div>
+
+		<!-- Upload progress panel -->
+		<div class="acps-mm-uploads" id="acps-mm-uploads" style="display:none;">
+			<div class="acps-mm-uploads-head">
+				<strong><?php esc_html_e( 'Uploads', 'acps-media-cleanup' ); ?></strong>
+				<button type="button" class="button-link acps-mm-uploads-close" id="acps-mm-uploads-close">&times;</button>
+			</div>
+			<div class="acps-mm-uploads-list" id="acps-mm-uploads-list"></div>
+		</div>
+
+		<!-- Full-page drop overlay -->
+		<div class="acps-mm-dropmask" id="acps-mm-dropmask"><div class="acps-mm-dropmask-inner"><span class="dashicons dashicons-upload"></span><p><?php esc_html_e( 'Drop files to upload', 'acps-media-cleanup' ); ?></p></div></div>
 
 		<!-- Detail drawer -->
 		<div class="acps-mm-drawer" id="acps-mm-drawer" aria-hidden="true">

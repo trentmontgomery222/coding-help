@@ -30,3 +30,10 @@ foreach ( array( 'acps_mc_log', 'acps_mc_index' ) as $t ) {
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
 }
+
+// Clear scheduled cron events.
+wp_clear_scheduled_hook( 'acps_mc_daily_scan' );
+wp_clear_scheduled_hook( 'acps_mc_continue_scan' );
+
+// Remove per-user recent-folder memory.
+delete_metadata( 'user', 0, 'acps_mm_recent_folders', '', true );

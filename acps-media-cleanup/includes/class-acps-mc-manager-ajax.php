@@ -23,6 +23,7 @@ class ACPS_MC_Manager_Ajax {
 			'delete',
 			'where_used',
 			'upload_saved',
+			'convert_heic',
 		);
 		foreach ( $actions as $a ) {
 			add_action( 'wp_ajax_acps_mm_' . $a, array( $this, $a ) );
@@ -48,15 +49,37 @@ class ACPS_MC_Manager_Ajax {
 		global $wpdb;
 		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type='attachment' AND post_status<>'trash'" );
 
+		$scan   = get_option( ACPS_MC_OPT_SCANMETA, array() );
+		$unused = ( is_array( $scan ) && isset( $scan['counts']['unused'] ) ) ? (int) $scan['counts']['unused'] : 0;
+
 		wp_send_json_success(
 			array(
-				'writable' => $folders->is_writable(),
-				'backend'  => $folders->backend_label(),
-				'total'    => $total,
-				'tree'     => $folders->tree_all_counts(),
-				'common'   => $folders->common_folders( 8 ),
+				'writable'  => $folders->is_writable(),
+				'backend'   => $folders->backend_label(),
+				'total'     => $total,
+				'tree'      => $folders->tree_all_counts(),
+				'common'    => $folders->common_folders( 8 ),
+				'hasScan'   => ! empty( $scan['time'] ),
+				'scanTime'  => ! empty( $scan['time'] ) ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $scan['time'] ) : '',
+				'unused'    => $unused,
 			)
 		);
+	}
+
+	/**
+	 * Map of attachment id => used(bool) from the last scan (empty if no scan).
+	 *
+	 * @return array
+	 */
+	protected function results_map() {
+		$results = get_option( ACPS_MC_OPT_RESULTS, array() );
+		$map     = array();
+		if ( is_array( $results ) ) {
+			foreach ( $results as $id => $row ) {
+				$map[ (int) $id ] = ! empty( $row['used'] );
+			}
+		}
+		return $map;
 	}
 
 	/**
@@ -87,6 +110,18 @@ class ACPS_MC_Manager_Ajax {
 			return $out;
 		}
 
+		// Cleanup smart views (from the last scan).
+		if ( 'unused' === $folder || 'used' === $folder ) {
+			$want = ( 'unused' === $folder );
+			$out  = array();
+			foreach ( $this->results_map() as $id => $is_used ) {
+				if ( $is_used !== $want ) {
+					$out[] = (int) $id;
+				}
+			}
+			return $out;
+		}
+
 		$target = $recursive ? $folders->descendants( (int) $folder ) : array( (int) $folder );
 		$target = array_map( 'intval', $target );
 		$out    = array();
@@ -107,7 +142,9 @@ class ACPS_MC_Manager_Ajax {
 		$type   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( $_POST['type'] ) ) : '';
 		$sort   = isset( $_POST['sort'] ) ? sanitize_key( wp_unslash( $_POST['sort'] ) ) : 'date';
 		$paged  = max( 1, isset( $_POST['paged'] ) ? absint( $_POST['paged'] ) : 1 );
-		$per    = min( 200, max( 10, isset( $_POST['per_page'] ) ? absint( $_POST['per_page'] ) : 60 ) );
+		// The manager loads everything at once; keep a generous hard cap so a
+		// giant library cannot exhaust memory in a single response.
+		$per    = min( 20000, max( 10, isset( $_POST['per_page'] ) ? absint( $_POST['per_page'] ) : 5000 ) );
 
 		$where = array( "p.post_type = 'attachment'", "p.post_status <> 'trash'" );
 
@@ -115,7 +152,7 @@ class ACPS_MC_Manager_Ajax {
 		$ids = $this->ids_for_folder( $folder );
 		if ( is_array( $ids ) ) {
 			if ( empty( $ids ) ) {
-				wp_send_json_success( array( 'items' => array(), 'total' => 0, 'pages' => 0, 'paged' => $paged ) );
+				wp_send_json_success( array( 'items' => array(), 'total' => 0, 'returned' => 0, 'capped' => false ) );
 			}
 			$where[] = 'p.ID IN (' . implode( ',', array_map( 'intval', $ids ) ) . ')';
 		}
@@ -152,40 +189,49 @@ class ACPS_MC_Manager_Ajax {
 				$order = 'p.post_date DESC';
 		}
 
-		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p WHERE {$where_sql}" ); // phpcs:ignore
+		$total  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p WHERE {$where_sql}" ); // phpcs:ignore
 		$offset = ( $paged - 1 ) * $per;
 
 		$rows = $wpdb->get_col( "SELECT p.ID FROM {$wpdb->posts} p WHERE {$where_sql} ORDER BY {$order} LIMIT {$per} OFFSET {$offset}" ); // phpcs:ignore
+		$rows = array_map( 'intval', (array) $rows );
 
-		$items = array();
-		foreach ( (array) $rows as $id ) {
-			$items[] = $this->card( (int) $id );
+		// Warm caches so per-card lookups don't each hit the DB.
+		if ( $rows ) {
+			_prime_post_caches( $rows, false, true );
+		}
+
+		$used_map = $this->results_map();
+		$items    = array();
+		foreach ( $rows as $id ) {
+			$items[] = $this->card( (int) $id, $used_map );
 		}
 
 		wp_send_json_success(
 			array(
-				'items' => $items,
-				'total' => $total,
-				'pages' => (int) ceil( $total / $per ),
-				'paged' => $paged,
+				'items'    => $items,
+				'total'    => $total,
+				'returned' => count( $items ),
+				'capped'   => ( $total > count( $items ) ),
 			)
 		);
 	}
 
-	protected function card( $id ) {
-		$mime = get_post_mime_type( $id );
-		$thumb = '';
-		if ( wp_attachment_is_image( $id ) ) {
-			$src = wp_get_attachment_image_src( $id, array( 200, 200 ) );
-			if ( $src ) {
-				$thumb = $src[0];
-			}
+	/**
+	 * @param int   $id       Attachment ID.
+	 * @param array $used_map id => used(bool) from last scan.
+	 */
+	protected function card( $id, $used_map = array() ) {
+		$mime  = get_post_mime_type( $id );
+		$thumb = $this->best_thumb( $id );
+		$file  = get_post_meta( $id, '_wp_attached_file', true );
+
+		// Used state colour: used | unused | unknown (not in last scan).
+		if ( array_key_exists( $id, $used_map ) ) {
+			$state = $used_map[ $id ] ? 'used' : 'unused';
+		} else {
+			$state = 'unknown';
 		}
-		if ( '' === $thumb ) {
-			$icon = wp_mime_type_icon( $id );
-			$thumb = $icon ? $icon : '';
-		}
-		$file = get_post_meta( $id, '_wp_attached_file', true );
+
 		return array(
 			'id'       => $id,
 			'title'    => get_the_title( $id ),
@@ -194,7 +240,31 @@ class ACPS_MC_Manager_Ajax {
 			'isImage'  => wp_attachment_is_image( $id ),
 			'thumb'    => $thumb,
 			'url'      => wp_get_attachment_url( $id ),
+			'state'    => $state,
 		);
+	}
+
+	/**
+	 * Best available square-ish preview URL for any attachment.
+	 * Returns the image itself, a generated PDF/video preview, or a mime icon.
+	 *
+	 * @param int $id Attachment ID.
+	 * @return string
+	 */
+	protected function best_thumb( $id ) {
+		// Works for images AND for PDFs/video that have generated sub-sizes.
+		$src = wp_get_attachment_image_src( $id, array( 300, 300 ) );
+		if ( $src && ! empty( $src[0] ) && ! $src[3] ) {
+			// $src[3] (is_intermediate) false for icons; ensure it's a real image.
+		}
+		if ( $src && ! empty( $src[0] ) ) {
+			// Skip the generic WP media icons (they live in wp-includes/images/media).
+			if ( false === strpos( $src[0], '/wp-includes/images/media/' ) ) {
+				return $src[0];
+			}
+		}
+		$icon = wp_mime_type_icon( $id );
+		return $icon ? $icon : '';
 	}
 
 	public function detail() {
@@ -239,13 +309,37 @@ class ACPS_MC_Manager_Ajax {
 				'date'        => get_the_date( '', $id ),
 				'sizeH'       => $bytes ? size_format( $bytes, 1 ) : '',
 				'isImage'     => wp_attachment_is_image( $id ),
-				'thumb'       => $this->card( $id )['thumb'],
+				'thumb'       => $this->best_thumb( $id ),
 				'sizes'       => $sizes,
 				'writable'    => $folders->is_writable(),
 				'folderId'    => $folders->folder_for( $id ),
 				'folders'     => $this->folder_options( $folders ),
 				'editUrl'     => get_edit_post_link( $id, 'raw' ),
 				'imageEdit'   => wp_attachment_is_image( $id ) ? admin_url( 'post.php?post=' . $id . '&action=edit' ) : '',
+				'isHeic'      => ACPS_MC_Heic::is_heic( $id ),
+				'heicSupport' => ACPS_MC_Heic::supported(),
+			)
+		);
+	}
+
+	public function convert_heic() {
+		$this->guard();
+		$id = isset( $_POST['id'] ) ? (int) $_POST['id'] : 0;
+		if ( 'attachment' !== get_post_type( $id ) || ! current_user_can( 'edit_post', $id ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'acps-media-cleanup' ) ) );
+		}
+		if ( ! ACPS_MC_Heic::supported() ) {
+			wp_send_json_error( array( 'message' => __( 'HEIC conversion is not available on this server (Imagick without HEIC support).', 'acps-media-cleanup' ) ) );
+		}
+		$res = ACPS_MC_Heic::convert( $id );
+		if ( is_wp_error( $res ) ) {
+			wp_send_json_error( array( 'message' => $res->get_error_message() ) );
+		}
+		wp_send_json_success(
+			array(
+				'id'    => $id,
+				'url'   => wp_get_attachment_url( $id ),
+				'thumb' => $this->best_thumb( $id ),
 			)
 		);
 	}

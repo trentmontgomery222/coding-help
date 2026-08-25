@@ -464,10 +464,11 @@ class ACPS_MC_Folders {
 					$compute( $fid );
 				}
 				$out[] = array(
-					'id'    => $fid,
-					'name'  => isset( $folders[ $fid ]['name'] ) ? $folders[ $fid ]['name'] : ( '#' . $fid ),
-					'depth' => $depth,
-					'total' => $agg[ $fid ],
+					'id'     => $fid,
+					'name'   => isset( $folders[ $fid ]['name'] ) ? $folders[ $fid ]['name'] : ( '#' . $fid ),
+					'depth'  => $depth,
+					'parent' => isset( $folders[ $fid ]['parent'] ) ? (int) $folders[ $fid ]['parent'] : 0,
+					'total'  => $agg[ $fid ],
 				);
 				$walk( $fid, $depth + 1 );
 			}

@@ -56,6 +56,12 @@ class ACPS_MC_Settings {
 
 			// Make the Media Manager the default screen for the Media menu.
 			'replace_media_screen'    => 1,
+
+			// Run the usage scan automatically once a day (around 2am).
+			'auto_nightly_scan'       => 1,
+
+			// Convert HEIC/HEIF uploads to JPEG automatically (if supported).
+			'convert_heic_on_upload'  => 1,
 		);
 	}
 
@@ -122,6 +128,8 @@ class ACPS_MC_Settings {
 			'scan_builder_cache',
 			'require_backup_ack',
 			'replace_media_screen',
+			'auto_nightly_scan',
+			'convert_heic_on_upload',
 		) as $flag ) {
 			$clean[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;
 		}

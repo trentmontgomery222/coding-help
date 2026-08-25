@@ -433,6 +433,28 @@ class ACPS_MC_Admin {
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'Automatic scan', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="auto_nightly_scan" value="1" <?php checked( $s['auto_nightly_scan'] ); ?>> <?php esc_html_e( 'Scan for where media is used automatically every night (around 2am)', 'acps-media-cleanup' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Keeps the used / unused colours and the "Unused" view up to date without you running a scan by hand.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'HEIC conversion', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="convert_heic_on_upload" value="1" <?php checked( $s['convert_heic_on_upload'] ); ?>> <?php esc_html_e( 'Convert HEIC/HEIF uploads to JPEG automatically', 'acps-media-cleanup' ); ?></label>
+						<p class="description">
+							<?php
+							if ( ACPS_MC_Heic::supported() ) {
+								esc_html_e( 'This server supports HEIC conversion. ✓', 'acps-media-cleanup' );
+							} else {
+								esc_html_e( 'This server cannot convert HEIC (Imagick without HEIC support). Conversion will be skipped.', 'acps-media-cleanup' );
+							}
+							?>
+						</p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><label for="excluded_extensions"><?php esc_html_e( 'Never delete these file types', 'acps-media-cleanup' ); ?></label></th>
 					<td>
 						<input type="text" id="excluded_extensions" name="excluded_extensions" value="<?php echo esc_attr( implode( ', ', (array) $s['excluded_extensions'] ) ); ?>" class="regular-text" placeholder="pdf, svg">
@@ -489,6 +511,13 @@ class ACPS_MC_Admin {
 
 		$clean = ACPS_MC_Settings::sanitize( wp_unslash( $_POST ) );
 		update_option( ACPS_MC_OPT_SETTINGS, $clean );
+
+		// Reconcile the nightly-scan schedule with the new setting immediately.
+		if ( ! empty( $clean['auto_nightly_scan'] ) ) {
+			ACPS_MC_Cron::schedule();
+		} else {
+			ACPS_MC_Cron::unschedule();
+		}
 
 		wp_safe_redirect( add_query_arg( 'acps_mc_saved', 1, self::page_url( 'settings' ) ) );
 		exit;

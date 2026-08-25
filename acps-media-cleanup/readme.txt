@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,25 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.3.0 =
+* Media Manager grid: fixed 250×250 square previews, every file shown at once
+  (no "load more"), and a colour indicator per file — green = used, red =
+  unused, grey = not yet scanned — plus a matching legend.
+* Cleanup is now built into the Media Manager: "Unused" and "Used" smart views
+  in the sidebar, a "Scan usage now" button with a progress bar, and the last
+  scan time / unused count shown in the toolbar.
+* Collapsible folder tree: sub-folders can be expanded/collapsed (state
+  remembered per browser).
+* PDF (and other preview-able files) now show real thumbnails, not a generic
+  icon, when the server has generated previews.
+* Drag-and-drop upload: drop files anywhere on the page; a per-file progress
+  panel shows upload status.
+* Built-in HEIC/HEIF → JPEG converter: automatic on upload (when the server
+  supports it) and a manual "Convert to JPEG" button on HEIC files.
+* Nightly automatic usage scan (around 2am) via WP-Cron, so used/unused stays
+  current without running a scan by hand. Runs in bounded slices and resumes
+  itself so large libraries never time out.
 
 = 1.2.0 =
 * New Media Manager: a full-screen replacement for the Media Library screen with

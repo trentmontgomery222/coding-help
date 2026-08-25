@@ -17,12 +17,24 @@ Built for the ACPS website (WordPress + **FileBird** media folders +
    reports which files are unused and *where* the used ones are used, and lets
    you trash them safely, folder by folder.
 2. **Media Manager** (the *Media Manager* screen, and optionally the default
-   *Media* screen) — a better day-to-day media library: FileBird folder sidebar,
-   search/filter, a thumbnail grid, a detail drawer with inline editing, copy-URL,
-   move-to-folder, on-demand "where used", an upload flow that files each new file
-   and hands you its URL, and bulk organize (move / set alt / trash). It also adds
-   Copy-URL, folder and "where used" controls **into** the normal media modal
-   without replacing it, so Beaver Builder and FileBird keep working as they are.
+   *Media* screen) — a better day-to-day media library:
+   - FileBird folder sidebar with **collapsible** sub-folders and counts, plus
+     **All / Unused / Used / Unfiled** views (cleanup is built right in).
+   - **250×250 square previews**, all shown at once (no "load more"), each
+     **colour-coded**: green = used, red = unused, grey = not yet scanned.
+   - Real **PDF thumbnails** (when the server generates previews).
+   - Search / type / sort; a detail drawer with inline editing, copy-URL,
+     move-to-folder, and on-demand "where used".
+   - **Drag-and-drop upload** anywhere on the page with a per-file **progress**
+     panel; after each upload a popup files it (recent-folder chips) and hands
+     you its URL.
+   - **Bulk organize**: move / set alt / trash on many files at once.
+   - Built-in **HEIC → JPEG** conversion (auto on upload + a manual button),
+     when the server's Imagick supports HEIC.
+   - A **nightly automatic scan** (~2am) keeps the used/unused colours current.
+
+   It also adds Copy-URL, folder and "where used" controls **into** the normal
+   media modal without replacing it, so Beaver Builder and FileBird keep working.
 
 ---
 

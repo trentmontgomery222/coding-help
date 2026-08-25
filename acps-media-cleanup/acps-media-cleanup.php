@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Unused Media Cleanup
  * Plugin URI:        https://acpsmd.org/
  * Description:        Safely find and remove media library files (images, PDFs, documents, videos) that are not used anywhere on the site. Works with FileBird folders and Beaver Builder. Single-site only. Trash first, restore anytime.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            ACPS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'ACPS_MC_VERSION', '1.2.0' );
+define( 'ACPS_MC_VERSION', '1.3.0' );
 define( 'ACPS_MC_FILE', __FILE__ );
 define( 'ACPS_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -45,6 +45,8 @@ require_once ACPS_MC_DIR . 'includes/class-acps-mc-admin.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-ajax.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-manager.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-manager-ajax.php';
+require_once ACPS_MC_DIR . 'includes/class-acps-mc-heic.php';
+require_once ACPS_MC_DIR . 'includes/class-acps-mc-cron.php';
 
 /**
  * Activation: create the audit-log table and seed default settings.
@@ -53,6 +55,9 @@ function acps_mc_activate() {
 	ACPS_MC_Settings::install_defaults();
 	ACPS_MC_Logger::install_table();
 	ACPS_MC_Scanner::install_index_table();
+	if ( ACPS_MC_Settings::get( 'auto_nightly_scan' ) ) {
+		ACPS_MC_Cron::schedule();
+	}
 	add_option( 'acps_media_cleanup_activated', time() );
 }
 register_activation_hook( __FILE__, 'acps_mc_activate' );
@@ -63,6 +68,8 @@ register_activation_hook( __FILE__, 'acps_mc_activate' );
  */
 function acps_mc_deactivate() {
 	delete_transient( ACPS_MC_TRANSIENT_INDEX );
+	ACPS_MC_Cron::unschedule();
+	wp_clear_scheduled_hook( ACPS_MC_Cron::CONTINUE_HOOK );
 }
 register_deactivation_hook( __FILE__, 'acps_mc_deactivate' );
 
@@ -72,6 +79,10 @@ register_deactivation_hook( __FILE__, 'acps_mc_deactivate' );
  */
 function acps_mc_boot() {
 	load_plugin_textdomain( 'acps-media-cleanup', false, dirname( ACPS_MC_BASENAME ) . '/languages' );
+
+	// Runs in every context (cron ticks and REST/AJAX uploads have no is_admin()).
+	new ACPS_MC_Cron();
+	new ACPS_MC_Heic();
 
 	if ( is_admin() ) {
 		new ACPS_MC_Admin();
