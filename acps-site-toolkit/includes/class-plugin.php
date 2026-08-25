@@ -54,6 +54,7 @@ class Plugin {
 		Feedback::ensure_feedback_form();
 		Help::ensure_contact_form();
 		Help::ensure_media_request_form();
+		Error_Log::ensure_form();
 
 		// The floating button is now the contact form. If the label is still the
 		// old default, flip it to match (leaves any custom label alone).
@@ -187,6 +188,21 @@ class Plugin {
 		// Q&A / help widget — only when on.
 		if ( $qa_on ) {
 			wp_enqueue_script( 'acps-st-qa', ACPS_ST_URL . 'assets/js/qa.js', array(), ACPS_ST_VERSION, true );
+		}
+
+		// Auto-log 404s: fire a diagnostic beacon on the 404 page. Independent of
+		// analytics. Config is static (safe to cache); per-visitor data is
+		// gathered client-side or on the uncached REST request.
+		if ( Settings::get( 'autolog_404' ) && is_404() ) {
+			wp_enqueue_script( 'acps-st-autolog', ACPS_ST_URL . 'assets/js/autolog.js', array(), ACPS_ST_VERSION, true );
+			wp_localize_script(
+				'acps-st-autolog',
+				'ACPS_ST_AUTOLOG',
+				array(
+					'url'    => esc_url_raw( rest_url( ACPS_ST_REST_NAMESPACE . '/auto-log' ) ),
+					'postId' => 0,
+				)
+			);
 		}
 
 		wp_enqueue_style( 'acps-st-frontend', ACPS_ST_URL . 'assets/css/frontend.css', array(), ACPS_ST_VERSION );

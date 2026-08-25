@@ -62,6 +62,17 @@ class REST_Controller {
 				'permission_callback' => '__return_true',
 			)
 		);
+		// Auto-log beacon (e.g. 404 diagnostics). Public + rate-limited; runs
+		// independently of analytics.
+		register_rest_route(
+			$ns,
+			'/auto-log',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'auto_log' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 
 		if ( ! Settings::get( 'analytics_enabled' ) ) {
 			return;
@@ -124,6 +135,24 @@ class REST_Controller {
 			array( 'success' => false, 'message' => __( 'Incorrect password.', 'acps-site-toolkit' ) ),
 			200
 		);
+	}
+
+	/**
+	 * POST /auto-log — record a diagnostic entry (e.g. a 404 hit). Gated by the
+	 * autolog_404 setting; rate-limited inside Error_Log.
+	 *
+	 * @param \WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function auto_log( $req ) {
+		$this->no_cache();
+		if ( ! Settings::get( 'autolog_404' ) ) {
+			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'disabled' ), 200 );
+		}
+		$params = $req->get_json_params();
+		$params = is_array( $params ) ? $params : $req->get_params();
+		$id     = Error_Log::record( $params );
+		return new \WP_REST_Response( array( 'ok' => (bool) $id ), 200 );
 	}
 
 	/**

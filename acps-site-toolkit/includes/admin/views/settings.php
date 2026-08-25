@@ -240,6 +240,19 @@ $checked = function ( $key ) use ( $s ) {
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'Auto-log 404 pages', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'autolog_404' ) ); ?>" value="1" <?php echo $checked( 'autolog_404' ); ?>> <?php esc_html_e( 'Record an entry automatically whenever a visitor hits a “page not found” (404)', 'acps-site-toolkit' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Each 404 is logged with the requested URL, where the visitor came from, and their device, browser, screen, language, time zone and session — enough to reproduce what happened. No email is sent; entries appear under the “Site error log (404s)” form.', 'acps-site-toolkit' ); ?></p>
+						<?php
+						$err_form = \ACPS\SiteToolkit\Error_Log::ensure_form();
+						if ( $err_form ) :
+							?>
+							<p><a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-entries&form_id=' . (int) $err_form->id ) ); ?>" class="button"><?php esc_html_e( 'View the 404 log', 'acps-site-toolkit' ); ?></a></p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Manage forms', 'acps-site-toolkit' ); ?></th>
 					<td>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-forms' ) ); ?>" class="button"><?php esc_html_e( 'Open the form builder', 'acps-site-toolkit' ); ?></a>

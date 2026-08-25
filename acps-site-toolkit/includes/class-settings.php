@@ -37,6 +37,7 @@ class Settings {
 			// Global form behaviour (per-form builder settings override where noted).
 			'entry_store_ip'        => 1,  // store submitter's anonymized IP + browser on entries.
 			'max_upload_mb'         => 10, // max size for a single file upload, in MB.
+			'autolog_404'           => 0,  // auto-record a diagnostic entry on every 404 page.
 
 			// Feedback trigger.
 			'feedback_enabled'      => 1,
@@ -175,6 +176,7 @@ class Settings {
 			'qa_enabled',
 			'restricted_forms_enabled',
 			'entry_store_ip',
+			'autolog_404',
 			'feedback_enabled',
 			'feedback_allow_screenshot',
 			'trigger_transparent',
