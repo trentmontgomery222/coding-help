@@ -44,12 +44,28 @@ class ACPS_MC_Ajax {
 	public function scan_start() {
 		$this->guard();
 		$scanner = new ACPS_MC_Scanner();
-		$meta    = $scanner->start();
+		$resume  = ! empty( $_POST['resume'] );
+
+		if ( $resume ) {
+			$point = $scanner->resume_point();
+			if ( $point ) {
+				wp_send_json_success(
+					array(
+						'step'     => $point['step'],
+						'offset'   => $point['offset'],
+						'resumed'  => true,
+					)
+				);
+			}
+		}
+
+		$meta = $scanner->start();
 		wp_send_json_success(
 			array(
-				'step'   => ACPS_MC_Scanner::STEPS[0],
-				'offset' => 0,
-				'grand'  => isset( $meta['grand_total'] ) ? (int) $meta['grand_total'] : 0,
+				'step'    => ACPS_MC_Scanner::STEPS[0],
+				'offset'  => 0,
+				'grand'   => isset( $meta['grand_total'] ) ? (int) $meta['grand_total'] : 0,
+				'resumed' => false,
 			)
 		);
 	}
@@ -164,12 +180,12 @@ class ACPS_MC_Ajax {
 			'mime'     => $mime,
 			'ext'      => isset( $row['ext'] ) ? $row['ext'] : '',
 			'date'     => isset( $row['date'] ) ? $row['date'] : '',
-			'size'     => isset( $row['size'] ) ? (int) $row['size'] : 0,
-			'size_h'   => size_format( isset( $row['size'] ) ? (int) $row['size'] : 0, 1 ),
-			'used'     => ! empty( $row['used'] ),
-			'reason'   => isset( $row['reason'] ) ? $row['reason'] : '',
-			'thumb'    => $thumb,
-			'excluded' => (bool) $is_excluded,
+			'size'      => isset( $row['size'] ) ? (int) $row['size'] : 0,
+			'size_h'    => size_format( isset( $row['size'] ) ? (int) $row['size'] : 0, 1 ),
+			'used'      => ! empty( $row['used'] ),
+			'locations' => isset( $row['locations'] ) && is_array( $row['locations'] ) ? $row['locations'] : array(),
+			'thumb'     => $thumb,
+			'excluded'  => (bool) $is_excluded,
 		);
 	}
 

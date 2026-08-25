@@ -123,10 +123,18 @@ acps-media-cleanup/
 
 - **Scan** runs as phases (`index_posts`, `index_postmeta`, `index_options`,
   `index_termmeta`, `index_usermeta`, `index_extras`, `classify`), each paged via
-  AJAX. Indexing extracts referenced filenames/IDs into a compact "used" set; the
-  `classify` phase compares every attachment against that set.
-- Results are stored in the `acps_media_cleanup_results` option; scan metadata in
-  `acps_media_cleanup_scan_meta`.
+  AJAX. Indexing extracts referenced filenames/IDs — **together with the source
+  they came from** (page, option, widget, theme file, …) — into the
+  `{prefix}acps_mc_index` table. The `classify` phase looks up every attachment
+  against that table and records **where** it is used.
+- **Accuracy:** attachment posts and their own bookkeeping meta
+  (`_wp_attached_file`, `_wp_attachment_metadata`, backup sizes, alt text,
+  optimiser data) are **never** indexed, so a file can never "match itself." This
+  was the cause of the earlier "everything looks used" behaviour.
+- **Resumable:** the index lives in a table and the scan position is saved to
+  `acps_media_cleanup_scan_meta['cursor']` after every batch, and results are
+  written incrementally to `acps_media_cleanup_results`. If a scan is
+  interrupted, the Scan tab offers **Resume** to continue from where it stopped.
 - Every deletion is re-validated by `ACPS_MC_Deleter::can_delete()` regardless of
   what the browser sends, so a stale page can never delete a now-used file.
 

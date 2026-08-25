@@ -70,7 +70,12 @@ class ACPS_MC_Admin {
 					'ackRequired'      => __( 'Please tick "I have a recent backup" before deleting.', 'acps-media-cleanup' ),
 					'noneSelected'     => __( 'No files selected.', 'acps-media-cleanup' ),
 					'scanning'         => __( 'Scanning…', 'acps-media-cleanup' ),
+					'resuming'         => __( 'Resuming…', 'acps-media-cleanup' ),
 					'done'             => __( 'Scan complete', 'acps-media-cleanup' ),
+					'usedIn'           => __( 'Used in', 'acps-media-cleanup' ),
+					'notFound'         => __( 'Not found anywhere scanned', 'acps-media-cleanup' ),
+					'more'             => __( 'more', 'acps-media-cleanup' ),
+					'checked'          => __( 'checked', 'acps-media-cleanup' ),
 					'used'             => __( 'Used', 'acps-media-cleanup' ),
 					'unused'           => __( 'Unused', 'acps-media-cleanup' ),
 					'restore'          => __( 'Restore', 'acps-media-cleanup' ),
@@ -161,7 +166,8 @@ class ACPS_MC_Admin {
 	/* --------------------------------------------------------------- */
 
 	protected function render_scan_tab() {
-		$meta = get_option( ACPS_MC_OPT_SCANMETA, array() );
+		$meta        = get_option( ACPS_MC_OPT_SCANMETA, array() );
+		$in_progress = ! empty( $meta['in_progress'] );
 		?>
 		<div class="acps-mc-card">
 			<h2><?php esc_html_e( 'Scan the media library', 'acps-media-cleanup' ); ?></h2>
@@ -172,15 +178,33 @@ class ACPS_MC_Admin {
 				<?php esc_html_e( 'Scanning changes nothing. It only reads your site and produces a report. Deleting is always a separate, deliberate step.', 'acps-media-cleanup' ); ?>
 			</p>
 
+			<?php if ( $in_progress ) : ?>
+				<div class="notice notice-warning inline" id="acps-mc-resume-notice">
+					<p>
+						<?php esc_html_e( 'A previous scan did not finish. You can resume it where it left off, or start a new scan.', 'acps-media-cleanup' ); ?>
+					</p>
+				</div>
+			<?php endif; ?>
+
 			<p>
-				<button type="button" class="button button-primary button-hero" id="acps-mc-scan-btn">
-					<?php esc_html_e( 'Scan now', 'acps-media-cleanup' ); ?>
-				</button>
+				<?php if ( $in_progress ) : ?>
+					<button type="button" class="button button-primary button-hero" id="acps-mc-resume-btn">
+						<?php esc_html_e( 'Resume scan', 'acps-media-cleanup' ); ?>
+					</button>
+					<button type="button" class="button button-hero" id="acps-mc-scan-btn">
+						<?php esc_html_e( 'Start a new scan', 'acps-media-cleanup' ); ?>
+					</button>
+				<?php else : ?>
+					<button type="button" class="button button-primary button-hero" id="acps-mc-scan-btn">
+						<?php esc_html_e( 'Scan now', 'acps-media-cleanup' ); ?>
+					</button>
+				<?php endif; ?>
 			</p>
 
 			<div id="acps-mc-progress" class="acps-mc-progress" style="display:none;">
 				<div class="acps-mc-progress-bar"><div class="acps-mc-progress-fill"></div></div>
 				<p class="acps-mc-progress-label"></p>
+				<p class="acps-mc-progress-live" id="acps-mc-progress-live"></p>
 			</div>
 
 			<div id="acps-mc-summary" class="acps-mc-summary">

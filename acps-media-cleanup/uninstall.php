@@ -25,6 +25,8 @@ foreach ( $options as $opt ) {
 	delete_option( $opt );
 }
 
-$table = $wpdb->prefix . 'acps_mc_log';
-// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+foreach ( array( 'acps_mc_log', 'acps_mc_index' ) as $t ) {
+	$table = $wpdb->prefix . $t;
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+}

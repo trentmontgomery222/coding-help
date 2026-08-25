@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,17 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.1.0 =
+* Fixed a major accuracy bug where nearly every file was reported as "used":
+  the scanner was reading each attachment's own metadata (which contains its own
+  filename and thumbnail sizes) and matching the file against itself. Attachment-
+  owned data is now excluded from the index.
+* Added "Used in" details: each used file now lists the exact pages, settings,
+  widgets, theme files, etc. where it was found.
+* The scan now writes results incrementally to a database table and saves its
+  position after every batch, so an interrupted scan can be resumed where it
+  left off.
 
 = 1.0.0 =
 * Initial release.

@@ -68,6 +68,7 @@
 	transition: width .3s ease;
 }
 .acps-mc-progress-label { margin: 6px 2px; color: #50575e; font-size: 13px; }
+.acps-mc-progress-live { margin: 2px; color: #787c82; font-size: 12px; font-variant-numeric: tabular-nums; }
 
 /* Two-column folder layout */
 .acps-mc-columns { display: flex; gap: 18px; align-items: flex-start; }
@@ -124,6 +125,9 @@
 .acps-mc-thumb-icon { display: inline-flex; align-items: center; justify-content: center; font-size: 24px; color: #a7aaad; }
 .acps-mc-fileinfo { font-size: 13px; line-height: 1.35; word-break: break-word; }
 .acps-mc-fileinfo a { text-decoration: none; }
+.acps-mc-usedin { display: block; margin-top: 3px; font-size: 12px; color: #50575e; }
+.acps-mc-usedin.acps-mc-notfound { color: #b32d2e; font-style: italic; }
+.acps-mc-usedin .acps-mc-more { color: #787c82; cursor: help; }
 
 .acps-mc-table td, .acps-mc-table th { vertical-align: middle; }
 tr.is-used { opacity: .7; }

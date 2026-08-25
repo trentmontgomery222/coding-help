@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Unused Media Cleanup
  * Plugin URI:        https://acpsmd.org/
  * Description:        Safely find and remove media library files (images, PDFs, documents, videos) that are not used anywhere on the site. Works with FileBird folders and Beaver Builder. Single-site only. Trash first, restore anytime.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            ACPS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'ACPS_MC_VERSION', '1.0.0' );
+define( 'ACPS_MC_VERSION', '1.1.0' );
 define( 'ACPS_MC_FILE', __FILE__ );
 define( 'ACPS_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -49,6 +49,7 @@ require_once ACPS_MC_DIR . 'includes/class-acps-mc-ajax.php';
 function acps_mc_activate() {
 	ACPS_MC_Settings::install_defaults();
 	ACPS_MC_Logger::install_table();
+	ACPS_MC_Scanner::install_index_table();
 	add_option( 'acps_media_cleanup_activated', time() );
 }
 register_activation_hook( __FILE__, 'acps_mc_activate' );

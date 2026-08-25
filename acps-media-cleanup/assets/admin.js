@@ -30,18 +30,21 @@
 	/* ============================================================
 	 * SCAN
 	 * ============================================================ */
-	function runScan() {
-		var $btn = $( '#acps-mc-scan-btn' );
+	function runScan( resume ) {
+		var $btn = $( '#acps-mc-scan-btn, #acps-mc-resume-btn' );
 		var $prog = $( '#acps-mc-progress' );
 		var $fill = $prog.find( '.acps-mc-progress-fill' );
 		var $label = $prog.find( '.acps-mc-progress-label' );
+		var $live = $( '#acps-mc-progress-live' );
 
 		$btn.prop( 'disabled', true );
+		$( '#acps-mc-resume-notice' ).slideUp();
 		$prog.show();
 		$fill.css( 'width', '2%' );
-		$label.text( i18n.scanning || 'Scanning…' );
+		$label.text( resume ? ( i18n.resuming || 'Resuming…' ) : ( i18n.scanning || 'Scanning…' ) );
+		$live.text( '' );
 
-		post( 'scan_start' ).done( function ( res ) {
+		post( 'scan_start', { resume: resume ? 1 : 0 } ).done( function ( res ) {
 			if ( ! res || ! res.success ) {
 				fail();
 				return;
@@ -59,6 +62,18 @@
 				$fill.css( 'width', Math.max( 2, d.percent ) + '%' );
 				$label.text( d.label + ' (' + d.percent + '%)' );
 
+				// Live tally while classifying.
+				if ( d.counts && d.counts.attachments ) {
+					var c = d.counts;
+					if ( c.classified > 0 ) {
+						$live.text(
+							( i18n.checked || 'checked' ) + ' ' + c.classified + ' / ' + c.attachments +
+							'  ·  ' + ( i18n.unused || 'unused' ) + ': ' + c.unused +
+							'  ·  ' + ( i18n.used || 'used' ) + ': ' + c.used
+						);
+					}
+				}
+
 				if ( d.all_done ) {
 					$fill.css( 'width', '100%' );
 					$label.text( ( i18n.done || 'Scan complete' ) );
@@ -75,12 +90,13 @@
 					$( '#acps-mc-summary' ).html( res.data.summary );
 				}
 				$btn.prop( 'disabled', false );
-				setTimeout( function () { $prog.fadeOut(); }, 900 );
+				setTimeout( function () { $prog.fadeOut(); }, 1200 );
 			} );
 		}
 
 		function fail() {
 			$label.text( i18n.workingError || 'Something went wrong.' );
+			$live.text( '' );
 			$btn.prop( 'disabled', false );
 		}
 	}
@@ -197,6 +213,7 @@
 					html += ' · <a href="' + esc( f.edit ) + '">' + esc( 'edit' ) + '</a>';
 				}
 			}
+			html += renderLocations( f );
 			html += '</span></td>';
 
 			html += '<td>' + esc( ( f.ext || '' ).toUpperCase() ) + '</td>';
@@ -206,7 +223,8 @@
 			// Status.
 			html += '<td>';
 			if ( f.used ) {
-				html += '<span class="acps-mc-badge acps-mc-badge-used" title="' + esc( f.reason ) + '">' + esc( i18n.used ) + '</span>';
+				var utip = ( f.locations || [] ).map( function ( l ) { return l.label; } ).join( '\n' );
+				html += '<span class="acps-mc-badge acps-mc-badge-used" title="' + esc( utip ) + '">' + esc( i18n.used ) + '</span>';
 			} else if ( f.excluded ) {
 				html += '<span class="acps-mc-badge acps-mc-badge-protected">' + esc( i18n.protected ) + '</span>';
 			} else {
@@ -228,6 +246,31 @@
 		html += '</tbody></table>';
 		$files.html( html );
 		updateActionBar();
+	}
+
+	function renderLocations( f ) {
+		var locs = f.locations || [];
+		if ( ! locs.length ) {
+			if ( ! f.used ) {
+				return '<span class="acps-mc-usedin acps-mc-notfound">' + esc( i18n.notFound || 'Not found anywhere scanned' ) + '</span>';
+			}
+			return '';
+		}
+		var shown = locs.slice( 0, 3 );
+		var parts = shown.map( function ( l ) {
+			if ( l.url ) {
+				return '<a href="' + esc( l.url ) + '">' + esc( l.label ) + '</a>';
+			}
+			return esc( l.label );
+		} );
+		var extra = locs.length - shown.length;
+		var tip = locs.map( function ( l ) { return l.label; } ).join( '\n' );
+		var out = '<span class="acps-mc-usedin" title="' + esc( tip ) + '"><strong>' + esc( i18n.usedIn || 'Used in' ) + ':</strong> ' + parts.join( ', ' );
+		if ( extra > 0 ) {
+			out += ' <span class="acps-mc-more">+' + extra + ' ' + esc( i18n.more || 'more' ) + '</span>';
+		}
+		out += '</span>';
+		return out;
 	}
 
 	function selectedChecks() {
@@ -302,7 +345,8 @@
 	 * ============================================================ */
 	$( function () {
 		// Scan.
-		$( '#acps-mc-scan-btn' ).on( 'click', runScan );
+		$( '#acps-mc-scan-btn' ).on( 'click', function () { runScan( false ); } );
+		$( '#acps-mc-resume-btn' ).on( 'click', function () { runScan( true ); } );
 
 		// Folders view init.
 		if ( $( '#acps-mc-tree' ).length ) {
