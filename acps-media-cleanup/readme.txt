@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.8.3
+Stable tag: 1.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -33,6 +33,10 @@ It is built to be **very safe**:
 * Full audit log of every action.
 
 This is a single-site plugin. It does not add any network/multisite screens.
+
+In-browser HEIC → JPEG conversion is powered by the bundled heic2any library
+(MIT licensed, https://github.com/alexcorvi/heic2any), which wraps a WebAssembly
+build of libheif. It runs entirely in the browser; no media is sent anywhere.
 
 = Folder support =
 
@@ -64,6 +68,23 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.9.0 =
+* HEIC conversion now happens in your browser. Some servers (including some
+  managed hosts) run a hardened image library that refuses modern iPhone HEICs
+  with "too many auxiliary image references," which no PHP-side change can work
+  around. The Media Manager now converts HEIC/HEIF photos to JPEG right in the
+  browser — using a bundled WebAssembly build of libheif (heic2any) — *before*
+  the file is uploaded. Benefits:
+  - Works regardless of what the server's image library supports.
+  - Nothing is sent to any third-party service; the photo is converted on your
+    own computer, so it's safe for sensitive images.
+  - The converter shows a "Converting HEIC…" row, then uploads the JPEG with a
+    normal progress bar and the usual place-in-folder / rename popup.
+  If a photo can't be converted in the browser for any reason, the original is
+  still uploaded so nothing is lost. Server-side conversion remains as a
+  fallback for uploads made outside the Media Manager. Controlled by the
+  existing "Convert HEIC/HEIF uploads to JPEG automatically" setting.
 
 = 1.8.3 =
 * Fixed the upload progress bars and, more importantly, uploads that never

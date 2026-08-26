@@ -404,11 +404,13 @@ class ACPS_MC_Admin {
 					<td>
 						<label><input type="checkbox" name="convert_heic_on_upload" value="1" <?php checked( $s['convert_heic_on_upload'] ); ?>> <?php esc_html_e( 'Convert HEIC/HEIF uploads to JPEG automatically', 'acps-media-cleanup' ); ?></label>
 						<p class="description">
+							<?php esc_html_e( 'In the Media Manager, HEIC photos are converted to JPEG right in your browser before they upload — no server support needed and nothing is sent to any third party.', 'acps-media-cleanup' ); ?>
+							<br>
 							<?php
 							if ( ACPS_MC_Heic::supported() ) {
-								esc_html_e( 'This server supports HEIC conversion. ✓', 'acps-media-cleanup' );
+								esc_html_e( 'Uploads made elsewhere (the classic media library) are also converted on this server. ✓', 'acps-media-cleanup' );
 							} else {
-								esc_html_e( 'This server cannot convert HEIC (Imagick without HEIC support). Conversion will be skipped.', 'acps-media-cleanup' );
+								esc_html_e( 'This server itself cannot convert HEIC (Imagick without HEIC support), so uploads made outside the Media Manager will stay as HEIC.', 'acps-media-cleanup' );
 							}
 							?>
 						</p>

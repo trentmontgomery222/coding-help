@@ -94,7 +94,20 @@ class ACPS_MC_Manager {
 		wp_enqueue_media();
 
 		wp_enqueue_style( 'acps-mm', ACPS_MC_URL . 'assets/manager.css', array( 'dashicons' ), ACPS_MC_VERSION );
-		wp_enqueue_script( 'acps-mm', ACPS_MC_URL . 'assets/manager.js', array( 'jquery' ), ACPS_MC_VERSION, true );
+
+		// In-browser HEIC → JPEG conversion (heic2any, bundled). Loaded only when
+		// the "convert HEIC on upload" setting is on. This runs a WebAssembly build
+		// of libheif entirely in the browser, so iPhone photos are turned into
+		// JPEGs before they ever leave the computer — no third-party service, and
+		// it does not depend on the server's ImageMagick/libheif (which on some
+		// hosts refuses these files with "too many auxiliary image references").
+		$deps       = array( 'jquery' );
+		$convert_on = (bool) ACPS_MC_Settings::get( 'convert_heic_on_upload' );
+		if ( $convert_on ) {
+			wp_enqueue_script( 'acps-heic2any', ACPS_MC_URL . 'assets/vendor/heic2any.min.js', array(), '0.0.4', true );
+			$deps[] = 'acps-heic2any';
+		}
+		wp_enqueue_script( 'acps-mm', ACPS_MC_URL . 'assets/manager.js', $deps, ACPS_MC_VERSION, true );
 
 		wp_localize_script(
 			'acps-mm',
@@ -104,6 +117,7 @@ class ACPS_MC_Manager {
 				'nonce'        => wp_create_nonce( 'acps_mm' ),
 				'scanNonce'    => wp_create_nonce( 'acps_mc' ),
 				'heicSupport'  => ACPS_MC_Heic::supported(),
+				'convertHeicClient' => $convert_on,
 				'i18n'    => array(
 					'allMedia'      => __( 'All media', 'acps-media-cleanup' ),
 					'unfiled'       => __( 'Uncategorized', 'acps-media-cleanup' ),
@@ -156,6 +170,8 @@ class ACPS_MC_Manager {
 					'scanDone'      => __( 'Scan complete', 'acps-media-cleanup' ),
 					'convertHeic'   => __( 'Convert to JPEG', 'acps-media-cleanup' ),
 					'converting'    => __( 'Converting…', 'acps-media-cleanup' ),
+					'heicConverting' => __( 'Converting HEIC…', 'acps-media-cleanup' ),
+					'heicFailed'     => __( 'Couldn’t convert — uploading original', 'acps-media-cleanup' ),
 					'usedItem'      => __( 'Used on the site', 'acps-media-cleanup' ),
 					'unusedItem'    => __( 'Not used anywhere', 'acps-media-cleanup' ),
 					'unknownItem'   => __( 'Usage unknown (run a scan)', 'acps-media-cleanup' ),

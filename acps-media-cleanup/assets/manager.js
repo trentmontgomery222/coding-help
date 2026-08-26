@@ -441,6 +441,90 @@
 	// How many files were added in the current batch (reset when the batch
 	// completes). Decides single-file vs bulk handling.
 	var batchTotal = 0;
+	// HEIC files still being converted to JPEG in the browser. While any are in
+	// flight the batch isn't "finished" (the converted JPEGs are re-fed to the
+	// uploader and still have to upload), so finishBatch() waits on this.
+	var heicPending = 0;
+	// Set true for the single addFile() call that re-adds a converted JPEG (or a
+	// HEIC we couldn't convert), so the FilesAdded handler doesn't try to
+	// intercept it again and loop forever.
+	var heicBypassNext = false;
+
+	// Should this just-added file be converted in the browser first?
+	function shouldConvertHeic( f ) {
+		if ( ! A.convertHeicClient || ! window.heic2any ) { return false; }
+		var name = String( ( f && f.name ) || '' ).toLowerCase();
+		var type = String( ( f && f.type ) || '' ).toLowerCase();
+		return /\.(heic|heif)$/.test( name ) || type === 'image/heic' || type === 'image/heif';
+	}
+	// Dig the native browser File/Blob out of a Plupload file object.
+	function getNativeFile( f ) {
+		try { if ( f.getNative ) { var n = f.getNative(); if ( n ) { return n; } } } catch ( e ) {}
+		try {
+			if ( f.getSource ) {
+				var s = f.getSource();
+				if ( s && window.Blob && s instanceof Blob ) { return s; }
+				if ( s && s.getSource ) { var ss = s.getSource(); if ( ss && window.Blob && ss instanceof Blob ) { return ss; } }
+			}
+		} catch ( e ) {}
+		return null;
+	}
+	// A lightweight row in the uploads panel for the "Converting HEIC…" phase.
+	function heicRow( key, label ) {
+		var $row = $( '<div class="acps-mm-uprow acps-mm-heicrow"><span class="acps-mm-upname"></span>' +
+			'<span class="acps-mm-upbar"><span class="acps-mm-upfill acps-mm-indet"></span></span>' +
+			'<span class="acps-mm-uppct"></span></div>' );
+		$row.attr( 'data-heic', key );
+		$row.find( '.acps-mm-upname' ).text( label );
+		$row.find( '.acps-mm-uppct' ).text( i18n.heicConverting || 'Converting HEIC…' );
+		$( '#acps-mm-uploads-list' ).prepend( $row );
+		showUploads();
+	}
+	function heicRowDone( key ) { $( '.acps-mm-heicrow[data-heic="' + key + '"]' ).remove(); }
+	function heicRowFail( key ) {
+		$( '.acps-mm-heicrow[data-heic="' + key + '"]' ).addClass( 'error' )
+			.find( '.acps-mm-upfill' ).removeClass( 'acps-mm-indet' ).css( 'width', '100%' ).end()
+			.find( '.acps-mm-uppct' ).text( i18n.heicFailed || 'Convert failed' );
+	}
+	// Convert one HEIC to JPEG in the browser, then feed the JPEG back into the
+	// uploader as a normal file. On any failure, fall back to uploading the
+	// original so the file is never silently lost.
+	function interceptHeic( u, f ) {
+		var origName = ( f && f.name ) || 'photo.heic';
+		var base     = origName.replace( /\.(heic|heif)$/i, '' );
+		var key      = String( ( f && f.id ) || base );
+		var native   = getNativeFile( f );
+
+		heicPending++;
+		heicRow( key, base + '.heic' );
+		// Take the HEIC out of the uploader so the original never uploads as-is.
+		try { u.removeFile( f ); } catch ( e ) {}
+
+		function reAdd( fileOrBlob, name, ok ) {
+			heicPending--;
+			if ( ok ) { heicRowDone( key ); } else { heicRowFail( key ); }
+			if ( ! fileOrBlob ) { finishBatch(); return; } // nothing to upload; maybe close out the batch
+			heicBypassNext = true;
+			try { u.addFile( fileOrBlob, name ); u.refresh(); u.start(); } catch ( e ) { heicBypassNext = false; finishBatch(); }
+		}
+
+		if ( ! native || ! window.heic2any ) {
+			// Can't convert in the browser → upload the original HEIC untouched.
+			reAdd( native, origName, false );
+			return;
+		}
+		try {
+			window.heic2any( { blob: native, toType: 'image/jpeg', quality: 0.9 } ).then( function ( out ) {
+				var blob = ( window.Array && Array.isArray( out ) ) ? out[ 0 ] : out;
+				if ( ! blob ) { reAdd( native, origName, false ); return; }
+				reAdd( blob, base + '.jpg', true );
+			} ).catch( function () {
+				reAdd( native, origName, false );
+			} );
+		} catch ( e ) {
+			reAdd( native, origName, false );
+		}
+	}
 
 	function showUploads() { $( '#acps-mm-uploads' ).show(); }
 	function uploadRow( file ) {
@@ -503,8 +587,16 @@
 		if ( ! up ) { return; }
 
 		up.bind( 'FilesAdded', function ( u, files ) {
+			// One re-added file (a converted JPEG, or a HEIC we couldn't convert)
+			// must skip interception so it doesn't loop back through the converter.
+			var bypass = heicBypassNext;
+			heicBypassNext = false;
 			for ( var i = 0; i < files.length; i++ ) {
 				var f = files[ i ];
+				if ( ! bypass && shouldConvertHeic( f ) ) {
+					interceptHeic( u, f ); // remove + convert-in-browser + re-add as JPEG
+					continue;
+				}
 				batchTotal++;
 				pending.push( f.id );
 				uploadRow( f );
@@ -538,6 +630,10 @@
 
 	// Called once the whole upload queue drains: decide what to show next.
 	function finishBatch() {
+		// A HEIC is still converting in the browser; its JPEG will be uploaded
+		// next and trigger another completion. Wait for that instead of finishing
+		// on a partial batch.
+		if ( heicPending > 0 ) { return; }
 		pending = [];
 		if ( ! batchTotal ) { return; }
 		batchTotal = 0;
