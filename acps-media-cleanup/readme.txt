@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,12 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.7.0 =
+* Folder browsing now works like a file explorer. Opening a folder shows only the
+  files directly in it, plus clickable tiles for its sub-folders (with a cover
+  image and file count). A new "Include sub-folders" toggle (off by default)
+  switches to showing every file from the folder and all its sub-folders at once.
 
 = 1.6.0 =
 * Menu: the Media Manager no longer has its own top-level tab — it lives entirely

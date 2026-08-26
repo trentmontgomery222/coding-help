@@ -244,6 +244,53 @@
 .acps-mm-genwarn { color: #b32d2e; font-size: 12px; margin: 4px 0 0; }
 .acps-mm-upnext.needs-rename { opacity: .5; }
 
+/* Sub-folder tiles inside the grid (file-explorer style) */
+.acps-mm-foldercard { cursor: pointer; }
+.acps-mm-foldercard .acps-mm-thumb-wrap { background: #fbf6e6; position: relative; }
+.acps-mm-foldercard .acps-mm-folderoverlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+.acps-mm-foldercard .acps-mm-folderoverlay .dashicons {
+	font-size: 64px;
+	width: 64px;
+	height: 64px;
+	color: #dba617;
+	opacity: .92;
+	text-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.acps-mm-foldercard img + .acps-mm-folderoverlay .dashicons { opacity: .8; color: #fff; }
+.acps-mm-foldercount {
+	position: absolute;
+	right: 6px;
+	bottom: 6px;
+	background: rgba(0,0,0,.62);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	border-radius: 10px;
+	padding: 1px 8px;
+	z-index: 2;
+}
+/* Folder name is ALWAYS visible (even in Classic, where file names hover). */
+.acps-mm-foldercard .acps-mm-cap {
+	position: static;
+	opacity: 1;
+	background: none;
+	color: inherit;
+	padding: 8px 10px;
+	font-weight: 600;
+}
+.view-classic .acps-mm-foldercard { border-color: #e5c869; }
+.view-refined .acps-mm-foldercard { border-color: #e5c869; }
+
+/* "Include sub-folders" toggle */
+.acps-mm-subtoggle { font-size: 12px; color: #50575e; white-space: nowrap; }
+
 /* Folder carets */
 .acps-mm-caret {
 	display: inline-block;

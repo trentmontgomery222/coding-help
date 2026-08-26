@@ -160,6 +160,7 @@ class ACPS_MC_Manager {
 					'sizeLarge'     => __( 'Large', 'acps-media-cleanup' ),
 					'viewClassic'   => __( 'Classic', 'acps-media-cleanup' ),
 					'viewRefined'   => __( 'Refined', 'acps-media-cleanup' ),
+					'folderCount'   => __( '%d files', 'acps-media-cleanup' ),
 				),
 			)
 		);
@@ -312,6 +313,7 @@ class ACPS_MC_Manager {
 							<option value="title"><?php esc_html_e( 'Name A–Z', 'acps-media-cleanup' ); ?></option>
 						</select>
 						<select id="acps-mm-page"><option value=""><?php esc_html_e( '— Used on page: any —', 'acps-media-cleanup' ); ?></option></select>
+						<label class="acps-mm-subtoggle"><input type="checkbox" id="acps-mm-recursive"> <?php esc_html_e( 'Include sub-folders', 'acps-media-cleanup' ); ?></label>
 						<span class="acps-mm-toolbar-spacer"></span>
 						<label class="acps-mm-selectall-lbl"><input type="checkbox" id="acps-mm-selectall"> <?php esc_html_e( 'Select', 'acps-media-cleanup' ); ?></label>
 					</div>

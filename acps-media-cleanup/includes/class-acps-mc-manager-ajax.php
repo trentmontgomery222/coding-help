@@ -163,14 +163,20 @@ class ACPS_MC_Manager_Ajax {
 		// The manager loads everything at once; keep a generous hard cap so a
 		// giant library cannot exhaust memory in a single response.
 		$per    = min( 20000, max( 10, isset( $_POST['per_page'] ) ? absint( $_POST['per_page'] ) : 5000 ) );
+		$recursive = ! empty( $_POST['recursive'] );
+
+		// Immediate sub-folders shown as tiles (only when browsing a real folder
+		// non-recursively, with no search active).
+		$is_folder  = ( ctype_digit( (string) $folder ) && (int) $folder > 0 );
+		$subfolders = ( $is_folder && ! $recursive && '' === $search ) ? $this->subfolders_for( (int) $folder ) : array();
 
 		$where = array( "p.post_type = 'attachment'", "p.post_status <> 'trash'" );
 
 		// Folder filter.
-		$ids = $this->ids_for_folder( $folder );
+		$ids = $this->ids_for_folder( $folder, $recursive );
 		if ( is_array( $ids ) ) {
 			if ( empty( $ids ) ) {
-				wp_send_json_success( array( 'items' => array(), 'total' => 0, 'returned' => 0, 'capped' => false ) );
+				wp_send_json_success( array( 'items' => array(), 'total' => 0, 'returned' => 0, 'capped' => false, 'subfolders' => $subfolders ) );
 			}
 			$where[] = 'p.ID IN (' . implode( ',', array_map( 'intval', $ids ) ) . ')';
 		}
@@ -209,7 +215,7 @@ class ACPS_MC_Manager_Ajax {
 
 		// Serve the heavy card list from a short-lived cache (rebuilt only when
 		// something changes, via the version counter) so repeat loads are fast.
-		$sig  = md5( wp_json_encode( array( $folder, $search, $type, $sort, $per, $this->version() ) ) );
+		$sig  = md5( wp_json_encode( array( $folder, $search, $type, $sort, $per, $recursive, $this->version() ) ) );
 		$ckey = 'acps_mm_q_' . $sig;
 		$cache = get_transient( $ckey );
 
@@ -245,12 +251,60 @@ class ACPS_MC_Manager_Ajax {
 
 		wp_send_json_success(
 			array(
-				'items'    => $items,
-				'total'    => $total,
-				'returned' => count( $items ),
-				'capped'   => ( $total > count( $items ) ),
+				'items'      => $items,
+				'total'      => $total,
+				'returned'   => count( $items ),
+				'capped'     => ( $total > count( $items ) ),
+				'subfolders' => $subfolders,
 			)
 		);
+	}
+
+	/**
+	 * Immediate sub-folders of a folder, as tiles: id, name, file count, cover.
+	 *
+	 * @param int $folder_id Folder id.
+	 * @return array
+	 */
+	protected function subfolders_for( $folder_id ) {
+		global $wpdb;
+		$folders = $this->folders_obj();
+		$all     = $folders->folders();
+		$map     = $folders->attachment_folder_map();
+
+		$kids = array();
+		foreach ( $all as $f ) {
+			if ( (int) $f['id'] > 0 && (int) $f['parent'] === (int) $folder_id ) {
+				$kids[] = $f;
+			}
+		}
+		usort( $kids, function ( $a, $b ) { return strcasecmp( $a['name'], $b['name'] ); } );
+
+		$out = array();
+		foreach ( $kids as $f ) {
+			$desc = array_map( 'intval', $folders->descendants( (int) $f['id'] ) );
+			$ids  = array();
+			foreach ( $map as $aid => $fid ) {
+				if ( in_array( (int) $fid, $desc, true ) ) {
+					$ids[] = (int) $aid;
+				}
+			}
+			$cover = '';
+			if ( $ids ) {
+				$in  = implode( ',', array_map( 'intval', $ids ) );
+				$cid = (int) $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE ID IN ($in) AND post_status <> 'trash' AND post_mime_type LIKE 'image/%' ORDER BY post_date DESC LIMIT 1" ); // phpcs:ignore
+				if ( $cid ) {
+					$cover = $this->best_thumb( $cid );
+				}
+			}
+			$out[] = array(
+				'id'    => (int) $f['id'],
+				'name'  => $f['name'],
+				'count' => count( $ids ),
+				'cover' => $cover,
+			);
+		}
+		return $out;
 	}
 
 	/**

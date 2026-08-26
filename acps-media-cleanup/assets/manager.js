@@ -5,7 +5,7 @@
 	var A = window.ACPS_MM || {};
 	var i18n = A.i18n || {};
 
-	var state = { folder: 'all', search: '', type: '', sort: 'date' };
+	var state = { folder: 'all', search: '', type: '', sort: 'date', recursive: false };
 	var selection = {};
 	var folderTree = [];      // [{id,name,depth,parent,total}]
 	var lastFolderData = null;
@@ -20,6 +20,7 @@
 	var FOLDER_KEY = 'acps_mm_folder';
 	var OPEN_KEY = 'acps_mm_open';
 	var SCROLL_KEY = 'acps_mm_scroll';
+	var RECURSIVE_KEY = 'acps_mm_recursive';
 
 	function lsSet( k, v ) { try { window.localStorage.setItem( k, v ); } catch ( e ) {} }
 	function lsGet( k ) { try { return window.localStorage.getItem( k ); } catch ( e ) { return null; } }
@@ -159,16 +160,40 @@
 			search: state.search,
 			type: state.type,
 			sort: state.sort,
+			recursive: state.recursive ? 1 : 0,
 			per_page: 20000
 		} ).done( function ( res ) {
 			if ( ! res || ! res.success ) {
 				$( '#acps-mm-grid' ).html( '<p class="acps-mm-muted">' + esc( i18n.error ) + '</p>' );
 				return;
 			}
-			renderAll( res.data.items, onDone );
+			renderAll( res.data.items, onDone, res.data.subfolders || [] );
 			var cnt = res.data.returned + ( res.data.capped ? ' / ' + res.data.total : '' );
 			$( '#acps-mm-count' ).text( cnt + ' ' + ( i18n.allMedia || 'items' ) );
 		} );
+	}
+
+	function selectFolder( fid ) {
+		state.folder = fid;
+		lsSet( FOLDER_KEY, fid );
+		$( '#acps-mm-page' ).val( '' );
+		$( '.acps-mm-folder' ).removeClass( 'is-active' );
+		$( '.acps-mm-folder[data-folder="' + fid + '"]' ).addClass( 'is-active' );
+		closeDetail();
+		loadGrid();
+		try { window.scrollTo( 0, 0 ); } catch ( e ) {}
+	}
+
+	function folderCardHtml( f ) {
+		var h = '<div class="acps-mm-card acps-mm-foldercard" data-folder="' + f.id + '" title="' + esc( f.name ) + '">';
+		h += '<div class="acps-mm-thumb-wrap">';
+		if ( f.cover ) { h += '<img src="' + esc( f.cover ) + '" alt="" loading="lazy">'; }
+		h += '<span class="acps-mm-folderoverlay"><span class="dashicons dashicons-portfolio"></span></span>';
+		h += '<span class="acps-mm-foldercount">' + ( parseInt( f.count, 10 ) || 0 ) + '</span>';
+		h += '</div>';
+		h += '<div class="acps-mm-cap">' + esc( f.name ) + '</div>';
+		h += '</div>';
+		return h;
 	}
 
 	function cardHtml( f ) {
@@ -195,10 +220,21 @@
 		return i18n.unknownItem || 'Not scanned';
 	}
 
-	function renderAll( items, onDone ) {
+	function renderAll( items, onDone, subfolders ) {
 		var $grid = $( '#acps-mm-grid' ).empty();
+		subfolders = subfolders || [];
+
+		// Sub-folder tiles first (so you can click into them like a file explorer).
+		if ( subfolders.length ) {
+			var fh = '';
+			subfolders.forEach( function ( f ) { fh += folderCardHtml( f ); } );
+			$grid.append( fh );
+		}
+
 		if ( ! items.length ) {
-			$grid.html( '<p class="acps-mm-muted">' + esc( i18n.noResults ) + '</p>' );
+			if ( ! subfolders.length ) {
+				$grid.html( '<p class="acps-mm-muted">' + esc( i18n.noResults ) + '</p>' );
+			}
 			if ( onDone ) { onDone(); }
 			return;
 		}
@@ -597,12 +633,13 @@
 
 	/* ---------------- Bindings ---------------- */
 	$( function () {
-		// Restore the last-open folder before the first load.
+		// Restore the last-open folder + sub-folder toggle before the first load.
 		var savedFolder = lsGet( FOLDER_KEY );
 		if ( savedFolder ) {
 			state.folder = savedFolder;
 			if ( savedFolder.indexOf( 'page:' ) === 0 ) { $( '#acps-mm-page' ).val( savedFolder ); }
 		}
+		if ( lsGet( RECURSIVE_KEY ) === '1' ) { state.recursive = true; $( '#acps-mm-recursive' ).prop( 'checked', true ); }
 
 		loadFolders();
 		loadGrid( function () {
@@ -652,11 +689,13 @@
 		} );
 
 		$( document ).on( 'click', '.acps-mm-folder', function () {
-			state.folder = $( this ).data( 'folder' );
-			lsSet( FOLDER_KEY, state.folder );
-			$( '#acps-mm-page' ).val( '' );
-			$( '.acps-mm-folder' ).removeClass( 'is-active' );
-			$( this ).addClass( 'is-active' );
+			selectFolder( $( this ).data( 'folder' ) );
+		} );
+
+		// Include sub-folders toggle (initial state restored in init).
+		$( '#acps-mm-recursive' ).on( 'change', function () {
+			state.recursive = this.checked;
+			lsSet( RECURSIVE_KEY, this.checked ? '1' : '0' );
 			loadGrid();
 		} );
 
@@ -722,7 +761,10 @@
 			updateBulkBar();
 		} );
 		$( document ).on( 'click', '.acps-mm-check', function ( e ) { e.stopPropagation(); } );
-		$( document ).on( 'click', '.acps-mm-card', function () { openDetail( $( this ).data( 'id' ) ); } );
+		$( document ).on( 'click', '.acps-mm-card', function () {
+			if ( $( this ).hasClass( 'acps-mm-foldercard' ) ) { selectFolder( $( this ).data( 'folder' ) ); return; }
+			openDetail( $( this ).data( 'id' ) );
+		} );
 
 		$( '#acps-mm-selectall' ).on( 'change', function () {
 			var on = this.checked;
