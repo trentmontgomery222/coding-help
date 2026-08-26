@@ -171,24 +171,35 @@ class ACPS_MC_Heic {
 		$new_path = trailingslashit( $dir ) . $new_base;
 
 		try {
+			// Best-effort: raise ImageMagick's resource limits before decoding.
+			//
+			// Modern iPhone HEICs bundle several auxiliary images (HDR gain maps,
+			// depth maps, thumbnails). ImageMagick counts those references and
+			// rejects the file with "Too many auxiliary image references" once the
+			// count passes its ListLength resource limit — which hardened hosts
+			// (e.g. WP Engine's policy.xml) set very low. Raising it here can let
+			// the file through. This can only ever *raise* the limit within what
+			// the server's policy allows; a policy hard-cap still wins, and we
+			// fall back to a clear message below in that case. Guarded so it does
+			// nothing on Imagick builds without these constants.
+			if ( defined( 'Imagick::RESOURCETYPE_LIST_LENGTH' ) ) {
+				@Imagick::setResourceLimit( constant( 'Imagick::RESOURCETYPE_LIST_LENGTH' ), 100000 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			}
+			if ( defined( 'Imagick::RESOURCETYPE_TIME' ) ) {
+				@Imagick::setResourceLimit( constant( 'Imagick::RESOURCETYPE_TIME' ), 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			}
+
 			$im = new Imagick();
 
-			// Modern iPhone HEICs bundle auxiliary images (HDR gain maps, depth
-			// maps, thumbnails). On some libheif builds, reading the whole
-			// container throws "Too many auxiliary image references". Reading
-			// just the primary image ("[0]") avoids that; fall back to a plain
-			// read on any server where the scene selector isn't supported.
-			$read = false;
+			// Reading just the primary image ("[0]") walks far fewer auxiliary
+			// references than reading the whole container, so try it first; fall
+			// back to a plain read on any server where the scene selector isn't
+			// supported.
 			try {
 				$im->readImage( $file . '[0]' );
-				$read = true;
 			} catch ( Exception $inner ) {
 				$im->clear();
 				$im->readImage( $file );
-				$read = true;
-			}
-			if ( ! $read ) {
-				throw new Exception( 'unreadable' );
 			}
 
 			// If a multi-image container still came through, keep the first frame.
@@ -205,7 +216,14 @@ class ACPS_MC_Heic {
 			$im->clear();
 			$im->destroy();
 		} catch ( Exception $e ) {
-			return new WP_Error( 'convert_failed', $e->getMessage() );
+			$msg = $e->getMessage();
+			// Give a specific, actionable message for the auxiliary-image-limit
+			// case, which is a server (ImageMagick/libheif) restriction we can
+			// only try to work around, not fully fix in PHP.
+			if ( false !== stripos( $msg, 'auxiliary image' ) ) {
+				$msg = __( 'This iPhone photo bundles extra images (HDR/depth data) that your server\'s image library refuses to open ("too many auxiliary image references"). The file was uploaded, but auto-conversion is blocked by a server limit. Ask your host to raise ImageMagick\'s "list-length" policy or update libheif, or set the iPhone to shoot "Most Compatible" (Settings ▸ Camera ▸ Formats) so photos arrive as JPEG.', 'acps-media-cleanup' );
+			}
+			return new WP_Error( 'convert_failed', $msg );
 		}
 
 		if ( ! file_exists( $new_path ) ) {

@@ -607,9 +607,16 @@ class ACPS_MC_Manager_Ajax {
 			wp_send_json_error();
 		}
 		$folders = $this->folders_obj();
-		if ( $folder_id > 0 && $folders->is_writable() && current_user_can( 'edit_post', $id ) ) {
-			$folders->assign( $id, $folder_id );
-			$folders->remember_recent( $folder_id );
+		if ( $folders->is_writable() && current_user_can( 'edit_post', $id ) ) {
+			if ( $folder_id > 0 ) {
+				$folders->assign( $id, $folder_id );
+				$folders->remember_recent( $folder_id );
+			} else {
+				// No folder chosen → make sure it lands in Uncategorized (top
+				// level) so it's easy to find, instead of wherever FileBird's
+				// "add new uploads to the selected folder" setting would file it.
+				$folders->assign( $id, 0 );
+			}
 		}
 		$this->bump_version();
 

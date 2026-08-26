@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.8.1
+Stable tag: 1.8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,22 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.8.2 =
+* Fixed new uploads landing in a hidden sub-folder. FileBird auto-files every
+  new upload into whichever folder is currently selected, so files were ending
+  up somewhere you couldn't see without turning on "Include sub-folders." The
+  Media Manager now files every upload into Uncategorized (top level) unless you
+  explicitly place it in a folder — including the bulk "Just upload" path, which
+  previously skipped that step.
+* HEIC: another attempt at "Too many auxiliary image references" on modern
+  iPhone photos. The plugin now raises ImageMagick's "list-length" resource
+  limit before decoding (that limit is what this specific error trips) and reads
+  only the primary image. If your host's ImageMagick policy hard-caps that
+  limit, conversion can still be blocked at the server level — in that case the
+  file still uploads and the error now explains the exact cause and the fixes
+  (ask the host to raise the ImageMagick "list-length" policy or update libheif,
+  or set the iPhone to shoot "Most Compatible" so photos arrive as JPEG).
 
 = 1.8.1 =
 * Fixed uploads that stopped reporting progress and quit after a few files: the

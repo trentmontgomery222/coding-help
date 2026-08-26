@@ -532,7 +532,20 @@
 		h += '</p></div></div>';
 		var $m = $( h ).appendTo( 'body' );
 		$m.on( 'click', '.acps-mm-batch-edit', function () { $m.remove(); showUploadPopup(); } );
-		$m.on( 'click', '.acps-mm-batch-just', function () { $m.remove(); uploadQueue = []; loadGrid(); loadFolders(); } );
+		$m.on( 'click', '.acps-mm-batch-just', function () {
+			$m.remove();
+			// "Just upload" still has to file each one into Uncategorized (top
+			// level): FileBird auto-files new uploads into whatever folder is
+			// selected, so without this they'd land in a sub-folder the user
+			// can't see unless "Include sub-folders" is on. upload_saved with
+			// folder_id 0 unfiles them — the same thing the per-file edit popup
+			// does. Refresh once they've all settled so the counts are right.
+			var calls = uploadQueue.map( function ( item ) {
+				return post( 'upload_saved', { id: item.id, folder_id: 0 } );
+			} );
+			uploadQueue = [];
+			$.when.apply( $, calls ).always( function () { loadGrid(); loadFolders(); } );
+		} );
 	}
 
 	function showUploadPopup() {
