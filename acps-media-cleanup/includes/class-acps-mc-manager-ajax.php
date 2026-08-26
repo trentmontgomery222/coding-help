@@ -478,17 +478,15 @@ class ACPS_MC_Manager_Ajax {
 			wp_send_json_error( array( 'message' => __( 'Nothing selected.', 'acps-media-cleanup' ) ) );
 		}
 
-		// Safety pre-check: which selected files look used?
+		// Fast safety pre-check from the last scan (no per-file DB scan, so this
+		// stays instant). The client also checks the on-screen colour before
+		// asking, so this rarely fires.
 		if ( ! $confirm ) {
-			$used = array();
+			$used_map = $this->results_map();
+			$used     = array();
 			foreach ( $ids as $id ) {
-				$locs = ACPS_MC_Usage::for_attachment( $id );
-				if ( ! empty( $locs ) ) {
-					$used[] = array(
-						'id'       => $id,
-						'filename' => wp_basename( (string) get_attached_file( $id ) ),
-						'count'    => count( $locs ),
-					);
+				if ( ! empty( $used_map[ $id ] ) ) {
+					$used[] = array( 'id' => $id, 'filename' => wp_basename( (string) get_attached_file( $id ) ) );
 				}
 			}
 			if ( ! empty( $used ) ) {
@@ -558,6 +556,7 @@ class ACPS_MC_Manager_Ajax {
 				'id'       => $id,
 				'url'      => wp_get_attachment_url( $id ),
 				'filename' => wp_basename( (string) get_post_meta( $id, '_wp_attached_file', true ) ),
+				'card'     => $this->card( $id ),
 				'common'   => $folders->common_folders( 8 ),
 				'folders'  => $this->folder_options( $folders ),
 			)
@@ -588,11 +587,11 @@ class ACPS_MC_Manager_Ajax {
 			wp_send_json_error( array( 'message' => __( 'Please enter a valid file name.', 'acps-media-cleanup' ) ) );
 		}
 
-		// Usage warning.
+		// Fast usage warning from the last scan (no per-file scan).
 		if ( ! $confirm ) {
-			$locs = ACPS_MC_Usage::for_attachment( $id );
-			if ( ! empty( $locs ) ) {
-				wp_send_json_success( array( 'needs_confirm' => true, 'count' => count( $locs ) ) );
+			$used_map = $this->results_map();
+			if ( ! empty( $used_map[ $id ] ) ) {
+				wp_send_json_success( array( 'needs_confirm' => true, 'count' => 1 ) );
 			}
 		}
 
@@ -600,40 +599,55 @@ class ACPS_MC_Manager_Ajax {
 		if ( ! $old || ! file_exists( $old ) ) {
 			wp_send_json_error( array( 'message' => __( 'Original file not found.', 'acps-media-cleanup' ) ) );
 		}
-		$dir      = trailingslashit( dirname( $old ) );
+		$dir_abs  = dirname( $old );
+		$dir      = trailingslashit( $dir_abs );
 		$ext      = pathinfo( $old, PATHINFO_EXTENSION );
-		$new_name = wp_unique_filename( dirname( $old ), $newbase . ( $ext ? '.' . $ext : '' ) );
+		$new_name = wp_unique_filename( $dir_abs, $newbase . ( $ext ? '.' . $ext : '' ) );
+		$new_stem = pathinfo( $new_name, PATHINFO_FILENAME );
 		$new_path = $dir . $new_name;
 
 		if ( ! @rename( $old, $new_path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			wp_send_json_error( array( 'message' => __( 'Could not rename the file on disk.', 'acps-media-cleanup' ) ) );
 		}
 
-		// Remove the now-orphaned old size files and original.
-		$meta_old = wp_get_attachment_metadata( $id );
-		if ( is_array( $meta_old ) ) {
-			if ( ! empty( $meta_old['sizes'] ) ) {
-				foreach ( $meta_old['sizes'] as $s ) {
-					if ( ! empty( $s['file'] ) && file_exists( $dir . $s['file'] ) ) {
-						@unlink( $dir . $s['file'] ); // phpcs:ignore
+		// Rename the generated size files on disk (fast — no re-encoding) and
+		// update the metadata paths in place.
+		$meta = wp_get_attachment_metadata( $id );
+		$uploads = wp_get_upload_dir();
+		$subdir  = trim( str_replace( $uploads['basedir'], '', $dir_abs ), '/\\' );
+
+		if ( is_array( $meta ) ) {
+			$meta['file'] = ( '' !== $subdir ? $subdir . '/' : '' ) . $new_name;
+
+			if ( ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+				foreach ( $meta['sizes'] as $k => $s ) {
+					if ( empty( $s['file'] ) ) {
+						continue;
 					}
+					$sext = pathinfo( $s['file'], PATHINFO_EXTENSION );
+					$newf = $new_stem . '-' . (int) $s['width'] . 'x' . (int) $s['height'] . ( $sext ? '.' . $sext : '' );
+					if ( $newf !== $s['file'] && file_exists( $dir . $s['file'] ) ) {
+						@rename( $dir . $s['file'], $dir . $newf ); // phpcs:ignore
+					}
+					$meta['sizes'][ $k ]['file'] = $newf;
 				}
 			}
-			if ( ! empty( $meta_old['original_image'] ) && file_exists( $dir . $meta_old['original_image'] ) ) {
-				@unlink( $dir . $meta_old['original_image'] ); // phpcs:ignore
+
+			if ( ! empty( $meta['original_image'] ) ) {
+				$oext        = pathinfo( $meta['original_image'], PATHINFO_EXTENSION );
+				$new_orig    = wp_unique_filename( $dir_abs, $new_stem . '-original' . ( $oext ? '.' . $oext : '' ) );
+				if ( file_exists( $dir . $meta['original_image'] ) ) {
+					@rename( $dir . $meta['original_image'], $dir . $new_orig ); // phpcs:ignore
+				}
+				$meta['original_image'] = $new_orig;
 			}
+
+			wp_update_attachment_metadata( $id, $meta );
 		}
 
-		$uploads = wp_get_upload_dir();
-		$rel     = ltrim( str_replace( $uploads['basedir'], '', $new_path ), '/\\' );
+		$rel = ( '' !== $subdir ? $subdir . '/' : '' ) . $new_name;
 		update_post_meta( $id, '_wp_attached_file', $rel );
 		$wpdb->update( $wpdb->posts, array( 'guid' => trailingslashit( $uploads['baseurl'] ) . $rel ), array( 'ID' => $id ), array( '%s' ), array( '%d' ) );
-
-		require_once ABSPATH . 'wp-admin/includes/image.php';
-		$md = wp_generate_attachment_metadata( $id, $new_path );
-		if ( is_array( $md ) ) {
-			wp_update_attachment_metadata( $id, $md );
-		}
 		clean_post_cache( $id );
 
 		$this->bump_version();

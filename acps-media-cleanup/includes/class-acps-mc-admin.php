@@ -482,7 +482,7 @@ class ACPS_MC_Admin {
 		wp_safe_redirect(
 			add_query_arg(
 				array( 'page' => self::SETTINGS_SLUG, 'acps_mc_saved' => 1 ),
-				admin_url( 'admin.php' )
+				admin_url( 'upload.php' )
 			)
 		);
 		exit;

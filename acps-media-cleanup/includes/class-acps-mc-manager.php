@@ -32,45 +32,7 @@ class ACPS_MC_Manager {
 	}
 
 	public function register_menu() {
-		// One top-level menu holds everything (manager + cleanup utilities).
-		add_menu_page(
-			__( 'Media Manager', 'acps-media-cleanup' ),
-			__( 'Media Manager', 'acps-media-cleanup' ),
-			'upload_files',
-			self::SLUG,
-			array( $this, 'render' ),
-			'dashicons-format-gallery',
-			26
-		);
-		add_submenu_page(
-			self::SLUG,
-			__( 'Media Library', 'acps-media-cleanup' ),
-			__( 'Library', 'acps-media-cleanup' ),
-			'upload_files',
-			self::SLUG,
-			array( $this, 'render' )
-		);
-
-		if ( $this->admin ) {
-			add_submenu_page(
-				self::SLUG,
-				__( 'Trash & Log', 'acps-media-cleanup' ),
-				__( 'Trash', 'acps-media-cleanup' ),
-				ACPS_MC_CAP,
-				ACPS_MC_Admin::TRASH_SLUG,
-				array( $this->admin, 'render_trash_page' )
-			);
-			add_submenu_page(
-				self::SLUG,
-				__( 'Settings', 'acps-media-cleanup' ),
-				__( 'Settings', 'acps-media-cleanup' ),
-				ACPS_MC_CAP,
-				ACPS_MC_Admin::SETTINGS_SLUG,
-				array( $this->admin, 'render_settings_page' )
-			);
-		}
-
-		// Also under the core Media menu, so it sits beside the classic library.
+		// Everything lives UNDER the core "Media" menu — no separate top-level tab.
 		add_submenu_page(
 			'upload.php',
 			__( 'Media Manager', 'acps-media-cleanup' ),
@@ -79,10 +41,29 @@ class ACPS_MC_Manager {
 			self::SLUG,
 			array( $this, 'render' )
 		);
+
+		if ( $this->admin ) {
+			add_submenu_page(
+				'upload.php',
+				__( 'Media Trash & Log', 'acps-media-cleanup' ),
+				__( 'Media Trash', 'acps-media-cleanup' ),
+				ACPS_MC_CAP,
+				ACPS_MC_Admin::TRASH_SLUG,
+				array( $this->admin, 'render_trash_page' )
+			);
+			add_submenu_page(
+				'upload.php',
+				__( 'Media Manager Settings', 'acps-media-cleanup' ),
+				__( 'Media Settings', 'acps-media-cleanup' ),
+				ACPS_MC_CAP,
+				ACPS_MC_Admin::SETTINGS_SLUG,
+				array( $this->admin, 'render_settings_page' )
+			);
+		}
 	}
 
 	public static function page_url() {
-		return add_query_arg( 'page', self::SLUG, admin_url( 'admin.php' ) );
+		return add_query_arg( 'page', self::SLUG, admin_url( 'upload.php' ) );
 	}
 
 	/**
@@ -92,9 +73,9 @@ class ACPS_MC_Manager {
 		if ( ! ACPS_MC_Settings::get( 'replace_media_screen' ) ) {
 			return;
 		}
-		// Let people opt back to the classic screen, and never touch the
-		// single-item detail view.
-		if ( isset( $_GET['classic'] ) || isset( $_GET['item'] ) ) {
+		// Let people opt back to the classic screen, never touch the single-item
+		// detail view, and never loop when already on one of our own pages.
+		if ( isset( $_GET['classic'] ) || isset( $_GET['item'] ) || isset( $_GET['page'] ) ) {
 			return;
 		}
 		if ( ! current_user_can( 'upload_files' ) ) {
@@ -270,10 +251,25 @@ class ACPS_MC_Manager {
 		$writable = $folders->is_writable();
 		?>
 		<div class="wrap acps-mm-wrap">
+			<!-- Top-right view/size controls -->
+			<div class="acps-mm-headright">
+				<span class="acps-mm-viewtoggle" role="group" aria-label="<?php esc_attr_e( 'View style', 'acps-media-cleanup' ); ?>">
+					<button type="button" class="button acps-mm-viewbtn" data-view="classic"><span class="dashicons dashicons-grid-view"></span> <?php esc_html_e( 'Classic', 'acps-media-cleanup' ); ?></button>
+					<button type="button" class="button acps-mm-viewbtn" data-view="refined"><span class="dashicons dashicons-screenoptions"></span> <?php esc_html_e( 'Refined', 'acps-media-cleanup' ); ?></button>
+				</span>
+				<label class="acps-mm-sizelbl"><?php esc_html_e( 'Size', 'acps-media-cleanup' ); ?>
+					<select id="acps-mm-size">
+						<option value="130"><?php esc_html_e( 'Small', 'acps-media-cleanup' ); ?></option>
+						<option value="180" selected><?php esc_html_e( 'Medium', 'acps-media-cleanup' ); ?></option>
+						<option value="250"><?php esc_html_e( 'Large', 'acps-media-cleanup' ); ?></option>
+					</select>
+				</label>
+			</div>
+
 			<h1 class="wp-heading-inline"><span class="dashicons dashicons-format-gallery"></span> <?php esc_html_e( 'Media Manager', 'acps-media-cleanup' ); ?></h1>
 			<button type="button" class="page-title-action" id="acps-mm-upload"><?php esc_html_e( 'Upload files', 'acps-media-cleanup' ); ?></button>
-			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-trash', admin_url( 'admin.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Trash', 'acps-media-cleanup' ); ?></a>
-			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-settings', admin_url( 'admin.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Settings', 'acps-media-cleanup' ); ?></a>
+			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-trash', admin_url( 'upload.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Trash', 'acps-media-cleanup' ); ?></a>
+			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-settings', admin_url( 'upload.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Settings', 'acps-media-cleanup' ); ?></a>
 			<a href="<?php echo esc_url( admin_url( 'upload.php?classic=1' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Classic library', 'acps-media-cleanup' ); ?></a>
 			<hr class="wp-header-end">
 
@@ -317,17 +313,6 @@ class ACPS_MC_Manager {
 						</select>
 						<select id="acps-mm-page"><option value=""><?php esc_html_e( '— Used on page: any —', 'acps-media-cleanup' ); ?></option></select>
 						<span class="acps-mm-toolbar-spacer"></span>
-						<span class="acps-mm-viewtoggle" role="group" aria-label="<?php esc_attr_e( 'View style', 'acps-media-cleanup' ); ?>">
-							<button type="button" class="button acps-mm-viewbtn" data-view="classic"><span class="dashicons dashicons-grid-view"></span> <?php esc_html_e( 'Classic', 'acps-media-cleanup' ); ?></button>
-							<button type="button" class="button acps-mm-viewbtn" data-view="refined"><span class="dashicons dashicons-screenoptions"></span> <?php esc_html_e( 'Refined', 'acps-media-cleanup' ); ?></button>
-						</span>
-						<label class="acps-mm-sizelbl"><?php esc_html_e( 'Size', 'acps-media-cleanup' ); ?>
-							<select id="acps-mm-size">
-								<option value="130"><?php esc_html_e( 'Small', 'acps-media-cleanup' ); ?></option>
-								<option value="180" selected><?php esc_html_e( 'Medium', 'acps-media-cleanup' ); ?></option>
-								<option value="250"><?php esc_html_e( 'Large', 'acps-media-cleanup' ); ?></option>
-							</select>
-						</label>
 						<label class="acps-mm-selectall-lbl"><input type="checkbox" id="acps-mm-selectall"> <?php esc_html_e( 'Select', 'acps-media-cleanup' ); ?></label>
 					</div>
 

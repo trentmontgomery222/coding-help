@@ -191,6 +191,9 @@
 .view-classic .acps-mm-state-dot { width: 10px; height: 10px; top: 6px; right: 6px; }
 .view-classic .acps-mm-cardcopy { top: 6px; right: 24px; width: 22px; height: 22px; }
 .view-classic .acps-mm-cardcopy .dashicons { font-size: 14px; width: 14px; height: 14px; line-height: 22px; }
+/* Classic view = plainer sidebar: no folder icons (still keeps carets & counts). */
+.view-classic .acps-mm-sidebar .acps-mm-fname .dashicons { display: none; }
+.view-classic .acps-mm-fname { padding-left: 2px; }
 
 /* Copy-link button on each card (top-right) */
 .acps-mm-cardcopy {
@@ -213,6 +216,21 @@
 .acps-mm-card:hover .acps-mm-cardcopy { opacity: 1; }
 .acps-mm-cardcopy .dashicons { font-size: 16px; width: 16px; height: 16px; line-height: 26px; }
 .acps-mm-cardcopy.copied { background: #46b450; color: #fff; opacity: 1; }
+
+/* Top-right header controls */
+.acps-mm-wrap { position: relative; }
+.acps-mm-headright {
+	position: absolute;
+	top: 6px;
+	right: 12px;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	z-index: 5;
+}
+@media screen and ( max-width: 960px ) {
+	.acps-mm-headright { position: static; margin: 8px 0; }
+}
 
 /* Toolbar view toggle (segmented) */
 .acps-mm-viewtoggle { display: inline-flex; }
@@ -372,7 +390,9 @@
 .acps-mm-upfill { display: block; height: 100%; width: 0; background: #2271b1; transition: width .2s; }
 .acps-mm-uprow.done .acps-mm-upfill { background: #46b450; }
 .acps-mm-uprow.error .acps-mm-upfill { background: #d63638; }
-.acps-mm-uppct { flex: 0 0 30px; text-align: right; color: #787c82; }
+.acps-mm-uppct { flex: 0 0 24px; text-align: right; color: #787c82; }
+.acps-mm-upcancel { flex: 0 0 auto; background: none; border: none; cursor: pointer; color: #b32d2e; font-size: 16px; line-height: 1; padding: 0 2px; }
+.acps-mm-upcancel:hover { color: #d63638; }
 
 @media screen and ( max-width: 782px ) {
 	.acps-mm-layout { flex-direction: column; }

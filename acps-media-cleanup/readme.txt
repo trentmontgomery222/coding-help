@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,22 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.6.0 =
+* Menu: the Media Manager no longer has its own top-level tab — it lives entirely
+  under the WordPress "Media" menu (with Media Trash and Media Settings beside it).
+* Instant delete & rename: deleting hides the item immediately and trashes it in
+  the background; renaming updates the name on screen instantly and renames the
+  files (no re-encoding) in the background. The used/in-use warning now uses the
+  last scan result, so it never adds a slow lookup.
+* Uploads no longer reload the whole grid — the new file is added straight to the
+  top of the list. The upload popup gained a Cancel button, and each in-progress
+  upload has its own cancel (×).
+* The manager reopens where you left off: the last folder, your scroll position,
+  and the file whose panel was open are all restored.
+* The Classic / Refined switch now restyles the whole page (in Classic the folder
+  list drops its icons to match the plain look), and the view / size controls moved
+  to the top-right corner instead of sitting above the thumbnails.
 
 = 1.5.0 =
 * View switcher in the Media Manager toolbar: "Classic" (default) looks like the
