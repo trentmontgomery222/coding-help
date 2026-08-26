@@ -177,6 +177,8 @@ class ACPS_MC_Manager {
 					'sizeSmall'     => __( 'Small', 'acps-media-cleanup' ),
 					'sizeMedium'    => __( 'Medium', 'acps-media-cleanup' ),
 					'sizeLarge'     => __( 'Large', 'acps-media-cleanup' ),
+					'viewClassic'   => __( 'Classic', 'acps-media-cleanup' ),
+					'viewRefined'   => __( 'Refined', 'acps-media-cleanup' ),
 				),
 			)
 		);
@@ -315,6 +317,10 @@ class ACPS_MC_Manager {
 						</select>
 						<select id="acps-mm-page"><option value=""><?php esc_html_e( '— Used on page: any —', 'acps-media-cleanup' ); ?></option></select>
 						<span class="acps-mm-toolbar-spacer"></span>
+						<span class="acps-mm-viewtoggle" role="group" aria-label="<?php esc_attr_e( 'View style', 'acps-media-cleanup' ); ?>">
+							<button type="button" class="button acps-mm-viewbtn" data-view="classic"><span class="dashicons dashicons-grid-view"></span> <?php esc_html_e( 'Classic', 'acps-media-cleanup' ); ?></button>
+							<button type="button" class="button acps-mm-viewbtn" data-view="refined"><span class="dashicons dashicons-screenoptions"></span> <?php esc_html_e( 'Refined', 'acps-media-cleanup' ); ?></button>
+						</span>
 						<label class="acps-mm-sizelbl"><?php esc_html_e( 'Size', 'acps-media-cleanup' ); ?>
 							<select id="acps-mm-size">
 								<option value="130"><?php esc_html_e( 'Small', 'acps-media-cleanup' ); ?></option>

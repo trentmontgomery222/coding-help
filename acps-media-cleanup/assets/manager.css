@@ -108,17 +108,10 @@
 	position: relative;
 	width: var( --acps-card );
 	background: #fff;
-	border: 3px solid #c3c4c7;   /* default = unknown/not scanned */
-	border-radius: 8px;
 	overflow: hidden;
 	cursor: pointer;
 	transition: box-shadow .12s, transform .1s;
 }
-.acps-mm-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.15); }
-.acps-mm-card.state-used { border-color: #46b450; }
-.acps-mm-card.state-unused { border-color: #d63638; }
-.acps-mm-card.state-unknown { border-color: #c3c4c7; }
-.acps-mm-card.is-selected { box-shadow: 0 0 0 3px #2271b1 inset; }
 .acps-mm-thumb-wrap {
 	width: 100%;
 	aspect-ratio: 1 / 1;
@@ -130,12 +123,10 @@
 .acps-mm-thumb-wrap img { width: 100%; height: 100%; object-fit: cover; }
 .acps-mm-thumb-wrap .dashicons { font-size: 60px; color: #a7aaad; }
 .acps-mm-cap {
-	padding: 8px 10px;
 	font-size: 12px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	border-top: 1px solid #f0f0f1;
 }
 .acps-mm-check {
 	position: absolute;
@@ -161,6 +152,46 @@
 .state-unused .acps-mm-state-dot { background: #d63638; }
 .state-unknown .acps-mm-state-dot { background: #c3c4c7; }
 
+/* --- Refined view: colour-coded cards with a caption row --- */
+.view-refined .acps-mm-card {
+	border: 3px solid #c3c4c7;   /* default = unknown/not scanned */
+	border-radius: 8px;
+}
+.view-refined .acps-mm-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.15); }
+.view-refined .acps-mm-card.state-used { border-color: #46b450; }
+.view-refined .acps-mm-card.state-unused { border-color: #d63638; }
+.view-refined .acps-mm-card.state-unknown { border-color: #c3c4c7; }
+.view-refined .acps-mm-card.is-selected { box-shadow: 0 0 0 3px #2271b1 inset; }
+.view-refined .acps-mm-cap { padding: 8px 10px; border-top: 1px solid #f0f0f1; }
+
+/* --- Classic view: looks like the normal WordPress media grid --- */
+.view-classic { gap: 8px; }
+.view-classic .acps-mm-card {
+	border: 1px solid #dcdcde;
+	border-radius: 2px;
+	box-shadow: inset 0 0 0 1px rgba(0,0,0,.02);
+}
+.view-classic .acps-mm-card:hover { box-shadow: 0 0 0 1px #2271b1; }
+.view-classic .acps-mm-card.is-selected { box-shadow: 0 0 0 2px #2271b1; border-color: #2271b1; }
+/* Filename appears only on hover, as a caption over the bottom of the tile. */
+.view-classic .acps-mm-cap {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 14px 8px 5px;
+	color: #fff;
+	background: linear-gradient( to top, rgba(0,0,0,.72), rgba(0,0,0,0) );
+	opacity: 0;
+	transition: opacity .12s;
+	z-index: 1;
+}
+.view-classic .acps-mm-card:hover .acps-mm-cap { opacity: 1; }
+/* Keep a small usage indicator, but no coloured border (stays WP-like). */
+.view-classic .acps-mm-state-dot { width: 10px; height: 10px; top: 6px; right: 6px; }
+.view-classic .acps-mm-cardcopy { top: 6px; right: 24px; width: 22px; height: 22px; }
+.view-classic .acps-mm-cardcopy .dashicons { font-size: 14px; width: 14px; height: 14px; line-height: 22px; }
+
 /* Copy-link button on each card (top-right) */
 .acps-mm-cardcopy {
 	position: absolute;
@@ -182,6 +213,13 @@
 .acps-mm-card:hover .acps-mm-cardcopy { opacity: 1; }
 .acps-mm-cardcopy .dashicons { font-size: 16px; width: 16px; height: 16px; line-height: 26px; }
 .acps-mm-cardcopy.copied { background: #46b450; color: #fff; opacity: 1; }
+
+/* Toolbar view toggle (segmented) */
+.acps-mm-viewtoggle { display: inline-flex; }
+.acps-mm-viewtoggle .acps-mm-viewbtn { border-radius: 0; margin: 0; }
+.acps-mm-viewtoggle .acps-mm-viewbtn:first-child { border-top-left-radius: 3px; border-bottom-left-radius: 3px; }
+.acps-mm-viewtoggle .acps-mm-viewbtn:last-child { border-top-right-radius: 3px; border-bottom-right-radius: 3px; margin-left: -1px; }
+.acps-mm-viewtoggle .acps-mm-viewbtn .dashicons { font-size: 15px; width: 15px; height: 15px; vertical-align: text-bottom; }
 
 /* Toolbar size control */
 .acps-mm-sizelbl { font-size: 12px; color: #50575e; display: inline-flex; align-items: center; gap: 4px; }

@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,13 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.5.0 =
+* View switcher in the Media Manager toolbar: "Classic" (default) looks like the
+  normal WordPress media grid — plain thumbnail tiles, filename on hover — while
+  "Refined" is the bordered, colour-coded card view. Every extra feature (copy
+  link, selection, the detail drawer, used/unused indicator) works in both. Your
+  choice is remembered per browser.
 
 = 1.4.0 =
 * Cleanup fully merged into the Media Manager: it is now the single top-level

@@ -14,6 +14,7 @@
 	var uploadRows = {};      // plupload file id -> jQuery row
 	var EXPAND_KEY = 'acps_mm_expanded';   // folders are collapsed by default
 	var SIZE_KEY = 'acps_mm_size';
+	var VIEW_KEY = 'acps_mm_view';         // 'classic' (default) | 'refined'
 
 	function post( action, data ) {
 		data = data || {};
@@ -45,6 +46,15 @@
 	}
 	function applyCardSize( px ) {
 		try { document.documentElement.style.setProperty( '--acps-card', parseInt( px, 10 ) + 'px' ); } catch ( e ) {}
+	}
+	function getView() {
+		try { var v = window.localStorage.getItem( VIEW_KEY ); return ( v === 'refined' ) ? 'refined' : 'classic'; } catch ( e ) { return 'classic'; }
+	}
+	function applyView( view ) {
+		view = ( view === 'refined' ) ? 'refined' : 'classic';
+		$( '#acps-mm-grid' ).removeClass( 'view-classic view-refined' ).addClass( 'view-' + view );
+		$( '.acps-mm-viewbtn' ).removeClass( 'button-primary' ).filter( '[data-view="' + view + '"]' ).addClass( 'button-primary' );
+		try { window.localStorage.setItem( VIEW_KEY, view ); } catch ( e ) {}
 	}
 
 	/* ---------------- Folders sidebar ---------------- */
@@ -521,6 +531,12 @@
 		$( '#acps-mm-size' ).on( 'change', function () {
 			applyCardSize( this.value );
 			try { window.localStorage.setItem( SIZE_KEY, this.value ); } catch ( e ) {}
+		} );
+
+		// Apply saved view style (Classic looks like the normal media library).
+		applyView( getView() );
+		$( document ).on( 'click', '.acps-mm-viewbtn', function () {
+			applyView( $( this ).data( 'view' ) );
 		} );
 
 		// "Used on page" filter.

@@ -20,8 +20,12 @@ Built for the ACPS website (WordPress + **FileBird** media folders +
    *Media* screen) — a better day-to-day media library:
    - FileBird folder sidebar with **collapsible** sub-folders and counts, plus
      **All / Unused / Used / Unfiled** views (cleanup is built right in).
-   - **250×250 square previews**, all shown at once (no "load more"), each
-     **colour-coded**: green = used, red = unused, grey = not yet scanned.
+   - Two **view styles** (toolbar toggle, remembered per browser): **Classic**
+     (default) looks like the normal WordPress media grid; **Refined** shows
+     bordered, colour-coded cards. Both keep every extra feature.
+   - Square previews (adjustable size), all shown at once (no "load more"),
+     **colour-coded** in Refined view: green = used, red = unused, grey = not
+     yet scanned.
    - Real **PDF thumbnails** (when the server generates previews).
    - Search / type / sort; a detail drawer with inline editing, copy-URL,
      move-to-folder, and on-demand "where used".
