@@ -432,257 +432,320 @@
 		} ).fail( function () { window.alert( i18n.error ); loadGrid(); } );
 	}
 
-	/* ---------------- Upload (drag + progress) ---------------- */
-	// File ids still uploading, in the order they were added. Plupload uploads
-	// sequentially, so the Nth success() belongs to the Nth still-pending file
-	// (FIFO). Cancelling a specific file splices it out so the mapping stays
-	// aligned with Plupload's own remaining queue.
-	var pending = [];
-	// How many files were added in the current batch (reset when the batch
-	// completes). Decides single-file vs bulk handling.
-	var batchTotal = 0;
-	// HEIC files still being converted to JPEG in the browser. While any are in
-	// flight the batch isn't "finished" (the converted JPEGs are re-fed to the
-	// uploader and still have to upload), so finishBatch() waits on this.
-	var heicPending = 0;
-	// Set true for the single addFile() call that re-adds a converted JPEG (or a
-	// HEIC we couldn't convert), so the FilesAdded handler doesn't try to
-	// intercept it again and loop forever.
-	var heicBypassNext = false;
+	/* ---------------- Upload (custom XHR: drag + progress + browser HEIC→JPEG) ----------------
+	 * The manager uploads with its own XHR instead of plupload so it can:
+	 *   - convert HEIC → JPEG in the browser first (works even when the server's
+	 *     image library refuses these files),
+	 *   - file each upload into the folder you're currently viewing,
+	 *   - show real per-file progress, the time each took, and why one failed, and
+	 *   - remember an interrupted batch so you can finish it after a refresh.
+	 * Files upload one at a time (gentle on the server); HEIC conversion for a
+	 * file happens just before that file uploads.
+	 */
+	var UP_RESUME_KEY = 'acps_mm_resume';  // names still unfinished from last time
+	var uploadSeq     = 0;                 // unique id per upload row
+	var activeUploads = 0;                 // queued + in-flight (drives finishBatch)
+	var batchTotal    = 0;                 // files added in the current batch
+	var running       = false;            // is a file currently being processed?
+	var taskQueue     = [];                // rows waiting to upload, FIFO
+	var singleUpload  = false;            // was the finished batch a single file?
 
-	// Should this just-added file be converted in the browser first?
-	function shouldConvertHeic( f ) {
-		if ( ! A.convertHeicClient || ! window.heic2any ) { return false; }
-		var name = String( ( f && f.name ) || '' ).toLowerCase();
-		var type = String( ( f && f.type ) || '' ).toLowerCase();
+	// New uploads go into the folder you're viewing (a real numbered folder),
+	// otherwise Uncategorized (0) — All media, Uncategorized and the smart views.
+	function currentUploadFolder() {
+		var f = String( state.folder );
+		return ( /^\d+$/.test( f ) && parseInt( f, 10 ) > 0 ) ? parseInt( f, 10 ) : 0;
+	}
+	function isHeicName( name, type ) {
+		name = String( name || '' ).toLowerCase();
+		type = String( type || '' ).toLowerCase();
 		return /\.(heic|heif)$/.test( name ) || type === 'image/heic' || type === 'image/heif';
-	}
-	// Dig the native browser File/Blob out of a Plupload file object.
-	function getNativeFile( f ) {
-		try { if ( f.getNative ) { var n = f.getNative(); if ( n ) { return n; } } } catch ( e ) {}
-		try {
-			if ( f.getSource ) {
-				var s = f.getSource();
-				if ( s && window.Blob && s instanceof Blob ) { return s; }
-				if ( s && s.getSource ) { var ss = s.getSource(); if ( ss && window.Blob && ss instanceof Blob ) { return ss; } }
-			}
-		} catch ( e ) {}
-		return null;
-	}
-	// A lightweight row in the uploads panel for the "Converting HEIC…" phase.
-	function heicRow( key, label ) {
-		var $row = $( '<div class="acps-mm-uprow acps-mm-heicrow"><span class="acps-mm-upname"></span>' +
-			'<span class="acps-mm-upbar"><span class="acps-mm-upfill acps-mm-indet"></span></span>' +
-			'<span class="acps-mm-uppct"></span></div>' );
-		$row.attr( 'data-heic', key );
-		$row.find( '.acps-mm-upname' ).text( label );
-		$row.find( '.acps-mm-uppct' ).text( i18n.heicConverting || 'Converting HEIC…' );
-		$( '#acps-mm-uploads-list' ).prepend( $row );
-		showUploads();
-	}
-	function heicRowDone( key ) { $( '.acps-mm-heicrow[data-heic="' + key + '"]' ).remove(); }
-	function heicRowFail( key ) {
-		$( '.acps-mm-heicrow[data-heic="' + key + '"]' ).addClass( 'error' )
-			.find( '.acps-mm-upfill' ).removeClass( 'acps-mm-indet' ).css( 'width', '100%' ).end()
-			.find( '.acps-mm-uppct' ).text( i18n.heicFailed || 'Convert failed' );
-	}
-	// Convert one HEIC to JPEG in the browser, then feed the JPEG back into the
-	// uploader as a normal file. On any failure, fall back to uploading the
-	// original so the file is never silently lost.
-	function interceptHeic( u, f ) {
-		var origName = ( f && f.name ) || 'photo.heic';
-		var base     = origName.replace( /\.(heic|heif)$/i, '' );
-		var key      = String( ( f && f.id ) || base );
-		var native   = getNativeFile( f );
-
-		heicPending++;
-		heicRow( key, base + '.heic' );
-		// Take the HEIC out of the uploader so the original never uploads as-is.
-		try { u.removeFile( f ); } catch ( e ) {}
-
-		function reAdd( fileOrBlob, name, ok ) {
-			heicPending--;
-			if ( ok ) { heicRowDone( key ); } else { heicRowFail( key ); }
-			if ( ! fileOrBlob ) { finishBatch(); return; } // nothing to upload; maybe close out the batch
-			heicBypassNext = true;
-			try { u.addFile( fileOrBlob, name ); u.refresh(); u.start(); } catch ( e ) { heicBypassNext = false; finishBatch(); }
-		}
-
-		if ( ! native || ! window.heic2any ) {
-			// Can't convert in the browser → upload the original HEIC untouched.
-			reAdd( native, origName, false );
-			return;
-		}
-		try {
-			window.heic2any( { blob: native, toType: 'image/jpeg', quality: 0.9 } ).then( function ( out ) {
-				var blob = ( window.Array && Array.isArray( out ) ) ? out[ 0 ] : out;
-				if ( ! blob ) { reAdd( native, origName, false ); return; }
-				reAdd( blob, base + '.jpg', true );
-			} ).catch( function () {
-				reAdd( native, origName, false );
-			} );
-		} catch ( e ) {
-			reAdd( native, origName, false );
-		}
 	}
 
 	function showUploads() { $( '#acps-mm-uploads' ).show(); }
-	function uploadRow( file ) {
-		var $row = $( '<div class="acps-mm-uprow"><span class="acps-mm-upname">' + esc( file.name ) + '</span>' +
+
+	function makeRow( name ) {
+		var rid  = 'u' + ( ++uploadSeq );
+		var $row = $( '<div class="acps-mm-uprow"><span class="acps-mm-upname"></span>' +
 			'<span class="acps-mm-upbar"><span class="acps-mm-upfill"></span></span>' +
 			'<span class="acps-mm-uppct">0%</span>' +
 			'<button type="button" class="acps-mm-upcancel" title="' + esc( i18n.cancel || 'Cancel' ) + '">&times;</button></div>' );
-		$row.on( 'click', '.acps-mm-upcancel', function () { cancelUpload( file ); } );
+		$row.attr( 'data-row', rid ).find( '.acps-mm-upname' ).text( name );
 		$( '#acps-mm-uploads-list' ).prepend( $row );
-		uploadRows[ file.id ] = { $row: $row, file: file };
 		showUploads();
-		return $row;
+		var row = { id: rid, name: name, $row: $row, xhr: null, cancelled: false, start: 0, file: null };
+		uploadRows[ rid ] = row;
+		$row.on( 'click', '.acps-mm-upcancel', function () { cancelRow( row ); } );
+		return row;
 	}
-	function setUploadPct( file, pct ) {
-		var r = uploadRows[ file.id ];
-		if ( ! r ) { uploadRow( file ); r = uploadRows[ file.id ]; }
-		pct = Math.max( 0, Math.min( 100, parseInt( pct, 10 ) || 0 ) );
-		if ( ! r.$row.hasClass( 'done' ) && ! r.$row.hasClass( 'error' ) ) {
-			r.$row.find( '.acps-mm-upfill' ).css( 'width', pct + '%' );
-			r.$row.find( '.acps-mm-uppct' ).text( pct + '%' );
+	function rowDoneOrError( row ) { return row.$row.hasClass( 'done' ) || row.$row.hasClass( 'error' ); }
+	function rowPct( row, pct ) {
+		if ( rowDoneOrError( row ) ) { return; }
+		pct = Math.max( 0, Math.min( 100, Math.round( pct ) || 0 ) );
+		row.$row.find( '.acps-mm-upfill' ).css( 'width', pct + '%' );
+		row.$row.find( '.acps-mm-uppct' ).text( pct + '%' );
+	}
+	function rowStage( row, text ) {  // indeterminate phase, e.g. converting
+		if ( rowDoneOrError( row ) ) { return; }
+		row.$row.find( '.acps-mm-upfill' ).addClass( 'acps-mm-indet' ).css( 'width', '40%' );
+		row.$row.find( '.acps-mm-uppct' ).text( text );
+	}
+	function rowUnstage( row ) { row.$row.find( '.acps-mm-upfill' ).removeClass( 'acps-mm-indet' ); }
+	function fmtDur( ms ) {
+		var s = ms / 1000;
+		if ( s < 1 ) { return Math.round( ms ) + ' ms'; }
+		if ( s < 60 ) { return ( Math.round( s * 10 ) / 10 ) + ' s'; }
+		var m = Math.floor( s / 60 );
+		return m + 'm ' + Math.round( s - m * 60 ) + 's';
+	}
+	function whenStamp( d ) {
+		try {
+			var now = new Date();
+			var sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+			var t = d.toLocaleTimeString( [], { hour: 'numeric', minute: '2-digit' } );
+			return sameDay ? t : ( d.toLocaleDateString( [], { month: 'short', day: 'numeric' } ) + ', ' + t );
+		} catch ( e ) { return ''; }
+	}
+	function rowDone( row ) {
+		rowUnstage( row );
+		row.$row.addClass( 'done' ).find( '.acps-mm-upfill' ).css( 'width', '100%' );
+		row.$row.find( '.acps-mm-uppct' ).text( '✓' );
+		row.$row.find( '.acps-mm-upcancel' ).remove();
+		var dur = row.start ? ( Date.now() - row.start ) : 0;
+		var tip = ( i18n.uploadedIn || 'Uploaded in %s' ).replace( '%s', fmtDur( dur ) );
+		var w = whenStamp( new Date() );
+		if ( w ) { tip += ' · ' + w; }
+		row.$row.attr( 'title', tip );
+	}
+	function rowError( row, why ) {
+		rowUnstage( row );
+		row.$row.addClass( 'error' ).find( '.acps-mm-upfill' ).css( 'width', '100%' );
+		row.$row.find( '.acps-mm-uppct' ).text( '✕' );
+		row.$row.find( '.acps-mm-upcancel' ).remove();
+		var tip = ( i18n.uploadFailed || 'Upload failed' );
+		if ( why ) { tip += ': ' + why; }
+		var w = whenStamp( new Date() );
+		if ( w ) { tip += ' · ' + w; }
+		row.$row.attr( 'title', tip );
+	}
+	function cancelRow( row ) {
+		row.cancelled = true;
+		var i = $.inArray( row, taskQueue );
+		if ( i !== -1 ) {
+			// Queued but not started yet — remove and account for it.
+			taskQueue.splice( i, 1 );
+			rowError( row, i18n.cancelled || 'Cancelled' );
+			forgetResume( row.name );
+			activeUploads--;
+			if ( ! running && ! taskQueue.length && activeUploads <= 0 ) { finishBatch(); }
+			return;
 		}
+		// In-flight — abort; onabort/afterRow handle the accounting.
+		rowError( row, i18n.cancelled || 'Cancelled' );
+		if ( row.xhr ) { try { row.xhr.abort(); } catch ( e ) {} }
 	}
-	function markRow( fid, cls, mark ) {
-		var r = uploadRows[ fid ];
-		if ( r && ! r.$row.hasClass( 'done' ) && ! r.$row.hasClass( 'error' ) ) {
-			r.$row.addClass( cls ).find( '.acps-mm-upfill' ).css( 'width', '100%' );
-			r.$row.find( '.acps-mm-uppct' ).text( mark );
-			r.$row.find( '.acps-mm-upcancel' ).remove();
+
+	// Public entry points (file input + drag-drop) hand their FileLists here.
+	function handleFiles( list ) {
+		if ( ! list || ! list.length ) { return; }
+		for ( var i = 0; i < list.length; i++ ) {
+			var file = list[ i ];
+			var row  = makeRow( file.name || 'file' );
+			row.file = file;
+			batchTotal++;
+			activeUploads++;
+			taskQueue.push( row );
+			rememberResume( file.name || 'file' );
 		}
+		pump();
 	}
-	function dropPending( fid ) {
-		var i = $.inArray( fid, pending );
-		if ( i !== -1 ) { pending.splice( i, 1 ); }
+	function pump() {
+		if ( running ) { return; }
+		var row = taskQueue.shift();
+		if ( ! row ) { return; }
+		running = true;
+		processRow( row );
 	}
-	function cancelUpload( file ) {
-		if ( uploader && uploader.uploader && file ) {
-			try { uploader.uploader.removeFile( file ); } catch ( e ) {}
+	function afterRow( row ) {
+		running = false;
+		activeUploads--;
+		if ( taskQueue.length ) { pump(); }
+		else if ( activeUploads <= 0 ) { finishBatch(); }
+	}
+	function processRow( row ) {
+		if ( row.cancelled ) { afterRow( row ); return; }
+		var file = row.file;
+		row.start = Date.now();
+		if ( A.convertHeicClient && window.heic2any && isHeicName( file.name, file.type ) ) {
+			rowStage( row, i18n.heicConverting || 'Converting HEIC…' );
+			var base = String( file.name || 'photo' ).replace( /\.(heic|heif)$/i, '' );
+			var p;
+			try { p = window.heic2any( { blob: file, toType: 'image/jpeg', quality: 0.9 } ); }
+			catch ( e ) { p = null; }
+			if ( p && p.then ) {
+				p.then( function ( out ) {
+					var blob = ( window.Array && Array.isArray( out ) ) ? out[ 0 ] : out;
+					rowUnstage( row );
+					if ( blob ) { uploadBlob( row, blob, base + '.jpg' ); }
+					else { uploadBlob( row, file, file.name ); }
+				} ).catch( function () {
+					rowUnstage( row );
+					uploadBlob( row, file, file.name ); // conversion failed → upload original
+				} );
+				return;
+			}
+			rowUnstage( row );
 		}
-		dropPending( file.id );
-		markRow( file.id, 'error', '✕' );
+		uploadBlob( row, file, file.name );
+	}
+	function uploadBlob( row, blob, filename ) {
+		if ( row.cancelled ) { afterRow( row ); return; }
+		var fd = new FormData();
+		fd.append( 'action', 'acps_mm_upload' );
+		fd.append( 'nonce', A.nonce );
+		fd.append( 'folder_id', currentUploadFolder() );
+		fd.append( 'file', blob, filename );
+
+		var xhr = new XMLHttpRequest();
+		row.xhr = xhr;
+		xhr.open( 'POST', A.ajaxUrl, true );
+		xhr.upload.onprogress = function ( e ) {
+			if ( e.lengthComputable ) { rowPct( row, ( e.loaded / e.total ) * 100 ); }
+		};
+		xhr.onload = function () {
+			row.xhr = null;
+			var res = null;
+			try { res = JSON.parse( xhr.responseText ); } catch ( e ) {}
+			if ( xhr.status >= 200 && xhr.status < 300 && res && res.success && res.data && res.data.id ) {
+				rowDone( row );
+				uploadQueue.push( {
+					id: res.data.id, url: res.data.url || '', filename: res.data.filename || filename,
+					card: res.data.card || null, common: res.data.common || [], duplicate: res.data.duplicate || null
+				} );
+			} else {
+				rowError( row, ( res && res.data && res.data.message ) || ( 'HTTP ' + xhr.status ) );
+			}
+			forgetResume( row.name );
+			afterRow( row );
+		};
+		xhr.onerror = function () {
+			row.xhr = null;
+			rowError( row, i18n.networkError || 'Network error' );
+			forgetResume( row.name );
+			afterRow( row );
+		};
+		xhr.onabort = function () {
+			row.xhr = null;
+			forgetResume( row.name ); // row already marked cancelled by cancelRow
+			afterRow( row );
+		};
+		xhr.send( fd );
+	}
+
+	/* Resume-assist: remember which files were still uploading, so if you leave
+	 * or refresh mid-batch we can tell you which didn't finish when you return.
+	 * (The browser can't re-read files after a reload, so this re-prompts rather
+	 * than silently re-sending — the Google Drive drip-uploader is the true
+	 * unattended path.) */
+	function readResume() { try { return JSON.parse( lsGet( UP_RESUME_KEY ) || '[]' ) || []; } catch ( e ) { return []; } }
+	function writeResume( list ) { lsSet( UP_RESUME_KEY, JSON.stringify( list ) ); }
+	function rememberResume( name ) { var l = readResume(); l.push( { name: name, at: Date.now() } ); writeResume( l ); }
+	function forgetResume( name ) {
+		var l = readResume();
+		for ( var i = 0; i < l.length; i++ ) { if ( l[ i ].name === name ) { l.splice( i, 1 ); break; } }
+		writeResume( l );
+	}
+	function checkResume() {
+		var l = readResume();
+		// Drop anything older than 2 days so an old interruption doesn't nag forever.
+		var cutoff = Date.now() - 2 * 24 * 60 * 60 * 1000;
+		l = l.filter( function ( x ) { return x && x.at && x.at >= cutoff; } );
+		writeResume( l );
+		if ( ! l.length ) { return; }
+		var names = l.map( function ( x ) { return x.name; } ).slice( 0, 12 );
+		var extra = l.length - names.length;
+		var msg = ( i18n.resumeNotice || '%d upload(s) did not finish last time. Your browser can\'t resume them automatically — drag them in again to finish:' ).replace( '%d', l.length );
+		var $n = $( '<div class="notice notice-warning is-dismissible acps-mm-resume"><p></p><ul class="acps-mm-resume-list"></ul>' +
+			'<p><button type="button" class="button acps-mm-resume-clear"></button></p></div>' );
+		$n.find( 'p' ).first().text( msg );
+		names.forEach( function ( nm ) { $n.find( '.acps-mm-resume-list' ).append( $( '<li></li>' ).text( nm ) ); } );
+		if ( extra > 0 ) { $n.find( '.acps-mm-resume-list' ).append( $( '<li></li>' ).text( '… +' + extra ) ); }
+		$n.find( '.acps-mm-resume-clear' ).text( i18n.dismiss || 'Dismiss' );
+		$n.on( 'click', '.acps-mm-resume-clear', function () { writeResume( [] ); $n.remove(); } );
+		$( '.acps-mm-main' ).prepend( $n );
 	}
 
 	function initUploader() {
-		if ( ! window.wp || ! wp.Uploader ) { return; }
-		try {
-			uploader = new wp.Uploader( {
-				browser: $( '#acps-mm-upload' ),
-				dropzone: $( '.acps-mm-wrap' )
-			} );
-		} catch ( e ) { return; /* uploader unavailable */ }
+		// Hidden multi-file input, opened by the "Upload files" button.
+		var $input = $( '<input type="file" multiple class="acps-mm-fileinput" style="position:absolute;left:-9999px;top:-9999px;">' ).appendTo( 'body' );
+		$( '#acps-mm-upload' ).on( 'click', function ( e ) { e.preventDefault(); $input.trigger( 'click' ); } );
+		$input.on( 'change', function () { handleFiles( this.files ); this.value = ''; } );
 
-		// Bind directly to the underlying Plupload instance instead of relying on
-		// the callbacks you can pass to the wp.Uploader constructor. Some
-		// WordPress builds never invoke the `added` / `progress` constructor
-		// callbacks, and because the whole post-upload flow keys off a counter set
-		// in `added`, that left progress bars empty AND skipped the grid refresh
-		// (so uploads didn't appear in "All media" until a manual reload). The raw
-		// Plupload events always fire, so this is deterministic across versions.
-		var up = uploader.uploader;
-		if ( ! up ) { return; }
+		// Drag-and-drop anywhere on the manager.
+		var $wrap = $( '.acps-mm-wrap' );
+		function stop( e ) { e.preventDefault(); e.stopPropagation(); }
+		$wrap.on( 'dragenter dragover', function ( e ) { stop( e ); $wrap.addClass( 'acps-mm-dragging' ); } );
+		$wrap.on( 'dragleave dragend', function ( e ) { stop( e ); $wrap.removeClass( 'acps-mm-dragging' ); } );
+		$wrap.on( 'drop', function ( e ) {
+			stop( e );
+			$wrap.removeClass( 'acps-mm-dragging' );
+			var dt = e.originalEvent && e.originalEvent.dataTransfer;
+			if ( dt && dt.files && dt.files.length ) { handleFiles( dt.files ); }
+		} );
 
-		up.bind( 'FilesAdded', function ( u, files ) {
-			// One re-added file (a converted JPEG, or a HEIC we couldn't convert)
-			// must skip interception so it doesn't loop back through the converter.
-			var bypass = heicBypassNext;
-			heicBypassNext = false;
-			for ( var i = 0; i < files.length; i++ ) {
-				var f = files[ i ];
-				if ( ! bypass && shouldConvertHeic( f ) ) {
-					interceptHeic( u, f ); // remove + convert-in-browser + re-add as JPEG
-					continue;
-				}
-				batchTotal++;
-				pending.push( f.id );
-				uploadRow( f );
-			}
-		} );
-		up.bind( 'UploadProgress', function ( u, file ) {
-			setUploadPct( file, file.percent || 0 );
-		} );
-		up.bind( 'FileUploaded', function ( u, file, info ) {
-			dropPending( file.id );
-			// Plupload hands us the raw server response; WordPress replies with
-			// {success:true, data:{id,url,filename,...}} for an attachment upload.
-			var d = null;
-			try {
-				var parsed = JSON.parse( ( info && info.response ) || '{}' );
-				if ( parsed && parsed.success && parsed.data ) { d = parsed.data; }
-			} catch ( e ) { d = null; }
-			if ( d && d.id ) {
-				markRow( file.id, 'done', '✓' );
-				uploadQueue.push( { id: d.id, url: d.url || '', filename: d.filename || d.name || file.name || '' } );
-			} else {
-				markRow( file.id, 'error', '✕' );
-			}
-		} );
-		up.bind( 'Error', function ( u, err ) {
-			var fid = ( err && err.file ) ? err.file.id : null;
-			if ( fid ) { dropPending( fid ); markRow( fid, 'error', '✕' ); }
-		} );
-		up.bind( 'UploadComplete', function () { finishBatch(); } );
+		checkResume();
 	}
 
-	// Called once the whole upload queue drains: decide what to show next.
+	// Called once every file in the batch has settled: decide what to show next.
 	function finishBatch() {
-		// A HEIC is still converting in the browser; its JPEG will be uploaded
-		// next and trigger another completion. Wait for that instead of finishing
-		// on a partial batch.
-		if ( heicPending > 0 ) { return; }
-		pending = [];
-		if ( ! batchTotal ) { return; }
+		singleUpload = ( batchTotal === 1 );
 		batchTotal = 0;
+		activeUploads = 0;
+		running = false;
 		if ( ! uploadQueue.length ) { loadFolders(); return; } // all failed/cancelled
-		if ( uploadQueue.length <= 1 ) { showUploadPopup(); return; }
+		if ( uploadQueue.length === 1 ) { showUploadPopup(); return; }
 		showBatchChoice( uploadQueue.length );
 	}
 
-	// Bulk-upload fork: edit every file one at a time (existing flow), or skip
-	// straight to done and just leave the files uploaded (Unfiled).
+	// Bulk-upload fork: edit every file one at a time, or just leave them where
+	// they were filed (the folder you were viewing). Files with generic camera
+	// names are forced through the rename step either way.
 	function showBatchChoice( total ) {
+		var genericCount = uploadQueue.filter( function ( it ) { return isGeneric( it.filename || '' ); } ).length;
 		var h = '<div class="acps-mm-modal"><div class="acps-mm-modal-box">';
 		h += '<h3>' + esc( ( i18n.batchChoice || '%d files uploaded' ).replace( '%d', total ) ) + '</h3>';
+		if ( genericCount ) {
+			h += '<p class="acps-mm-genwarn">' + esc( ( i18n.batchGenericWarn || '%d file(s) have generic names and must be renamed before continuing.' ).replace( '%d', genericCount ) ) + '</p>';
+		}
 		h += '<p class="acps-mm-modal-actions acps-mm-batch-actions">';
 		h += '<button type="button" class="button button-primary acps-mm-batch-edit">' + esc( i18n.editIndividually || 'Edit each individually' ) + '</button>';
-		h += '<button type="button" class="button acps-mm-batch-just">' + esc( i18n.justUpload || 'Just upload' ) + '</button>';
+		h += '<button type="button" class="button acps-mm-batch-just">' + esc( genericCount ? ( i18n.justUploadRename || 'Rename the generic ones only' ) : ( i18n.justUpload || 'Just upload' ) ) + '</button>';
 		h += '</p></div></div>';
 		var $m = $( h ).appendTo( 'body' );
 		$m.on( 'click', '.acps-mm-batch-edit', function () { $m.remove(); showUploadPopup(); } );
 		$m.on( 'click', '.acps-mm-batch-just', function () {
 			$m.remove();
-			// "Just upload" still has to file each one into Uncategorized (top
-			// level): FileBird auto-files new uploads into whatever folder is
-			// selected, so without this they'd land in a sub-folder the user
-			// can't see unless "Include sub-folders" is on. upload_saved with
-			// folder_id 0 unfiles them — the same thing the per-file edit popup
-			// does. Refresh once they've all settled so the counts are right.
-			var calls = uploadQueue.map( function ( item ) {
-				return post( 'upload_saved', { id: item.id, folder_id: 0 } );
-			} );
-			uploadQueue = [];
-			$.when.apply( $, calls ).always( function () { loadGrid(); loadFolders(); } );
+			// Files are already filed (by the upload endpoint) into the folder you
+			// were viewing — no re-filing needed. Non-generic files are done; only
+			// the generic-named ones still have to be renamed (forced in the popup).
+			uploadQueue = uploadQueue.filter( function ( it ) { return isGeneric( it.filename || '' ); } );
+			if ( uploadQueue.length ) { showUploadPopup(); }
+			else { loadGrid(); loadFolders(); }
 		} );
 	}
 
 	function showUploadPopup() {
-		// Queue drained (all files placed/skipped): reconcile the grid against the
+		// Queue drained (all files placed / renamed): reconcile the grid against the
 		// server once so newly-uploaded files are guaranteed to show in the current
-		// view — belt-and-suspenders on top of the per-file prepend above.
+		// view — belt-and-suspenders on top of the per-file prepend below.
 		if ( ! uploadQueue.length ) { loadGrid(); loadFolders(); return; }
 		var item = uploadQueue[ 0 ];
 		var id = item.id;
-		var card = null; // "add this to the grid" data — filled in by the background fetch below
+		// The upload endpoint already returned the grid card, recent folders and a
+		// duplicate check — no extra round trip needed. A rename below updates card.
+		var card = item.card || null;
 		var generic = isGeneric( item.filename || '' );
 
-		// Render right away from data the upload already gave us — the popup
-		// shouldn't make the user wait on another server round trip just to
-		// appear. Anything we don't have yet (recent-folder chips, the grid
-		// card) is filled in as it arrives, in the background.
 		var h = '<div class="acps-mm-modal"><div class="acps-mm-modal-box"><h3>' + esc( i18n.uploaded ) + '</h3>';
 		h += '<div class="acps-mm-dupewarn" style="display:none"></div>';
 
@@ -694,18 +757,33 @@
 		h += '<div class="acps-mm-field"><label>' + esc( 'File URL' ) + '</label><div class="acps-mm-urlrow"><input type="text" readonly class="acps-mm-url" value="' + esc( item.url ) + '"><button type="button" class="button acps-mm-copy" data-url="' + esc( item.url ) + '">' + esc( i18n.copyUrl ) + '</button></div></div>';
 		if ( writable ) {
 			h += '<div class="acps-mm-field"><label>' + esc( i18n.placeInFolder ) + '</label>';
-			h += '<div class="acps-mm-chiprow"></div>'; // recent-folder chips, filled in once fetched
-			// The folder dropdown itself needs no round trip — it's built from
-			// the folder tree the sidebar already loaded.
+			h += '<div class="acps-mm-chiprow"></div>'; // recent-folder chips (from the upload response)
 			h += folderSelectHtml() + ' <button type="button" class="button acps-mm-place-sel" data-id="' + id + '">' + esc( i18n.move ) + '</button><span class="acps-mm-place-msg"></span>';
 		}
 		h += '<p class="acps-mm-modal-actions">';
-		h += '<button type="button" class="button acps-mm-upcancel-btn">' + esc( i18n.cancel || 'Cancel' ) + '</button> ';
+		// Generic-named files can't be skipped — you must rename them. Only a
+		// non-generic file gets a plain Cancel (keep as-is, edit later).
+		if ( ! generic ) {
+			h += '<button type="button" class="button acps-mm-upcancel-btn">' + esc( i18n.cancel || 'Cancel' ) + '</button> ';
+		}
 		h += '<button type="button" class="button button-primary acps-mm-upnext' + ( generic ? ' needs-rename' : '' ) + '"' + ( generic ? ' disabled' : '' ) + '>' + esc( i18n.done || 'Done' ) + '</button>';
 		h += '</p></div></div>';
 		var $m = $( h ).appendTo( 'body' );
 
-		var placedFid = 0;
+		// Default placement = the folder it was already filed into (the one you
+		// were viewing when you uploaded). Picking another folder moves it.
+		var placedFid = currentUploadFolder();
+
+		// Recent-folder chips straight from the upload response.
+		var $chips = $m.find( '.acps-mm-chiprow' );
+		if ( item.common && item.common.length ) {
+			var chipHtml = '';
+			item.common.forEach( function ( c ) { chipHtml += '<button type="button" class="button acps-mm-place-chip" data-fid="' + c.id + '">' + esc( c.name ) + '</button>'; } );
+			$chips.html( chipHtml );
+		} else {
+			$chips.remove();
+		}
+
 		$m.on( 'click', '.acps-mm-place-chip', function () { placedFid = parseInt( $( this ).data( 'fid' ), 10 ) || 0; placeUpload( id, placedFid, $m ); } );
 		$m.on( 'click', '.acps-mm-place-sel', function () { placedFid = parseInt( $m.find( '.acps-mm-picker-select' ).val(), 10 ) || 0; placeUpload( id, placedFid, $m ); } );
 		$m.on( 'click', '.acps-mm-uprename', function () {
@@ -721,64 +799,35 @@
 				} else { window.alert( ( r && r.data && r.data.message ) || i18n.error ); }
 			} );
 		} );
-		// A copy the user chooses to delete right from this popup, rather than
-		// keeping — closes the popup and moves straight to the next file.
+
+		// Duplicate warning (also from the upload response).
 		var deletedSelf = false;
 		$m.on( 'click', '.acps-mm-dupe-keepboth', function () { $m.find( '.acps-mm-dupewarn' ).slideUp( 150 ); } );
 		$m.on( 'click', '.acps-mm-dupe-delete-copy', function () {
-			post( 'delete', { ids: [ id ], confirm: 1 } ).done( function () {
-				deletedSelf = true;
-				finishPopup( false );
-			} );
+			post( 'delete', { ids: [ id ], confirm: 1 } ).done( function () { deletedSelf = true; finishPopup( false ); } );
 		} );
-
-		// Background fetch: recent-folder chips + the card used to prepend this
-		// file into the currently-open grid view — plus a duplicate check, since
-		// this is the first point after upload where the file is on disk to hash.
-		// Doesn't block the popup above.
-		var saved = post( 'upload_saved', { id: id, folder_id: 0 } ).done( function ( res ) {
-			if ( ! res || ! res.success ) { return; }
-			var incoming = res.data.card || null;
-			if ( incoming && card && card.filename ) {
-				// A rename may have already happened while this was in flight —
-				// don't let a stale filename/url clobber it.
-				incoming.filename = card.filename;
-				incoming.url = card.url || incoming.url;
-			}
-			card = incoming;
-			var common = res.data.common || [];
-			var $chips = $m.find( '.acps-mm-chiprow' );
-			if ( common.length ) {
-				var chipHtml = '';
-				common.forEach( function ( c ) { chipHtml += '<button type="button" class="button acps-mm-place-chip" data-id="' + id + '" data-fid="' + c.id + '">' + esc( c.name ) + '</button>'; } );
-				$chips.html( chipHtml );
-			} else {
-				$chips.remove();
-			}
-			if ( res.data.duplicate && ! deletedSelf ) {
-				var d = res.data.duplicate;
-				var w = '<p>' + esc( i18n.dupeUploadWarn || 'This file looks identical to an existing one:' ) + '</p>';
-				w += '<div class="acps-mm-dupewarn-file"><img src="' + esc( d.thumb ) + '" alt=""><div><strong>' + esc( d.filename ) + '</strong><br><span class="acps-mm-muted">' + esc( d.date ) + '</span></div></div>';
-				w += '<p class="acps-mm-dupewarn-actions">';
-				w += '<a href="' + esc( d.url ) + '" target="_blank" rel="noopener" class="button">' + esc( i18n.viewExisting || 'View existing file' ) + '</a> ';
-				w += '<button type="button" class="button acps-mm-dupe-delete-copy">' + esc( i18n.deleteThisCopy || 'Delete this copy' ) + '</button> ';
-				w += '<button type="button" class="button acps-mm-dupe-keepboth">' + esc( i18n.keepBoth || 'Keep both' ) + '</button>';
-				w += '</p>';
-				$m.find( '.acps-mm-dupewarn' ).html( w ).slideDown( 150 );
-			}
-		} );
+		if ( item.duplicate ) {
+			var d = item.duplicate;
+			var w = '<p>' + esc( i18n.dupeUploadWarn || 'This file looks identical to an existing one:' ) + '</p>';
+			w += '<div class="acps-mm-dupewarn-file"><img src="' + esc( d.thumb ) + '" alt=""><div><strong>' + esc( d.filename ) + '</strong><br><span class="acps-mm-muted">' + esc( d.date ) + '</span></div></div>';
+			w += '<p class="acps-mm-dupewarn-actions">';
+			w += '<a href="' + esc( d.url ) + '" target="_blank" rel="noopener" class="button">' + esc( i18n.viewExisting || 'View existing file' ) + '</a> ';
+			w += '<button type="button" class="button acps-mm-dupe-delete-copy">' + esc( i18n.deleteThisCopy || 'Delete this copy' ) + '</button> ';
+			w += '<button type="button" class="button acps-mm-dupe-keepboth">' + esc( i18n.keepBoth || 'Keep both' ) + '</button>';
+			w += '</p>';
+			$m.find( '.acps-mm-dupewarn' ).html( w ).show();
+		}
 
 		function finishPopup( addIt ) {
-			$m.remove();
-			if ( addIt && belongsInView( placedFid ) ) {
-				if ( card ) {
-					prependCard( card );
-				} else {
-					// Card isn't back from the background fetch yet — add it to
-					// the grid as soon as it is, without holding up the next file.
-					saved.done( function ( res ) { if ( res && res.success && res.data.card ) { prependCard( res.data.card ); } } );
-				}
+			// For a single-file upload, drop the final URL onto the clipboard as a
+			// convenience (this runs from the Done click — a user gesture — so the
+			// browser allows the copy, and it reflects any rename).
+			if ( addIt && singleUpload && ! deletedSelf ) {
+				var url = $m.find( '.acps-mm-copy' ).data( 'url' ) || item.url;
+				if ( url ) { copyText( url ); toast( i18n.urlCopied || 'Link copied to clipboard' ); }
 			}
+			$m.remove();
+			if ( addIt && ! deletedSelf && card && belongsInView( placedFid ) ) { prependCard( card ); }
 			uploadQueue.shift();
 			loadFolders(); // sidebar counts only — no grid reload
 			showUploadPopup();
@@ -1186,5 +1235,15 @@
 		var $t = $( '<textarea>' ).val( text ).appendTo( 'body' ).select();
 		try { document.execCommand( 'copy' ); } catch ( e ) {}
 		$t.remove();
+	}
+
+	// Brief bottom-center toast message.
+	var toastTimer = null;
+	function toast( text ) {
+		var $t = $( '#acps-mm-toast' );
+		if ( ! $t.length ) { $t = $( '<div id="acps-mm-toast" class="acps-mm-toast"></div>' ).appendTo( 'body' ); }
+		$t.text( text ).addClass( 'show' );
+		clearTimeout( toastTimer );
+		toastTimer = setTimeout( function () { $t.removeClass( 'show' ); }, 1800 );
 	}
 } )( jQuery );

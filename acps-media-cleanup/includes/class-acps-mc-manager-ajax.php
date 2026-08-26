@@ -22,6 +22,7 @@ class ACPS_MC_Manager_Ajax {
 			'bulk_alt',
 			'delete',
 			'where_used',
+			'upload',
 			'upload_saved',
 			'convert_heic',
 			'rename_file',
@@ -593,6 +594,73 @@ class ACPS_MC_Manager_Ajax {
 
 		$this->bump_version();
 		wp_send_json_success( array( 'deleted' => $deleted, 'items' => $items ) );
+	}
+
+	/**
+	 * Receive one uploaded file (the manager uploads with its own fetch/XHR so it
+	 * can convert HEIC in the browser first, file the upload into the folder the
+	 * user is currently viewing, and report real progress / timings). Creates the
+	 * attachment, files it, hashes it for duplicate detection, and returns the
+	 * same data the post-upload popup uses.
+	 *
+	 * `folder_id` is the target folder: > 0 files it there, <= 0 leaves it in
+	 * Uncategorized (top level). The browser passes the folder currently being
+	 * viewed so uploads land where you're looking unless you move them.
+	 */
+	public function upload() {
+		$this->guard();
+
+		if ( empty( $_FILES['file'] ) || ! isset( $_FILES['file']['tmp_name'] ) ) {
+			wp_send_json_error( array( 'message' => __( 'No file was received.', 'acps-media-cleanup' ) ) );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$folder_id = isset( $_POST['folder_id'] ) ? (int) $_POST['folder_id'] : 0;
+
+		// Let WordPress core do the secure sideload + attachment creation +
+		// metadata/thumbnail generation. test_form is off because this is our own
+		// nonce-guarded AJAX request, not a <form> post.
+		$id = media_handle_upload( 'file', 0, array(), array( 'test_form' => false ) );
+		if ( is_wp_error( $id ) ) {
+			wp_send_json_error( array( 'message' => $id->get_error_message() ) );
+		}
+
+		$folders = $this->folders_obj();
+		if ( $folders->is_writable() && current_user_can( 'edit_post', $id ) ) {
+			// > 0 → chosen/current folder; otherwise Uncategorized (top level), so
+			// it never disappears into a sub-folder FileBird might auto-file it to.
+			$folders->assign( $id, $folder_id > 0 ? $folder_id : 0 );
+			if ( $folder_id > 0 ) {
+				$folders->remember_recent( $folder_id );
+			}
+		}
+
+		$this->bump_version();
+
+		$hash      = ACPS_MC_Duplicates::hash_file( $id );
+		$dup_id    = $hash ? ACPS_MC_Duplicates::find_duplicate( $id, $hash ) : 0;
+		$duplicate = $dup_id ? array(
+			'id'       => $dup_id,
+			'filename' => wp_basename( (string) get_post_meta( $dup_id, '_wp_attached_file', true ) ),
+			'url'      => wp_get_attachment_url( $dup_id ),
+			'thumb'    => $this->best_thumb( $dup_id ),
+			'date'     => get_the_date( '', $dup_id ),
+		) : null;
+
+		wp_send_json_success(
+			array(
+				'id'        => $id,
+				'url'       => wp_get_attachment_url( $id ),
+				'filename'  => wp_basename( (string) get_post_meta( $id, '_wp_attached_file', true ) ),
+				'card'      => $this->card( $id ),
+				'common'    => $folders->common_folders( 8 ),
+				'folders'   => $this->folder_options( $folders ),
+				'duplicate' => $duplicate,
+			)
+		);
 	}
 
 	/**

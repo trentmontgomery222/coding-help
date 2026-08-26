@@ -498,6 +498,24 @@
 .acps-mm-upfill.acps-mm-indet { width: 40%; animation: acps-mm-indet 1.1s ease-in-out infinite; }
 @keyframes acps-mm-indet { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
 .acps-mm-heicrow .acps-mm-uppct { flex: 0 0 auto; white-space: nowrap; }
+.acps-mm-uprow.error .acps-mm-uppct,
+.acps-mm-uprow[title] { cursor: help; }
+
+/* Drag-over highlight for the whole manager. */
+.acps-mm-wrap.acps-mm-dragging { outline: 3px dashed #2271b1; outline-offset: -6px; background: rgba(34,113,177,.04); }
+
+/* Resume-assist notice. */
+.acps-mm-resume { margin: 0 0 12px; }
+.acps-mm-resume-list { margin: 4px 0 8px 18px; max-height: 160px; overflow: auto; list-style: disc; }
+
+/* Toast. */
+.acps-mm-toast {
+	position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
+	background: #1d2327; color: #fff; padding: 9px 16px; border-radius: 6px; font-size: 13px;
+	box-shadow: 0 6px 24px rgba(0,0,0,.25); z-index: 100060; opacity: 0; pointer-events: none;
+	transition: opacity .18s, transform .18s;
+}
+.acps-mm-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .acps-mm-uprow.done .acps-mm-upfill { background: #46b450; }
 .acps-mm-uprow.error .acps-mm-upfill { background: #d63638; }
 .acps-mm-uppct { flex: 0 0 24px; text-align: right; color: #787c82; }
