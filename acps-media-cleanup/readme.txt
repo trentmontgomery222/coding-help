@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,54 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.8.0 =
+* New: automatic duplicate-file detection. Every file is content-hashed (not
+  just compared by name), so an exact re-upload of an existing file is caught
+  even if it was renamed or WordPress auto-suffixed it (photo-1.jpg,
+  photo-2.jpg, etc.):
+  - Uploading a duplicate now shows a warning right in the upload popup, with
+    the existing file to compare against and one-click actions: view the
+    existing file, delete this copy, or keep both.
+  - A new "Find duplicates" button reviews the whole library (hashing any
+    older files that predate this feature as it goes) and groups matching
+    files together so you can pick which one to keep and trash the rest, with
+    the same server-side re-validation and trash-first safety as the rest of
+    the plugin.
+
+= 1.7.3 =
+* Faster uploads when "Convert HEIC/HEIF uploads to JPEG automatically" is on:
+  conversion used to run inline as part of each file's upload response — real
+  work (often 1-3+ seconds per photo) that, since uploads process one file at
+  a time, compounded across a batch of iPhone photos. It's now handed to
+  WP-Cron instead, so each upload finishes immediately and the photo converts
+  moments later in the background (the same mechanism this plugin already
+  uses for its nightly scan). The manual "Convert to JPEG" button still
+  converts immediately if you don't want to wait.
+
+= 1.7.2 =
+* Fixed unreliable upload progress/cancel in the Media Manager: canceling one
+  file during a bulk upload could sometimes mark a *different*, still-uploading
+  file as failed (or done). Each row is now tied to the exact file it belongs
+  to via the uploader's own per-file events, not "whichever row happens to be
+  first," so progress, cancel and errors always land on the right row.
+* Bulk uploads now ask, once every file has finished, whether to edit each one
+  individually (rename / place in a folder, one at a time — the existing flow)
+  or just leave them uploaded (Uncategorized, edit later). Uploading a single
+  file still always opens the edit step, same as before.
+* The post-upload edit popup (rename / copy URL / place in folder) now opens
+  instantly using the data the upload itself already returned, instead of
+  waiting on an extra server round trip first. The recent-folder chips and the
+  "add to grid" step fill in a moment later in the background without holding
+  up the popup or blocking you from moving to the next file.
+
+= 1.7.1 =
+* Fixed HEIC/HEIF uploads: WordPress core was rejecting .heic/.heif files
+  outright ("this file type is not permitted") before the plugin's converter
+  ever ran, because the plugin never told WordPress those extensions were
+  allowed. The upload allow-list and the file-type check are now both
+  patched so HEIC photos (e.g. straight from an iPhone) actually reach the
+  server and get converted to JPEG as intended.
 
 = 1.7.0 =
 * Folder browsing now works like a file explorer. Opening a folder shows only the

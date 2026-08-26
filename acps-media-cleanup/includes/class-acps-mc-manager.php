@@ -131,6 +131,20 @@ class ACPS_MC_Manager {
 					'uploaded'      => __( 'Uploaded', 'acps-media-cleanup' ),
 					'placeInFolder' => __( 'Place in folder', 'acps-media-cleanup' ),
 					'done'          => __( 'Done', 'acps-media-cleanup' ),
+					'batchChoice'      => __( '%d files uploaded', 'acps-media-cleanup' ),
+					'editIndividually' => __( 'Edit each individually', 'acps-media-cleanup' ),
+					'justUpload'       => __( 'Just upload (leave them Uncategorized)', 'acps-media-cleanup' ),
+					'findDuplicates'  => __( 'Find duplicates', 'acps-media-cleanup' ),
+					'scanningDupes'   => __( 'Scanning for duplicates…', 'acps-media-cleanup' ),
+					'noDupes'         => __( 'No duplicate files found.', 'acps-media-cleanup' ),
+					'dupeTitle'       => __( 'Duplicate files', 'acps-media-cleanup' ),
+					'dupeUploadWarn'  => __( 'This file looks identical to an existing one:', 'acps-media-cleanup' ),
+					'keepThis'        => __( 'Keep this one', 'acps-media-cleanup' ),
+					'trashExtras'     => __( 'Trash the rest', 'acps-media-cleanup' ),
+					'keepBoth'        => __( 'Keep both', 'acps-media-cleanup' ),
+					'deleteThisCopy'  => __( 'Delete this copy', 'acps-media-cleanup' ),
+					'viewExisting'    => __( 'View existing file', 'acps-media-cleanup' ),
+					'moreToScan'      => __( 'Large library — click "Find duplicates" again to keep scanning.', 'acps-media-cleanup' ),
 					'bulkAlt'       => __( 'Set alt text on selected', 'acps-media-cleanup' ),
 					'altPrompt'     => __( 'Alt text to apply to all selected files:', 'acps-media-cleanup' ),
 					'error'         => __( 'Something went wrong. Please try again.', 'acps-media-cleanup' ),
@@ -288,6 +302,7 @@ class ACPS_MC_Manager {
 				<span class="acps-mm-scaninfo" id="acps-mm-scaninfo"></span>
 				<span class="acps-mm-toolbar-spacer"></span>
 				<div class="acps-mm-scanprog" id="acps-mm-scanprog" style="display:none;"><div class="acps-mm-scanprog-fill"></div></div>
+				<button type="button" class="button" id="acps-mm-finddupes"><?php esc_html_e( 'Find duplicates', 'acps-media-cleanup' ); ?></button>
 				<button type="button" class="button" id="acps-mm-scannow"><?php esc_html_e( 'Scan usage now', 'acps-media-cleanup' ); ?></button>
 			</div>
 

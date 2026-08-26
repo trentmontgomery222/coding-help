@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Unused Media Cleanup
  * Plugin URI:        https://acpsmd.org/
  * Description:        Safely find and remove media library files (images, PDFs, documents, videos) that are not used anywhere on the site. Works with FileBird folders and Beaver Builder. Single-site only. Trash first, restore anytime.
- * Version:           1.7.0
+ * Version:           1.8.0
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            ACPS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'ACPS_MC_VERSION', '1.7.0' );
+define( 'ACPS_MC_VERSION', '1.8.0' );
 define( 'ACPS_MC_FILE', __FILE__ );
 define( 'ACPS_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -46,6 +46,7 @@ require_once ACPS_MC_DIR . 'includes/class-acps-mc-ajax.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-manager.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-manager-ajax.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-heic.php';
+require_once ACPS_MC_DIR . 'includes/class-acps-mc-duplicates.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-cron.php';
 
 /**
@@ -83,6 +84,7 @@ function acps_mc_boot() {
 	// Runs in every context (cron ticks and REST/AJAX uploads have no is_admin()).
 	new ACPS_MC_Cron();
 	new ACPS_MC_Heic();
+	new ACPS_MC_Duplicates();
 
 	if ( is_admin() ) {
 		$admin = new ACPS_MC_Admin();

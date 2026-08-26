@@ -36,6 +36,11 @@ Built for the ACPS website (WordPress + **FileBird** media folders +
    - Built-in **HEIC → JPEG** conversion (auto on upload + a manual button),
      when the server's Imagick supports HEIC.
    - A **nightly automatic scan** (~2am) keeps the used/unused colours current.
+   - **Duplicate detection**: every upload is content-hashed, so an exact
+     re-upload of an existing file is flagged right in the upload popup (view
+     the existing file / delete this copy / keep both). A **Find duplicates**
+     button reviews the whole library for already-existing duplicates —
+     grouped by matching files, pick which one to keep and trash the rest.
 
    It also adds Copy-URL, folder and "where used" controls **into** the normal
    media modal without replacing it, so Beaver Builder and FileBird keep working.
@@ -143,6 +148,7 @@ acps-media-cleanup/
 │   ├── class-acps-mc-folders.php   FileBird (table/taxonomy) + date-folder fallback
 │   ├── class-acps-mc-scanner.php   Batched usage index + classification (the core)
 │   ├── class-acps-mc-deleter.php   Server-side re-validated trash/delete/restore
+│   ├── class-acps-mc-duplicates.php Content-hash duplicate detection
 │   ├── class-acps-mc-admin.php     Menu, tabs, settings screen
 │   └── class-acps-mc-ajax.php      Nonce-guarded AJAX endpoints
 └── assets/

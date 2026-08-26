@@ -28,6 +28,8 @@ class ACPS_MC_Manager_Ajax {
 			'rename_folder',
 			'delete_folder',
 			'pages',
+			'duplicates',
+			'dedupe',
 		);
 		foreach ( $actions as $a ) {
 			add_action( 'wp_ajax_acps_mm_' . $a, array( $this, $a ) );
@@ -605,16 +607,107 @@ class ACPS_MC_Manager_Ajax {
 			$folders->remember_recent( $folder_id );
 		}
 		$this->bump_version();
+
+		// This is also the first point after upload where we reliably have the
+		// file on disk, so it doubles as the spot to hash it and check whether
+		// it's a byte-for-byte duplicate of something already in the library.
+		$hash      = ACPS_MC_Duplicates::hash_file( $id );
+		$duplicate = null;
+		$dup_id    = $hash ? ACPS_MC_Duplicates::find_duplicate( $id, $hash ) : 0;
+		if ( $dup_id ) {
+			$duplicate = array(
+				'id'       => $dup_id,
+				'filename' => wp_basename( (string) get_post_meta( $dup_id, '_wp_attached_file', true ) ),
+				'url'      => wp_get_attachment_url( $dup_id ),
+				'thumb'    => $this->best_thumb( $dup_id ),
+				'date'     => get_the_date( '', $dup_id ),
+			);
+		}
+
 		wp_send_json_success(
 			array(
-				'id'       => $id,
-				'url'      => wp_get_attachment_url( $id ),
-				'filename' => wp_basename( (string) get_post_meta( $id, '_wp_attached_file', true ) ),
-				'card'     => $this->card( $id ),
-				'common'   => $folders->common_folders( 8 ),
-				'folders'  => $this->folder_options( $folders ),
+				'id'        => $id,
+				'url'       => wp_get_attachment_url( $id ),
+				'filename'  => wp_basename( (string) get_post_meta( $id, '_wp_attached_file', true ) ),
+				'card'      => $this->card( $id ),
+				'common'    => $folders->common_folders( 8 ),
+				'folders'   => $this->folder_options( $folders ),
+				'duplicate' => $duplicate,
 			)
 		);
+	}
+
+	/**
+	 * List groups of files that are byte-for-byte identical. Runs one batch of
+	 * hashing first for any pre-existing files this feature hasn't seen yet
+	 * (see ACPS_MC_Duplicates::backfill_batch()) — 'more' tells the browser
+	 * whether to call this again to keep backfilling a large library.
+	 */
+	public function duplicates() {
+		$this->guard();
+		$backfill = ACPS_MC_Duplicates::backfill_batch( 300 );
+		$groups   = ACPS_MC_Duplicates::groups();
+
+		$out = array();
+		foreach ( $groups as $g ) {
+			$files = array();
+			foreach ( $g['ids'] as $id ) {
+				$path  = (string) get_attached_file( $id );
+				$bytes = ( $path && file_exists( $path ) ) ? filesize( $path ) : false;
+				$files[] = array(
+					'id'       => $id,
+					'filename' => wp_basename( (string) get_post_meta( $id, '_wp_attached_file', true ) ),
+					'url'      => wp_get_attachment_url( $id ),
+					'thumb'    => $this->best_thumb( $id ),
+					'date'     => get_the_date( '', $id ),
+					'sizeH'    => $bytes ? size_format( $bytes, 1 ) : '',
+				);
+			}
+			$out[] = array( 'hash' => $g['hash'], 'files' => $files );
+		}
+
+		wp_send_json_success(
+			array(
+				'groups' => $out,
+				'more'   => $backfill['more'],
+			)
+		);
+	}
+
+	/**
+	 * Trash every file in a duplicate group except the one to keep. Re-checks
+	 * on the server that every id given really does share the claimed hash —
+	 * the same "never trust the browser for a delete" rule the rest of the
+	 * plugin follows — so a tampered request can't trash unrelated files.
+	 */
+	public function dedupe() {
+		$this->guard();
+		$hash  = isset( $_POST['hash'] ) ? (string) $_POST['hash'] : '';
+		$keep  = isset( $_POST['keep'] ) ? (int) $_POST['keep'] : 0;
+		$trash = isset( $_POST['trash'] ) ? array_map( 'intval', (array) $_POST['trash'] ) : array();
+
+		$claimed = array_merge( array( $keep ), $trash );
+		$valid   = ACPS_MC_Duplicates::verify_group( $hash, $claimed );
+
+		if ( ! $keep || ! in_array( $keep, $valid, true ) ) {
+			wp_send_json_error( array( 'message' => __( 'Could not verify this duplicate group.', 'acps-media-cleanup' ) ) );
+		}
+
+		$trashed = array();
+		foreach ( $trash as $id ) {
+			if ( $id === $keep ) {
+				continue;
+			}
+			if ( ! in_array( $id, $valid, true ) ) {
+				continue; // didn't actually share the hash — skip, don't trash it
+			}
+			if ( current_user_can( 'delete_post', $id ) && wp_trash_post( $id ) ) {
+				$trashed[] = $id;
+			}
+		}
+
+		$this->bump_version();
+		wp_send_json_success( array( 'trashed' => $trashed ) );
 	}
 
 	/**

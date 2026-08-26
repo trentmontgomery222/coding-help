@@ -23,6 +23,56 @@ class ACPS_MC_Heic {
 	 */
 	public function __construct() {
 		add_filter( 'wp_generate_attachment_metadata', array( __CLASS__, 'on_generate_metadata' ), 8, 2 );
+
+		// Without these two filters, WordPress core rejects .heic/.heif files
+		// during upload ("Sorry, this file type is not permitted for security
+		// reasons") before the conversion code above ever gets a chance to run.
+		add_filter( 'upload_mimes', array( __CLASS__, 'allow_heic_mime' ) );
+		add_filter( 'wp_check_filetype_and_ext', array( __CLASS__, 'fix_heic_filetype' ), 10, 4 );
+
+		// The actual conversion is scheduled (see on_generate_metadata()) rather
+		// than run inline, so it doesn't hold up the upload response — this is
+		// the callback WP-Cron fires a moment later to do the real work.
+		add_action( 'acps_mc_heic_convert', array( __CLASS__, 'convert' ) );
+	}
+
+	/**
+	 * Allow .heic / .heif extensions through the upload allow-list.
+	 *
+	 * Registered unconditionally (not gated on `supported()`), so that even on
+	 * a server without HEIC-capable Imagick the file can still land in the
+	 * media library — it just won't preview in-browser and conversion will be
+	 * skipped, same graceful-degradation behaviour as the rest of this class.
+	 *
+	 * @param array $mimes Ext => mime map.
+	 * @return array
+	 */
+	public static function allow_heic_mime( $mimes ) {
+		$mimes['heic'] = 'image/heic';
+		$mimes['heif'] = 'image/heif';
+		return $mimes;
+	}
+
+	/**
+	 * WordPress double-checks the upload against the real file content
+	 * (finfo/getimagesize) in wp_check_filetype_and_ext(), and that sniffing
+	 * commonly fails to recognise HEIC containers even once the extension is
+	 * allow-listed above, which would otherwise still block the upload with
+	 * an "ext_type_mismatch" error. Trust the extension for .heic/.heif.
+	 *
+	 * @param array  $data     ext/type/proper_filename.
+	 * @param string $file     Full path to the uploaded file.
+	 * @param string $filename The original filename.
+	 * @param array  $mimes    Allowed mimes.
+	 * @return array
+	 */
+	public static function fix_heic_filetype( $data, $file, $filename, $mimes ) {
+		$ext = strtolower( pathinfo( $filename, PATHINFO_EXTENSION ) );
+		if ( in_array( $ext, array( 'heic', 'heif' ), true ) ) {
+			$data['ext']  = $ext;
+			$data['type'] = ( 'heic' === $ext ) ? 'image/heic' : 'image/heif';
+		}
+		return $data;
 	}
 
 	/**
@@ -61,6 +111,16 @@ class ACPS_MC_Heic {
 	/**
 	 * Auto-convert freshly uploaded HEIC files.
 	 *
+	 * Doesn't convert inline: the Imagick decode/encode plus a full second pass
+	 * of thumbnail generation is real work (often 1-3+ seconds per photo), and
+	 * running it here would hold up *this file's* upload response — which,
+	 * since the uploader processes one file at a time, directly slows down
+	 * every file queued after it too. Scheduling it instead lets the upload
+	 * finish immediately; WP-Cron runs the conversion moments later (the same
+	 * mechanism this plugin already uses for its nightly scan). The manual
+	 * "Convert to JPEG" button on the file still works immediately if you
+	 * don't want to wait for that.
+	 *
 	 * @param array $metadata Generated metadata.
 	 * @param int   $id       Attachment ID.
 	 * @return array
@@ -72,12 +132,8 @@ class ACPS_MC_Heic {
 		if ( ! self::supported() || ! self::is_heic( $id ) ) {
 			return $metadata;
 		}
-		$res = self::convert( $id );
-		if ( ! is_wp_error( $res ) ) {
-			$new = wp_get_attachment_metadata( $id );
-			if ( is_array( $new ) ) {
-				return $new;
-			}
+		if ( ! wp_next_scheduled( 'acps_mc_heic_convert', array( $id ) ) ) {
+			wp_schedule_single_event( time(), 'acps_mc_heic_convert', array( $id ) );
 		}
 		return $metadata;
 	}
@@ -151,6 +207,14 @@ class ACPS_MC_Heic {
 		}
 
 		clean_post_cache( $id );
+
+		// Bump the Media Manager's grid cache so the file's new thumbnail/mime
+		// shows up next time the grid loads — needed here (not just on the
+		// manual "Convert to JPEG" button) now that conversion also happens in
+		// the background via WP-Cron, with nothing else to invalidate it.
+		update_option( 'acps_mm_version', (int) get_option( 'acps_mm_version', 1 ) + 1, false );
+		delete_transient( 'acps_mm_stemmap' );
+
 		return true;
 	}
 }

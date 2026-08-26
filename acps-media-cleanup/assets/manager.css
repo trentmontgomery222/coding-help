@@ -375,8 +375,30 @@
 .acps-mm-modal-box h3 { margin-top: 0; }
 .acps-mm-modal-box select { width: 100%; }
 .acps-mm-modal-actions { margin-top: 16px; text-align: right; }
+.acps-mm-batch-actions { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.acps-mm-batch-actions .button { width: 100%; text-align: center; }
 .acps-mm-chiprow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .acps-mm-place-msg { color: #256b33; font-size: 12px; }
+
+/* Duplicate-file warning inside the post-upload popup */
+.acps-mm-dupewarn { background: #fcf3e3; border: 1px solid #f0c869; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; font-size: 13px; }
+.acps-mm-dupewarn p:first-child { margin-top: 0; }
+.acps-mm-dupewarn-file { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.acps-mm-dupewarn-file img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; background: #fff; }
+.acps-mm-dupewarn-actions { margin-bottom: 0; }
+.acps-mm-dupewarn-actions .button { margin: 2px 4px 2px 0; }
+
+/* Find-duplicates review modal */
+.acps-mm-dupe-box { width: 640px; }
+.acps-mm-dupe-groups { max-height: 60vh; overflow: auto; margin: -4px; padding: 4px; }
+.acps-mm-dupe-group { border: 1px solid #dcdcde; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+.acps-mm-dupe-files { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+.acps-mm-dupe-file { display: flex; flex-direction: column; align-items: center; width: 110px; font-size: 11px; text-align: center; cursor: pointer; padding: 6px; border: 2px solid transparent; border-radius: 6px; }
+.acps-mm-dupe-file.is-checked, .acps-mm-dupe-file:has(input:checked) { border-color: #2271b1; background: #f0f6fc; }
+.acps-mm-dupe-file img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; margin: 4px 0; background: #f0f0f1; }
+.acps-mm-dupe-fname { word-break: break-all; }
+.acps-mm-dupe-fmeta { color: #787c82; }
+.acps-mm-dupe-status { margin-left: 8px; color: #787c82; font-size: 12px; }
 
 /* HEIC box */
 .acps-mm-heicbox {

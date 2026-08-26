@@ -433,19 +433,23 @@
 	}
 
 	/* ---------------- Upload (drag + progress) ---------------- */
+	// Ids of files currently uploading (added, not yet resolved), in the order
+	// they were added. This — not "whichever row happens to be first in the
+	// DOM" — is what a completion/cancel/error event gets matched against, so
+	// a cancel or an out-of-order finish can never mark the wrong row.
+	var inFlightIds = [];
+	// How many files were added since the upload queue was last empty. Used to
+	// decide, once the whole batch has finished, whether to force the edit
+	// popup (single file) or offer a choice (bulk).
+	var batchTotal = 0;
+
 	function showUploads() { $( '#acps-mm-uploads' ).show(); }
 	function uploadRow( file ) {
 		var $row = $( '<div class="acps-mm-uprow"><span class="acps-mm-upname">' + esc( file.name ) + '</span>' +
 			'<span class="acps-mm-upbar"><span class="acps-mm-upfill"></span></span>' +
 			'<span class="acps-mm-uppct">0%</span>' +
 			'<button type="button" class="acps-mm-upcancel" title="' + esc( i18n.cancel || 'Cancel' ) + '">&times;</button></div>' );
-		$row.on( 'click', '.acps-mm-upcancel', function () {
-			if ( uploader && uploader.uploader && file ) {
-				try { uploader.uploader.removeFile( file ); } catch ( e ) {}
-			}
-			$row.addClass( 'error' ).find( '.acps-mm-uppct' ).text( '✕' );
-			$row.find( '.acps-mm-upcancel' ).remove();
-		} );
+		$row.on( 'click', '.acps-mm-upcancel', function () { cancelUpload( file ); } );
 		$( '#acps-mm-uploads-list' ).prepend( $row );
 		uploadRows[ file.id ] = { $row: $row, file: file };
 		showUploads();
@@ -460,16 +464,44 @@
 		var $row = rowFor( file );
 		if ( $row ) { $row.find( '.acps-mm-upfill' ).css( 'width', pct + '%' ); $row.find( '.acps-mm-uppct' ).text( pct + '%' ); }
 	}
-	function markFirstRow( cls, mark ) {
-		$.each( uploadRows, function ( fid, r ) {
-			var $r = r.$row;
-			if ( ! $r.hasClass( 'done' ) && ! $r.hasClass( 'error' ) ) {
-				$r.addClass( cls ).find( '.acps-mm-upfill' ).css( 'width', '100%' );
-				$r.find( '.acps-mm-uppct' ).text( mark );
-				$r.find( '.acps-mm-upcancel' ).remove();
-				return false;
-			}
-		} );
+	// Cancel one specific in-progress upload. Aborts it in Plupload *and*
+	// resolves its row immediately and synchronously, so the click always
+	// reflects on the file the user actually clicked — never a different
+	// still-uploading file in the same batch.
+	function cancelUpload( file ) {
+		if ( uploader && uploader.uploader && file ) {
+			try { uploader.uploader.removeFile( file ); } catch ( e ) {}
+		}
+		resolveFile( file.id, 'error', '✕' );
+	}
+	// Mark exactly the row for `fid` as done/errored, and drop it from the
+	// in-flight list. Safe to call more than once for the same file (e.g. a
+	// manual cancel followed by Plupload's own Error event for that same
+	// removal) — after the first call the row is already in a terminal state
+	// and further calls are no-ops.
+	function resolveFile( fid, cls, mark ) {
+		if ( ! fid ) { return; }
+		var idx = $.inArray( fid, inFlightIds );
+		if ( idx !== -1 ) { inFlightIds.splice( idx, 1 ); }
+		var r = uploadRows[ fid ];
+		if ( r && ! r.$row.hasClass( 'done' ) && ! r.$row.hasClass( 'error' ) ) {
+			r.$row.addClass( cls ).find( '.acps-mm-upfill' ).css( 'width', '100%' );
+			r.$row.find( '.acps-mm-uppct' ).text( mark );
+			r.$row.find( '.acps-mm-upcancel' ).remove();
+		}
+		maybeFinishBatch();
+	}
+	// Once every file in the current batch has resolved (succeeded, errored or
+	// was canceled), decide what happens next: a single upload still forces
+	// the edit popup; a bulk upload gets a choice between editing each file
+	// and just leaving them uploaded.
+	function maybeFinishBatch() {
+		if ( inFlightIds.length || ! batchTotal ) { return; }
+		var total = batchTotal;
+		batchTotal = 0; // decided — a fresh drag/drop starts a new batch count
+		if ( ! uploadQueue.length ) { loadFolders(); return; } // everything failed/was canceled
+		if ( total <= 1 ) { showUploadPopup(); return; }
+		showBatchChoice( total );
 	}
 
 	function initUploader() {
@@ -478,76 +510,159 @@
 			uploader = new wp.Uploader( {
 				browser: $( '#acps-mm-upload' ),
 				dropzone: $( '.acps-mm-wrap' ),
-				added: function ( file ) { uploadRow( file ); },
-				progress: function ( file ) { setUploadPct( file, file.percent || 0 ); },
-				success: function ( attachment ) {
-					var id = attachment.get ? attachment.get( 'id' ) : attachment.id;
-					markFirstRow( 'done', '✓' );
-					if ( id ) { uploadQueue.push( id ); if ( uploadQueue.length === 1 ) { showUploadPopup(); } }
+				added: function ( file ) {
+					inFlightIds.push( file.id );
+					batchTotal++;
+					uploadRow( file );
 				},
-				error: function () { markFirstRow( 'error', '✕' ); }
+				progress: function ( file ) { setUploadPct( file, file.percent || 0 ); },
+				// This higher-level callback is only used to capture the real,
+				// fully-processed attachment (id/url/filename) for the edit
+				// queue — row bookkeeping is handled separately below, by
+				// binding directly to Plupload's own events, since those are
+				// guaranteed to carry the exact `file` that just resolved.
+				success: function ( attachment ) {
+					var d = attachment && attachment.toJSON ? attachment.toJSON() : attachment;
+					if ( d && d.id ) { uploadQueue.push( { id: d.id, url: d.url, filename: d.filename || '' } ); }
+				}
 			} );
+			if ( uploader.uploader && uploader.uploader.bind ) {
+				uploader.uploader.bind( 'FileUploaded', function ( up, file ) { resolveFile( file.id, 'done', '✓' ); } );
+				uploader.uploader.bind( 'Error', function ( up, err ) {
+					var fid = ( err && err.file ) ? err.file.id : ( inFlightIds.length ? inFlightIds[ 0 ] : null );
+					resolveFile( fid, 'error', '✕' );
+				} );
+			}
 		} catch ( e ) { /* uploader unavailable */ }
+	}
+
+	// Bulk-upload fork: edit every file one at a time (existing flow), or skip
+	// straight to done and just leave the files uploaded (Unfiled).
+	function showBatchChoice( total ) {
+		var h = '<div class="acps-mm-modal"><div class="acps-mm-modal-box">';
+		h += '<h3>' + esc( ( i18n.batchChoice || '%d files uploaded' ).replace( '%d', total ) ) + '</h3>';
+		h += '<p class="acps-mm-modal-actions acps-mm-batch-actions">';
+		h += '<button type="button" class="button button-primary acps-mm-batch-edit">' + esc( i18n.editIndividually || 'Edit each individually' ) + '</button>';
+		h += '<button type="button" class="button acps-mm-batch-just">' + esc( i18n.justUpload || 'Just upload' ) + '</button>';
+		h += '</p></div></div>';
+		var $m = $( h ).appendTo( 'body' );
+		$m.on( 'click', '.acps-mm-batch-edit', function () { $m.remove(); showUploadPopup(); } );
+		$m.on( 'click', '.acps-mm-batch-just', function () { $m.remove(); uploadQueue = []; loadGrid(); loadFolders(); } );
 	}
 
 	function showUploadPopup() {
 		if ( ! uploadQueue.length ) { loadFolders(); return; }
-		var id = uploadQueue[ 0 ];
-		post( 'upload_saved', { id: id, folder_id: 0 } ).done( function ( res ) {
-			if ( ! res || ! res.success ) { uploadQueue.shift(); showUploadPopup(); return; }
-			var d = res.data;
-			var card = d.card || null;
-			var generic = isGeneric( d.filename || '' );
-			var h = '<div class="acps-mm-modal"><div class="acps-mm-modal-box"><h3>' + esc( i18n.uploaded ) + '</h3>';
+		var item = uploadQueue[ 0 ];
+		var id = item.id;
+		var card = null; // "add this to the grid" data — filled in by the background fetch below
+		var generic = isGeneric( item.filename || '' );
 
-			// Filename (with generic-name guard).
-			h += '<div class="acps-mm-field"><label>' + esc( 'File name' ) + '</label><div class="acps-mm-urlrow">';
-			h += '<input type="text" class="acps-mm-upfname" value="' + esc( baseNameNoExt( d.filename ) ) + '">';
-			h += '<button type="button" class="button acps-mm-uprename" data-id="' + id + '">' + esc( i18n.rename || 'Rename' ) + '</button></div>';
-			h += '<p class="acps-mm-genwarn" style="' + ( generic ? '' : 'display:none' ) + '">' + esc( i18n.genericName ) + '</p></div>';
+		// Render right away from data the upload already gave us — the popup
+		// shouldn't make the user wait on another server round trip just to
+		// appear. Anything we don't have yet (recent-folder chips, the grid
+		// card) is filled in as it arrives, in the background.
+		var h = '<div class="acps-mm-modal"><div class="acps-mm-modal-box"><h3>' + esc( i18n.uploaded ) + '</h3>';
+		h += '<div class="acps-mm-dupewarn" style="display:none"></div>';
 
-			h += '<div class="acps-mm-field"><label>' + esc( 'File URL' ) + '</label><div class="acps-mm-urlrow"><input type="text" readonly class="acps-mm-url" value="' + esc( d.url ) + '"><button type="button" class="button acps-mm-copy" data-url="' + esc( d.url ) + '">' + esc( i18n.copyUrl ) + '</button></div></div>';
-			if ( writable ) {
-				h += '<div class="acps-mm-field"><label>' + esc( i18n.placeInFolder ) + '</label>';
-				if ( ( d.common || [] ).length ) {
-					h += '<div class="acps-mm-chiprow">';
-					d.common.forEach( function ( c ) { h += '<button type="button" class="button acps-mm-place-chip" data-id="' + id + '" data-fid="' + c.id + '">' + esc( c.name ) + '</button>'; } );
-					h += '</div>';
-				}
-				h += folderSelectHtml() + ' <button type="button" class="button acps-mm-place-sel" data-id="' + id + '">' + esc( i18n.move ) + '</button><span class="acps-mm-place-msg"></span>';
-			}
-			h += '<p class="acps-mm-modal-actions">';
-			h += '<button type="button" class="button acps-mm-upcancel-btn">' + esc( i18n.cancel || 'Cancel' ) + '</button> ';
-			h += '<button type="button" class="button button-primary acps-mm-upnext' + ( generic ? ' needs-rename' : '' ) + '"' + ( generic ? ' disabled' : '' ) + '>' + esc( i18n.done || 'Done' ) + '</button>';
-			h += '</p></div></div>';
-			var $m = $( h ).appendTo( 'body' );
+		h += '<div class="acps-mm-field"><label>' + esc( 'File name' ) + '</label><div class="acps-mm-urlrow">';
+		h += '<input type="text" class="acps-mm-upfname" value="' + esc( baseNameNoExt( item.filename ) ) + '">';
+		h += '<button type="button" class="button acps-mm-uprename" data-id="' + id + '">' + esc( i18n.rename || 'Rename' ) + '</button></div>';
+		h += '<p class="acps-mm-genwarn" style="' + ( generic ? '' : 'display:none' ) + '">' + esc( i18n.genericName ) + '</p></div>';
 
-			var placedFid = 0;
-			$m.on( 'click', '.acps-mm-place-chip', function () { placedFid = parseInt( $( this ).data( 'fid' ), 10 ) || 0; placeUpload( id, placedFid, $m ); } );
-			$m.on( 'click', '.acps-mm-place-sel', function () { placedFid = parseInt( $m.find( '.acps-mm-picker-select' ).val(), 10 ) || 0; placeUpload( id, placedFid, $m ); } );
-			$m.on( 'click', '.acps-mm-uprename', function () {
-				var nb = $.trim( $m.find( '.acps-mm-upfname' ).val() );
-				if ( ! nb || isGeneric( nb ) ) { window.alert( i18n.genericName ); return; }
-				post( 'rename_file', { id: id, name: nb, confirm: 1 } ).done( function ( r ) {
-					if ( r && r.success ) {
-						$m.find( '.acps-mm-url' ).val( r.data.url );
-						$m.find( '.acps-mm-copy' ).data( 'url', r.data.url );
-						$m.find( '.acps-mm-genwarn' ).hide();
-						$m.find( '.acps-mm-upnext' ).prop( 'disabled', false ).removeClass( 'needs-rename' );
-						if ( card ) { card.filename = r.data.filename || card.filename; card.url = r.data.url || card.url; card.thumb = r.data.thumb || card.thumb; }
-					} else { window.alert( ( r && r.data && r.data.message ) || i18n.error ); }
-				} );
+		h += '<div class="acps-mm-field"><label>' + esc( 'File URL' ) + '</label><div class="acps-mm-urlrow"><input type="text" readonly class="acps-mm-url" value="' + esc( item.url ) + '"><button type="button" class="button acps-mm-copy" data-url="' + esc( item.url ) + '">' + esc( i18n.copyUrl ) + '</button></div></div>';
+		if ( writable ) {
+			h += '<div class="acps-mm-field"><label>' + esc( i18n.placeInFolder ) + '</label>';
+			h += '<div class="acps-mm-chiprow"></div>'; // recent-folder chips, filled in once fetched
+			// The folder dropdown itself needs no round trip — it's built from
+			// the folder tree the sidebar already loaded.
+			h += folderSelectHtml() + ' <button type="button" class="button acps-mm-place-sel" data-id="' + id + '">' + esc( i18n.move ) + '</button><span class="acps-mm-place-msg"></span>';
+		}
+		h += '<p class="acps-mm-modal-actions">';
+		h += '<button type="button" class="button acps-mm-upcancel-btn">' + esc( i18n.cancel || 'Cancel' ) + '</button> ';
+		h += '<button type="button" class="button button-primary acps-mm-upnext' + ( generic ? ' needs-rename' : '' ) + '"' + ( generic ? ' disabled' : '' ) + '>' + esc( i18n.done || 'Done' ) + '</button>';
+		h += '</p></div></div>';
+		var $m = $( h ).appendTo( 'body' );
+
+		var placedFid = 0;
+		$m.on( 'click', '.acps-mm-place-chip', function () { placedFid = parseInt( $( this ).data( 'fid' ), 10 ) || 0; placeUpload( id, placedFid, $m ); } );
+		$m.on( 'click', '.acps-mm-place-sel', function () { placedFid = parseInt( $m.find( '.acps-mm-picker-select' ).val(), 10 ) || 0; placeUpload( id, placedFid, $m ); } );
+		$m.on( 'click', '.acps-mm-uprename', function () {
+			var nb = $.trim( $m.find( '.acps-mm-upfname' ).val() );
+			if ( ! nb || isGeneric( nb ) ) { window.alert( i18n.genericName ); return; }
+			post( 'rename_file', { id: id, name: nb, confirm: 1 } ).done( function ( r ) {
+				if ( r && r.success ) {
+					$m.find( '.acps-mm-url' ).val( r.data.url );
+					$m.find( '.acps-mm-copy' ).data( 'url', r.data.url );
+					$m.find( '.acps-mm-genwarn' ).hide();
+					$m.find( '.acps-mm-upnext' ).prop( 'disabled', false ).removeClass( 'needs-rename' );
+					if ( card ) { card.filename = r.data.filename || card.filename; card.url = r.data.url || card.url; card.thumb = r.data.thumb || card.thumb; }
+				} else { window.alert( ( r && r.data && r.data.message ) || i18n.error ); }
 			} );
-			function finishPopup( addIt ) {
-				$m.remove();
-				if ( addIt && card && belongsInView( placedFid ) ) { prependCard( card ); }
-				uploadQueue.shift();
-				loadFolders(); // sidebar counts only — no grid reload
-				showUploadPopup();
-			}
-			$m.on( 'click', '.acps-mm-upnext', function () { finishPopup( true ); } );
-			$m.on( 'click', '.acps-mm-upcancel-btn', function () { finishPopup( false ); } );
 		} );
+		// A copy the user chooses to delete right from this popup, rather than
+		// keeping — closes the popup and moves straight to the next file.
+		var deletedSelf = false;
+		$m.on( 'click', '.acps-mm-dupe-keepboth', function () { $m.find( '.acps-mm-dupewarn' ).slideUp( 150 ); } );
+		$m.on( 'click', '.acps-mm-dupe-delete-copy', function () {
+			post( 'delete', { ids: [ id ], confirm: 1 } ).done( function () {
+				deletedSelf = true;
+				finishPopup( false );
+			} );
+		} );
+
+		// Background fetch: recent-folder chips + the card used to prepend this
+		// file into the currently-open grid view — plus a duplicate check, since
+		// this is the first point after upload where the file is on disk to hash.
+		// Doesn't block the popup above.
+		var saved = post( 'upload_saved', { id: id, folder_id: 0 } ).done( function ( res ) {
+			if ( ! res || ! res.success ) { return; }
+			var incoming = res.data.card || null;
+			if ( incoming && card && card.filename ) {
+				// A rename may have already happened while this was in flight —
+				// don't let a stale filename/url clobber it.
+				incoming.filename = card.filename;
+				incoming.url = card.url || incoming.url;
+			}
+			card = incoming;
+			var common = res.data.common || [];
+			var $chips = $m.find( '.acps-mm-chiprow' );
+			if ( common.length ) {
+				var chipHtml = '';
+				common.forEach( function ( c ) { chipHtml += '<button type="button" class="button acps-mm-place-chip" data-id="' + id + '" data-fid="' + c.id + '">' + esc( c.name ) + '</button>'; } );
+				$chips.html( chipHtml );
+			} else {
+				$chips.remove();
+			}
+			if ( res.data.duplicate && ! deletedSelf ) {
+				var d = res.data.duplicate;
+				var w = '<p>' + esc( i18n.dupeUploadWarn || 'This file looks identical to an existing one:' ) + '</p>';
+				w += '<div class="acps-mm-dupewarn-file"><img src="' + esc( d.thumb ) + '" alt=""><div><strong>' + esc( d.filename ) + '</strong><br><span class="acps-mm-muted">' + esc( d.date ) + '</span></div></div>';
+				w += '<p class="acps-mm-dupewarn-actions">';
+				w += '<a href="' + esc( d.url ) + '" target="_blank" rel="noopener" class="button">' + esc( i18n.viewExisting || 'View existing file' ) + '</a> ';
+				w += '<button type="button" class="button acps-mm-dupe-delete-copy">' + esc( i18n.deleteThisCopy || 'Delete this copy' ) + '</button> ';
+				w += '<button type="button" class="button acps-mm-dupe-keepboth">' + esc( i18n.keepBoth || 'Keep both' ) + '</button>';
+				w += '</p>';
+				$m.find( '.acps-mm-dupewarn' ).html( w ).slideDown( 150 );
+			}
+		} );
+
+		function finishPopup( addIt ) {
+			$m.remove();
+			if ( addIt && belongsInView( placedFid ) ) {
+				if ( card ) {
+					prependCard( card );
+				} else {
+					// Card isn't back from the background fetch yet — add it to
+					// the grid as soon as it is, without holding up the next file.
+					saved.done( function ( res ) { if ( res && res.success && res.data.card ) { prependCard( res.data.card ); } } );
+				}
+			}
+			uploadQueue.shift();
+			loadFolders(); // sidebar counts only — no grid reload
+			showUploadPopup();
+		}
+		$m.on( 'click', '.acps-mm-upnext', function () { finishPopup( true ); } );
+		$m.on( 'click', '.acps-mm-upcancel-btn', function () { finishPopup( false ); } );
 	}
 	// Would a newly-uploaded file (placed in folder `fid`) appear in the current view?
 	function belongsInView( fid ) {
@@ -595,6 +710,82 @@
 			$p.hide();
 			$( '#acps-mm-scaninfo' ).text( i18n.error );
 		}
+	}
+
+	/* ---------------- Find duplicates ---------------- */
+	function findDuplicates() {
+		var $btn = $( '#acps-mm-finddupes' ).prop( 'disabled', true );
+		var originalLabel = $btn.text();
+		$btn.text( i18n.scanningDupes || 'Scanning for duplicates…' );
+		post( 'duplicates' ).done( function ( res ) {
+			$btn.prop( 'disabled', false ).text( originalLabel );
+			if ( ! res || ! res.success ) { window.alert( i18n.error ); return; }
+			showDuplicatesModal( res.data.groups || [], !! res.data.more );
+		} ).fail( function () {
+			$btn.prop( 'disabled', false ).text( originalLabel );
+			window.alert( i18n.error );
+		} );
+	}
+
+	function showDuplicatesModal( groups, more ) {
+		var h = '<div class="acps-mm-modal"><div class="acps-mm-modal-box acps-mm-dupe-box">';
+		h += '<h3>' + esc( i18n.dupeTitle || 'Duplicate files' ) + '</h3>';
+		if ( ! groups.length ) {
+			h += '<p class="acps-mm-muted">' + esc( i18n.noDupes || 'No duplicate files found.' ) + '</p>';
+		} else {
+			h += '<div class="acps-mm-dupe-groups">';
+			groups.forEach( function ( g, gi ) {
+				h += '<div class="acps-mm-dupe-group" data-hash="' + esc( g.hash ) + '">';
+				h += '<div class="acps-mm-dupe-files">';
+				g.files.forEach( function ( f, fi ) {
+					h += '<label class="acps-mm-dupe-file' + ( 0 === fi ? ' is-checked' : '' ) + '">';
+					h += '<input type="radio" name="acps-mm-dupe-keep-' + gi + '" value="' + f.id + '"' + ( 0 === fi ? ' checked' : '' ) + '>';
+					h += '<img src="' + esc( f.thumb ) + '" alt="">';
+					h += '<span class="acps-mm-dupe-fname">' + esc( f.filename ) + '</span>';
+					h += '<span class="acps-mm-dupe-fmeta">' + esc( f.sizeH ) + ' · ' + esc( f.date ) + '</span>';
+					h += '</label>';
+				} );
+				h += '</div>';
+				h += '<button type="button" class="button acps-mm-dupe-trash">' + esc( i18n.trashExtras || 'Trash the rest' ) + '</button>';
+				h += '<span class="acps-mm-dupe-status"></span>';
+				h += '</div>';
+			} );
+			h += '</div>';
+			if ( more ) { h += '<p class="acps-mm-muted">' + esc( i18n.moreToScan || '' ) + '</p>'; }
+		}
+		h += '<p class="acps-mm-modal-actions"><button type="button" class="button acps-mm-dupe-close">' + esc( i18n.cancel || 'Close' ) + '</button></p>';
+		h += '</div></div>';
+		var $m = $( h ).appendTo( 'body' );
+
+		$m.on( 'click', '.acps-mm-dupe-close', function () { $m.remove(); } );
+		$m.on( 'change', '.acps-mm-dupe-file input[type="radio"]', function () {
+			$( this ).closest( '.acps-mm-dupe-files' ).find( '.acps-mm-dupe-file' ).removeClass( 'is-checked' );
+			$( this ).closest( '.acps-mm-dupe-file' ).addClass( 'is-checked' );
+		} );
+		$m.on( 'click', '.acps-mm-dupe-trash', function () {
+			var $btn = $( this ).prop( 'disabled', true );
+			var $group = $btn.closest( '.acps-mm-dupe-group' );
+			var hash = $group.data( 'hash' );
+			var keep = parseInt( $group.find( 'input:checked' ).val(), 10 ) || 0;
+			var trash = [];
+			$group.find( 'input[type="radio"]' ).each( function () {
+				var v = parseInt( $( this ).val(), 10 );
+				if ( v && v !== keep ) { trash.push( v ); }
+			} );
+			post( 'dedupe', { hash: hash, keep: keep, trash: trash } ).done( function ( res ) {
+				if ( res && res.success ) {
+					$group.fadeOut( 200, function () { $( this ).remove(); } );
+					loadGrid();
+					loadFolders();
+				} else {
+					$btn.prop( 'disabled', false );
+					window.alert( ( res && res.data && res.data.message ) || i18n.error );
+				}
+			} ).fail( function () {
+				$btn.prop( 'disabled', false );
+				window.alert( i18n.error );
+			} );
+		} );
 	}
 
 	/* ---------------- Pages + rename helpers ---------------- */
@@ -846,6 +1037,7 @@
 		} );
 
 		$( '#acps-mm-scannow' ).on( 'click', runScan );
+		$( '#acps-mm-finddupes' ).on( 'click', findDuplicates );
 		$( '#acps-mm-uploads-close' ).on( 'click', function () { $( '#acps-mm-uploads' ).hide(); } );
 
 		// Drag overlay.

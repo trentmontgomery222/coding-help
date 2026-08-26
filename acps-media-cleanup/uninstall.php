@@ -37,3 +37,9 @@ wp_clear_scheduled_hook( 'acps_mc_continue_scan' );
 
 // Remove per-user recent-folder memory.
 delete_metadata( 'user', 0, 'acps_mm_recent_folders', '', true );
+
+// Remove the file-content hashes used for duplicate detection. Only this
+// plugin's own bookkeeping meta key is touched — the attachments and files
+// themselves are never affected.
+delete_metadata( 'post', 0, '_acps_mc_filehash', '', true );
+delete_option( 'acps_mm_version' );
