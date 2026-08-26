@@ -158,6 +158,10 @@ class ACPS_MC_Deleter {
 				$res     = wp_delete_attachment( $id, true );
 				$success = ( false !== $res && null !== $res );
 			} else {
+				// Remember the folder so restore can put it back.
+				if ( $fid > 0 ) {
+					update_post_meta( $id, '_acps_mc_prev_folder', $fid );
+				}
 				$res     = wp_trash_post( $id );
 				$success = ( false !== $res && null !== $res );
 			}
@@ -221,6 +225,16 @@ class ACPS_MC_Deleter {
 			wp_update_post( array( 'ID' => $id, 'post_status' => 'inherit' ) );
 		}
 		if ( $res ) {
+			// Put the file back in the folder it was in before it was trashed
+			// (FileBird can drop the mapping on trash).
+			$prev = get_post_meta( $id, '_acps_mc_prev_folder', true );
+			if ( '' !== $prev && (int) $prev > 0 ) {
+				if ( $this->folders->is_writable() && ACPS_MC_Folders::UNCATEGORIZED === $this->folders->folder_for( $id ) ) {
+					$this->folders->assign( $id, (int) $prev );
+				}
+			}
+			delete_post_meta( $id, '_acps_mc_prev_folder' );
+
 			ACPS_MC_Logger::mark_unrestorable( $id );
 			ACPS_MC_Logger::record(
 				array(

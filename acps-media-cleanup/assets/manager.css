@@ -56,8 +56,45 @@
 	margin-bottom: 12px;
 	flex-wrap: wrap;
 }
-.acps-mm-search { min-width: 220px; }
+/* Consistent control height across the toolbar so nothing looks cramped. */
+.acps-mm-toolbar > input[type="search"],
+.acps-mm-toolbar > select {
+	height: 34px;
+	line-height: 32px;
+	font-size: 13px;
+}
+.acps-mm-search { min-width: 240px; height: 34px; }
 .acps-mm-toolbar-spacer { flex: 1 1 auto; }
+.acps-mm-subtoggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	padding: 0 12px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #fff;
+	cursor: pointer;
+}
+.acps-mm-subtoggle input { margin: 0; }
+/* "Select" toggle — a proper, comfortably-sized control, not a tiny checkbox. */
+.acps-mm-selectall-lbl {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 34px;
+	padding: 0 14px;
+	border: 1px solid #2271b1;
+	color: #2271b1;
+	border-radius: 4px;
+	background: #fff;
+	font-weight: 600;
+	font-size: 13px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.acps-mm-selectall-lbl:hover { background: #f0f6fc; }
+.acps-mm-selectall-lbl input { width: 16px; height: 16px; margin: 0; }
 
 .acps-mm-bulkbar {
 	display: flex;

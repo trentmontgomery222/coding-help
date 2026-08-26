@@ -42,4 +42,5 @@ delete_metadata( 'user', 0, 'acps_mm_recent_folders', '', true );
 // plugin's own bookkeeping meta key is touched — the attachments and files
 // themselves are never affected.
 delete_metadata( 'post', 0, '_acps_mc_filehash', '', true );
+delete_metadata( 'post', 0, '_acps_mc_prev_folder', '', true );
 delete_option( 'acps_mm_version' );

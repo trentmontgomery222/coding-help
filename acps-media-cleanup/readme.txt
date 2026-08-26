@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.8.0
+Stable tag: 1.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,22 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.8.1 =
+* Fixed uploads that stopped reporting progress and quit after a few files: the
+  Media Manager now uses the uploader's standard per-file callbacks again, so
+  progress bars update, the whole batch uploads, and cancelling a file marks the
+  right row.
+* HEIC: fixed "Too many auxiliary image references" on modern iPhone photos
+  (which bundle HDR/depth auxiliary images) by converting from the primary image
+  only. Auto-conversion now runs on upload again (inline) rather than waiting on
+  WP-Cron, so uploaded HEICs are JPEGs right away; the manual button is unchanged.
+* Restore now returns a file to the folder it was in before it was trashed
+  (FileBird can drop the folder mapping on trash; the plugin remembers it and
+  re-files the file on restore).
+* Removed a duplicate "Uncategorized" entry in the folder sidebar — there is now
+  a single Uncategorized view at the top that consistently lists unfiled files.
+* Made the "Select" control and the toolbar filters a proper, comfortable size.
 
 = 1.8.0 =
 * New: automatic duplicate-file detection. Every file is content-hashed (not

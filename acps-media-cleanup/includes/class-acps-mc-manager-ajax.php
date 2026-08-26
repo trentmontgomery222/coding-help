@@ -567,6 +567,11 @@ class ACPS_MC_Manager_Ajax {
 			}
 			$filename = wp_basename( (string) get_attached_file( $id ) );
 			$fid      = isset( $map[ $id ] ) ? (int) $map[ $id ] : ACPS_MC_Folders::UNCATEGORIZED;
+			// Remember the folder so restore can put it back (FileBird can drop
+			// its folder mapping when an attachment is trashed).
+			if ( $fid > 0 ) {
+				update_post_meta( $id, '_acps_mc_prev_folder', $fid );
+			}
 			$res      = wp_trash_post( $id );
 			if ( false !== $res && null !== $res ) {
 				$deleted++;

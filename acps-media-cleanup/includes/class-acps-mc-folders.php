@@ -463,6 +463,13 @@ class ACPS_MC_Folders {
 				if ( ! isset( $agg[ $fid ] ) ) {
 					$compute( $fid );
 				}
+				// The "Uncategorized" bucket is shown as its own item at the top
+				// of the sidebar (folder = "unfiled"); don't also render it inside
+				// the folder tree, or there are two — behaving differently.
+				if ( ACPS_MC_Folders::UNCATEGORIZED === (int) $fid ) {
+					$walk( $fid, $depth );
+					continue;
+				}
 				$out[] = array(
 					'id'     => $fid,
 					'name'   => isset( $folders[ $fid ]['name'] ) ? $folders[ $fid ]['name'] : ( '#' . $fid ),

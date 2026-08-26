@@ -433,14 +433,13 @@
 	}
 
 	/* ---------------- Upload (drag + progress) ---------------- */
-	// Ids of files currently uploading (added, not yet resolved), in the order
-	// they were added. This — not "whichever row happens to be first in the
-	// DOM" — is what a completion/cancel/error event gets matched against, so
-	// a cancel or an out-of-order finish can never mark the wrong row.
-	var inFlightIds = [];
-	// How many files were added since the upload queue was last empty. Used to
-	// decide, once the whole batch has finished, whether to force the edit
-	// popup (single file) or offer a choice (bulk).
+	// File ids still uploading, in the order they were added. Plupload uploads
+	// sequentially, so the Nth success() belongs to the Nth still-pending file
+	// (FIFO). Cancelling a specific file splices it out so the mapping stays
+	// aligned with Plupload's own remaining queue.
+	var pending = [];
+	// How many files were added in the current batch (reset when the batch
+	// completes). Decides single-file vs bulk handling.
 	var batchTotal = 0;
 
 	function showUploads() { $( '#acps-mm-uploads' ).show(); }
@@ -455,53 +454,33 @@
 		showUploads();
 		return $row;
 	}
-	function rowFor( file ) {
+	function setUploadPct( file, pct ) {
 		var r = uploadRows[ file.id ];
 		if ( ! r ) { uploadRow( file ); r = uploadRows[ file.id ]; }
-		return r ? r.$row : null;
-	}
-	function setUploadPct( file, pct ) {
-		var $row = rowFor( file );
-		if ( $row ) { $row.find( '.acps-mm-upfill' ).css( 'width', pct + '%' ); $row.find( '.acps-mm-uppct' ).text( pct + '%' ); }
-	}
-	// Cancel one specific in-progress upload. Aborts it in Plupload *and*
-	// resolves its row immediately and synchronously, so the click always
-	// reflects on the file the user actually clicked — never a different
-	// still-uploading file in the same batch.
-	function cancelUpload( file ) {
-		if ( uploader && uploader.uploader && file ) {
-			try { uploader.uploader.removeFile( file ); } catch ( e ) {}
+		pct = Math.max( 0, Math.min( 100, parseInt( pct, 10 ) || 0 ) );
+		if ( ! r.$row.hasClass( 'done' ) && ! r.$row.hasClass( 'error' ) ) {
+			r.$row.find( '.acps-mm-upfill' ).css( 'width', pct + '%' );
+			r.$row.find( '.acps-mm-uppct' ).text( pct + '%' );
 		}
-		resolveFile( file.id, 'error', '✕' );
 	}
-	// Mark exactly the row for `fid` as done/errored, and drop it from the
-	// in-flight list. Safe to call more than once for the same file (e.g. a
-	// manual cancel followed by Plupload's own Error event for that same
-	// removal) — after the first call the row is already in a terminal state
-	// and further calls are no-ops.
-	function resolveFile( fid, cls, mark ) {
-		if ( ! fid ) { return; }
-		var idx = $.inArray( fid, inFlightIds );
-		if ( idx !== -1 ) { inFlightIds.splice( idx, 1 ); }
+	function markRow( fid, cls, mark ) {
 		var r = uploadRows[ fid ];
 		if ( r && ! r.$row.hasClass( 'done' ) && ! r.$row.hasClass( 'error' ) ) {
 			r.$row.addClass( cls ).find( '.acps-mm-upfill' ).css( 'width', '100%' );
 			r.$row.find( '.acps-mm-uppct' ).text( mark );
 			r.$row.find( '.acps-mm-upcancel' ).remove();
 		}
-		maybeFinishBatch();
 	}
-	// Once every file in the current batch has resolved (succeeded, errored or
-	// was canceled), decide what happens next: a single upload still forces
-	// the edit popup; a bulk upload gets a choice between editing each file
-	// and just leaving them uploaded.
-	function maybeFinishBatch() {
-		if ( inFlightIds.length || ! batchTotal ) { return; }
-		var total = batchTotal;
-		batchTotal = 0; // decided — a fresh drag/drop starts a new batch count
-		if ( ! uploadQueue.length ) { loadFolders(); return; } // everything failed/was canceled
-		if ( total <= 1 ) { showUploadPopup(); return; }
-		showBatchChoice( total );
+	function dropPending( fid ) {
+		var i = $.inArray( fid, pending );
+		if ( i !== -1 ) { pending.splice( i, 1 ); }
+	}
+	function cancelUpload( file ) {
+		if ( uploader && uploader.uploader && file ) {
+			try { uploader.uploader.removeFile( file ); } catch ( e ) {}
+		}
+		dropPending( file.id );
+		markRow( file.id, 'error', '✕' );
 	}
 
 	function initUploader() {
@@ -511,29 +490,35 @@
 				browser: $( '#acps-mm-upload' ),
 				dropzone: $( '.acps-mm-wrap' ),
 				added: function ( file ) {
-					inFlightIds.push( file.id );
 					batchTotal++;
+					pending.push( file.id );
 					uploadRow( file );
 				},
 				progress: function ( file ) { setUploadPct( file, file.percent || 0 ); },
-				// This higher-level callback is only used to capture the real,
-				// fully-processed attachment (id/url/filename) for the edit
-				// queue — row bookkeeping is handled separately below, by
-				// binding directly to Plupload's own events, since those are
-				// guaranteed to carry the exact `file` that just resolved.
 				success: function ( attachment ) {
-					var d = attachment && attachment.toJSON ? attachment.toJSON() : attachment;
+					// Sequential uploads → this attachment is the oldest pending file.
+					var fid = pending.shift();
+					if ( fid ) { markRow( fid, 'done', '✓' ); }
+					var d = ( attachment && attachment.toJSON ) ? attachment.toJSON() : attachment;
 					if ( d && d.id ) { uploadQueue.push( { id: d.id, url: d.url, filename: d.filename || '' } ); }
-				}
+				},
+				error: function ( message, data, file ) {
+					var fid = file ? file.id : pending.shift();
+					if ( fid ) { dropPending( fid ); markRow( fid, 'error', '✕' ); }
+				},
+				complete: function () { finishBatch(); }
 			} );
-			if ( uploader.uploader && uploader.uploader.bind ) {
-				uploader.uploader.bind( 'FileUploaded', function ( up, file ) { resolveFile( file.id, 'done', '✓' ); } );
-				uploader.uploader.bind( 'Error', function ( up, err ) {
-					var fid = ( err && err.file ) ? err.file.id : ( inFlightIds.length ? inFlightIds[ 0 ] : null );
-					resolveFile( fid, 'error', '✕' );
-				} );
-			}
 		} catch ( e ) { /* uploader unavailable */ }
+	}
+
+	// Called once the whole upload queue drains: decide what to show next.
+	function finishBatch() {
+		pending = [];
+		if ( ! batchTotal ) { return; }
+		batchTotal = 0;
+		if ( ! uploadQueue.length ) { loadFolders(); return; } // all failed/cancelled
+		if ( uploadQueue.length <= 1 ) { showUploadPopup(); return; }
+		showBatchChoice( uploadQueue.length );
 	}
 
 	// Bulk-upload fork: edit every file one at a time (existing flow), or skip

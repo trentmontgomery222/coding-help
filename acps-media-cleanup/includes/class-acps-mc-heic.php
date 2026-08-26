@@ -132,8 +132,17 @@ class ACPS_MC_Heic {
 		if ( ! self::supported() || ! self::is_heic( $id ) ) {
 			return $metadata;
 		}
-		if ( ! wp_next_scheduled( 'acps_mc_heic_convert', array( $id ) ) ) {
-			wp_schedule_single_event( time(), 'acps_mc_heic_convert', array( $id ) );
+		// Convert immediately so the file is a usable JPEG the moment the upload
+		// finishes (WP-Cron isn't guaranteed to run promptly on every host).
+		// convert() points the attachment at the JPEG and sets its mime BEFORE
+		// it regenerates metadata, so this filter re-firing sees an image, not a
+		// HEIC — no infinite recursion.
+		$res = self::convert( $id );
+		if ( ! is_wp_error( $res ) ) {
+			$new = wp_get_attachment_metadata( $id );
+			if ( is_array( $new ) ) {
+				return $new;
+			}
 		}
 		return $metadata;
 	}
@@ -163,10 +172,29 @@ class ACPS_MC_Heic {
 
 		try {
 			$im = new Imagick();
-			$im->readImage( $file );
-			// HEIC can hold multiple frames; keep the first / flatten.
-			if ( method_exists( $im, 'setIteratorIndex' ) ) {
+
+			// Modern iPhone HEICs bundle auxiliary images (HDR gain maps, depth
+			// maps, thumbnails). On some libheif builds, reading the whole
+			// container throws "Too many auxiliary image references". Reading
+			// just the primary image ("[0]") avoids that; fall back to a plain
+			// read on any server where the scene selector isn't supported.
+			$read = false;
+			try {
+				$im->readImage( $file . '[0]' );
+				$read = true;
+			} catch ( Exception $inner ) {
+				$im->clear();
+				$im->readImage( $file );
+				$read = true;
+			}
+			if ( ! $read ) {
+				throw new Exception( 'unreadable' );
+			}
+
+			// If a multi-image container still came through, keep the first frame.
+			if ( $im->getNumberImages() > 1 ) {
 				$im->setIteratorIndex( 0 );
+				$im = $im->getImage();
 			}
 			$im->setImageFormat( 'jpeg' );
 			$im->setImageCompressionQuality( 90 );
