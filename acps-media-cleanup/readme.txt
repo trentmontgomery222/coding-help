@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.8.2
+Stable tag: 1.8.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -64,6 +64,17 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.8.3 =
+* Fixed the upload progress bars and, more importantly, uploads that never
+  appeared in the grid until a manual page reload. Root cause: on some
+  WordPress builds the uploader never fired the "file added" / "progress"
+  callbacks the Media Manager was relying on, so the progress rows were never
+  created and — because the whole post-upload step (including the grid refresh)
+  keyed off a counter set in that callback — nothing ran after the files
+  finished. The manager now listens to the uploader's underlying events
+  directly, which always fire, so progress shows and new files appear right
+  away. Added a grid re-sync when the upload queue drains as a safety net.
 
 = 1.8.2 =
 * Fixed new uploads landing in a hidden sub-folder. FileBird auto-files every

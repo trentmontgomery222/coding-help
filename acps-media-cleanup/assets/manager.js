@@ -488,27 +488,52 @@
 		try {
 			uploader = new wp.Uploader( {
 				browser: $( '#acps-mm-upload' ),
-				dropzone: $( '.acps-mm-wrap' ),
-				added: function ( file ) {
-					batchTotal++;
-					pending.push( file.id );
-					uploadRow( file );
-				},
-				progress: function ( file ) { setUploadPct( file, file.percent || 0 ); },
-				success: function ( attachment ) {
-					// Sequential uploads → this attachment is the oldest pending file.
-					var fid = pending.shift();
-					if ( fid ) { markRow( fid, 'done', '✓' ); }
-					var d = ( attachment && attachment.toJSON ) ? attachment.toJSON() : attachment;
-					if ( d && d.id ) { uploadQueue.push( { id: d.id, url: d.url, filename: d.filename || '' } ); }
-				},
-				error: function ( message, data, file ) {
-					var fid = file ? file.id : pending.shift();
-					if ( fid ) { dropPending( fid ); markRow( fid, 'error', '✕' ); }
-				},
-				complete: function () { finishBatch(); }
+				dropzone: $( '.acps-mm-wrap' )
 			} );
-		} catch ( e ) { /* uploader unavailable */ }
+		} catch ( e ) { return; /* uploader unavailable */ }
+
+		// Bind directly to the underlying Plupload instance instead of relying on
+		// the callbacks you can pass to the wp.Uploader constructor. Some
+		// WordPress builds never invoke the `added` / `progress` constructor
+		// callbacks, and because the whole post-upload flow keys off a counter set
+		// in `added`, that left progress bars empty AND skipped the grid refresh
+		// (so uploads didn't appear in "All media" until a manual reload). The raw
+		// Plupload events always fire, so this is deterministic across versions.
+		var up = uploader.uploader;
+		if ( ! up ) { return; }
+
+		up.bind( 'FilesAdded', function ( u, files ) {
+			for ( var i = 0; i < files.length; i++ ) {
+				var f = files[ i ];
+				batchTotal++;
+				pending.push( f.id );
+				uploadRow( f );
+			}
+		} );
+		up.bind( 'UploadProgress', function ( u, file ) {
+			setUploadPct( file, file.percent || 0 );
+		} );
+		up.bind( 'FileUploaded', function ( u, file, info ) {
+			dropPending( file.id );
+			// Plupload hands us the raw server response; WordPress replies with
+			// {success:true, data:{id,url,filename,...}} for an attachment upload.
+			var d = null;
+			try {
+				var parsed = JSON.parse( ( info && info.response ) || '{}' );
+				if ( parsed && parsed.success && parsed.data ) { d = parsed.data; }
+			} catch ( e ) { d = null; }
+			if ( d && d.id ) {
+				markRow( file.id, 'done', '✓' );
+				uploadQueue.push( { id: d.id, url: d.url || '', filename: d.filename || d.name || file.name || '' } );
+			} else {
+				markRow( file.id, 'error', '✕' );
+			}
+		} );
+		up.bind( 'Error', function ( u, err ) {
+			var fid = ( err && err.file ) ? err.file.id : null;
+			if ( fid ) { dropPending( fid ); markRow( fid, 'error', '✕' ); }
+		} );
+		up.bind( 'UploadComplete', function () { finishBatch(); } );
 	}
 
 	// Called once the whole upload queue drains: decide what to show next.
@@ -549,7 +574,10 @@
 	}
 
 	function showUploadPopup() {
-		if ( ! uploadQueue.length ) { loadFolders(); return; }
+		// Queue drained (all files placed/skipped): reconcile the grid against the
+		// server once so newly-uploaded files are guaranteed to show in the current
+		// view — belt-and-suspenders on top of the per-file prepend above.
+		if ( ! uploadQueue.length ) { loadGrid(); loadFolders(); return; }
 		var item = uploadQueue[ 0 ];
 		var id = item.id;
 		var card = null; // "add this to the grid" data — filled in by the background fetch below
