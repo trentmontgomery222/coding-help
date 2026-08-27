@@ -72,14 +72,27 @@ class ACPS_MC_Cron {
 	}
 
 	public function daily_run() {
-		if ( ! ACPS_MC_Settings::get( 'auto_nightly_scan' ) ) {
-			return;
+		// Cron context — never let a scan error break the cron run.
+		try {
+			if ( ! class_exists( 'ACPS_MC_Settings' ) || ! ACPS_MC_Settings::get( 'auto_nightly_scan' ) ) {
+				return;
+			}
+			$this->process( true );
+		} catch ( \Throwable $e ) {
+			if ( function_exists( 'acps_mc_log' ) ) {
+				acps_mc_log( 'Nightly scan error: ' . $e->getMessage() );
+			}
 		}
-		$this->process( true );
 	}
 
 	public function continue_run() {
-		$this->process( false );
+		try {
+			$this->process( false );
+		} catch ( \Throwable $e ) {
+			if ( function_exists( 'acps_mc_log' ) ) {
+				acps_mc_log( 'Scan continue error: ' . $e->getMessage() );
+			}
+		}
 	}
 
 	/**

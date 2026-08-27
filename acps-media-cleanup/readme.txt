@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.12.3
+Stable tag: 1.13.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,21 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.13.0 =
+* Crash-proofing: the plugin can no longer white-screen your site.
+  - Missing plugin files (the classic "some files didn't finish uploading"
+    problem) are now handled gracefully: the plugin loads what it can, disables
+    only the affected features, and shows an admin notice listing the missing
+    files so you can re-upload them — instead of taking the whole site down.
+    If a core shared file is missing, all features stay off until it's restored.
+  - Boot, activation and deactivation are wrapped so an unexpected error there
+    can't fatal the request.
+  - The always-on hooks that run during uploads and cron (HEIC conversion,
+    duplicate hashing, the nightly scan, and the Google Drive importer) and all
+    AJAX/REST handlers are wrapped in error handling, so a problem in one returns
+    a clean error for that action rather than a broken page.
+  (Verified by simulating missing files — the plugin loads without a fatal.)
 
 = 1.12.3 =
 * Rubber-band (drag) selection: click and drag a box across the grid to

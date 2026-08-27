@@ -35,10 +35,17 @@ class ACPS_MC_Duplicates {
 	 * @param int $id Newly-inserted attachment ID.
 	 */
 	public static function hash_on_upload( $id ) {
-		if ( 'attachment' !== get_post_type( $id ) ) {
-			return;
+		// Runs on every new attachment; never let a hashing hiccup break the upload.
+		try {
+			if ( 'attachment' !== get_post_type( $id ) ) {
+				return;
+			}
+			self::hash_file( (int) $id );
+		} catch ( \Throwable $e ) {
+			if ( function_exists( 'acps_mc_log' ) ) {
+				acps_mc_log( 'Duplicate hash_on_upload error: ' . $e->getMessage() );
+			}
 		}
-		self::hash_file( (int) $id );
 	}
 
 	/**

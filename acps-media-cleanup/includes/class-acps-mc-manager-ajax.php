@@ -32,8 +32,23 @@ class ACPS_MC_Manager_Ajax {
 			'duplicates',
 			'dedupe',
 		);
+		// Dispatch each action through a try/catch so a bug in one handler returns
+		// a clean JSON error for that request instead of a 500 / blank screen.
+		$self = $this;
 		foreach ( $actions as $a ) {
-			add_action( 'wp_ajax_acps_mm_' . $a, array( $this, $a ) );
+			add_action(
+				'wp_ajax_acps_mm_' . $a,
+				function () use ( $self, $a ) {
+					try {
+						$self->$a();
+					} catch ( \Throwable $e ) {
+						if ( function_exists( 'acps_mc_log' ) ) {
+							acps_mc_log( 'AJAX ' . $a . ' error: ' . $e->getMessage() );
+						}
+						wp_send_json_error( array( 'message' => __( 'Something went wrong. Please try again.', 'acps-media-cleanup' ) ), 500 );
+					}
+				}
+			);
 		}
 	}
 

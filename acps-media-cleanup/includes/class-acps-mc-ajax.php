@@ -27,8 +27,23 @@ class ACPS_MC_Ajax {
 			'restore',
 			'purge',
 		);
+		// Dispatch through try/catch so one failing handler returns a clean error
+		// for that request rather than a 500 / blank response.
+		$self = $this;
 		foreach ( $actions as $a ) {
-			add_action( 'wp_ajax_acps_mc_' . $a, array( $this, $a ) );
+			add_action(
+				'wp_ajax_acps_mc_' . $a,
+				function () use ( $self, $a ) {
+					try {
+						$self->$a();
+					} catch ( \Throwable $e ) {
+						if ( function_exists( 'acps_mc_log' ) ) {
+							acps_mc_log( 'AJAX ' . $a . ' error: ' . $e->getMessage() );
+						}
+						wp_send_json_error( array( 'message' => __( 'Something went wrong. Please try again.', 'acps-media-cleanup' ) ), 500 );
+					}
+				}
+			);
 		}
 	}
 

@@ -130,25 +130,30 @@ class ACPS_MC_Drive {
 	 * @return WP_REST_Response|array
 	 */
 	public static function rest_ingest( $req ) {
-		$files = $req->get_file_params();
-		if ( empty( $files['file'] ) || empty( $files['file']['tmp_name'] ) ) {
-			return new WP_REST_Response( array( 'status' => 'error', 'message' => 'No file received.' ), 400 );
-		}
-		$upload   = $files['file'];
-		$filename = ! empty( $upload['name'] ) ? $upload['name'] : ( $req->get_param( 'filename' ) ? (string) $req->get_param( 'filename' ) : 'drive-file' );
-		$folder   = self::target_folder();
-
-		$res = self::ingest_path( $upload['tmp_name'], $filename, $folder, true );
-		if ( is_wp_error( $res ) ) {
-			$code = $res->get_error_code();
-			// "skipped"/"duplicate" are normal outcomes, not failures: report 200
-			// with a status the script can act on (it moves the Drive file aside).
-			if ( in_array( $code, array( 'skipped_heic', 'duplicate', 'bad_type' ), true ) ) {
-				return array( 'status' => 'skipped', 'reason' => $code, 'message' => $res->get_error_message() );
+		try {
+			$files = $req->get_file_params();
+			if ( empty( $files['file'] ) || empty( $files['file']['tmp_name'] ) ) {
+				return new WP_REST_Response( array( 'status' => 'error', 'message' => 'No file received.' ), 400 );
 			}
-			return new WP_REST_Response( array( 'status' => 'error', 'reason' => $code, 'message' => $res->get_error_message() ), 500 );
+			$upload   = $files['file'];
+			$filename = ! empty( $upload['name'] ) ? $upload['name'] : ( $req->get_param( 'filename' ) ? (string) $req->get_param( 'filename' ) : 'drive-file' );
+			$folder   = self::target_folder();
+
+			$res = self::ingest_path( $upload['tmp_name'], $filename, $folder, true );
+			if ( is_wp_error( $res ) ) {
+				$code = $res->get_error_code();
+				// "skipped"/"duplicate" are normal outcomes, not failures: report 200
+				// with a status the script can act on (it moves the Drive file aside).
+				if ( in_array( $code, array( 'skipped_heic', 'duplicate', 'bad_type' ), true ) ) {
+					return array( 'status' => 'skipped', 'reason' => $code, 'message' => $res->get_error_message() );
+				}
+				return new WP_REST_Response( array( 'status' => 'error', 'reason' => $code, 'message' => $res->get_error_message() ), 500 );
+			}
+			return array( 'status' => 'ok', 'id' => (int) $res, 'url' => wp_get_attachment_url( (int) $res ) );
+		} catch ( \Throwable $e ) {
+			self::log( 'ingest', 'REST ingest error: ' . $e->getMessage() );
+			return new WP_REST_Response( array( 'status' => 'error', 'message' => 'Ingest failed.' ), 500 );
 		}
-		return array( 'status' => 'ok', 'id' => (int) $res, 'url' => wp_get_attachment_url( (int) $res ) );
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -243,15 +248,23 @@ class ACPS_MC_Drive {
 
 	/** Cron tick: import up to the current rate's worth of files. */
 	public static function tick() {
-		$s = ACPS_MC_Settings::all();
-		if ( empty( $s['drive_pull_enabled'] ) || empty( $s['drive_folder_id'] ) ) {
-			return;
+		// Cron context — an unhandled error here must not break the cron run.
+		try {
+			if ( ! class_exists( 'ACPS_MC_Settings' ) ) {
+				return;
+			}
+			$s = ACPS_MC_Settings::all();
+			if ( empty( $s['drive_pull_enabled'] ) || empty( $s['drive_folder_id'] ) ) {
+				return;
+			}
+			$rate = self::current_rate( $s );
+			if ( $rate <= 0 ) {
+				return;
+			}
+			self::pull_batch( (int) $s['drive_folder_id'], $rate );
+		} catch ( \Throwable $e ) {
+			self::log( 'tick', 'Drive tick error: ' . $e->getMessage() );
 		}
-		$rate = self::current_rate( $s );
-		if ( $rate <= 0 ) {
-			return;
-		}
-		self::pull_batch( (int) $s['drive_folder_id'], $rate );
 	}
 
 	/** Files-per-tick right now, from the day/night schedule. */

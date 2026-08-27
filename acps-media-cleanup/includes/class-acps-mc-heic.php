@@ -126,22 +126,30 @@ class ACPS_MC_Heic {
 	 * @return array
 	 */
 	public static function on_generate_metadata( $metadata, $id ) {
-		if ( ! ACPS_MC_Settings::get( 'convert_heic_on_upload' ) ) {
-			return $metadata;
-		}
-		if ( ! self::supported() || ! self::is_heic( $id ) ) {
-			return $metadata;
-		}
-		// Convert immediately so the file is a usable JPEG the moment the upload
-		// finishes (WP-Cron isn't guaranteed to run promptly on every host).
-		// convert() points the attachment at the JPEG and sets its mime BEFORE
-		// it regenerates metadata, so this filter re-firing sees an image, not a
-		// HEIC — no infinite recursion.
-		$res = self::convert( $id );
-		if ( ! is_wp_error( $res ) ) {
-			$new = wp_get_attachment_metadata( $id );
-			if ( is_array( $new ) ) {
-				return $new;
+		// This runs during every attachment's metadata generation. Never let an
+		// error here break the upload pipeline — return the original metadata.
+		try {
+			if ( ! class_exists( 'ACPS_MC_Settings' ) || ! ACPS_MC_Settings::get( 'convert_heic_on_upload' ) ) {
+				return $metadata;
+			}
+			if ( ! self::supported() || ! self::is_heic( $id ) ) {
+				return $metadata;
+			}
+			// Convert immediately so the file is a usable JPEG the moment the upload
+			// finishes (WP-Cron isn't guaranteed to run promptly on every host).
+			// convert() points the attachment at the JPEG and sets its mime BEFORE
+			// it regenerates metadata, so this filter re-firing sees an image, not a
+			// HEIC — no infinite recursion.
+			$res = self::convert( $id );
+			if ( ! is_wp_error( $res ) ) {
+				$new = wp_get_attachment_metadata( $id );
+				if ( is_array( $new ) ) {
+					return $new;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			if ( function_exists( 'acps_mc_log' ) ) {
+				acps_mc_log( 'HEIC on_generate_metadata error: ' . $e->getMessage() );
 			}
 		}
 		return $metadata;
