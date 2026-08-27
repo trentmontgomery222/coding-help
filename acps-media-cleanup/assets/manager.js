@@ -224,7 +224,8 @@
 		$( '.acps-mm-folder[data-folder="' + fid + '"]' ).addClass( 'is-active' );
 		closeDetail();
 		loadGrid();
-		try { window.scrollTo( 0, 0 ); } catch ( e ) {}
+		// Don't yank the whole page to the top on folder change — the sticky
+		// sidebar keeps the folders in view and the grid reloads in place.
 	}
 
 	function folderCardHtml( f ) {

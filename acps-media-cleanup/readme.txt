@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.12.1
+Stable tag: 1.12.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,16 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.12.2 =
+* The folder sidebar now stays on screen while you scroll the media grid, and
+  the folder list scrolls inside it (New folder, the All media/Uncategorized
+  views, and the folder search stay pinned at the top). No more one giant page.
+* Opening a folder no longer jumps you back to the top of the page.
+* Classic view polish to better match the native FileBird library: the
+  "New folder" button is FileBird blue regardless of your wp-admin colour
+  scheme, and folders use a clean outline folder icon instead of the chunkier
+  dashboard icon.
 
 = 1.12.1 =
 * Classic view now closely matches the native WordPress + FileBird media

@@ -10,18 +10,54 @@
 	margin-top: 12px;
 }
 
-/* Sidebar — fixed 300px, no hidden overflow (grows to fit) */
+/* Sidebar — fixed 300px, stays on screen while the grid scrolls; the folder
+   list scrolls INSIDE it (New Folder + specials + search stay pinned). */
 .acps-mm-sidebar {
 	flex: 0 0 300px;
 	width: 300px;
 	background: #fff;
 	border: 1px solid #dcdcde;
 	border-radius: 6px;
+	position: sticky;
+	top: 42px;              /* just below the WP admin bar */
+	align-self: flex-start;
+	max-height: calc( 100vh - 52px );
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;       /* the inner list handles scrolling */
 }
-/* New Folder button pinned at the top of the sidebar (FileBird-style). */
-.acps-mm-foldertop { padding: 10px 10px 6px; }
-.acps-mm-newfolder-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.acps-mm-folderlist-wrap {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+}
+/* New Folder button pinned at the top of the sidebar (FileBird-style). The
+   high-specificity selector + colours override the admin colour scheme so the
+   button stays FileBird blue regardless of the user's wp-admin theme. */
+.acps-mm-foldertop { flex: 0 0 auto; padding: 10px 10px 6px; }
+.acps-mm-sidebar .acps-mm-newfolder-btn.button-primary,
+.acps-mm-sidebar .acps-mm-newfolder-btn {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+	box-shadow: none;
+	text-shadow: none;
+}
+.acps-mm-sidebar .acps-mm-newfolder-btn.button-primary:hover,
+.acps-mm-sidebar .acps-mm-newfolder-btn:hover {
+	background: #135e96;
+	border-color: #135e96;
+	color: #fff;
+}
 .acps-mm-newfolder-btn .dashicons { font-size: 16px; width: 16px; height: 16px; }
+/* specials + search never scroll — only the tree does */
+.acps-mm-specials, .acps-mm-foldersearch { flex: 0 0 auto; }
 
 /* Folder search box (sits under the All Files / Uncategorized specials). */
 .acps-mm-foldersearch {
@@ -267,6 +303,19 @@
 .view-classic .acps-mm-folder.is-active .acps-mm-fname .dashicons { color: #2271b1; }
 .view-classic .acps-mm-fcount { background: #f0f0f1; color: #646970; }
 .view-classic .acps-mm-folder.is-active .acps-mm-fcount { background: #fff; color: #2271b1; }
+/* Swap the chunky dashicon folder glyph for a clean outline folder (matches the
+   native FileBird icon) on regular folders and the Uncategorized special. */
+.view-classic .acps-mm-fname .dashicons-portfolio,
+.view-classic .acps-mm-fname .dashicons-open-folder {
+	background: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='24'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%238c8f94'%20stroke-width='1.7'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M3%207.5A1.5%201.5%200%200%201%204.5%206h3.8l1.7%202H19.5A1.5%201.5%200%200%201%2021%209.5v7A1.5%201.5%200%200%201%2019.5%2018h-15A1.5%201.5%200%200%201%203%2016.5z'/%3E%3C/svg%3E") no-repeat center;
+	background-size: 17px 17px;
+}
+.view-classic .acps-mm-fname .dashicons-portfolio::before,
+.view-classic .acps-mm-fname .dashicons-open-folder::before { content: ""; }
+.view-classic .acps-mm-folder.is-active .acps-mm-fname .dashicons-portfolio,
+.view-classic .acps-mm-folder.is-active .acps-mm-fname .dashicons-open-folder {
+	background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='24'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%232271b1'%20stroke-width='1.8'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M3%207.5A1.5%201.5%200%200%201%204.5%206h3.8l1.7%202H19.5A1.5%201.5%200%200%201%2021%209.5v7A1.5%201.5%200%200%201%2019.5%2018h-15A1.5%201.5%200%200%201%203%2016.5z'/%3E%3C/svg%3E");
+}
 
 /* Copy-link button on each card (top-right corner). Faintly visible always so
    you can tell it's there, full-strength on hover. */
@@ -567,5 +616,7 @@
 
 @media screen and ( max-width: 782px ) {
 	.acps-mm-layout { flex-direction: column; }
-	.acps-mm-sidebar { flex-basis: auto; width: 100%; position: static; max-height: 320px; }
+	/* On small screens the sidebar stacks on top; keep the internal folder scroll
+	   (flex column is preserved) but drop the sticky positioning. */
+	.acps-mm-sidebar { flex-basis: auto; width: 100%; position: static; max-height: 60vh; }
 }
