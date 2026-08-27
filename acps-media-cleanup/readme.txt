@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.12.2
+Stable tag: 1.12.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,13 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.12.3 =
+* Rubber-band (drag) selection: click and drag a box across the grid to
+  highlight every file it touches — like selecting icons on your desktop.
+  Dragging from empty grid space works in any view and turns on Select mode
+  automatically; with Select mode already on you can drag from anywhere.
+  Individual click, Shift-click ranges and the checkboxes all still work.
 
 = 1.12.2 =
 * The folder sidebar now stays on screen while you scroll the media grid, and

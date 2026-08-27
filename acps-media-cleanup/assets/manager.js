@@ -9,6 +9,8 @@
 	var selection = {};
 	var selectMode = false;   // click cards to highlight/select instead of opening them
 	var lastClicked = null;   // anchor id for shift-click range selection
+	var marquee = null;       // active rubber-band drag-select, or null
+	var suppressClick = false; // swallow the click that ends a drag-select
 	var folderTree = [];      // [{id,name,depth,parent,total}]
 	var lastFolderData = null;
 	var writable = false;
@@ -1395,6 +1397,8 @@
 		} );
 		$( document ).on( 'click', '.acps-mm-check', function ( e ) { e.stopPropagation(); } );
 		$( document ).on( 'click', '.acps-mm-card', function ( e ) {
+			// A click that ended a rubber-band drag shouldn't also toggle/open.
+			if ( suppressClick ) { suppressClick = false; return; }
 			if ( $( this ).hasClass( 'acps-mm-foldercard' ) ) { selectFolder( $( this ).data( 'folder' ) ); return; }
 			var id = $( this ).data( 'id' );
 			// In select mode a click highlights the card (shift-click = range)
@@ -1405,6 +1409,53 @@
 				return;
 			}
 			openDetail( id );
+		} );
+
+		/* Rubber-band (marquee) selection: click-drag a box across the grid to
+		 * highlight everything it touches. Works from empty grid space in any mode,
+		 * and from anywhere when "Select" is on. Dragging auto-enters select mode. */
+		$( document ).on( 'mousedown', '#acps-mm-grid', function ( e ) {
+			if ( e.button !== 0 ) { return; }
+			var $t = $( e.target );
+			if ( $t.closest( '.acps-mm-check, .acps-mm-cardcopy' ).length ) { return; } // real controls
+			if ( $t.closest( '.acps-mm-foldercard' ).length ) { return; }               // folder tiles navigate
+			var onCard = $t.closest( '.acps-mm-card' ).length > 0;
+			if ( onCard && ! selectMode ) { return; } // a plain card click opens its drawer
+			marquee = { x0: e.clientX, y0: e.clientY, dragging: false, base: $.extend( {}, selection ), $box: null };
+			e.preventDefault(); // no text selection while dragging
+		} );
+		$( document ).on( 'mousemove', function ( e ) {
+			if ( ! marquee ) { return; }
+			var dx = e.clientX - marquee.x0, dy = e.clientY - marquee.y0;
+			if ( ! marquee.dragging ) {
+				if ( Math.abs( dx ) < 5 && Math.abs( dy ) < 5 ) { return; }
+				marquee.dragging = true;
+				if ( ! selectMode ) { // entering a lasso implies selection mode
+					selectMode = true;
+					$( '#acps-mm-selectall' ).prop( 'checked', true );
+					$( '#acps-mm-grid' ).addClass( 'acps-mm-selecting' );
+				}
+				marquee.$box = $( '<div class="acps-mm-marquee"></div>' ).appendTo( 'body' );
+			}
+			var left = Math.min( marquee.x0, e.clientX ), top = Math.min( marquee.y0, e.clientY );
+			var w = Math.abs( dx ), h = Math.abs( dy );
+			marquee.$box.css( { left: left + 'px', top: top + 'px', width: w + 'px', height: h + 'px' } );
+			var box = { left: left, top: top, right: left + w, bottom: top + h };
+			$( '#acps-mm-grid .acps-mm-card[data-id]' ).each( function () {
+				var id = $( this ).data( 'id' );
+				var r = this.getBoundingClientRect();
+				var inBox = ! ( r.right < box.left || r.left > box.right || r.bottom < box.top || r.top > box.bottom );
+				var want = !! marquee.base[ id ] || inBox; // baseline union what's in the box
+				if ( want !== !! selection[ id ] ) { setCardSelected( id, want ); }
+			} );
+			updateBulkBar();
+		} );
+		$( document ).on( 'mouseup', function () {
+			if ( ! marquee ) { return; }
+			var wasDrag = marquee.dragging;
+			if ( marquee.$box ) { marquee.$box.remove(); }
+			marquee = null;
+			if ( wasDrag ) { suppressClick = true; updateBulkBar(); }
 		} );
 
 		// "Select" toggles select mode: click cards to highlight them, shift-click

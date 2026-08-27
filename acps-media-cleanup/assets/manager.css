@@ -346,6 +346,17 @@
 .acps-mm-grid.acps-mm-selecting .acps-mm-card { cursor: copy; }
 .acps-mm-grid.acps-mm-selecting .acps-mm-card:hover { box-shadow: 0 0 0 2px #72aee6; }
 
+/* Rubber-band (drag) selection box + no text-selection while lassoing. */
+.acps-mm-marquee {
+	position: fixed;
+	z-index: 100050;
+	border: 1px solid #2271b1;
+	background: rgba( 34, 113, 177, .12 );
+	pointer-events: none;
+}
+.acps-mm-grid.acps-mm-selecting,
+.acps-mm-grid.acps-mm-selecting .acps-mm-cap { user-select: none; -webkit-user-select: none; }
+
 /* Top-right header controls */
 .acps-mm-wrap { position: relative; }
 .acps-mm-headright {
