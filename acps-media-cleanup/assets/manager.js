@@ -91,9 +91,10 @@
 		}
 	}
 
-	function specialItem( key, label, active ) {
+	function specialItem( key, label, active, count ) {
+		var pill = ( count !== null && count !== undefined && count !== '' ) ? '<span class="acps-mm-fcount">' + esc( count ) + '</span>' : '';
 		return '<li class="acps-mm-folder acps-mm-special' + ( active ? ' is-active' : '' ) + '" data-folder="' + esc( key ) + '">' +
-			'<span class="acps-mm-fname"><span class="dashicons ' + folderIcon( key ) + '"></span> ' + esc( label ) + '</span></li>';
+			'<span class="acps-mm-fname"><span class="dashicons ' + folderIcon( key ) + '"></span> ' + esc( label ) + '</span>' + pill + '</li>';
 	}
 	function folderIcon( key ) {
 		if ( key === 'all' ) { return 'dashicons-images-alt2'; }
@@ -106,21 +107,38 @@
 	var folderQuery = '';  // current folder-search text (lowercased)
 
 	function renderSidebar( data ) {
+		// Order mirrors the native FileBird library: New Folder button, then the
+		// "All Files"/"Uncategorized" specials, then the folder search, then the
+		// folder tree (which is the only part the search re-renders).
 		var html = '';
+		if ( writable ) {
+			html += '<div class="acps-mm-foldertop"><button type="button" class="button button-primary acps-mm-newfolder-btn" id="acps-mm-newfolder"><span class="dashicons dashicons-plus-alt2"></span> ' + esc( i18n.newFolder || 'New folder' ) + '</button></div>';
+		}
+		html += specialsHtml( data );
 		html += '<div class="acps-mm-foldersearch"><span class="dashicons dashicons-search"></span>';
 		html += '<input type="search" id="acps-mm-folder-search" placeholder="' + esc( i18n.searchFolders || 'Search folders…' ) + '" value="' + esc( folderQuery ) + '">';
 		html += '</div>';
-		html += '<div class="acps-mm-folderlist-wrap">' + folderListHtml( data ) + '</div>';
-		if ( writable ) {
-			html += '<button type="button" class="button acps-mm-newfolder-btn" id="acps-mm-newfolder">+ ' + esc( i18n.newFolder || 'New folder' ) + '</button>';
-		}
+		html += '<div class="acps-mm-folderlist-wrap">' + treeHtml( data ) + '</div>';
 		$( '#acps-mm-folders' ).html( html );
 	}
 
-	// The <ul> of folders — the collapsible tree normally, or a flat list of
-	// matches while a folder search is active.
-	function folderListHtml( data ) {
+	// The special views that always sit at the top (All media, Uncategorized,
+	// and the Unused/Used smart views once a scan exists).
+	function specialsHtml( data ) {
 		data = data || { total: 0 };
+		var html = '<ul class="acps-mm-folderlist acps-mm-specials">';
+		html += specialItem( 'all', ( i18n.allMedia || 'All media' ), state.folder === 'all', data.total );
+		html += specialItem( 'unfiled', ( i18n.unfiled || 'Uncategorized' ), state.folder === 'unfiled', ( data.unfiled !== undefined ? data.unfiled : null ) );
+		if ( data.hasScan ) {
+			html += specialItem( 'unused', ( i18n.unused || 'Unused' ), state.folder === 'unused', data.unused );
+			html += specialItem( 'used', ( i18n.used || 'Used' ), state.folder === 'used', ( data.used !== undefined ? data.used : null ) );
+		}
+		html += '</ul>';
+		return html;
+	}
+
+	// The folder tree (collapsible), or a flat list of matches while searching.
+	function treeHtml() {
 		var html = '<ul class="acps-mm-folderlist">';
 		if ( folderQuery ) {
 			var matches = folderTree.filter( function ( f ) { return String( f.name ).toLowerCase().indexOf( folderQuery ) !== -1; } );
@@ -136,13 +154,6 @@
 			} );
 			html += '</ul>';
 			return html;
-		}
-
-		html += specialItem( 'all', ( i18n.allMedia || 'All media' ) + ' (' + data.total + ')', state.folder === 'all' );
-		html += specialItem( 'unfiled', ( i18n.unfiled || 'Uncategorized' ), state.folder === 'unfiled' );
-		if ( data.hasScan ) {
-			html += specialItem( 'unused', ( i18n.unused || 'Unused' ) + ' (' + data.unused + ')', state.folder === 'unused' );
-			html += specialItem( 'used', ( i18n.used || 'Used' ), state.folder === 'used' );
 		}
 
 		// Build hierarchy for collapsible tree.
@@ -1310,7 +1321,7 @@
 		// list, so the search box keeps focus).
 		$( document ).on( 'input', '#acps-mm-folder-search', function () {
 			folderQuery = String( $( this ).val() || '' ).toLowerCase().trim();
-			$( '.acps-mm-folderlist-wrap' ).html( folderListHtml( lastFolderData ) );
+			$( '.acps-mm-folderlist-wrap' ).html( treeHtml( lastFolderData ) );
 		} );
 
 		// Include sub-folders toggle (initial state restored in init).

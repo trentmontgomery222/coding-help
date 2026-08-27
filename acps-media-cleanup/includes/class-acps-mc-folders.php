@@ -404,6 +404,28 @@ class ACPS_MC_Folders {
 	 *
 	 * @return array List of array( id, name, depth, total ).
 	 */
+	/**
+	 * How many non-trashed attachments are in no folder (Uncategorized). Uses the
+	 * same mapping rule as the tree so the number always agrees with it.
+	 *
+	 * @return int
+	 */
+	public function uncategorized_count() {
+		global $wpdb;
+		$ids = $wpdb->get_col(
+			"SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_status <> 'trash'"
+		);
+		$map = $this->attachment_folder_map();
+		$n   = 0;
+		foreach ( (array) $ids as $id ) {
+			$fid = isset( $map[ (int) $id ] ) ? (int) $map[ (int) $id ] : self::UNCATEGORIZED;
+			if ( self::UNCATEGORIZED === $fid ) {
+				$n++;
+			}
+		}
+		return $n;
+	}
+
 	public function tree_all_counts() {
 		global $wpdb;
 		$folders = $this->folders();

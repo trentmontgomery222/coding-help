@@ -67,17 +67,20 @@ class ACPS_MC_Manager_Ajax {
 
 		$scan   = get_option( ACPS_MC_OPT_SCANMETA, array() );
 		$unused = ( is_array( $scan ) && isset( $scan['counts']['unused'] ) ) ? (int) $scan['counts']['unused'] : 0;
+		$used   = ( is_array( $scan ) && isset( $scan['counts']['used'] ) ) ? (int) $scan['counts']['used'] : 0;
 
 		wp_send_json_success(
 			array(
 				'writable'  => $folders->is_writable(),
 				'backend'   => $folders->backend_label(),
 				'total'     => $total,
+				'unfiled'   => $folders->uncategorized_count(),
 				'tree'      => $folders->tree_all_counts(),
 				'common'    => $folders->common_folders( 8 ),
 				'hasScan'   => ! empty( $scan['time'] ),
 				'scanTime'  => ! empty( $scan['time'] ) ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $scan['time'] ) : '',
 				'unused'    => $unused,
+				'used'      => $used,
 			)
 		);
 	}

@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.12.0
+Stable tag: 1.12.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,16 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.12.1 =
+* Classic view now closely matches the native WordPress + FileBird media
+  library: the folder sidebar shows the folder icons, a count "pill" on each
+  folder (including "All media" and "Uncategorized"), a light-blue highlight on
+  the active folder, and a "New folder" button pinned at the top; the grid shows
+  the filename below each square thumbnail instead of only on hover. (Refined
+  view is unchanged — it keeps the colour-coded card borders.) A small
+  used/unused dot stays in each thumbnail's corner so you don't lose the usage
+  indicator.
 
 = 1.12.0 =
 * Uploads now TRULY resume after a refresh or crash — automatically, with no
