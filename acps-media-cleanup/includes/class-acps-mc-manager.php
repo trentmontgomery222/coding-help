@@ -180,7 +180,9 @@ class ACPS_MC_Manager {
 					'networkError'   => __( 'Network error', 'acps-media-cleanup' ),
 					'urlCopied'      => __( 'Link copied to clipboard', 'acps-media-cleanup' ),
 					'dismiss'        => __( 'Dismiss', 'acps-media-cleanup' ),
-					'resumeNotice'   => __( '%d upload(s) did not finish last time. Your browser can’t resume them automatically — drag them in again to finish:', 'acps-media-cleanup' ),
+					'resuming'       => __( 'Resuming %d unfinished upload(s)…', 'acps-media-cleanup' ),
+					'ghostNotice'    => __( '%d upload(s) couldn’t be saved for auto-resume (private mode or full storage). Drag them in again to finish:', 'acps-media-cleanup' ),
+					// (resumeNotice removed — uploads now truly auto-resume via IndexedDB.)
 					'batchGenericWarn' => __( '%d file(s) have generic names and must be renamed before continuing.', 'acps-media-cleanup' ),
 					'justUploadRename' => __( 'Rename the generic ones only', 'acps-media-cleanup' ),
 					'usedItem'      => __( 'Used on the site', 'acps-media-cleanup' ),

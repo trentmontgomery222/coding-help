@@ -614,6 +614,30 @@ class ACPS_MC_Manager_Ajax {
 			wp_send_json_error( array( 'message' => __( 'No file was received.', 'acps-media-cleanup' ) ) );
 		}
 
+		// Idempotency: the browser sends a stable per-file id ("uid") so a resumed
+		// upload whose success response was lost is never ingested twice. If we've
+		// already created an attachment for this uid, return it and stop.
+		$uid = isset( $_POST['uid'] ) ? substr( preg_replace( '/[^A-Za-z0-9_-]/', '', (string) wp_unslash( $_POST['uid'] ) ), 0, 64 ) : '';
+		$uid_key = '' !== $uid ? 'acps_fm_up_' . get_current_user_id() . '_' . $uid : '';
+		if ( '' !== $uid_key ) {
+			$prev = (int) get_transient( $uid_key );
+			if ( $prev && 'attachment' === get_post_type( $prev ) ) {
+				$folders = $this->folders_obj();
+				wp_send_json_success(
+					array(
+						'id'         => $prev,
+						'url'        => wp_get_attachment_url( $prev ),
+						'filename'   => wp_basename( (string) get_post_meta( $prev, '_wp_attached_file', true ) ),
+						'card'       => $this->card( $prev ),
+						'common'     => $folders->common_folders( 8 ),
+						'folders'    => $this->folder_options( $folders ),
+						'duplicate'  => null,
+						'idempotent' => true,
+					)
+				);
+			}
+		}
+
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/media.php';
 		require_once ABSPATH . 'wp-admin/includes/image.php';
@@ -639,6 +663,12 @@ class ACPS_MC_Manager_Ajax {
 		}
 
 		$this->bump_version();
+
+		// Remember this uid → attachment for a day so a resumed/retried request
+		// for the same file returns this attachment instead of making a copy.
+		if ( '' !== $uid_key ) {
+			set_transient( $uid_key, (int) $id, DAY_IN_SECONDS );
+		}
 
 		$hash      = ACPS_MC_Duplicates::hash_file( $id );
 		$dup_id    = $hash ? ACPS_MC_Duplicates::find_duplicate( $id, $hash ) : 0;

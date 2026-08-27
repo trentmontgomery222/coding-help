@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.11.0
+Stable tag: 1.12.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,18 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.12.0 =
+* Uploads now TRULY resume after a refresh or crash — automatically, with no
+  re-selecting files. Each pending file's data is saved to your browser's
+  IndexedDB as it's queued, so if you leave the page or it reloads mid-upload,
+  the unfinished files upload themselves the next time you open FileMedia. A
+  per-file idempotency id means a file that had actually finished (but whose
+  confirmation was lost to the interruption) is recognised and never uploaded
+  twice. If a file can't be saved (private-browsing mode or full storage), it
+  falls back to the old "drag it in again" prompt for just those files.
+  Persistent-storage is requested so the browser is less likely to evict the
+  saved data. (Verified in a real browser: file bytes survive a reload intact.)
 
 = 1.11.0 =
 * New: Google Drive drip-importer. Drop a big batch of photos into a Drive

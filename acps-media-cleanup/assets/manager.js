@@ -488,17 +488,29 @@
 	 *     image library refuses these files),
 	 *   - file each upload into the folder you're currently viewing,
 	 *   - show real per-file progress, the time each took, and why one failed, and
-	 *   - remember an interrupted batch so you can finish it after a refresh.
+	 *   - TRULY resume after a refresh/crash: each pending file's bytes are saved
+	 *     to IndexedDB, so on reload the unfinished ones upload again automatically
+	 *     with no re-selection. A per-file idempotency id means a file that had
+	 *     actually finished (but whose response was lost) is never uploaded twice.
+	 *     If a file can't be saved (private mode / storage full), it degrades to a
+	 *     "drag it in again" prompt, the same as before.
 	 * Files upload one at a time (gentle on the server); HEIC conversion for a
 	 * file happens just before that file uploads.
 	 */
-	var UP_RESUME_KEY = 'acps_mm_resume';  // names still unfinished from last time
+	var GHOST_KEY     = 'acps_mm_ghosts';  // names we could NOT persist (re-prompt only)
+	var IDB_NAME      = 'acps_filemedia';
+	var IDB_STORE     = 'uploads';
+	var IDB_VERSION   = 1;
 	var uploadSeq     = 0;                 // unique id per upload row
 	var activeUploads = 0;                 // queued + in-flight (drives finishBatch)
 	var batchTotal    = 0;                 // files added in the current batch
 	var running       = false;            // is a file currently being processed?
 	var taskQueue     = [];                // rows waiting to upload, FIFO
 	var singleUpload  = false;            // was the finished batch a single file?
+	var resumeOnly    = false;            // current batch came only from a resume
+	var idbAvailable  = ( 'indexedDB' in window );
+	var idbPromise    = null;             // cached open-DB promise
+	var persistPromises = {};             // uid -> in-flight persist promise (idempotent)
 
 	// New uploads go into the folder you're viewing (a real numbered folder),
 	// otherwise Uncategorized (0) — All media, Uncategorized and the smart views.
@@ -580,12 +592,12 @@
 	}
 	function cancelRow( row ) {
 		row.cancelled = true;
+		forgetPersisted( row ); // don't let a cancelled file resume later
 		var i = $.inArray( row, taskQueue );
 		if ( i !== -1 ) {
 			// Queued but not started yet — remove and account for it.
 			taskQueue.splice( i, 1 );
 			rowError( row, i18n.cancelled || 'Cancelled' );
-			forgetResume( row.name );
 			activeUploads--;
 			if ( ! running && ! taskQueue.length && activeUploads <= 0 ) { finishBatch(); }
 			return;
@@ -598,15 +610,22 @@
 	// Public entry points (file input + drag-drop) hand their FileLists here.
 	function handleFiles( list ) {
 		if ( ! list || ! list.length ) { return; }
+		resumeOnly = false; // a real user action, not a resume
+		var added = [];
 		for ( var i = 0; i < list.length; i++ ) {
 			var file = list[ i ];
 			var row  = makeRow( file.name || 'file' );
-			row.file = file;
+			row.file     = file;
+			row.uid      = makeUid();
+			row.folderId = currentUploadFolder(); // remember where it should go, for resume
 			batchTotal++;
 			activeUploads++;
 			taskQueue.push( row );
-			rememberResume( file.name || 'file' );
+			added.push( row );
 		}
+		// Save each file's bytes to IndexedDB in the background so an interrupted
+		// batch can finish itself on the next visit. Bounded memory: one at a time.
+		persistAhead( added );
 		pump();
 	}
 	function pump() {
@@ -650,10 +669,12 @@
 	}
 	function uploadBlob( row, blob, filename ) {
 		if ( row.cancelled ) { afterRow( row ); return; }
+		filename = filename || row.name || 'file';
 		var fd = new FormData();
 		fd.append( 'action', 'acps_mm_upload' );
 		fd.append( 'nonce', A.nonce );
-		fd.append( 'folder_id', currentUploadFolder() );
+		fd.append( 'folder_id', ( typeof row.folderId === 'number' ) ? row.folderId : currentUploadFolder() );
+		if ( row.uid ) { fd.append( 'uid', row.uid ); } // idempotency: never ingest twice
 		fd.append( 'file', blob, filename );
 
 		var xhr = new XMLHttpRequest();
@@ -668,60 +689,231 @@
 			try { res = JSON.parse( xhr.responseText ); } catch ( e ) {}
 			if ( xhr.status >= 200 && xhr.status < 300 && res && res.success && res.data && res.data.id ) {
 				rowDone( row );
+				forgetPersisted( row ); // fully uploaded — remove the saved copy
 				uploadQueue.push( {
 					id: res.data.id, url: res.data.url || '', filename: res.data.filename || filename,
-					card: res.data.card || null, common: res.data.common || [], duplicate: res.data.duplicate || null
+					card: res.data.card || null, common: res.data.common || [], duplicate: res.data.duplicate || null,
+					resumed: !! row.resumed
 				} );
 			} else {
+				// The server answered but rejected it (bad type, etc.) — retrying
+				// won't help, so drop the saved copy so it doesn't resume forever.
 				rowError( row, ( res && res.data && res.data.message ) || ( 'HTTP ' + xhr.status ) );
+				forgetPersisted( row );
 			}
-			forgetResume( row.name );
 			afterRow( row );
 		};
 		xhr.onerror = function () {
+			// Network fault mid-upload — keep the saved copy so it resumes on the
+			// next visit; just mark the row failed for now.
 			row.xhr = null;
 			rowError( row, i18n.networkError || 'Network error' );
-			forgetResume( row.name );
 			afterRow( row );
 		};
 		xhr.onabort = function () {
-			row.xhr = null;
-			forgetResume( row.name ); // row already marked cancelled by cancelRow
+			row.xhr = null; // cancelRow already dropped the saved copy
 			afterRow( row );
 		};
 		xhr.send( fd );
 	}
 
-	/* Resume-assist: remember which files were still uploading, so if you leave
-	 * or refresh mid-batch we can tell you which didn't finish when you return.
-	 * (The browser can't re-read files after a reload, so this re-prompts rather
-	 * than silently re-sending — the Google Drive drip-uploader is the true
-	 * unattended path.) */
-	function readResume() { try { return JSON.parse( lsGet( UP_RESUME_KEY ) || '[]' ) || []; } catch ( e ) { return []; } }
-	function writeResume( list ) { lsSet( UP_RESUME_KEY, JSON.stringify( list ) ); }
-	function rememberResume( name ) { var l = readResume(); l.push( { name: name, at: Date.now() } ); writeResume( l ); }
-	function forgetResume( name ) {
-		var l = readResume();
-		for ( var i = 0; i < l.length; i++ ) { if ( l[ i ].name === name ) { l.splice( i, 1 ); break; } }
-		writeResume( l );
+	/* ---- True resume: persist pending files in IndexedDB, restore on load ---- */
+
+	function makeUid() {
+		try { if ( window.crypto && crypto.randomUUID ) { return crypto.randomUUID(); } } catch ( e ) {}
+		return 'u-' + Date.now().toString( 36 ) + '-' + Math.random().toString( 36 ).slice( 2, 10 );
 	}
-	function checkResume() {
-		var l = readResume();
-		// Drop anything older than 2 days so an old interruption doesn't nag forever.
+	function fileToBuffer( file ) {
+		if ( file.arrayBuffer ) { return file.arrayBuffer(); }
+		return new Promise( function ( resolve, reject ) {
+			var fr = new FileReader();
+			fr.onload = function () { resolve( fr.result ); };
+			fr.onerror = function () { reject( fr.error || new Error( 'read' ) ); };
+			fr.readAsArrayBuffer( file );
+		} );
+	}
+	function idbOpen() {
+		if ( idbPromise ) { return idbPromise; }
+		if ( ! idbAvailable ) { return Promise.reject( new Error( 'no-idb' ) ); }
+		idbPromise = new Promise( function ( resolve, reject ) {
+			var req;
+			try { req = indexedDB.open( IDB_NAME, IDB_VERSION ); } catch ( e ) { reject( e ); return; }
+			req.onupgradeneeded = function () {
+				var db = req.result;
+				if ( ! db.objectStoreNames.contains( IDB_STORE ) ) { db.createObjectStore( IDB_STORE, { keyPath: 'uid' } ); }
+			};
+			req.onsuccess = function () { resolve( req.result ); };
+			req.onerror = function () { reject( req.error || new Error( 'idb-open' ) ); };
+		} );
+		return idbPromise;
+	}
+	function idbPut( rec ) {
+		return idbOpen().then( function ( db ) {
+			return new Promise( function ( resolve, reject ) {
+				var tx = db.transaction( IDB_STORE, 'readwrite' );
+				tx.oncomplete = function () { resolve(); };
+				tx.onerror = function () { reject( tx.error || new Error( 'idb-put' ) ); };
+				tx.onabort = function () { reject( tx.error || new Error( 'idb-abort' ) ); };
+				try { tx.objectStore( IDB_STORE ).put( rec ); } catch ( e ) { reject( e ); }
+			} );
+		} );
+	}
+	function idbGetAll() {
+		return idbOpen().then( function ( db ) {
+			return new Promise( function ( resolve, reject ) {
+				var out = [];
+				var tx = db.transaction( IDB_STORE, 'readonly' );
+				var req = tx.objectStore( IDB_STORE ).openCursor();
+				req.onsuccess = function () {
+					var c = req.result;
+					if ( c ) { out.push( c.value ); c.continue(); } else { resolve( out ); }
+				};
+				req.onerror = function () { reject( req.error || new Error( 'idb-getall' ) ); };
+			} );
+		} );
+	}
+	function idbDelete( uid ) {
+		return idbOpen().then( function ( db ) {
+			return new Promise( function ( resolve ) {
+				var tx = db.transaction( IDB_STORE, 'readwrite' );
+				tx.oncomplete = function () { resolve(); };
+				tx.onerror = function () { resolve(); };
+				tx.onabort = function () { resolve(); };
+				try { tx.objectStore( IDB_STORE ).delete( uid ); } catch ( e ) { resolve(); }
+			} );
+		} ).catch( function () {} );
+	}
+
+	// Save one file's bytes so it can resume after a refresh. Idempotent per uid,
+	// and degrades to a re-prompt "ghost" note if storage is unavailable/full.
+	function persistFile( row ) {
+		if ( ! row || ! row.uid || ! row.file ) { return Promise.resolve( false ); }
+		if ( persistPromises[ row.uid ] ) { return persistPromises[ row.uid ]; }
+		if ( ! idbAvailable ) { row.persisted = false; noteGhost( row ); return Promise.resolve( false ); }
+		var p = fileToBuffer( row.file ).then( function ( buf ) {
+			return idbPut( {
+				uid: row.uid,
+				name: row.name,
+				type: ( row.file && row.file.type ) || '',
+				folderId: ( typeof row.folderId === 'number' ) ? row.folderId : 0,
+				buffer: buf,
+				createdAt: Date.now()
+			} );
+		} ).then( function () {
+			row.persisted = true;
+			unnoteGhost( row.name ); // in case it was previously a ghost
+			return true;
+		} ).catch( function () {
+			// Storage full or blocked — can't truly resume this one; note it so we
+			// can at least re-prompt for it on the next visit.
+			row.persisted = false;
+			noteGhost( row );
+			return false;
+		} );
+		persistPromises[ row.uid ] = p;
+		return p;
+	}
+	// Persist a set of rows one at a time (bounded memory).
+	function persistAhead( rows ) {
+		var i = 0;
+		( function next() {
+			if ( i >= rows.length ) { return; }
+			var row = rows[ i++ ];
+			if ( row.cancelled ) { next(); return; }
+			persistFile( row ).then( next, next );
+		} )();
+	}
+	// A file is done (or gone) — drop its saved copy and any ghost note. Waits for
+	// any in-flight persist of this uid to finish first, so a fast upload can't
+	// delete the record before the (slower) save writes it and leaves an orphan.
+	function forgetPersisted( row ) {
+		if ( ! row ) { return; }
+		unnoteGhost( row.name );
+		if ( ! row.uid ) { return; }
+		var uid = row.uid;
+		var wait = persistPromises[ uid ] || Promise.resolve();
+		wait.then( function () { idbDelete( uid ); }, function () { idbDelete( uid ); } );
+	}
+
+	// "Ghosts": files we could NOT save (private mode / full storage). We can only
+	// re-prompt for these, the old best-effort behaviour.
+	function ghostList() { try { return JSON.parse( lsGet( GHOST_KEY ) || '[]' ) || []; } catch ( e ) { return []; } }
+	function ghostSave( l ) { lsSet( GHOST_KEY, JSON.stringify( l ) ); }
+	function noteGhost( row ) {
+		var l = ghostList();
+		if ( ! l.some( function ( x ) { return x.name === row.name; } ) ) { l.push( { name: row.name, at: Date.now() } ); ghostSave( l ); }
+	}
+	function unnoteGhost( name ) {
+		var l = ghostList(), out = l.filter( function ( x ) { return x.name !== name; } );
+		if ( out.length !== l.length ) { ghostSave( out ); }
+	}
+
+	// On load: automatically finish uploading anything left in IndexedDB, and
+	// (separately) re-prompt for any "ghost" files we couldn't save.
+	function resumePersisted() {
+		requestPersistentStorage();
+		var done = function () { checkGhosts(); };
+		if ( ! idbAvailable ) { done(); return; }
+		idbGetAll().then( function ( records ) {
+			records = records || [];
+			var rows = [];
+			var cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000; // forget after 3 days
+			records.forEach( function ( rec ) {
+				if ( ! rec || ! rec.uid || ! rec.buffer ) { return; }
+				if ( rec.createdAt && rec.createdAt < cutoff ) { idbDelete( rec.uid ); return; }
+				var blob = new Blob( [ rec.buffer ], { type: rec.type || '' } );
+				var file;
+				try { file = new File( [ blob ], rec.name || 'file', { type: rec.type || '' } ); }
+				catch ( e ) { file = blob; try { file.name = rec.name; } catch ( e2 ) {} }
+				var row = makeRow( rec.name || 'file' );
+				row.file      = file;
+				row.uid       = rec.uid;
+				row.folderId  = ( typeof rec.folderId === 'number' ) ? rec.folderId : 0;
+				row.persisted = true;
+				row.resumed   = true;
+				persistPromises[ rec.uid ] = Promise.resolve( true ); // already saved
+				batchTotal++;
+				activeUploads++;
+				taskQueue.push( row );
+				rows.push( row );
+			} );
+			if ( rows.length ) {
+				resumeOnly = true;
+				toast( ( i18n.resuming || 'Resuming %d unfinished upload(s)…' ).replace( '%d', rows.length ) );
+				pump();
+			}
+			done();
+		} ).catch( done );
+	}
+
+	function requestPersistentStorage() {
+		try {
+			if ( navigator.storage && navigator.storage.persist && navigator.storage.persisted ) {
+				navigator.storage.persisted().then( function ( already ) {
+					if ( ! already ) { navigator.storage.persist(); }
+				} );
+			}
+		} catch ( e ) {}
+	}
+
+	// Re-prompt notice for ghost files (only shown when IndexedDB couldn't hold
+	// them). Persisted files resume for real above and never appear here.
+	function checkGhosts() {
+		var l = ghostList();
 		var cutoff = Date.now() - 2 * 24 * 60 * 60 * 1000;
 		l = l.filter( function ( x ) { return x && x.at && x.at >= cutoff; } );
-		writeResume( l );
+		ghostSave( l );
 		if ( ! l.length ) { return; }
 		var names = l.map( function ( x ) { return x.name; } ).slice( 0, 12 );
 		var extra = l.length - names.length;
-		var msg = ( i18n.resumeNotice || '%d upload(s) did not finish last time. Your browser can\'t resume them automatically — drag them in again to finish:' ).replace( '%d', l.length );
+		var msg = ( i18n.ghostNotice || '%d upload(s) couldn\'t be saved for auto-resume (private mode or full storage). Drag them in again to finish:' ).replace( '%d', l.length );
 		var $n = $( '<div class="notice notice-warning acps-mm-resume"><p></p><ul class="acps-mm-resume-list"></ul>' +
 			'<p><button type="button" class="button acps-mm-resume-clear"></button></p></div>' );
 		$n.find( 'p' ).first().text( msg );
 		names.forEach( function ( nm ) { $n.find( '.acps-mm-resume-list' ).append( $( '<li></li>' ).text( nm ) ); } );
 		if ( extra > 0 ) { $n.find( '.acps-mm-resume-list' ).append( $( '<li></li>' ).text( '… +' + extra ) ); }
 		$n.find( '.acps-mm-resume-clear' ).text( i18n.dismiss || 'Dismiss' );
-		$n.on( 'click', '.acps-mm-resume-clear', function () { writeResume( [] ); $n.remove(); } );
+		$n.on( 'click', '.acps-mm-resume-clear', function () { ghostSave( [] ); $n.remove(); } );
 		$( '.acps-mm-main' ).prepend( $n );
 	}
 
@@ -743,16 +935,26 @@
 			if ( dt && dt.files && dt.files.length ) { handleFiles( dt.files ); }
 		} );
 
-		checkResume();
+		resumePersisted();
 	}
 
 	// Called once every file in the batch has settled: decide what to show next.
 	function finishBatch() {
 		singleUpload = ( batchTotal === 1 );
+		var wasResume = resumeOnly;
 		batchTotal = 0;
 		activeUploads = 0;
 		running = false;
+		resumeOnly = false;
 		if ( ! uploadQueue.length ) { loadFolders(); return; } // all failed/cancelled
+		// Files finished by an automatic resume shouldn't pop the rename/place
+		// dialog — the user reloaded; just fold them into the grid quietly.
+		if ( wasResume ) {
+			uploadQueue = [];
+			loadGrid();
+			loadFolders();
+			return;
+		}
 		if ( uploadQueue.length === 1 ) { showUploadPopup(); return; }
 		showBatchChoice( uploadQueue.length );
 	}
