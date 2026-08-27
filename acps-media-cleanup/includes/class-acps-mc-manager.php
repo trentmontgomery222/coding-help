@@ -35,8 +35,8 @@ class ACPS_MC_Manager {
 		// Everything lives UNDER the core "Media" menu — no separate top-level tab.
 		add_submenu_page(
 			'upload.php',
-			__( 'Media Manager', 'acps-media-cleanup' ),
-			__( 'Media Manager', 'acps-media-cleanup' ),
+			__( 'FileMedia', 'acps-media-cleanup' ),
+			__( 'FileMedia', 'acps-media-cleanup' ),
 			'upload_files',
 			self::SLUG,
 			array( $this, 'render' )
@@ -53,7 +53,7 @@ class ACPS_MC_Manager {
 			);
 			add_submenu_page(
 				'upload.php',
-				__( 'Media Manager Settings', 'acps-media-cleanup' ),
+				__( 'FileMedia Settings', 'acps-media-cleanup' ),
 				__( 'Media Settings', 'acps-media-cleanup' ),
 				ACPS_MC_CAP,
 				ACPS_MC_Admin::SETTINGS_SLUG,
@@ -135,6 +135,8 @@ class ACPS_MC_Manager {
 					'move'          => __( 'Move', 'acps-media-cleanup' ),
 					'moveToFolder'  => __( 'Move to folder…', 'acps-media-cleanup' ),
 					'newFolder'     => __( 'New folder', 'acps-media-cleanup' ),
+					'searchFolders' => __( 'Search folders…', 'acps-media-cleanup' ),
+					'noFolders'     => __( 'No folders match.', 'acps-media-cleanup' ),
 					'newFolderName' => __( 'New folder name:', 'acps-media-cleanup' ),
 					'selected'      => __( 'selected', 'acps-media-cleanup' ),
 					'deleteSel'     => __( 'Delete selected', 'acps-media-cleanup' ),
@@ -306,7 +308,7 @@ class ACPS_MC_Manager {
 				</label>
 			</div>
 
-			<h1 class="wp-heading-inline"><span class="dashicons dashicons-format-gallery"></span> <?php esc_html_e( 'Media Manager', 'acps-media-cleanup' ); ?></h1>
+			<h1 class="wp-heading-inline"><span class="dashicons dashicons-format-gallery"></span> <?php esc_html_e( 'FileMedia', 'acps-media-cleanup' ); ?></h1>
 			<button type="button" class="page-title-action" id="acps-mm-upload"><?php esc_html_e( 'Upload files', 'acps-media-cleanup' ); ?></button>
 			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-trash', admin_url( 'upload.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Trash', 'acps-media-cleanup' ); ?></a>
 			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-settings', admin_url( 'upload.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Settings', 'acps-media-cleanup' ); ?></a>
@@ -360,6 +362,7 @@ class ACPS_MC_Manager {
 
 					<div class="acps-mm-bulkbar" id="acps-mm-bulkbar" style="display:none;">
 						<span><strong id="acps-mm-selcount">0</strong> <?php esc_html_e( 'selected', 'acps-media-cleanup' ); ?></span>
+						<button type="button" class="button" id="acps-mm-bulk-all"><?php esc_html_e( 'Select all shown', 'acps-media-cleanup' ); ?></button>
 						<?php if ( $writable ) : ?>
 							<button type="button" class="button" id="acps-mm-bulk-move"><?php esc_html_e( 'Move to folder…', 'acps-media-cleanup' ); ?></button>
 						<?php endif; ?>

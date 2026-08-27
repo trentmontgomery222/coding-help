@@ -18,6 +18,22 @@
 	border: 1px solid #dcdcde;
 	border-radius: 6px;
 }
+/* Folder search box, pinned at the top of the sidebar. */
+.acps-mm-foldersearch {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	border-bottom: 1px solid #f0f0f1;
+	position: sticky;
+	top: 0;
+	background: #fff;
+	border-radius: 6px 6px 0 0;
+	z-index: 1;
+}
+.acps-mm-foldersearch .dashicons { color: #787c82; font-size: 16px; width: 16px; height: 16px; }
+.acps-mm-foldersearch input { flex: 1 1 auto; width: 100%; }
+.acps-mm-nofolders { padding: 10px; }
 .acps-mm-folderlist { margin: 0; }
 .acps-mm-folder {
 	display: flex;
@@ -165,24 +181,34 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+/* Card overlay controls live in three clear corners so they never collide:
+   top-left = select checkbox, top-right = copy-link, bottom-right = usage dot. */
 .acps-mm-check {
 	position: absolute;
-	top: 8px;
-	left: 8px;
-	background: rgba(255,255,255,.92);
-	border-radius: 3px;
-	padding: 2px 4px;
+	top: 6px;
+	left: 6px;
+	background: rgba(255,255,255,.95);
+	border-radius: 4px;
+	padding: 3px 5px;
 	line-height: 1;
-	z-index: 2;
+	z-index: 3;
+	box-shadow: 0 1px 3px rgba(0,0,0,.2);
+	opacity: 0;
+	transition: opacity .12s;
 }
+.acps-mm-check input { margin: 0; display: block; cursor: pointer; }
+.acps-mm-card:hover .acps-mm-check,
+.acps-mm-card.is-selected .acps-mm-check,
+.acps-mm-grid.acps-mm-selecting .acps-mm-check { opacity: 1; }
 .acps-mm-state-dot {
 	position: absolute;
-	top: 8px;
-	right: 8px;
-	width: 14px;
-	height: 14px;
+	bottom: 6px;
+	right: 6px;
+	width: 13px;
+	height: 13px;
 	border-radius: 50%;
 	border: 2px solid #fff;
+	box-shadow: 0 1px 2px rgba(0,0,0,.35);
 	z-index: 2;
 }
 .state-used .acps-mm-state-dot { background: #46b450; }
@@ -225,17 +251,18 @@
 }
 .view-classic .acps-mm-card:hover .acps-mm-cap { opacity: 1; }
 /* Keep a small usage indicator, but no coloured border (stays WP-like). */
-.view-classic .acps-mm-state-dot { width: 10px; height: 10px; top: 6px; right: 6px; }
-.view-classic .acps-mm-cardcopy { top: 6px; right: 24px; width: 22px; height: 22px; }
+.view-classic .acps-mm-state-dot { width: 10px; height: 10px; bottom: 6px; right: 6px; }
+.view-classic .acps-mm-cardcopy { width: 22px; height: 22px; }
 .view-classic .acps-mm-cardcopy .dashicons { font-size: 14px; width: 14px; height: 14px; line-height: 22px; }
 /* Classic view = plainer sidebar: no folder icons (still keeps carets & counts). */
 .view-classic .acps-mm-sidebar .acps-mm-fname .dashicons { display: none; }
 .view-classic .acps-mm-fname { padding-left: 2px; }
 
-/* Copy-link button on each card (top-right) */
+/* Copy-link button on each card (top-right corner). Faintly visible always so
+   you can tell it's there, full-strength on hover. */
 .acps-mm-cardcopy {
 	position: absolute;
-	top: 30px;
+	top: 6px;
 	right: 6px;
 	z-index: 3;
 	width: 26px;
@@ -243,16 +270,22 @@
 	padding: 0;
 	border: none;
 	border-radius: 50%;
-	background: rgba(255,255,255,.92);
+	background: rgba(255,255,255,.95);
 	box-shadow: 0 1px 3px rgba(0,0,0,.2);
 	cursor: pointer;
 	color: #2271b1;
-	opacity: 0;
-	transition: opacity .12s;
+	opacity: .55;
+	transition: opacity .12s, background .12s;
 }
 .acps-mm-card:hover .acps-mm-cardcopy { opacity: 1; }
+.acps-mm-cardcopy:hover { background: #fff; }
 .acps-mm-cardcopy .dashicons { font-size: 16px; width: 16px; height: 16px; line-height: 26px; }
 .acps-mm-cardcopy.copied { background: #46b450; color: #fff; opacity: 1; }
+
+/* Select mode: cards get a pointer + a subtle ring on hover to signal clicking
+   highlights rather than opens. */
+.acps-mm-grid.acps-mm-selecting .acps-mm-card { cursor: copy; }
+.acps-mm-grid.acps-mm-selecting .acps-mm-card:hover { box-shadow: 0 0 0 2px #72aee6; }
 
 /* Top-right header controls */
 .acps-mm-wrap { position: relative; }

@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.9.0
+Stable tag: 1.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,34 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.10.0 =
+* Renamed the screen to **FileMedia** (menu, headings and settings). Nothing
+  else changes — same page, same URL.
+* New in-house uploader (replaces the built-in WordPress uploader inside
+  FileMedia) so uploads finally behave the way you'd expect:
+  - HEIC really converts now. The previous approach relied on the WordPress
+    uploader handing the file to the browser converter, which didn't reliably
+    happen; FileMedia now controls the whole upload, converts each HEIC to JPEG
+    in the browser first, and uploads the JPEG.
+  - Uploads go into the folder you're currently viewing (a real folder), and
+    the popup still lets you move them somewhere else.
+  - Generic camera names (IMG_1234, DSC_, "image 3", "test", screenshots, …)
+    must be renamed — even in bulk uploads, where they used to slip through.
+  - Each progress row shows the time it took and when it finished on hover; a
+    failed upload shows the reason on hover.
+  - Single-file uploads copy the file's link to your clipboard when you finish.
+  - If you leave or refresh mid-upload, FileMedia tells you which files didn't
+    finish when you come back so you can drop them in again. (A browser can't
+    silently resume files it can no longer read — the planned Google Drive
+    drip-uploader is the true unattended path for very large batches.)
+* Folder search box at the top of the folder list — type to filter folders.
+* "Select" is now a mode: turn it on and click photos to highlight them (Shift-
+  click selects a range), instead of ticking one checkbox at a time. Added a
+  "Select all shown" button.
+* Cleaner preview tiles: the select checkbox (top-left), copy-link button
+  (top-right) and used/unused dot (bottom-right) now sit in their own corners
+  so they're easy to see and never overlap.
 
 = 1.9.0 =
 * HEIC conversion now happens in your browser. Some servers (including some

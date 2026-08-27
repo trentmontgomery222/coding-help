@@ -7,6 +7,8 @@
 
 	var state = { folder: 'all', search: '', type: '', sort: 'date', recursive: false };
 	var selection = {};
+	var selectMode = false;   // click cards to highlight/select instead of opening them
+	var lastClicked = null;   // anchor id for shift-click range selection
 	var folderTree = [];      // [{id,name,depth,parent,total}]
 	var lastFolderData = null;
 	var writable = false;
@@ -101,8 +103,41 @@
 		return 'dashicons-portfolio';
 	}
 
+	var folderQuery = '';  // current folder-search text (lowercased)
+
 	function renderSidebar( data ) {
+		var html = '';
+		html += '<div class="acps-mm-foldersearch"><span class="dashicons dashicons-search"></span>';
+		html += '<input type="search" id="acps-mm-folder-search" placeholder="' + esc( i18n.searchFolders || 'Search folders…' ) + '" value="' + esc( folderQuery ) + '">';
+		html += '</div>';
+		html += '<div class="acps-mm-folderlist-wrap">' + folderListHtml( data ) + '</div>';
+		if ( writable ) {
+			html += '<button type="button" class="button acps-mm-newfolder-btn" id="acps-mm-newfolder">+ ' + esc( i18n.newFolder || 'New folder' ) + '</button>';
+		}
+		$( '#acps-mm-folders' ).html( html );
+	}
+
+	// The <ul> of folders — the collapsible tree normally, or a flat list of
+	// matches while a folder search is active.
+	function folderListHtml( data ) {
+		data = data || { total: 0 };
 		var html = '<ul class="acps-mm-folderlist">';
+		if ( folderQuery ) {
+			var matches = folderTree.filter( function ( f ) { return String( f.name ).toLowerCase().indexOf( folderQuery ) !== -1; } );
+			if ( ! matches.length ) {
+				html += '<li class="acps-mm-muted acps-mm-nofolders">' + esc( i18n.noFolders || 'No folders match.' ) + '</li>';
+			}
+			matches.forEach( function ( f ) {
+				var active = String( state.folder ) === String( f.id );
+				html += '<li class="acps-mm-folder' + ( active ? ' is-active' : '' ) + '" data-folder="' + f.id + '">' +
+					'<span class="acps-mm-caret empty"></span>' +
+					'<span class="acps-mm-fname"><span class="dashicons dashicons-portfolio"></span> ' + esc( f.name ) + '</span>' +
+					'<span class="acps-mm-fcount">' + f.total + '</span></li>';
+			} );
+			html += '</ul>';
+			return html;
+		}
+
 		html += specialItem( 'all', ( i18n.allMedia || 'All media' ) + ' (' + data.total + ')', state.folder === 'all' );
 		html += specialItem( 'unfiled', ( i18n.unfiled || 'Uncategorized' ), state.folder === 'unfiled' );
 		if ( data.hasScan ) {
@@ -117,10 +152,7 @@
 		} );
 		html += renderFolderNodes( byParent, 0 );
 		html += '</ul>';
-		if ( writable ) {
-			html += '<button type="button" class="button acps-mm-newfolder-btn" id="acps-mm-newfolder">+ ' + esc( i18n.newFolder || 'New folder' ) + '</button>';
-		}
-		$( '#acps-mm-folders' ).html( html );
+		return html;
 	}
 
 	function renderFolderNodes( byParent, parentId ) {
@@ -278,13 +310,31 @@
 	function selCount() { return Object.keys( selection ).length; }
 	function updateBulkBar() {
 		$( '#acps-mm-selcount' ).text( selCount() );
-		$( '#acps-mm-bulkbar' ).toggle( selCount() > 0 );
+		// Visible while there's a selection, or whenever select mode is on (so the
+		// "Select all" / "Clear" actions stay reachable).
+		$( '#acps-mm-bulkbar' ).toggle( selCount() > 0 || selectMode );
 	}
 	function clearSelection() {
 		selection = {};
 		$( '.acps-mm-cb' ).prop( 'checked', false );
 		$( '.acps-mm-card' ).removeClass( 'is-selected' );
-		$( '#acps-mm-selectall' ).prop( 'checked', false );
+		updateBulkBar();
+	}
+	// Highlight/select a single card (keeps its checkbox in sync).
+	function setCardSelected( id, on ) {
+		if ( on ) { selection[ id ] = true; } else { delete selection[ id ]; }
+		var $c = $( '.acps-mm-card[data-id="' + id + '"]' );
+		$c.toggleClass( 'is-selected', !! on );
+		$c.find( '.acps-mm-cb' ).prop( 'checked', !! on );
+	}
+	function toggleCardSelection( id ) { setCardSelected( id, ! selection[ id ] ); updateBulkBar(); }
+	// Shift-click: select every visible card between the anchor and this one.
+	function selectRange( fromId, toId ) {
+		var ids = $( '#acps-mm-grid .acps-mm-card[data-id]' ).map( function () { return String( $( this ).data( 'id' ) ); } ).get();
+		var a = ids.indexOf( String( fromId ) ), b = ids.indexOf( String( toId ) );
+		if ( a === -1 || b === -1 ) { toggleCardSelection( toId ); return; }
+		if ( a > b ) { var t = a; a = b; b = t; }
+		for ( var i = a; i <= b; i++ ) { setCardSelected( ids[ i ], true ); }
 		updateBulkBar();
 	}
 
@@ -665,7 +715,7 @@
 		var names = l.map( function ( x ) { return x.name; } ).slice( 0, 12 );
 		var extra = l.length - names.length;
 		var msg = ( i18n.resumeNotice || '%d upload(s) did not finish last time. Your browser can\'t resume them automatically — drag them in again to finish:' ).replace( '%d', l.length );
-		var $n = $( '<div class="notice notice-warning is-dismissible acps-mm-resume"><p></p><ul class="acps-mm-resume-list"></ul>' +
+		var $n = $( '<div class="notice notice-warning acps-mm-resume"><p></p><ul class="acps-mm-resume-list"></ul>' +
 			'<p><button type="button" class="button acps-mm-resume-clear"></button></p></div>' );
 		$n.find( 'p' ).first().text( msg );
 		names.forEach( function ( nm ) { $n.find( '.acps-mm-resume-list' ).append( $( '<li></li>' ).text( nm ) ); } );
@@ -1054,6 +1104,13 @@
 			selectFolder( $( this ).data( 'folder' ) );
 		} );
 
+		// Folder search: filter the folder list as you type (re-renders only the
+		// list, so the search box keeps focus).
+		$( document ).on( 'input', '#acps-mm-folder-search', function () {
+			folderQuery = String( $( this ).val() || '' ).toLowerCase().trim();
+			$( '.acps-mm-folderlist-wrap' ).html( folderListHtml( lastFolderData ) );
+		} );
+
 		// Include sub-folders toggle (initial state restored in init).
 		$( '#acps-mm-recursive' ).on( 'change', function () {
 			state.recursive = this.checked;
@@ -1123,21 +1180,32 @@
 			updateBulkBar();
 		} );
 		$( document ).on( 'click', '.acps-mm-check', function ( e ) { e.stopPropagation(); } );
-		$( document ).on( 'click', '.acps-mm-card', function () {
+		$( document ).on( 'click', '.acps-mm-card', function ( e ) {
 			if ( $( this ).hasClass( 'acps-mm-foldercard' ) ) { selectFolder( $( this ).data( 'folder' ) ); return; }
-			openDetail( $( this ).data( 'id' ) );
+			var id = $( this ).data( 'id' );
+			// In select mode a click highlights the card (shift-click = range)
+			// instead of opening it.
+			if ( selectMode ) {
+				if ( e.shiftKey && lastClicked !== null ) { selectRange( lastClicked, id ); }
+				else { toggleCardSelection( id ); lastClicked = id; }
+				return;
+			}
+			openDetail( id );
 		} );
 
+		// "Select" toggles select mode: click cards to highlight them, shift-click
+		// for a range. (Individual checkboxes still work too.)
 		$( '#acps-mm-selectall' ).on( 'change', function () {
-			var on = this.checked;
-			$( '.acps-mm-cb' ).each( function () {
-				this.checked = on;
-				if ( on ) { selection[ this.value ] = true; } else { delete selection[ this.value ]; }
-				$( this ).closest( '.acps-mm-card' ).toggleClass( 'is-selected', on );
-			} );
+			selectMode = this.checked;
+			$( '#acps-mm-grid' ).toggleClass( 'acps-mm-selecting', selectMode );
+			if ( ! selectMode ) { lastClicked = null; }
 			updateBulkBar();
 		} );
 
+		$( '#acps-mm-bulk-all' ).on( 'click', function () {
+			$( '#acps-mm-grid .acps-mm-card[data-id]' ).each( function () { setCardSelected( $( this ).data( 'id' ), true ); } );
+			updateBulkBar();
+		} );
 		$( '#acps-mm-bulk-clear' ).on( 'click', clearSelection );
 		$( '#acps-mm-bulk-move' ).on( 'click', function () {
 			var ids = Object.keys( selection ).map( Number );

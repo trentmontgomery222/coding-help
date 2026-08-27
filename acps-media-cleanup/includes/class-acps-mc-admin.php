@@ -104,7 +104,7 @@ class ACPS_MC_Admin {
 		}
 		echo '<div class="wrap acps-mc">';
 		echo '<h1><span class="dashicons dashicons-trash"></span> ' . esc_html__( 'Media Trash & Activity Log', 'acps-media-cleanup' ) . '</h1>';
-		echo '<p><a href="' . esc_url( ACPS_MC_Manager::page_url() ) . '">&larr; ' . esc_html__( 'Back to Media Manager', 'acps-media-cleanup' ) . '</a></p>';
+		echo '<p><a href="' . esc_url( ACPS_MC_Manager::page_url() ) . '">&larr; ' . esc_html__( 'Back to FileMedia', 'acps-media-cleanup' ) . '</a></p>';
 		$this->render_trash_tab();
 		echo '</div>';
 	}
@@ -117,8 +117,8 @@ class ACPS_MC_Admin {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'acps-media-cleanup' ) );
 		}
 		echo '<div class="wrap acps-mc">';
-		echo '<h1><span class="dashicons dashicons-admin-generic"></span> ' . esc_html__( 'Media Manager Settings', 'acps-media-cleanup' ) . '</h1>';
-		echo '<p><a href="' . esc_url( ACPS_MC_Manager::page_url() ) . '">&larr; ' . esc_html__( 'Back to Media Manager', 'acps-media-cleanup' ) . '</a></p>';
+		echo '<h1><span class="dashicons dashicons-admin-generic"></span> ' . esc_html__( 'FileMedia Settings', 'acps-media-cleanup' ) . '</h1>';
+		echo '<p><a href="' . esc_url( ACPS_MC_Manager::page_url() ) . '">&larr; ' . esc_html__( 'Back to FileMedia', 'acps-media-cleanup' ) . '</a></p>';
 		$this->render_settings_tab();
 		echo '</div>';
 	}
@@ -201,7 +201,7 @@ class ACPS_MC_Admin {
 			?>
 		</p>
 		<?php if ( $unused > 0 ) : ?>
-			<p><a class="button button-primary" href="<?php echo esc_url( ACPS_MC_Manager::page_url() ); ?>"><?php esc_html_e( 'Review unused files in the Media Manager →', 'acps-media-cleanup' ); ?></a></p>
+			<p><a class="button button-primary" href="<?php echo esc_url( ACPS_MC_Manager::page_url() ); ?>"><?php esc_html_e( 'Review unused files in FileMedia →', 'acps-media-cleanup' ); ?></a></p>
 		<?php endif; ?>
 
 		<div class="acps-mc-coverage">
@@ -386,9 +386,9 @@ class ACPS_MC_Admin {
 					</td>
 				</tr>
 				<tr>
-					<th scope="row"><?php esc_html_e( 'Media Manager', 'acps-media-cleanup' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'FileMedia', 'acps-media-cleanup' ); ?></th>
 					<td>
-						<label><input type="checkbox" name="replace_media_screen" value="1" <?php checked( $s['replace_media_screen'] ); ?>> <?php esc_html_e( 'Open the enhanced Media Manager when I click "Media"', 'acps-media-cleanup' ); ?></label>
+						<label><input type="checkbox" name="replace_media_screen" value="1" <?php checked( $s['replace_media_screen'] ); ?>> <?php esc_html_e( 'Open the enhanced FileMedia screen when I click "Media"', 'acps-media-cleanup' ); ?></label>
 						<p class="description"><?php esc_html_e( 'The classic Media Library stays available via the "Classic library" link. The media picker inside the editor / Beaver Builder is never changed.', 'acps-media-cleanup' ); ?></p>
 					</td>
 				</tr>
@@ -404,13 +404,13 @@ class ACPS_MC_Admin {
 					<td>
 						<label><input type="checkbox" name="convert_heic_on_upload" value="1" <?php checked( $s['convert_heic_on_upload'] ); ?>> <?php esc_html_e( 'Convert HEIC/HEIF uploads to JPEG automatically', 'acps-media-cleanup' ); ?></label>
 						<p class="description">
-							<?php esc_html_e( 'In the Media Manager, HEIC photos are converted to JPEG right in your browser before they upload — no server support needed and nothing is sent to any third party.', 'acps-media-cleanup' ); ?>
+							<?php esc_html_e( 'In FileMedia, HEIC photos are converted to JPEG right in your browser before they upload — no server support needed and nothing is sent to any third party.', 'acps-media-cleanup' ); ?>
 							<br>
 							<?php
 							if ( ACPS_MC_Heic::supported() ) {
 								esc_html_e( 'Uploads made elsewhere (the classic media library) are also converted on this server. ✓', 'acps-media-cleanup' );
 							} else {
-								esc_html_e( 'This server itself cannot convert HEIC (Imagick without HEIC support), so uploads made outside the Media Manager will stay as HEIC.', 'acps-media-cleanup' );
+								esc_html_e( 'This server itself cannot convert HEIC (Imagick without HEIC support), so uploads made outside FileMedia will stay as HEIC.', 'acps-media-cleanup' );
 							}
 							?>
 						</p>
