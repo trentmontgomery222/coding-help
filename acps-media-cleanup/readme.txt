@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.10.0
+Stable tag: 1.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,24 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.11.0 =
+* New: Google Drive drip-importer. Drop a big batch of photos into a Drive
+  folder and have them trickle into the media library over time — slower during
+  the day, faster at night — so a large import never slows the site down. Two
+  ways to wire it up (use either or both), set up under FileMedia ▸ Settings ▸
+  "Google Drive import":
+  - Apps Script push: a small script (in your own Google account, provided in
+    the plugin's google-apps-script/ folder) posts files to a token-protected
+    REST endpoint. No Google Cloud project needed.
+  - WordPress pull: WordPress downloads from a shared Drive folder on a schedule
+    using a Google service-account key.
+  Both paths file imports into a folder you choose, skip byte-for-byte
+  duplicates, and move each processed Drive file into an "Imported to WordPress"
+  (or "Skipped (not imported)") sub-folder so nothing is ever imported twice.
+  HEIC/HEIF files are skipped by the importer (there's no browser to convert
+  them) — import those through FileMedia instead. See google-apps-script/README.md
+  for step-by-step setup.
 
 = 1.10.0 =
 * Renamed the screen to **FileMedia** (menu, headings and settings). Nothing

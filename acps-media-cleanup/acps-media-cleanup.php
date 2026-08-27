@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Unused Media Cleanup
  * Plugin URI:        https://acpsmd.org/
  * Description:        Safely find and remove media library files (images, PDFs, documents, videos) that are not used anywhere on the site. Works with FileBird folders and Beaver Builder. Single-site only. Trash first, restore anytime.
- * Version:           1.10.0
+ * Version:           1.11.0
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            ACPS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'ACPS_MC_VERSION', '1.10.0' );
+define( 'ACPS_MC_VERSION', '1.11.0' );
 define( 'ACPS_MC_FILE', __FILE__ );
 define( 'ACPS_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -47,6 +47,7 @@ require_once ACPS_MC_DIR . 'includes/class-acps-mc-manager.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-manager-ajax.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-heic.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-duplicates.php';
+require_once ACPS_MC_DIR . 'includes/class-acps-mc-drive.php';
 require_once ACPS_MC_DIR . 'includes/class-acps-mc-cron.php';
 
 /**
@@ -71,6 +72,7 @@ function acps_mc_deactivate() {
 	delete_transient( ACPS_MC_TRANSIENT_INDEX );
 	ACPS_MC_Cron::unschedule();
 	wp_clear_scheduled_hook( ACPS_MC_Cron::CONTINUE_HOOK );
+	ACPS_MC_Drive::unschedule();
 }
 register_deactivation_hook( __FILE__, 'acps_mc_deactivate' );
 
@@ -85,6 +87,7 @@ function acps_mc_boot() {
 	new ACPS_MC_Cron();
 	new ACPS_MC_Heic();
 	new ACPS_MC_Duplicates();
+	new ACPS_MC_Drive();
 
 	if ( is_admin() ) {
 		$admin = new ACPS_MC_Admin();

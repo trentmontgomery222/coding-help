@@ -20,10 +20,15 @@ $options = array(
 	'acps_media_cleanup_scan_meta',
 	'acps_mc_usage_index',
 	'acps_media_cleanup_activated',
+	'acps_mc_drive_status',
+	'acps_mc_drive_log',
 );
 foreach ( $options as $opt ) {
 	delete_option( $opt );
 }
+
+// Cached Google Drive access token.
+delete_transient( 'acps_mc_drive_token' );
 
 foreach ( array( 'acps_mc_log', 'acps_mc_index' ) as $t ) {
 	$table = $wpdb->prefix . $t;
@@ -34,6 +39,7 @@ foreach ( array( 'acps_mc_log', 'acps_mc_index' ) as $t ) {
 // Clear scheduled cron events.
 wp_clear_scheduled_hook( 'acps_mc_daily_scan' );
 wp_clear_scheduled_hook( 'acps_mc_continue_scan' );
+wp_clear_scheduled_hook( 'acps_mc_drive_tick' );
 
 // Remove per-user recent-folder memory.
 delete_metadata( 'user', 0, 'acps_mm_recent_folders', '', true );

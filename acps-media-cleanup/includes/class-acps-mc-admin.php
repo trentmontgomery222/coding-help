@@ -453,6 +453,104 @@ class ACPS_MC_Admin {
 				</tr>
 			</table>
 
+			<h2 class="acps-mc-h2"><span class="dashicons dashicons-google"></span> <?php esc_html_e( 'Google Drive import (drip-upload)', 'acps-media-cleanup' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Bring a large batch of photos in gradually from a Google Drive folder — slower during the day, faster at night — so it never slows the site down. HEIC/HEIF files are skipped by this importer (there is no browser here to convert them); import those through FileMedia instead.', 'acps-media-cleanup' ); ?>
+			</p>
+
+			<?php
+			$drive_status = class_exists( 'ACPS_MC_Drive' ) ? ACPS_MC_Drive::get_status() : array();
+			$drive_log    = class_exists( 'ACPS_MC_Drive' ) ? ACPS_MC_Drive::get_log() : array();
+			$push_token   = ( '' !== (string) $s['drive_push_token'] ) ? (string) $s['drive_push_token'] : wp_generate_password( 40, false );
+			$ingest_url   = esc_url_raw( rest_url( 'acps-mc/v1/ingest' ) );
+			?>
+
+			<h3><?php esc_html_e( 'Common', 'acps-media-cleanup' ); ?></h3>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="drive_target_folder"><?php esc_html_e( 'File imports into folder ID', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<input type="number" min="0" id="drive_target_folder" name="drive_target_folder" value="<?php echo esc_attr( $s['drive_target_folder'] ); ?>" class="small-text">
+						<p class="description"><?php esc_html_e( 'FileBird folder ID new imports are placed in. 0 = Uncategorized (top level). You can move them later in FileMedia.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Skip duplicates', 'acps-media-cleanup' ); ?></th>
+					<td><label><input type="checkbox" name="drive_skip_duplicates" value="1" <?php checked( $s['drive_skip_duplicates'] ); ?>> <?php esc_html_e( 'Do not import a file that is a byte-for-byte copy of one already in the library.', 'acps-media-cleanup' ); ?></label></td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'Option A — Apps Script push (no Google Cloud project needed)', 'acps-media-cleanup' ); ?></h3>
+			<p class="description"><?php esc_html_e( 'A small Google Apps Script (running in your own Google account) sends files to this site. Paste the token below into the script. See google-apps-script/Code.gs in the plugin folder for the script and setup steps.', 'acps-media-cleanup' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="drive_push_token"><?php esc_html_e( 'Push token (shared secret)', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<input type="text" id="drive_push_token" name="drive_push_token" value="<?php echo esc_attr( $push_token ); ?>" class="regular-text code" style="width:32em;max-width:100%;">
+						<p class="description"><?php esc_html_e( 'Leave blank to disable the push endpoint. A suggested random value is pre-filled — save to keep it, or replace with your own. Treat it like a password.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Endpoint URL', 'acps-media-cleanup' ); ?></th>
+					<td><code><?php echo esc_html( $ingest_url ); ?></code><p class="description"><?php esc_html_e( 'The script posts files here with the token in an "X-ACPS-Token" header.', 'acps-media-cleanup' ); ?></p></td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'Option B — WordPress pulls (Google service account)', 'acps-media-cleanup' ); ?></h3>
+			<p class="description"><?php esc_html_e( 'WordPress downloads from a Drive folder on its own schedule. Create a Google Cloud service account, enable the Drive API, download its JSON key, paste it below, then share the Drive folder with the service account\'s email address (as Editor).', 'acps-media-cleanup' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Enable pulling', 'acps-media-cleanup' ); ?></th>
+					<td><label><input type="checkbox" name="drive_pull_enabled" value="1" <?php checked( $s['drive_pull_enabled'] ); ?>> <?php esc_html_e( 'Let WordPress download from the Drive folder on a schedule.', 'acps-media-cleanup' ); ?></label></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="drive_folder_id"><?php esc_html_e( 'Drive source folder', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<input type="text" id="drive_folder_id" name="drive_folder_id" value="<?php echo esc_attr( $s['drive_folder_id'] ); ?>" class="regular-text code" style="width:32em;max-width:100%;">
+						<p class="description"><?php esc_html_e( 'Paste the folder\'s URL or its ID. Imported files are moved into an "Imported to WordPress" sub-folder; skipped ones into "Skipped (not imported)".', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="drive_service_account"><?php esc_html_e( 'Service-account JSON key', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<textarea id="drive_service_account" name="drive_service_account" rows="5" class="large-text code" placeholder='{ "type": "service_account", "client_email": "...", "private_key": "..." }'><?php echo esc_textarea( $s['drive_service_account'] ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Stored in your database and used only to reach the shared Drive folder. Remember to share the folder with this key\'s client_email.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Throttle', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<label><?php esc_html_e( 'Daytime:', 'acps-media-cleanup' ); ?> <input type="number" min="0" max="500" name="drive_day_rate" value="<?php echo esc_attr( $s['drive_day_rate'] ); ?>" class="small-text"></label>
+						<label style="margin-left:10px;"><?php esc_html_e( 'Night:', 'acps-media-cleanup' ); ?> <input type="number" min="0" max="1000" name="drive_night_rate" value="<?php echo esc_attr( $s['drive_night_rate'] ); ?>" class="small-text"></label>
+						<span class="description"><?php esc_html_e( 'files per 5-minute check.', 'acps-media-cleanup' ); ?></span>
+						<br>
+						<label><?php esc_html_e( 'Day starts at hour', 'acps-media-cleanup' ); ?> <input type="number" min="0" max="23" name="drive_day_start" value="<?php echo esc_attr( $s['drive_day_start'] ); ?>" class="small-text"></label>
+						<label style="margin-left:10px;"><?php esc_html_e( 'Night starts at hour', 'acps-media-cleanup' ); ?> <input type="number" min="0" max="23" name="drive_night_start" value="<?php echo esc_attr( $s['drive_night_start'] ); ?>" class="small-text"></label>
+						<span class="description"><?php esc_html_e( '(0–23, your site timezone).', 'acps-media-cleanup' ); ?></span>
+					</td>
+				</tr>
+				<?php if ( ! empty( $drive_status ) ) : ?>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Last run', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<?php
+						$when = ! empty( $drive_status['last_run'] ) ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $drive_status['last_run'] ) : '—';
+						/* translators: 1: date/time, 2: imported count, 3: skipped count, 4: total imported */
+						echo esc_html( sprintf( __( '%1$s — imported %2$d, skipped %3$d (total imported so far: %4$d)', 'acps-media-cleanup' ), $when, (int) ( $drive_status['last_imported'] ?? 0 ), (int) ( $drive_status['last_skipped'] ?? 0 ), (int) ( $drive_status['total_imported'] ?? 0 ) ) );
+						?>
+						<?php if ( ! empty( $drive_log ) ) : ?>
+							<details style="margin-top:6px;"><summary><?php esc_html_e( 'Recent import log', 'acps-media-cleanup' ); ?></summary>
+							<ul class="acps-mc-muted" style="margin-top:6px;">
+								<?php foreach ( array_slice( $drive_log, 0, 15 ) as $line ) : ?>
+									<li><?php echo esc_html( wp_date( 'H:i', (int) $line['t'] ) . ' [' . $line['type'] . '] ' . $line['msg'] ); ?></li>
+								<?php endforeach; ?>
+							</ul></details>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<?php endif; ?>
+			</table>
+
 			<?php submit_button( __( 'Save settings', 'acps-media-cleanup' ) ); ?>
 		</form>
 
@@ -479,6 +577,11 @@ class ACPS_MC_Admin {
 			ACPS_MC_Cron::schedule();
 		} else {
 			ACPS_MC_Cron::unschedule();
+		}
+
+		// Reconcile the Google Drive pull schedule with its setting.
+		if ( class_exists( 'ACPS_MC_Drive' ) ) {
+			ACPS_MC_Drive::maybe_schedule();
 		}
 
 		wp_safe_redirect(
