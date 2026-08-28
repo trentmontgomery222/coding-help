@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cayden  Staff Directory
  * Description:       Staff Directory system for the website
- * Version:           2.8.0
+ * Version:           2.8.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; //no access
 }
 
-define( 'CAYDENDIR_SD_VERSION',       '2.8.0' );
+define( 'CAYDENDIR_SD_VERSION',       '2.8.1' );
 define( 'CAYDENDIR_SD_DIR',           plugin_dir_path( __FILE__ ) );
 define( 'CAYDENDIR_SD_URL',           plugin_dir_url( __FILE__ ) );
 define( 'CAYDENDIR_SD_CRON_HOOK',     'CAYDENDIR_sd_daily_sync' );
@@ -1045,6 +1045,23 @@ function CAYDENDIR_sd_user_can_edit() {
 	return is_user_logged_in() && current_user_can( CAYDENDIR_sd_edit_cap() );
 }
 
+/**
+ * True while a background search indexer is processing content for its index.
+ *
+ * SearchWP (with "Parse Shortcodes" enabled) renders the directory during
+ * indexing and fires the `searchwp\indexer\batch` action while it runs; we
+ * detect that and force the public-only version so hidden people and
+ * editor-only markup are never written to the search index. The indexer has no
+ * reliable logged-in user, so this explicit check is used instead of trusting
+ * is_user_logged_in(). Filterable so other indexers (e.g. Relevanssi) can opt
+ * in: add_filter( 'CAYDENDIR_sd_is_search_indexing', '__return_true' ) inside
+ * their own indexing hook.
+ */
+function CAYDENDIR_sd_is_search_indexing() {
+	$indexing = function_exists( 'did_action' ) && did_action( 'searchwp\indexer\batch' ) > 0;
+	return (bool) apply_filters( 'CAYDENDIR_sd_is_search_indexing', $indexing );
+}
+
 function CAYDENDIR_sd_normalize_record( $row ) {
 	$defaults = array(
 		'name'      => '',
@@ -1625,6 +1642,15 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 	$data = CAYDENDIR_sd_get_merged_data();
 
 	$can_edit = CAYDENDIR_sd_user_can_edit();
+
+	// While a search indexer (e.g. SearchWP with "Parse Shortcodes" on) is
+	// rendering this to index it, always emit the PUBLIC-only version: no
+	// hidden people and no editor-only UI. Everything private is gated on
+	// $can_edit, so forcing it false here keeps private data out of the index
+	// even if a user context leaks into the background indexer.
+	if ( CAYDENDIR_sd_is_search_indexing() ) {
+		$can_edit = false;
+	}
 
 	// Hidden people are removed for the public; editors still see them
 	// (with a "Hidden" badge) so they can be un-hidden later.
@@ -2766,6 +2792,7 @@ function CAYDENDIR_sd_help_page_run() {
 				<li>Tick <strong>Hide from directory</strong> to remove someone from the public list; editors still see them with a <em>Hidden</em> badge and can un-hide later.</li>
 				<li>To hand a row back to the automatic data, open it and choose <strong>Remove manual override</strong>. You can also remove overrides from the list at the bottom of the Settings page.</li>
 			</ul>
+			<p class="description"><strong>Search engines &amp; SearchWP:</strong> hidden people and the editor-only controls are never sent to a search index. If you use SearchWP with &ldquo;Parse Shortcodes&rdquo; on, the plugin detects its indexer (<code>searchwp\indexer\batch</code>) and renders the public-only version while indexing, so hidden people won&rsquo;t appear in site search. Other indexers can opt in with <code>add_filter( 'CAYDENDIR_sd_is_search_indexing', '__return_true' )</code> during their indexing pass.</p>
 		</div>
 
 		<div class="card">
