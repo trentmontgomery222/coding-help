@@ -1,16 +1,221 @@
 <?php
 /*
 WPCode Snippet type: PHP Snippet
-No special Insert Location needed — this hooks wp_footer directly in
-PHP, so it always prints regardless of how this site's WPCode install
-handles JavaScript-type snippet insertion/targeting. Restrict to a
-specific page, if needed, by wrapping the whole block in an is_page()
-check — see the commented example at the bottom.
+No special Insert Location needed — this hooks wp_head/wp_footer
+directly in PHP, so it always prints regardless of how this site's
+WPCode install handles JavaScript/CSS-type snippet insertion/targeting.
+Restrict to a specific page, if needed, by wrapping the add_action()
+calls in an is_page() check — see the commented example at the bottom.
 
-This is the exact JS from carousel-loader.js (including the hidden
-Beaver Builder list settings reader for speed/perPage), just delivered
-via PHP output instead of WPCode's JavaScript Snippet type.
+This is the exact JS + CSS from carousel-loader.js/carousel-theme.css
+(including the hidden Beaver Builder list settings reader for
+speed/perPage), just delivered via PHP output instead of WPCode's
+JavaScript/CSS Snippet types.
 */
+
+add_action( 'wp_head', function () {
+	?>
+	<style>
+	.feedbacksettings {
+		display: none;
+	}
+
+	#fb-feed-carousel {
+		position: relative;
+		max-width: 100%;
+	}
+
+	/* Kill Smash Balloon's own grid/flex-wrap rules once items become slides */
+	#fb-feed-carousel .cff-posts-wrap.splide__list {
+		flex-wrap: nowrap !important;
+	}
+
+	/* Masonry-mode feeds set a fixed-height, scroll-to-load-more wrapper —
+	   let the carousel size to its own content instead of clipping/scrolling */
+	#fb-feed-carousel .cff-wrapper-fixed-height {
+		height: auto !important;
+		overflow: visible !important;
+	}
+
+	#fb-feed-carousel .splide__track {
+		overflow: hidden;
+	}
+
+	/* !important throughout this rule so it wins regardless of Smash
+	   Balloon's own stylesheet. */
+	#fb-feed-carousel .splide__slide {
+		box-sizing: border-box !important;
+		background: #f6f6f6 !important;
+		border-radius: 4px !important;
+		box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15) !important;
+		padding: 12px !important;
+		height: 700px !important;
+		overflow: hidden !important;
+		display: flex !important;
+		flex-direction: column !important;
+	}
+
+	/* Photo/video-poster banner — carousel-loader.php's JS moves this img
+	   to be the card's first direct child and tags it .cff-carousel-banner. */
+	#fb-feed-carousel .splide__slide > img.cff-carousel-banner {
+		display: block;
+		width: calc(100% + 32px);
+		height: 350px;
+		object-fit: cover;
+	/* 	margin: -16px -16px 12px -16px; */
+		flex: 0 0 auto;
+	}
+
+	/* Album posts can carry several photos — only the banner one should show */
+	#fb-feed-carousel .splide__slide img.cff-feed-image:not(.cff-carousel-banner) {
+		display: none !important;
+	}
+
+	/* Whatever wrapper Smash Balloon originally put the image in is now
+	   empty (the image itself was relocated above) — hide its leftover
+	   shell/chrome under any of the class names it's used across layouts. */
+	#fb-feed-carousel .splide__slide .cff-media-wrap,
+	#fb-feed-carousel .splide__slide .cff-html5-video,
+	#fb-feed-carousel .splide__slide .cff-photos,
+	#fb-feed-carousel .splide__slide .cff-single-photo {
+		display: none !important;
+	}
+
+	/* Clamp post text to a consistent number of lines so cards line up evenly. */
+	#fb-feed-carousel .splide__slide .cff-post-text {
+		font-size: 14px !important;
+		line-height: 1.5 !important;
+		max-height: 6em !important;
+		overflow: hidden !important;
+		display: -webkit-box !important;
+		-webkit-line-clamp: 4 !important;
+		-webkit-box-orient: vertical !important;
+		margin: 0px !important;
+		margin-top: 10px !important;
+	}
+
+	/* Date + Read More/Share sit together as one row at the bottom of the
+	   card. Smash Balloon already makes the card itself the positioning
+	   anchor for these, so keep position:absolute and anchor it with
+	   bottom/left rather than fighting it back to static. */
+	#fb-feed-carousel .splide__slide .cff-carousel-footer,
+	#fb-feed-carousel .splide__slide .cff-carousel-footer .cff-date,
+	#fb-feed-carousel .splide__slide .cff-carousel-footer .cff-meta-wrap,
+	#fb-feed-carousel .splide__slide .cff-carousel-footer .cff-post-links {
+		position: absolute;
+		left: 1px;
+		right: auto !important;
+		bottom: -20px;
+		padding-left: 23px;
+		padding-bottom: 243px;
+	}
+
+	#fb-feed-carousel .splide__slide .cff-carousel-footer {
+		display: flex !important;
+		align-items: center !important;
+		gap: 8px !important;
+		font-size: 12px !important;
+	}
+
+	#fb-feed-carousel .splide__slide .cff-date {
+		color: #999;
+		white-space: nowrap;
+	}
+
+	#fb-feed-carousel .splide__slide .cff-post-links {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		white-space: nowrap;
+	}
+
+	#fb-feed-carousel .splide__slide .cff-post-links a {
+	/* 	color: #1877f2; */
+		text-decoration: none;
+	}
+
+	#fb-feed-carousel .splide__slide .cff-post-links a:hover {
+		text-decoration: underline;
+	}
+
+	/* Hide the "..." expand link and comment/like counts — BB's carousel
+	   doesn't show these, keep the card to image + excerpt + date/links */
+	#fb-feed-carousel .splide__slide .cff-expand,
+	#fb-feed-carousel .splide__slide .cff-react-wrapper {
+		display: none !important;
+	}
+
+	/* Arrows — mimic BB's circular overlay arrow buttons. top/transform
+	   are !important because Splide's own JS resets the arrow's inline
+	   `top` on click — force the centered position so it wins over that. */
+	#fb-feed-carousel .splide__arrow {
+		background: rgba(0, 0, 0, 0.55);
+		width: 40px;
+		height: 40px;
+		display:none;
+		opacity: 1;
+		top: 50% !important;
+		transform: translateY(-50%) !important;
+	}
+
+	#fb-feed-carousel .splide__arrow:hover {
+		background: rgba(0, 0, 0, 0.8);
+	}
+
+	#fb-feed-carousel .splide__arrow svg {
+		fill: #fff;
+		width: 16px;
+		height: 16px;
+	}
+
+	#fb-feed-carousel .splide__arrow--prev {
+		left: 0.5em;
+	}
+
+	#fb-feed-carousel .splide__arrow--next {
+		right: 0.5em;
+	}
+
+	#fb-feed-carousel .splide__arrow:focus, #fb-feed-carousel .splide__arrow:focus-visible {
+		outline: 2px solid #1877f2 !important;
+		outline-offset: 2px !important;
+		border-radius: 50% !important;
+	}
+
+	button:active, input[type="button"]:active, input[type="submit"]:active, button:focus, input[type="button"]:focus, input[type="submit"]:focus {
+		color: #fff;
+	}
+
+	/* Dots — centered pagination row below the cards */
+	#fb-feed-carousel .splide__pagination {
+		position: relative;
+		bottom: auto;
+		margin-top: 16px;
+	}
+
+	#fb-feed-carousel .splide__pagination__page {
+		background: #ccc;
+		opacity: 1;
+		width: 9px;
+		height: 9px;
+		margin: 0 4px;
+		transition: background-color 0.2s ease;
+	}
+
+	#fb-feed-carousel .splide__pagination__page.is-active {
+		background: #1877f2;
+		transform: scale(1.2);
+	}
+
+	/* Hide Smash Balloon's "Load More" button — see README, it should stay off */
+	#fb-feed-carousel .cff-loadmore-wrapper,
+	#fb-feed-carousel .cff-load-more {
+		display: none !important;
+	}
+	</style>
+	<?php
+}, 100 );
+
 add_action( 'wp_footer', function () {
 	?>
 	<script>
