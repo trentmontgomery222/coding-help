@@ -75,6 +75,17 @@ category of thing Smash Balloon's own docs walk through for custom CSS.
   that guide can be added to the config object.
 - Arrow/dot colors live in `carousel-theme.css` (`.splide__arrow`,
   `.splide__pagination__page.is-active`).
+- Card look (white background, shadow, rounded corners, image banner,
+  clamped text) is built entirely in `carousel-theme.css` on
+  `.splide__slide` — it doesn't depend on Smash Balloon's own card
+  styling, since that only ships with Grid/Masonry layout, not List.
+  `height: 380px` and `-webkit-line-clamp: 4` on the slide/text control
+  how tall each card is and how much excerpt text shows before it's cut
+  off — raise/lower both together to fit more or less text.
+- The image force-load fix in `carousel-loader.js` (resolving
+  `img[data-src]` eagerly) is what fixes empty/broken photo boxes — Smash
+  Balloon's own lazy-loader doesn't reliably fire once posts move into
+  the carousel, and never fires on Splide's loop-mode slide clones.
 
 ## If it doesn't pick up the feed
 

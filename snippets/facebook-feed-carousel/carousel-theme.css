@@ -29,8 +29,67 @@ centered dot pagination, evenly gapped cards).
 	overflow: hidden;
 }
 
+/*
+Smash Balloon's own card look (white bg + shadow + rounded corners) only
+ships with its Grid/Masonry layouts, not List — so on List layout (which
+you're on, since Grid wasn't offered under the Timeline feed type) each
+slide is bare text with no card at all. Build the card look directly on
+the slide instead of depending on Smash Balloon's layout-specific classes.
+*/
 #fb-feed-carousel .splide__slide {
 	box-sizing: border-box;
+	background: #fff;
+	border-radius: 4px;
+	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+	padding: 16px;
+	height: 380px;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+/* Bleed the post photo/video poster to the card's top edges as a fixed-
+   height banner. Photo posts wrap their image in .cff-media-wrap; video
+   posts wrap their poster image in .cff-html5-video instead. */
+#fb-feed-carousel .splide__slide .cff-media-wrap,
+#fb-feed-carousel .splide__slide .cff-html5-video {
+	margin: -16px -16px 12px -16px;
+	height: 160px;
+	overflow: hidden;
+	flex: 0 0 auto;
+}
+
+#fb-feed-carousel .splide__slide .cff-media-wrap img,
+#fb-feed-carousel .splide__slide .cff-html5-video img {
+	width: 100%;
+	height: 160px;
+	object-fit: cover;
+}
+
+/* Clamp post text to a consistent number of lines so cards line up evenly */
+#fb-feed-carousel .splide__slide .cff-post-text {
+	font-size: 14px;
+	line-height: 1.5;
+	overflow: hidden;
+	display: -webkit-box;
+	-webkit-line-clamp: 4;
+	-webkit-box-orient: vertical;
+	margin: 0;
+}
+
+#fb-feed-carousel .splide__slide .cff-date {
+	font-size: 12px;
+	color: #999;
+	margin-top: auto;
+	padding-top: 8px;
+}
+
+/* Hide the "...", Read More/Share row, and comment/like counts — BB's
+   carousel doesn't show these, keep the card to image + excerpt + date */
+#fb-feed-carousel .splide__slide .cff-expand,
+#fb-feed-carousel .splide__slide .cff-meta-wrap,
+#fb-feed-carousel .splide__slide .cff-react-wrapper {
+	display: none !important;
 }
 
 /* Arrows — mimic BB's circular overlay arrow buttons */

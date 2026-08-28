@@ -73,6 +73,16 @@ re-strip after resize in case Masonry's JS reapplies them.
 		list.classList.add('splide__list');
 		items.forEach(function (item) {
 			item.classList.add('splide__slide');
+			// Smash Balloon lazy-loads photos via data-src; its own lazy-load
+			// observer doesn't reliably fire once posts move into the carousel
+			// (and Splide's loop mode clones slides, which never fire it at
+			// all), so resolve them eagerly instead of waiting on it.
+			item.querySelectorAll('img[data-src]').forEach(function (img) {
+				img.src = img.dataset.src;
+				img.removeAttribute('data-src');
+				img.classList.remove('lazyload');
+				img.classList.add('lazyloaded');
+			});
 		});
 		root.classList.add('splide');
 
