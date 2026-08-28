@@ -42,7 +42,7 @@ the slide instead of depending on Smash Balloon's layout-specific classes.
    line-clamp further down in this file to match). */
 #fb-feed-carousel .splide__slide {
 	box-sizing: border-box !important;
-	background: #fff !important;
+	background: #f6f6f6 !important;
 	border-radius: 4px !important;
 	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15) !important;
 	padding: 16px !important;
@@ -148,12 +148,18 @@ the slide instead of depending on Smash Balloon's layout-specific classes.
 	display: none !important;
 }
 
-/* Arrows — mimic BB's circular overlay arrow buttons */
+/* Arrows — mimic BB's circular overlay arrow buttons.
+   top/transform are !important because Splide's own JS resets the
+   arrow's inline `top` on click (confirmed: it measured 371px before a
+   click and 20px right after, with track height unchanged at 700px both
+   times) — force the centered position so it wins over that. */
 #fb-feed-carousel .splide__arrow {
 	background: rgba(0, 0, 0, 0.55);
 	width: 40px;
 	height: 40px;
 	opacity: 1;
+	top: 50% !important;
+	transform: translateY(-50%) !important;
 }
 
 #fb-feed-carousel .splide__arrow:hover {
