@@ -83,6 +83,18 @@ re-strip after resize in case Masonry's JS reapplies them.
 				img.classList.remove('lazyload');
 				img.classList.add('lazyloaded');
 			});
+
+			// Move the post's first photo/video-poster to the very top of
+			// the card as a banner. Smash Balloon wraps it in a different
+			// class depending on layout (.cff-media-wrap, .cff-photos,
+			// .cff-html5-video, ...), so rather than guess that wrapper,
+			// relocate the stable img.cff-feed-image element itself and
+			// mark it so the CSS can target it directly.
+			var media = item.querySelector('img.cff-feed-image');
+			if (media) {
+				media.classList.add('cff-carousel-banner');
+				item.insertBefore(media, item.firstChild);
+			}
 		});
 		root.classList.add('splide');
 
