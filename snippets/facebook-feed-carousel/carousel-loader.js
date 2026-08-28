@@ -8,6 +8,17 @@ Pure JS on purpose (no <link>/<script> tags) — WPCode's JavaScript
 Snippet editor treats the whole box as a JS body and lints out raw HTML
 tags. Splide's CSS/JS are pulled in with document.createElement instead
 of a literal <script>/<link>, so nothing here needs an HTML Snippet.
+
+Matches Smash Balloon's actual rendered markup:
+  #fb-feed-carousel > ... > .cff-posts-wrap > .cff-item (one per post)
+(NOT .cff-list-wrapper / .cff-item-wrap — that's a different layout mode.)
+
+If the feed's Layout is set to "Masonry" in Smash Balloon, its own JS
+positions each .cff-item with inline position:absolute; left/top and may
+re-run that on window resize, fighting the carousel. Switching the feed's
+Layout to "Grid" avoids that fight entirely (see README). This script
+still defensively strips those inline styles either way, including a
+re-strip after resize in case Masonry's JS reapplies them.
 */
 (function () {
 	var ROOT_ID = 'fb-feed-carousel'; // must match the wrapper div ID around your shortcode
@@ -23,15 +34,34 @@ of a literal <script>/<link>, so nothing here needs an HTML Snippet.
 		document.head.appendChild(el);
 	}
 
+	// Undo Smash Balloon's masonry-mode inline absolute positioning so
+	// Splide's own flex-based slide layout controls where items sit.
+	function stripMasonryStyles(list, items) {
+		list.style.position = '';
+		list.style.height = '';
+		items.forEach(function (item) {
+			item.style.position = '';
+			item.style.left = '';
+			item.style.top = '';
+			item.style.zIndex = '';
+		});
+		var fixedHeightWrap = root.querySelector('.cff-wrapper-fixed-height');
+		if (fixedHeightWrap) {
+			fixedHeightWrap.style.height = 'auto';
+			fixedHeightWrap.style.overflow = 'visible';
+		}
+	}
+
 	function buildSlider() {
 		if (root.dataset.carouselReady) return; // guard against double init
-		var list = root.querySelector('.cff-list-wrapper');
-		var items = list
-			? list.querySelectorAll(':scope > .cff-item-wrap')
-			: [];
+		var list = root.querySelector('.cff-posts-wrap');
+		var items = list ? list.querySelectorAll(':scope > .cff-item') : [];
 		if (!list || !items.length) return;
 
 		root.dataset.carouselReady = '1';
+		items = Array.prototype.slice.call(items);
+
+		stripMasonryStyles(list, items);
 
 		// Wrap the plugin's existing item list in the structure Splide expects,
 		// without cloning or removing any of Smash Balloon's own nodes/handlers.
@@ -62,6 +92,16 @@ of a literal <script>/<link>, so nothing here needs an HTML Snippet.
 				640: { perPage: 1 },
 			},
 		}).mount();
+
+		// If Smash Balloon's masonry JS recalculates positions on resize,
+		// strip its inline styles again shortly after so the carousel wins.
+		var resizeTimer;
+		window.addEventListener('resize', function () {
+			clearTimeout(resizeTimer);
+			resizeTimer = setTimeout(function () {
+				stripMasonryStyles(list, items);
+			}, 150);
+		});
 	}
 
 	// Smash Balloon loads posts via AJAX after page load, so watch the DOM

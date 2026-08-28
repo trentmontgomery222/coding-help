@@ -9,15 +9,24 @@ needing Smash Balloon Pro. Built on [Splide.js](https://splidejs.com/)
 
 Smash Balloon's Pro "Carousel" layout is really just their own JS/CSS
 sitting on top of the same feed markup the free version already outputs
-(`.cff-list-wrapper` > repeated `.cff-item-wrap`). This snippet does the
-same thing client-side: it waits for the feed to finish its AJAX load,
-then wraps the existing post nodes (without cloning or removing them —
-any lightbox/click handlers Smash Balloon attached keep working) in the
-structure Splide needs, and mounts the slider. It's plain CSS/JS
-customization of the plugin's own public output, the same category of
-thing Smash Balloon's own docs walk through for custom CSS.
+(`.cff-posts-wrap` > repeated `.cff-item`, one per post). This snippet
+does the same thing client-side: it waits for the feed to finish its
+AJAX load, then wraps the existing post nodes (without cloning or
+removing them — any lightbox/click handlers Smash Balloon attached keep
+working) in the structure Splide needs, and mounts the slider. It's
+plain CSS/JS customization of the plugin's own public output, the same
+category of thing Smash Balloon's own docs walk through for custom CSS.
 
 ## Setup
+
+0. **Set the feed's Layout to "Grid" (recommended).** In Smash Balloon →
+   your Facebook Feed → Customize → Layout, "Masonry" makes the plugin's
+   own JS position every post with inline `position:absolute; left/top`
+   (and can re-run that on window resize), which fights the carousel.
+   "Grid" renders the same posts without that JS positioning, so the
+   carousel drops in cleanly. The snippets below still work either way —
+   `carousel-loader.js` strips Masonry's inline positioning defensively —
+   but Grid avoids the fight entirely.
 
 1. **Fix the feed's post count so it's not paginated.** In the Facebook
    Feed settings, set "Number of Posts" to a fixed count (e.g. 9–12) and
@@ -69,9 +78,14 @@ thing Smash Balloon's own docs walk through for custom CSS.
 
 ## If it doesn't pick up the feed
 
-Smash Balloon's markup has been stable across recent versions
-(`.cff-list-wrapper` / `.cff-item-wrap`), but if your installed version
+The selectors in `carousel-loader.js` (`.cff-posts-wrap` / `.cff-item`)
+match Smash Balloon's Grid and Masonry layouts. If your installed version
 differs: open the page, right-click a feed post → **Inspect**, and check
 what class wraps the repeating items and what class each individual post
-uses. Update `list.querySelector('.cff-list-wrapper')` and
-`':scope > .cff-item-wrap'` in `carousel-loader.js` to match.
+uses. Update `root.querySelector('.cff-posts-wrap')` and
+`':scope > .cff-item'` in `carousel-loader.js` to match.
+
+If posts still don't fully unstack into a row (some overlap or a big gap
+above the carousel), the feed is likely on Masonry layout and Smash
+Balloon's JS re-ran its absolute positioning after the carousel mounted —
+switch Layout to Grid (step 0 above) to remove the conflict at the source.

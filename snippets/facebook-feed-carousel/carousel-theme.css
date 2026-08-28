@@ -14,8 +14,15 @@ centered dot pagination, evenly gapped cards).
 }
 
 /* Kill Smash Balloon's own grid/flex-wrap rules once items become slides */
-#fb-feed-carousel .cff-list-wrapper.splide__list {
+#fb-feed-carousel .cff-posts-wrap.splide__list {
 	flex-wrap: nowrap !important;
+}
+
+/* Masonry-mode feeds set a fixed-height, scroll-to-load-more wrapper —
+   let the carousel size to its own content instead of clipping/scrolling */
+#fb-feed-carousel .cff-wrapper-fixed-height {
+	height: auto !important;
+	overflow: visible !important;
 }
 
 #fb-feed-carousel .splide__track {
