@@ -122,13 +122,13 @@ re-strip after resize in case Masonry's JS reapplies them.
 
 	loadAsset('link', {
 		rel: 'stylesheet',
-		href: 'https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/css/splide.min.css',
+		href: 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4/dist/css/splide.min.css',
 	});
 
 	loadAsset(
 		'script',
 		{
-			src: 'https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/js/splide.min.js',
+			src: 'https://cdn.jsdelivr.net/npm/@splidejs/splide@4/dist/js/splide.min.js',
 		},
 		watchForFeed
 	);
