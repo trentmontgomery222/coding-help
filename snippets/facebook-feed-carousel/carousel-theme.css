@@ -1,0 +1,80 @@
+/*
+WPCode Snippet type: CSS Snippet
+Insert location: Site Wide Header (safe to run everywhere — fully scoped
+under #fb-feed-carousel, so it does nothing on pages without that wrapper).
+
+Purpose: theme Splide's default markup to look like Beaver Builder's
+native Post Carousel module (circular arrow buttons on the edges,
+centered dot pagination, evenly gapped cards).
+*/
+
+#fb-feed-carousel {
+	position: relative;
+	max-width: 100%;
+}
+
+/* Kill Smash Balloon's own grid/flex-wrap rules once items become slides */
+#fb-feed-carousel .cff-list-wrapper.splide__list {
+	flex-wrap: nowrap !important;
+}
+
+#fb-feed-carousel .splide__track {
+	overflow: hidden;
+}
+
+#fb-feed-carousel .splide__slide {
+	box-sizing: border-box;
+}
+
+/* Arrows — mimic BB's circular overlay arrow buttons */
+#fb-feed-carousel .splide__arrow {
+	background: rgba(0, 0, 0, 0.55);
+	width: 40px;
+	height: 40px;
+	opacity: 1;
+}
+
+#fb-feed-carousel .splide__arrow:hover {
+	background: rgba(0, 0, 0, 0.8);
+}
+
+#fb-feed-carousel .splide__arrow svg {
+	fill: #fff;
+	width: 16px;
+	height: 16px;
+}
+
+#fb-feed-carousel .splide__arrow--prev {
+	left: 0.5em;
+}
+
+#fb-feed-carousel .splide__arrow--next {
+	right: 0.5em;
+}
+
+/* Dots — centered pagination row below the cards */
+#fb-feed-carousel .splide__pagination {
+	position: relative;
+	bottom: auto;
+	margin-top: 16px;
+}
+
+#fb-feed-carousel .splide__pagination__page {
+	background: #ccc;
+	opacity: 1;
+	width: 9px;
+	height: 9px;
+	margin: 0 4px;
+	transition: background-color 0.2s ease;
+}
+
+#fb-feed-carousel .splide__pagination__page.is-active {
+	background: #1877f2; /* swap for your brand color */
+	transform: scale(1.2);
+}
+
+/* Hide Smash Balloon's "Load More" button — see README, it should stay off */
+#fb-feed-carousel .cff-loadmore-wrapper,
+#fb-feed-carousel .cff-load-more {
+	display: none !important;
+}

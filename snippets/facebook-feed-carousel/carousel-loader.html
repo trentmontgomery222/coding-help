@@ -1,0 +1,83 @@
+<!--
+WPCode Snippet type: HTML Snippet
+Insert location: Footer
+Insertion: restrict to just the page(s) with the Facebook feed via
+WPCode's "Insertion" tab -> "Page Specific" (or Smart Conditional Logic).
+Don't run this site-wide; only the page that has #fb-feed-carousel needs it.
+-->
+
+<link
+	rel="stylesheet"
+	href="https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/css/splide.min.css"
+/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/js/splide.min.js"></script>
+
+<script>
+(function () {
+	var ROOT_ID = 'fb-feed-carousel'; // must match the wrapper div ID around your shortcode
+	var root = document.getElementById(ROOT_ID);
+	if (!root) return;
+
+	function buildSlider() {
+		if (root.dataset.carouselReady) return; // guard against double init
+		var list = root.querySelector('.cff-list-wrapper');
+		var items = list
+			? list.querySelectorAll(':scope > .cff-item-wrap')
+			: [];
+		if (!list || !items.length) return;
+
+		root.dataset.carouselReady = '1';
+
+		// Wrap the plugin's existing item list in the structure Splide expects,
+		// without cloning or removing any of Smash Balloon's own nodes/handlers.
+		var track = document.createElement('div');
+		track.className = 'splide__track';
+		list.parentNode.insertBefore(track, list);
+		track.appendChild(list);
+
+		list.classList.add('splide__list');
+		items.forEach(function (item) {
+			item.classList.add('splide__slide');
+		});
+		root.classList.add('splide');
+
+		new Splide(root, {
+			type: 'loop',
+			perPage: 3,
+			perMove: 1,
+			gap: '1.5rem',
+			pagination: true,
+			arrows: true,
+			autoplay: true,
+			interval: 5000,
+			pauseOnHover: true,
+			pauseOnFocus: true,
+			breakpoints: {
+				1024: { perPage: 2 },
+				640: { perPage: 1 },
+			},
+		}).mount();
+	}
+
+	// Smash Balloon loads posts via AJAX after page load, so poll the DOM
+	// with a MutationObserver instead of assuming a fixed delay.
+	function whenSplideReady(cb) {
+		if (window.Splide) return cb();
+		var check = setInterval(function () {
+			if (window.Splide) {
+				clearInterval(check);
+				cb();
+			}
+		}, 50);
+	}
+
+	whenSplideReady(function () {
+		buildSlider(); // in case the feed is already cached/loaded
+		var observer = new MutationObserver(function () {
+			buildSlider();
+			if (root.dataset.carouselReady) observer.disconnect();
+		});
+		observer.observe(root, { childList: true, subtree: true });
+	});
+})();
+</script>
