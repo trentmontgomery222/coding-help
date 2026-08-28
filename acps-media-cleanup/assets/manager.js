@@ -80,6 +80,7 @@
 			folderTree = res.data.tree || [];
 			lastFolderData = res.data;
 			renderSidebar( res.data );
+			populateHeroFolders();
 			renderScanInfo( res.data );
 		} );
 	}
@@ -224,10 +225,33 @@
 		$( '#acps-mm-page' ).val( '' );
 		$( '.acps-mm-folder' ).removeClass( 'is-active' );
 		$( '.acps-mm-folder[data-folder="' + fid + '"]' ).addClass( 'is-active' );
+		syncHeroFolder();
 		closeDetail();
 		loadGrid();
 		// Don't yank the whole page to the top on folder change — the sticky
 		// sidebar keeps the folders in view and the grid reloads in place.
+	}
+
+	// Keep the "Add Media File" hero folder chooser in step with the current
+	// upload target (a real numbered folder, else Uncategorized).
+	function syncHeroFolder() {
+		var $sel = $( '#acps-mm-hero-folder-sel' );
+		if ( ! $sel.length ) { return; }
+		var f = String( state.folder );
+		$sel.val( ( /^\d+$/.test( f ) && parseInt( f, 10 ) > 0 ) ? f : 'unfiled' );
+	}
+
+	// Fill the hero folder chooser from the loaded folder tree (indented, like
+	// the FileBird chooser on the native uploader).
+	function populateHeroFolders() {
+		var $sel = $( '#acps-mm-hero-folder-sel' );
+		if ( ! $sel.length ) { return; }
+		var opts = '<option value="unfiled">' + esc( i18n.unfiled || 'Uncategorized' ) + '</option>';
+		( folderTree || [] ).forEach( function ( f ) {
+			opts += '<option value="' + esc( f.id ) + '">' + esc( indent( f.depth ) + f.name ) + '</option>';
+		} );
+		$sel.html( opts );
+		syncHeroFolder();
 	}
 
 	function folderCardHtml( f ) {
@@ -935,7 +959,14 @@
 		// Hidden multi-file input, opened by the "Upload files" button.
 		var $input = $( '<input type="file" multiple class="acps-mm-fileinput" style="position:absolute;left:-9999px;top:-9999px;">' ).appendTo( 'body' );
 		$( '#acps-mm-upload' ).on( 'click', function ( e ) { e.preventDefault(); $input.trigger( 'click' ); } );
+		// "Add Media File" hero "Select Files" button uses the same hidden input.
+		$( document ).on( 'click', '#acps-mm-hero-select', function ( e ) { e.preventDefault(); $input.trigger( 'click' ); } );
 		$input.on( 'change', function () { handleFiles( this.files ); this.value = ''; } );
+
+		// The hero drop area highlights on drag (the whole-page drop still works too).
+		var $heroDrop = $( '#acps-mm-hero-drop' );
+		$heroDrop.on( 'dragenter dragover', function ( e ) { e.preventDefault(); e.stopPropagation(); $heroDrop.addClass( 'is-over' ); } );
+		$heroDrop.on( 'dragleave dragend drop', function () { $heroDrop.removeClass( 'is-over' ); } );
 
 		// Drag-and-drop anywhere on the manager.
 		var $wrap = $( '.acps-mm-wrap' );
@@ -1318,6 +1349,11 @@
 
 		$( document ).on( 'click', '.acps-mm-folder', function () {
 			selectFolder( $( this ).data( 'folder' ) );
+		} );
+
+		// Hero "Add to folder" chooser sets the current upload target.
+		$( document ).on( 'change', '#acps-mm-hero-folder-sel', function () {
+			selectFolder( this.value );
 		} );
 
 		// Folder search: filter the folder list as you type (re-renders only the

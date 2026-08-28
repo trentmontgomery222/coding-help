@@ -390,6 +390,9 @@ class ACPS_MC_Admin {
 					<td>
 						<label><input type="checkbox" name="replace_media_screen" value="1" <?php checked( $s['replace_media_screen'] ); ?>> <?php esc_html_e( 'Open the enhanced FileMedia screen when I click "Media"', 'acps-media-cleanup' ); ?></label>
 						<p class="description"><?php esc_html_e( 'The classic Media Library stays available via the "Classic library" link. The media picker inside the editor / Beaver Builder is never changed.', 'acps-media-cleanup' ); ?></p>
+						<br>
+						<label><input type="checkbox" name="replace_media_uploader" value="1" <?php checked( $s['replace_media_uploader'] ); ?>> <?php esc_html_e( 'Use the FileMedia uploader on the "Add Media File" page (drop zone, folder chooser, HEIC conversion, resumable progress)', 'acps-media-cleanup' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Replaces the plain WordPress uploader at Media › Add New. The classic uploader stays available via the "Classic uploader" link on the FileMedia upload screen.', 'acps-media-cleanup' ); ?></p>
 					</td>
 				</tr>
 				<tr>

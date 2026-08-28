@@ -236,7 +236,7 @@ class ACPS_MC_Manager_Ajax {
 
 		// Serve the heavy card list from a short-lived cache (rebuilt only when
 		// something changes, via the version counter) so repeat loads are fast.
-		$sig  = md5( wp_json_encode( array( $folder, $search, $type, $sort, $per, $recursive, $this->version() ) ) );
+		$sig  = md5( wp_json_encode( array( $folder, $search, $type, $sort, $per, $recursive, $this->version(), ACPS_MC_VERSION ) ) );
 		$ckey = 'acps_mm_q_' . $sig;
 		$cache = get_transient( $ckey );
 
@@ -355,17 +355,36 @@ class ACPS_MC_Manager_Ajax {
 	 * @return string
 	 */
 	protected function best_thumb( $id ) {
-		// Works for images AND for PDFs/video that have generated sub-sizes.
-		$src = wp_get_attachment_image_src( $id, array( 300, 300 ) );
-		if ( $src && ! empty( $src[0] ) && ! $src[3] ) {
-			// $src[3] (is_intermediate) false for icons; ensure it's a real image.
+		// 1) A real image, or a PDF/doc/video whose generated preview sub-size
+		//    wp_get_attachment_image_src() is willing to return.
+		$src = wp_get_attachment_image_src( $id, array( 400, 400 ) );
+		if ( $src && ! empty( $src[0] ) && false === strpos( $src[0], '/wp-includes/images/media/' ) ) {
+			return $src[0];
 		}
-		if ( $src && ! empty( $src[0] ) ) {
-			// Skip the generic WP media icons (they live in wp-includes/images/media).
-			if ( false === strpos( $src[0], '/wp-includes/images/media/' ) ) {
-				return $src[0];
+
+		// 2) Explicit fallback for PDFs (and other non-image files) that DO have a
+		//    generated preview in their metadata but which image_src skipped because
+		//    wp_attachment_is_image() is false for them. Build the URL from the
+		//    stored sub-size file so real previews show instead of a grey icon.
+		$meta = wp_get_attachment_metadata( $id );
+		if ( is_array( $meta ) && ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+			$uploads = wp_get_upload_dir();
+			$rel     = (string) get_post_meta( $id, '_wp_attached_file', true );
+			$subdir  = ( '' !== $rel && false !== strpos( $rel, '/' ) ) ? trailingslashit( dirname( $rel ) ) : '';
+			$baseurl = trailingslashit( $uploads['baseurl'] ) . $subdir;
+			foreach ( array( 'medium', 'medium_large', 'large', 'thumbnail', 'full' ) as $sz ) {
+				if ( ! empty( $meta['sizes'][ $sz ]['file'] ) ) {
+					return $baseurl . $meta['sizes'][ $sz ]['file'];
+				}
+			}
+			foreach ( $meta['sizes'] as $s ) {
+				if ( ! empty( $s['file'] ) ) {
+					return $baseurl . $s['file'];
+				}
 			}
 		}
+
+		// 3) Nothing preview-able — fall back to the mime-type icon.
 		$icon = wp_mime_type_icon( $id );
 		return $icon ? $icon : '';
 	}

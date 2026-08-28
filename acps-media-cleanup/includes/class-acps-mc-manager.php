@@ -29,6 +29,10 @@ class ACPS_MC_Manager {
 
 		// Optionally make this the default Media screen.
 		add_action( 'load-upload.php', array( $this, 'maybe_redirect_media' ) );
+
+		// Optionally replace the native "Add Media File" uploader (media-new.php)
+		// with the FileMedia uploader.
+		add_action( 'load-media-new.php', array( $this, 'maybe_redirect_media_new' ) );
 	}
 
 	public function register_menu() {
@@ -82,6 +86,25 @@ class ACPS_MC_Manager {
 			return;
 		}
 		wp_safe_redirect( self::page_url() );
+		exit;
+	}
+
+	/**
+	 * Redirect the native "Add Media File" page (media-new.php) to the FileMedia
+	 * uploader when enabled. `?classic=1` on media-new.php escapes back to the
+	 * plain WordPress uploader.
+	 */
+	public function maybe_redirect_media_new() {
+		if ( ! ACPS_MC_Settings::get( 'replace_media_uploader' ) ) {
+			return;
+		}
+		if ( isset( $_GET['classic'] ) || isset( $_GET['page'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		if ( ! current_user_can( 'upload_files' ) ) {
+			return;
+		}
+		wp_safe_redirect( add_query_arg( 'upload', '1', self::page_url() ) );
 		exit;
 	}
 
@@ -293,8 +316,10 @@ class ACPS_MC_Manager {
 		}
 		$folders  = new ACPS_MC_Folders();
 		$writable = $folders->is_writable();
+		// "Add Media File" mode: arrived from the replaced media-new.php page.
+		$upload_mode = isset( $_GET['upload'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		?>
-		<div class="wrap acps-mm-wrap">
+		<div class="wrap acps-mm-wrap<?php echo $upload_mode ? ' acps-mm-uploadmode' : ''; ?>">
 			<!-- Top-right view/size controls -->
 			<div class="acps-mm-headright">
 				<span class="acps-mm-viewtoggle" role="group" aria-label="<?php esc_attr_e( 'View style', 'acps-media-cleanup' ); ?>">
@@ -315,11 +340,34 @@ class ACPS_MC_Manager {
 			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-trash', admin_url( 'upload.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Trash', 'acps-media-cleanup' ); ?></a>
 			<a href="<?php echo esc_url( add_query_arg( 'page', 'acps-mc-settings', admin_url( 'upload.php' ) ) ); ?>" class="page-title-action"><?php esc_html_e( 'Settings', 'acps-media-cleanup' ); ?></a>
 			<a href="<?php echo esc_url( admin_url( 'upload.php?classic=1' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Classic library', 'acps-media-cleanup' ); ?></a>
+			<?php if ( $upload_mode ) : ?>
+				<a href="<?php echo esc_url( admin_url( 'media-new.php?classic=1' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Classic uploader', 'acps-media-cleanup' ); ?></a>
+			<?php endif; ?>
 			<hr class="wp-header-end">
 
 			<?php if ( ! $writable ) : ?>
 				<div class="notice notice-info inline"><p><?php esc_html_e( 'No FileBird folders detected — files are grouped by upload date and cannot be moved between folders.', 'acps-media-cleanup' ); ?></p></div>
 			<?php endif; ?>
+
+			<!-- "Add Media File" hero: a 1:1 replacement for the native media-new.php
+			     uploader. Powered by the same FileMedia uploader as the rest of this
+			     screen (drop zone, folder chooser, in-browser HEIC conversion,
+			     resumable per-file progress). Hidden unless we're in upload mode. -->
+			<div class="acps-mm-hero" id="acps-mm-hero">
+				<div class="acps-mm-hero-drop" id="acps-mm-hero-drop">
+					<span class="dashicons dashicons-upload acps-mm-hero-ico"></span>
+					<p class="acps-mm-hero-title"><?php esc_html_e( 'Drop files anywhere to upload', 'acps-media-cleanup' ); ?></p>
+					<p class="acps-mm-hero-or"><?php esc_html_e( 'or', 'acps-media-cleanup' ); ?></p>
+					<button type="button" class="button button-hero button-primary" id="acps-mm-hero-select"><?php esc_html_e( 'Select Files', 'acps-media-cleanup' ); ?></button>
+					<?php if ( $writable ) : ?>
+						<div class="acps-mm-hero-folder">
+							<label for="acps-mm-hero-folder-sel"><?php esc_html_e( 'Add to folder:', 'acps-media-cleanup' ); ?></label>
+							<select id="acps-mm-hero-folder-sel"><option value="unfiled"><?php esc_html_e( 'Uncategorized', 'acps-media-cleanup' ); ?></option></select>
+						</div>
+					<?php endif; ?>
+					<p class="acps-mm-hero-max"><?php printf( esc_html__( 'Maximum upload file size: %s.', 'acps-media-cleanup' ), esc_html( size_format( wp_max_upload_size() ) ) ); ?></p>
+				</div>
+			</div>
 
 			<!-- Cleanup / scan bar -->
 			<div class="acps-mm-scanbar">

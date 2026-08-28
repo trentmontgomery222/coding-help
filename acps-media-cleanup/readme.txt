@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.13.0
+Stable tag: 1.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,22 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.14.0 =
+* "Add Media File" is now the FileMedia uploader (1:1 replacement for the
+  native media-new.php page).
+  - Going to Media › Add New (wp-admin/media-new.php) opens the FileMedia
+    uploader: a big drop area with "Select Files", a "Add to folder" chooser
+    (your FileBird folders), the maximum upload size, plus everything the
+    FileMedia uploader already does — in-browser HEIC→JPEG conversion,
+    per-file progress, and automatic resume of interrupted uploads.
+  - Can be turned off under Media › Media Settings › FileMedia. A "Classic
+    uploader" link (and media-new.php?classic=1) always falls back to the
+    plain WordPress uploader.
+* PDF previews: fixed PDFs showing a plain grey icon instead of their real
+  generated preview. The preview now falls back to the stored preview sub-size
+  when WordPress declines to return one, and the grid card cache is versioned
+  to the plugin so updating the plugin rebuilds any stale cards.
 
 = 1.13.0 =
 * Crash-proofing: the plugin can no longer white-screen your site.

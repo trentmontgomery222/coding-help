@@ -625,9 +625,37 @@
 .acps-mm-upcancel { flex: 0 0 auto; background: none; border: none; cursor: pointer; color: #b32d2e; font-size: 16px; line-height: 1; padding: 0 2px; }
 .acps-mm-upcancel:hover { color: #d63638; }
 
+/* --------------------------------------------------------------------------
+ * "Add Media File" hero — the 1:1 replacement for the native media-new.php
+ * uploader. Hidden on the normal manager; shown only in upload mode.
+ * ------------------------------------------------------------------------ */
+.acps-mm-hero { display: none; }
+.acps-mm-wrap.acps-mm-uploadmode .acps-mm-hero { display: block; margin: 14px 0 18px; }
+.acps-mm-hero-drop {
+	border: 3px dashed #c3c4c7;
+	border-radius: 8px;
+	background: #fff;
+	text-align: center;
+	padding: 46px 20px 40px;
+	transition: border-color .15s, background .15s;
+}
+.acps-mm-hero-drop.is-over { border-color: #2271b1; background: rgba(34,113,177,.06); }
+.acps-mm-hero-ico { color: #2271b1; font-size: 40px; width: 40px; height: 40px; }
+.acps-mm-hero-title { font-size: 20px; font-weight: 600; margin: 10px 0 4px; color: #1d2327; }
+.acps-mm-hero-or { color: #787c82; margin: 4px 0 12px; text-transform: lowercase; }
+.acps-mm-hero-drop .button-hero { margin: 0 0 8px; }
+.acps-mm-hero-folder { margin: 14px 0 4px; color: #1d2327; }
+.acps-mm-hero-folder label { font-weight: 600; margin-right: 6px; }
+.acps-mm-hero-folder select { min-width: 220px; max-width: 90%; }
+.acps-mm-hero-max { color: #787c82; font-size: 12px; margin: 12px 0 0; }
+/* In upload mode the library still appears below the hero as "recent uploads";
+   nudge the scan bar down a touch so the hero reads as the focal point. */
+.acps-mm-wrap.acps-mm-uploadmode .acps-mm-scanbar { margin-top: 4px; }
+
 @media screen and ( max-width: 782px ) {
 	.acps-mm-layout { flex-direction: column; }
 	/* On small screens the sidebar stacks on top; keep the internal folder scroll
 	   (flex column is preserved) but drop the sticky positioning. */
 	.acps-mm-sidebar { flex-basis: auto; width: 100%; position: static; max-height: 60vh; }
+	.acps-mm-hero-drop { padding: 32px 14px; }
 }

@@ -57,6 +57,10 @@ class ACPS_MC_Settings {
 			// Make the Media Manager the default screen for the Media menu.
 			'replace_media_screen'    => 1,
 
+			// Replace the native "Add Media File" upload page (media-new.php) with
+			// the FileMedia uploader (drop zone + folder chooser + HEIC + progress).
+			'replace_media_uploader'  => 1,
+
 			// Run the usage scan automatically once a day (around 2am).
 			'auto_nightly_scan'       => 1,
 
@@ -144,6 +148,7 @@ class ACPS_MC_Settings {
 			'scan_builder_cache',
 			'require_backup_ack',
 			'replace_media_screen',
+			'replace_media_uploader',
 			'auto_nightly_scan',
 			'convert_heic_on_upload',
 			'drive_pull_enabled',
