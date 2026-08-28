@@ -36,12 +36,14 @@ you're on, since Grid wasn't offered under the Timeline feed type) each
 slide is bare text with no card at all. Build the card look directly on
 the slide instead of depending on Smash Balloon's layout-specific classes.
 */
-/* !important throughout this rule: Smash Balloon's own stylesheet was
-   overriding display/height here, which silently broke the flex-column
-   layout — the footer stopped being pushed to the bottom (it just sat
-   wherever the text ended) and slide heights became inconsistent between
-   cards, which is also why the arrows drifted position on each click
-   (Splide re-centers them against the measured track height). */
+/* !important throughout this rule. display/height/overflow ARE winning
+   (confirmed via getComputedStyle) but height still measured 700px —
+   that's the classic flexbox gotcha where flex items default to
+   min-height:auto, letting content stretch the box past a fixed height.
+   Pinning min-height/max-height alongside height forces the true fixed
+   box, which is also what makes margin-top:auto on the footer (below)
+   actually have leftover space to push into, and what keeps every
+   slide's measured height consistent for Splide's arrow centering. */
 #fb-feed-carousel .splide__slide {
 	box-sizing: border-box !important;
 	background: #fff !important;
@@ -49,6 +51,8 @@ the slide instead of depending on Smash Balloon's layout-specific classes.
 	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15) !important;
 	padding: 16px !important;
 	height: 380px !important;
+	min-height: 380px !important;
+	max-height: 380px !important;
 	overflow: hidden !important;
 	display: flex !important;
 	flex-direction: column !important;
