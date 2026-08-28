@@ -96,7 +96,23 @@ the slide instead of depending on Smash Balloon's layout-specific classes.
 
 /* Date + Read More/Share sit together as one row at the bottom of the
    card — carousel-loader.js wraps both in .cff-carousel-footer since
-   they're separate sibling elements in Smash Balloon's markup. */
+   they're separate sibling elements in Smash Balloon's markup. Smash
+   Balloon positions .cff-date/.cff-meta-wrap with `position: absolute`
+   in its own CSS (to overlay them on compact list rows), which ignores
+   the flex wrapper's layout for their own placement — that's why they
+   were landing on top of the text instead of below it. Force them back
+   to normal flow so the flex row actually controls where they sit. */
+#fb-feed-carousel .splide__slide .cff-carousel-footer,
+#fb-feed-carousel .splide__slide .cff-carousel-footer .cff-date,
+#fb-feed-carousel .splide__slide .cff-carousel-footer .cff-meta-wrap,
+#fb-feed-carousel .splide__slide .cff-carousel-footer .cff-post-links {
+	position: static !important;
+	top: auto !important;
+	left: auto !important;
+	right: auto !important;
+	bottom: auto !important;
+}
+
 #fb-feed-carousel .splide__slide .cff-carousel-footer {
 	display: flex !important;
 	align-items: center !important;
