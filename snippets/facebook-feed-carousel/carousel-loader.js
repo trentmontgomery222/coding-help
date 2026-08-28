@@ -1,22 +1,27 @@
-<!--
-WPCode Snippet type: HTML Snippet
+/*
+WPCode Snippet type: JavaScript Snippet
 Insert location: Footer
 Insertion: restrict to just the page(s) with the Facebook feed via
 WPCode's "Insertion" tab -> "Page Specific" (or Smart Conditional Logic).
-Don't run this site-wide; only the page that has #fb-feed-carousel needs it.
--->
 
-<link
-	rel="stylesheet"
-	href="https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/css/splide.min.css"
-/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/js/splide.min.js"></script>
-
-<script>
+Pure JS on purpose (no <link>/<script> tags) — WPCode's JavaScript
+Snippet editor treats the whole box as a JS body and lints out raw HTML
+tags. Splide's CSS/JS are pulled in with document.createElement instead
+of a literal <script>/<link>, so nothing here needs an HTML Snippet.
+*/
 (function () {
 	var ROOT_ID = 'fb-feed-carousel'; // must match the wrapper div ID around your shortcode
 	var root = document.getElementById(ROOT_ID);
 	if (!root) return;
+
+	function loadAsset(tag, attrs, onload) {
+		var el = document.createElement(tag);
+		Object.keys(attrs).forEach(function (key) {
+			el[key] = attrs[key];
+		});
+		if (onload) el.onload = onload;
+		document.head.appendChild(el);
+	}
 
 	function buildSlider() {
 		if (root.dataset.carouselReady) return; // guard against double init
@@ -59,25 +64,32 @@ Don't run this site-wide; only the page that has #fb-feed-carousel needs it.
 		}).mount();
 	}
 
-	// Smash Balloon loads posts via AJAX after page load, so poll the DOM
+	// Smash Balloon loads posts via AJAX after page load, so watch the DOM
 	// with a MutationObserver instead of assuming a fixed delay.
-	function whenSplideReady(cb) {
-		if (window.Splide) return cb();
-		var check = setInterval(function () {
-			if (window.Splide) {
-				clearInterval(check);
-				cb();
-			}
-		}, 50);
-	}
-
-	whenSplideReady(function () {
+	function watchForFeed() {
 		buildSlider(); // in case the feed is already cached/loaded
 		var observer = new MutationObserver(function () {
 			buildSlider();
 			if (root.dataset.carouselReady) observer.disconnect();
 		});
 		observer.observe(root, { childList: true, subtree: true });
+	}
+
+	if (window.Splide) {
+		watchForFeed();
+		return;
+	}
+
+	loadAsset('link', {
+		rel: 'stylesheet',
+		href: 'https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/css/splide.min.css',
 	});
+
+	loadAsset(
+		'script',
+		{
+			src: 'https://cdnjs.cloudflare.com/ajax/libs/splide/4.1.4/js/splide.min.js',
+		},
+		watchForFeed
+	);
 })();
-</script>

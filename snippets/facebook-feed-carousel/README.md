@@ -44,17 +44,21 @@ thing Smash Balloon's own docs walk through for custom CSS.
    Site Wide Header is fine — it's fully scoped under `#fb-feed-carousel`
    so it's inert on every other page.
 
-4. **Add snippet 2 — HTML/JS loader.** New Snippet, paste in
-   `carousel-loader.html`. Type: **HTML Snippet**. Insert Location:
-   **Footer**. Go to the **Insertion** tab and restrict it to just the
-   page(s) that actually have the feed (Page Specific / Smart Conditional
-   Logic) — no reason to load Splide site-wide.
+4. **Add snippet 2 — JS loader.** New Snippet, paste in
+   `carousel-loader.js`. Type: **JavaScript Snippet** (not HTML Snippet —
+   WPCode's JS editor lints out raw `<script>`/`<link>` tags, which is
+   what throws the red "not allowed" marks; this version loads Splide via
+   `document.createElement` instead, so it's pure JS with nothing to
+   flag). Insert Location: **Footer**. Go to the **Insertion** tab and
+   restrict it to just the page(s) that actually have the feed (Page
+   Specific / Smart Conditional Logic) — no reason to load Splide
+   site-wide.
 
 5. **Activate both snippets** and load the page.
 
 ## Tuning
 
-- `perPage` / the `breakpoints` block in `carousel-loader.html` controls
+- `perPage` / the `breakpoints` block in `carousel-loader.js` controls
   how many cards show at each screen width — match whatever your Beaver
   Builder Post Carousel normally uses.
 - `autoplay`, `interval`, `pauseOnHover`, `type: 'loop'` are all
@@ -70,4 +74,4 @@ Smash Balloon's markup has been stable across recent versions
 differs: open the page, right-click a feed post → **Inspect**, and check
 what class wraps the repeating items and what class each individual post
 uses. Update `list.querySelector('.cff-list-wrapper')` and
-`':scope > .cff-item-wrap'` in `carousel-loader.html` to match.
+`':scope > .cff-item-wrap'` in `carousel-loader.js` to match.
