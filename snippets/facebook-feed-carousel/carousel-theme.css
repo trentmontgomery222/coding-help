@@ -87,17 +87,43 @@ the slide instead of depending on Smash Balloon's layout-specific classes.
 	margin: 0;
 }
 
-#fb-feed-carousel .splide__slide .cff-date {
-	font-size: 12px;
-	color: #999;
+/* Date + Read More/Share sit together as one row at the bottom of the
+   card — carousel-loader.js wraps both in .cff-carousel-footer since
+   they're separate sibling elements in Smash Balloon's markup. */
+#fb-feed-carousel .splide__slide .cff-carousel-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
 	margin-top: auto;
 	padding-top: 8px;
+	font-size: 12px;
 }
 
-/* Hide the "...", Read More/Share row, and comment/like counts — BB's
-   carousel doesn't show these, keep the card to image + excerpt + date */
+#fb-feed-carousel .splide__slide .cff-date {
+	color: #999;
+	white-space: nowrap;
+}
+
+#fb-feed-carousel .splide__slide .cff-post-links {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	white-space: nowrap;
+}
+
+#fb-feed-carousel .splide__slide .cff-post-links a {
+	color: #1877f2;
+	text-decoration: none;
+}
+
+#fb-feed-carousel .splide__slide .cff-post-links a:hover {
+	text-decoration: underline;
+}
+
+/* Hide the "..." expand link and comment/like counts — BB's carousel
+   doesn't show these, keep the card to image + excerpt + date/links */
 #fb-feed-carousel .splide__slide .cff-expand,
-#fb-feed-carousel .splide__slide .cff-meta-wrap,
 #fb-feed-carousel .splide__slide .cff-react-wrapper {
 	display: none !important;
 }

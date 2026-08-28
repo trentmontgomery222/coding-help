@@ -95,6 +95,21 @@ re-strip after resize in case Masonry's JS reapplies them.
 				media.classList.add('cff-carousel-banner');
 				item.insertBefore(media, item.firstChild);
 			}
+
+			// Put the date and the Read More/Share links on one row
+			// together at the bottom of the card. They're separate
+			// sibling elements in Smash Balloon's markup (.cff-date and
+			// .cff-meta-wrap), so wrap both in a flex row instead of
+			// relying on their default stacked layout.
+			var dateEl = item.querySelector('.cff-date');
+			var metaEl = item.querySelector('.cff-meta-wrap');
+			if (dateEl && metaEl) {
+				var footer = document.createElement('div');
+				footer.className = 'cff-carousel-footer';
+				dateEl.parentNode.insertBefore(footer, dateEl);
+				footer.appendChild(dateEl);
+				footer.appendChild(metaEl);
+			}
 		});
 		root.classList.add('splide');
 
