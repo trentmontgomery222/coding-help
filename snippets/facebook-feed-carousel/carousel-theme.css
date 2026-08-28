@@ -36,16 +36,22 @@ you're on, since Grid wasn't offered under the Timeline feed type) each
 slide is bare text with no card at all. Build the card look directly on
 the slide instead of depending on Smash Balloon's layout-specific classes.
 */
+/* !important throughout this rule: Smash Balloon's own stylesheet was
+   overriding display/height here, which silently broke the flex-column
+   layout — the footer stopped being pushed to the bottom (it just sat
+   wherever the text ended) and slide heights became inconsistent between
+   cards, which is also why the arrows drifted position on each click
+   (Splide re-centers them against the measured track height). */
 #fb-feed-carousel .splide__slide {
-	box-sizing: border-box;
-	background: #fff;
-	border-radius: 4px;
-	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
-	padding: 16px;
-	height: 380px;
-	overflow: hidden;
-	display: flex;
-	flex-direction: column;
+	box-sizing: border-box !important;
+	background: #fff !important;
+	border-radius: 4px !important;
+	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15) !important;
+	padding: 16px !important;
+	height: 380px !important;
+	overflow: hidden !important;
+	display: flex !important;
+	flex-direction: column !important;
 }
 
 /* Photo/video-poster banner — carousel-loader.js moves this img to be
@@ -76,28 +82,31 @@ the slide instead of depending on Smash Balloon's layout-specific classes.
 	display: none !important;
 }
 
-/* Clamp post text to a consistent number of lines so cards line up evenly */
+/* Clamp post text to a consistent number of lines so cards line up evenly.
+   max-height is a hard fallback in case -webkit-line-clamp doesn't take
+   (some browsers/CSS conflicts) — 1.5em line-height * 4 lines = 6em. */
 #fb-feed-carousel .splide__slide .cff-post-text {
-	font-size: 14px;
-	line-height: 1.5;
-	overflow: hidden;
-	display: -webkit-box;
-	-webkit-line-clamp: 4;
-	-webkit-box-orient: vertical;
-	margin: 0;
+	font-size: 14px !important;
+	line-height: 1.5 !important;
+	max-height: 6em !important;
+	overflow: hidden !important;
+	display: -webkit-box !important;
+	-webkit-line-clamp: 4 !important;
+	-webkit-box-orient: vertical !important;
+	margin: 0 !important;
 }
 
 /* Date + Read More/Share sit together as one row at the bottom of the
    card — carousel-loader.js wraps both in .cff-carousel-footer since
    they're separate sibling elements in Smash Balloon's markup. */
 #fb-feed-carousel .splide__slide .cff-carousel-footer {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin-top: auto;
-	padding-top: 8px;
-	font-size: 12px;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: space-between !important;
+	gap: 8px !important;
+	margin-top: auto !important;
+	padding-top: 8px !important;
+	font-size: 12px !important;
 }
 
 #fb-feed-carousel .splide__slide .cff-date {
