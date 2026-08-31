@@ -25,6 +25,10 @@ class Activator {
 	public static function activate() {
 		Schema::install();
 
+		// Activating cleanly clears any "last update failed" flag (this code
+		// loaded, so it isn't crashing).
+		delete_option( 'acps_st_update_failed' );
+
 		// Seed default settings without clobbering existing ones.
 		$existing = get_option( ACPS_ST_OPT_SETTINGS );
 		if ( ! is_array( $existing ) ) {

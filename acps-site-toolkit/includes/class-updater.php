@@ -59,8 +59,54 @@ class Updater {
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
 		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
 		add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
+		// Rename the extracted package folder back to our plugin slug, so an
+		// update whose zip unpacks to a different folder name (typical of GitHub
+		// release zips) installs over the SAME directory instead of a new one —
+		// which is what otherwise leaves the plugin "disabled" after an update.
+		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
 		add_action( 'init', array( $this, 'maybe_handle_force_update' ) );
+		// Early self-test responder used by the post-update crash check.
+		add_action( 'init', array( $this, 'maybe_handle_selftest' ), 1 );
 		add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
+		// After our plugin updates: crash-test the new code and (re)enable it
+		// only if it loads cleanly.
+		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
+		// Surface a rolled-back update to admins (shown by whatever version is
+		// active once the plugin runs again).
+		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+	}
+
+	/**
+	 * Ensure the unpacked update folder is named after our plugin slug so it
+	 * overwrites the existing plugin directory (and the plugin stays active),
+	 * regardless of what the zip's top-level folder was called.
+	 *
+	 * @param string      $source        Path to the unpacked package.
+	 * @param string      $remote_source Path to the download's parent dir.
+	 * @param \WP_Upgrader $upgrader      Upgrader instance.
+	 * @param array       $args          Hook args (includes 'plugin' during a plugin update).
+	 * @return string|\WP_Error
+	 */
+	public function fix_source_dir( $source, $remote_source, $upgrader, $args = array() ) {
+		try {
+			// Only touch OUR plugin's update.
+			$plugin = isset( $args['plugin'] ) ? $args['plugin'] : '';
+			if ( ACPS_ST_BASENAME !== $plugin ) {
+				return $source;
+			}
+			$desired = trailingslashit( $remote_source ) . $this->slug();
+			$source  = untrailingslashit( $source );
+			if ( untrailingslashit( $desired ) === $source ) {
+				return trailingslashit( $source );
+			}
+			global $wp_filesystem;
+			if ( $wp_filesystem && $wp_filesystem->move( $source, untrailingslashit( $desired ), true ) ) {
+				return trailingslashit( $desired );
+			}
+		} catch ( \Throwable $e ) {
+			self::log_error( 'fix_source_dir: ' . $e->getMessage() );
+		}
+		return $source;
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -267,6 +313,149 @@ class Updater {
 		} catch ( \Throwable $e ) {
 			self::log_error( 'flush_after_upgrade: ' . $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Whether the just-finished upgrade included our plugin.
+	 *
+	 * @param array $options upgrader_process_complete options.
+	 * @return bool
+	 */
+	private function upgrade_touched_us( $options ) {
+		if ( ! isset( $options['type'] ) || 'plugin' !== $options['type'] ) {
+			return false;
+		}
+		if ( ! empty( $options['plugins'] ) && is_array( $options['plugins'] ) ) {
+			return in_array( ACPS_ST_BASENAME, $options['plugins'], true );
+		}
+		if ( ! empty( $options['plugin'] ) ) {
+			return ACPS_ST_BASENAME === $options['plugin'];
+		}
+		// Single-plugin update without an explicit list: assume it may be us.
+		return true;
+	}
+
+	/**
+	 * After our plugin is updated: make sure it's active, then crash-test the
+	 * NEW code with a fresh loopback request. If it loads cleanly, leave it fully
+	 * enabled; if it fails to load, deactivate it so a bad release can't take the
+	 * site down — and record that so it can be surfaced later.
+	 *
+	 * @param \WP_Upgrader $upgrader Upgrader instance (unused).
+	 * @param array        $options  upgrader_process_complete options.
+	 */
+	public function verify_after_upgrade( $upgrader, $options ) {
+		try {
+			if ( ! $this->upgrade_touched_us( $options ) ) {
+				return;
+			}
+			if ( ! function_exists( 'is_plugin_active' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			}
+
+			// Ensure it's marked active so the loopback loads the new code.
+			// Silent activation just sets the option — it does NOT re-include the
+			// plugin in this request (which would fatal on "cannot redeclare").
+			if ( ! is_plugin_active( ACPS_ST_BASENAME ) ) {
+				activate_plugin( ACPS_ST_BASENAME, '', false, true );
+			}
+
+			$result = $this->self_test_result();
+
+			if ( 'crash' === $result ) {
+				// Definitive failure (a 5xx from the fresh load) — pull it back so
+				// a bad release can't take the site down.
+				deactivate_plugins( ACPS_ST_BASENAME, true );
+				update_option(
+					'acps_st_update_failed',
+					array( 'when' => current_time( 'mysql' ), 'version' => ACPS_ST_VERSION ),
+					false
+				);
+				self::log_error( 'verify_after_upgrade: new version returned a fatal (5xx) on load; deactivated to protect the site.' );
+				return;
+			}
+
+			// 'ok' or 'unknown': leave the plugin ENABLED. We only ever disable on
+			// a definite crash, so a blocked/slow loopback can't knock out a
+			// perfectly healthy update.
+			if ( 'ok' === $result ) {
+				delete_option( 'acps_st_update_failed' );
+			} else {
+				self::log_error( 'verify_after_upgrade: load self-test inconclusive (loopback blocked or uncached); left the plugin enabled.' );
+			}
+		} catch ( \Throwable $e ) {
+			self::log_error( 'verify_after_upgrade: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Crash test: hit the site with a fresh loopback request (which loads the
+	 * newly-installed code from scratch) and confirm the plugin booted far enough
+	 * to answer with its marker. A fatal during load never reaches the marker, so
+	 * its absence — or a 5xx — means "crashed".
+	 *
+	 * @return string 'ok' | 'crash' | 'unknown'
+	 */
+	private function self_test_result() {
+		$trigger = trim( (string) Settings::get( 'update_trigger' ) );
+		$url     = '' !== $trigger
+			? add_query_arg( self::QUERY_VAR . '_selftest', rawurlencode( $trigger ), home_url( '/' ) )
+			: home_url( '/' );
+
+		$resp = wp_remote_get( $url, array( 'timeout' => 20, 'sslverify' => false, 'redirection' => 2 ) );
+
+		// A network error is inconclusive (loopbacks are blocked on some hosts) —
+		// never treat it as a crash.
+		if ( is_wp_error( $resp ) ) {
+			return 'unknown';
+		}
+		if ( (int) wp_remote_retrieve_response_code( $resp ) >= 500 ) {
+			return 'crash';
+		}
+		if ( '' !== $trigger ) {
+			return ( false !== strpos( (string) wp_remote_retrieve_body( $resp ), 'ACPS_OK' ) ) ? 'ok' : 'unknown';
+		}
+		// No secret: a non-5xx home page is a reasonable healthy signal.
+		return 'ok';
+	}
+
+	/**
+	 * Early responder for the crash-test loopback. Reaching this line at all
+	 * proves the plugin loaded without a fatal, so it prints a marker and exits.
+	 * Guarded by the same secret as the force-update URL.
+	 */
+	public function maybe_handle_selftest() {
+		$key = self::QUERY_VAR . '_selftest';
+		if ( ! isset( $_GET[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$trigger = trim( (string) Settings::get( 'update_trigger' ) );
+		$given   = sanitize_text_field( wp_unslash( $_GET[ $key ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( '' === $trigger || ! hash_equals( $trigger, $given ) ) {
+			return;
+		}
+		nocache_headers();
+		status_header( 200 );
+		echo 'ACPS_OK';
+		exit;
+	}
+
+	/**
+	 * Tell admins if a recent update was rolled back because it failed the load
+	 * test. Shown by whichever version is active once the plugin runs again.
+	 */
+	public function maybe_show_update_failed_notice() {
+		if ( ! current_user_can( 'update_plugins' ) ) {
+			return;
+		}
+		$failed = get_option( 'acps_st_update_failed' );
+		if ( ! is_array( $failed ) ) {
+			return;
+		}
+		echo '<div class="notice notice-error is-dismissible"><p>'
+			. esc_html__( 'Cayden Form Manager: a recent update failed its load test and was rolled back / kept disabled to protect the site.', 'acps-site-toolkit' )
+			. ' ' . esc_html( isset( $failed['when'] ) ? $failed['when'] : '' )
+			. '</p></div>';
 	}
 
 	/* ------------------------------------------------------------------ *
