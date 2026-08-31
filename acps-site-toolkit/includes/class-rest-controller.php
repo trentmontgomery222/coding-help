@@ -194,7 +194,7 @@ class REST_Controller {
 		// (same signal as the spam guard), so clearing cookies/cache never makes a
 		// "new" visitor. No client id needed.
 		if ( $track_visitors ) {
-			Visitors::record();
+			Visitors::record( null, Session::client_ip() );
 		}
 
 		$visit_id = false;

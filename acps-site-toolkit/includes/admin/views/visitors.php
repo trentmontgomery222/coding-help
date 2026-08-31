@@ -45,9 +45,38 @@ if ( '' !== $view_uid ) {
 					<tbody>
 						<tr><th scope="row"><?php esc_html_e( 'Visitor ID', 'acps-site-toolkit' ); ?></th><td><code><?php echo esc_html( $visitor->uid ); ?></code></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->name ? $visitor->name : '—' ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Last IP address', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( ! empty( $visitor->last_ip ) ? $visitor->last_ip : '—' ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->first_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->last_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( count( $entries ) ); ?></td></tr>
+					</tbody>
+				</table>
+
+				<?php $nav = Visitors::navigation( $view_uid, 300 ); ?>
+				<h2><?php esc_html_e( 'Navigation (pages visited)', 'acps-site-toolkit' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Every page this visitor viewed, newest first, across all their sessions. Requires page-view tracking to be on.', 'acps-site-toolkit' ); ?></p>
+				<table class="widefat striped">
+					<thead><tr>
+						<th scope="col"><?php esc_html_e( 'When', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Page', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Time on page', 'acps-site-toolkit' ); ?></th>
+					</tr></thead>
+					<tbody>
+						<?php if ( ! $nav ) : ?>
+							<tr><td colspan="3"><?php esc_html_e( 'No page views recorded for this visitor.', 'acps-site-toolkit' ); ?></td></tr>
+						<?php else : ?>
+							<?php foreach ( $nav as $p ) :
+								$title = $p['title'] ? $p['title'] : $p['url'];
+								$secs  = (int) $p['time_on_page'];
+								$ontime = $secs > 0 ? ( $secs < 60 ? $secs . 's' : floor( $secs / 60 ) . 'm ' . ( $secs % 60 ) . 's' ) : '—';
+								?>
+								<tr>
+									<td><?php echo esc_html( $p['visited_at'] ); ?></td>
+									<td><?php echo $p['url'] ? '<a href="' . esc_url( $p['url'] ) . '" target="_blank" rel="noopener">' . esc_html( $title ) . '</a>' : esc_html( $title ); ?></td>
+									<td><?php echo esc_html( $ontime ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						<?php endif; ?>
 					</tbody>
 				</table>
 
@@ -114,7 +143,7 @@ $total  = $result['total'];
 ?>
 <div class="wrap acps-admin">
 	<h1><?php esc_html_e( 'Visitors', 'acps-site-toolkit' ); ?></h1>
-	<p class="description"><?php esc_html_e( 'Every unique visitor (by first-party ID). Search by ID or name. Names are set automatically when a form has an "accname" field.', 'acps-site-toolkit' ); ?></p>
+	<p class="description"><?php esc_html_e( 'Every unique visitor (by first-party fingerprint). Search by ID, name or IP address. Names are set automatically when a form has an "accname" field. Open a visitor to see their IP and full page navigation.', 'acps-site-toolkit' ); ?></p>
 
 	<form method="get" class="acps-filters">
 		<input type="hidden" name="page" value="acps-st-visitors">
@@ -128,13 +157,14 @@ $total  = $result['total'];
 		<thead><tr>
 			<th scope="col"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></th>
 			<th scope="col"><?php esc_html_e( 'Visitor ID', 'acps-site-toolkit' ); ?></th>
+			<th scope="col"><?php esc_html_e( 'Last IP', 'acps-site-toolkit' ); ?></th>
 			<th scope="col"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th>
 			<th scope="col"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th>
 			<th scope="col"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th>
 		</tr></thead>
 		<tbody>
 			<?php if ( ! $rows ) : ?>
-				<tr><td colspan="5"><?php esc_html_e( 'No visitors yet.', 'acps-site-toolkit' ); ?></td></tr>
+				<tr><td colspan="6"><?php esc_html_e( 'No visitors yet.', 'acps-site-toolkit' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $rows as $v ) :
 					$link = admin_url( 'admin.php?page=acps-st-visitors&visitor=' . rawurlencode( $v->uid ) );
@@ -142,6 +172,7 @@ $total  = $result['total'];
 					<tr>
 						<td><a href="<?php echo esc_url( $link ); ?>"><strong><?php echo esc_html( $v->name ? $v->name : __( '(unnamed)', 'acps-site-toolkit' ) ); ?></strong></a></td>
 						<td><code><?php echo esc_html( $v->uid ); ?></code></td>
+						<td><?php echo esc_html( ! empty( $v->last_ip ) ? $v->last_ip : '—' ); ?></td>
 						<td><?php echo esc_html( (int) $v->entry_count ); ?></td>
 						<td><?php echo esc_html( $v->first_seen ); ?></td>
 						<td><?php echo esc_html( $v->last_seen ); ?></td>

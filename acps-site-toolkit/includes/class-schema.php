@@ -60,6 +60,8 @@ class Schema {
 		self::add_column_if_missing( self::table( 'entries' ), 'visitor_uid', 'CHAR(36) DEFAULT NULL' );
 		self::add_column_if_missing( self::table( 'visitors' ), 'name', 'VARCHAR(191) DEFAULT NULL' );
 		self::add_column_if_missing( self::table( 'visitors' ), 'notes', 'TEXT DEFAULT NULL' );
+		self::add_column_if_missing( self::table( 'visitors' ), 'last_ip', 'VARCHAR(64) DEFAULT NULL' );
+		self::add_column_if_missing( self::table( 'sessions' ), 'visitor_uid', 'CHAR(36) DEFAULT NULL' );
 	}
 
 	/**
@@ -133,6 +135,7 @@ class Schema {
 			uid CHAR(36) NOT NULL,
 			name VARCHAR(191) DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
+			last_ip VARCHAR(64) DEFAULT NULL,
 			first_seen DATETIME NOT NULL,
 			last_seen DATETIME NOT NULL,
 			PRIMARY KEY  (id),
@@ -156,10 +159,12 @@ class Schema {
 			entry_url TEXT DEFAULT NULL,
 			referrer TEXT DEFAULT NULL,
 			consent TINYINT(1) NOT NULL DEFAULT 0,
+			visitor_uid CHAR(36) DEFAULT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY session_token (session_token),
 			KEY last_activity_at (last_activity_at),
-			KEY user_id (user_id)
+			KEY user_id (user_id),
+			KEY visitor_uid (visitor_uid)
 		) {$charset_collate};";
 
 		// --- Page visits (spec §3.2) ----------------------------------------

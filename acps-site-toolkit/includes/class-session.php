@@ -72,8 +72,30 @@ class Session {
 			'consent'            => ! empty( $context['consent'] ) ? 1 : 0,
 		);
 
+		// Tie the session to the visitor fingerprint so a visitor's whole
+		// navigation can be assembled across sessions. Guarded so a not-yet-
+		// upgraded schema can't break session creation.
+		if ( self::sessions_have_visitor_uid() ) {
+			$defaults['visitor_uid'] = Visitors::fingerprint();
+		}
+
 		$wpdb->insert( $table, $defaults ); // phpcs:ignore WordPress.DB
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Whether the sessions table has the visitor_uid column yet (cached).
+	 *
+	 * @return bool
+	 */
+	private static function sessions_have_visitor_uid() {
+		static $has = null;
+		if ( null === $has ) {
+			global $wpdb;
+			$cols = $wpdb->get_col( 'SHOW COLUMNS FROM ' . Schema::table( 'sessions' ) ); // phpcs:ignore WordPress.DB
+			$has  = is_array( $cols ) && in_array( 'visitor_uid', array_map( 'strtolower', $cols ), true );
+		}
+		return $has;
 	}
 
 	/**

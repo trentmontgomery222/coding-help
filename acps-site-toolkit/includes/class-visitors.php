@@ -44,7 +44,7 @@ class Visitors {
 	 *
 	 * @param string|null $uid Explicit id, or null to use the fingerprint.
 	 */
-	public static function record( $uid = null ) {
+	public static function record( $uid = null, $ip = null ) {
 		$uid = ( null === $uid || '' === $uid ) ? self::fingerprint() : self::sanitize( $uid );
 		if ( '' === $uid ) {
 			return;
@@ -52,6 +52,24 @@ class Visitors {
 		global $wpdb;
 		$t   = Schema::table( 'visitors' );
 		$now = current_time( 'mysql' );
+		$ip  = ( null === $ip ) ? '' : trim( (string) $ip );
+
+		// Store the visitor's IP only when we're recording a real front-end
+		// sighting (an IP was passed) — never overwrite it from an admin call.
+		if ( '' !== $ip && self::has_column( 'visitors', 'last_ip' ) ) {
+			$wpdb->query( // phpcs:ignore WordPress.DB
+				$wpdb->prepare(
+					"INSERT INTO {$t} (uid, first_seen, last_seen, last_ip) VALUES (%s, %s, %s, %s)
+					 ON DUPLICATE KEY UPDATE last_seen = VALUES(last_seen), last_ip = VALUES(last_ip)",
+					$uid,
+					$now,
+					$now,
+					$ip
+				)
+			);
+			return;
+		}
+
 		$wpdb->query( // phpcs:ignore WordPress.DB
 			$wpdb->prepare(
 				"INSERT INTO {$t} (uid, first_seen, last_seen) VALUES (%s, %s, %s)
@@ -61,6 +79,57 @@ class Visitors {
 				$now
 			)
 		);
+	}
+
+	/**
+	 * The pages a visitor has navigated, newest first, across all their sessions
+	 * (sessions are tied to the visitor by the same fingerprint). Requires page
+	 * tracking to be on.
+	 *
+	 * @param string $uid   Visitor id.
+	 * @param int    $limit Max rows.
+	 * @return array[] title, url, post_id, visited_at.
+	 */
+	public static function navigation( $uid, $limit = 200 ) {
+		$uid = self::sanitize( $uid );
+		if ( '' === $uid || ! self::has_column( 'sessions', 'visitor_uid' ) ) {
+			return array();
+		}
+		global $wpdb;
+		$vi    = Schema::table( 'visits' );
+		$se    = Schema::table( 'sessions' );
+		$limit = max( 1, min( 1000, (int) $limit ) );
+		$rows  = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT vi.title, vi.url, vi.post_id, vi.visited_at, vi.time_on_page
+				 FROM {$vi} vi JOIN {$se} se ON vi.session_id = se.id
+				 WHERE se.visitor_uid = %s
+				 ORDER BY vi.visited_at DESC
+				 LIMIT %d",
+				$uid,
+				$limit
+			),
+			ARRAY_A
+		);
+		return $rows ? $rows : array();
+	}
+
+	/**
+	 * Whether a table has a column (cached per request). Guards writes/reads
+	 * against a schema that hasn't finished upgrading yet.
+	 *
+	 * @param string $table Logical table key.
+	 * @param string $col   Column name.
+	 * @return bool
+	 */
+	private static function has_column( $table, $col ) {
+		static $cache = array();
+		if ( ! isset( $cache[ $table ] ) ) {
+			global $wpdb;
+			$found            = $wpdb->get_col( 'SHOW COLUMNS FROM ' . Schema::table( $table ) ); // phpcs:ignore WordPress.DB
+			$cache[ $table ]  = is_array( $found ) ? array_map( 'strtolower', $found ) : array();
+		}
+		return in_array( strtolower( $col ), $cache[ $table ], true );
 	}
 
 	/**
@@ -131,10 +200,17 @@ class Visitors {
 		$where  = array( '1=1' );
 		$params = array();
 		if ( '' !== $args['search'] ) {
-			$like     = '%' . $wpdb->esc_like( $args['search'] ) . '%';
-			$where[]  = '(uid LIKE %s OR name LIKE %s)';
-			$params[] = $like;
-			$params[] = $like;
+			$like = '%' . $wpdb->esc_like( $args['search'] ) . '%';
+			if ( self::has_column( 'visitors', 'last_ip' ) ) {
+				$where[]  = '(uid LIKE %s OR name LIKE %s OR last_ip LIKE %s)';
+				$params[] = $like;
+				$params[] = $like;
+				$params[] = $like;
+			} else {
+				$where[]  = '(uid LIKE %s OR name LIKE %s)';
+				$params[] = $like;
+				$params[] = $like;
+			}
 		}
 		$where_sql = implode( ' AND ', $where );
 
