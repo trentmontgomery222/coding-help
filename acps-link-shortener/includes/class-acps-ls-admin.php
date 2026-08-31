@@ -480,7 +480,29 @@ class ACPS_LS_Admin {
 			}
 		}
 
+		// Self-updater settings.
+		$update_enabled  = isset( $_POST['update_enabled'] ) ? 1 : 0;
+		$update_auto     = isset( $_POST['update_auto'] ) ? 1 : 0;
+		$update_source   = ( isset( $_POST['update_source'] ) && 'github' === $_POST['update_source'] ) ? 'github' : 'url';
+		$update_manifest = isset( $_POST['update_manifest'] ) ? esc_url_raw( wp_unslash( $_POST['update_manifest'] ), array( 'https', 'http' ) ) : '';
+		$update_mkey     = isset( $_POST['update_manifest_key'] ) ? sanitize_text_field( wp_unslash( $_POST['update_manifest_key'] ) ) : '';
+		$gh_owner        = isset( $_POST['gh_owner'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_owner'] ) ) : '';
+		$gh_repo         = isset( $_POST['gh_repo'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_repo'] ) ) : '';
+		$gh_asset        = isset( $_POST['gh_asset'] ) ? sanitize_file_name( wp_unslash( $_POST['gh_asset'] ) ) : '';
+		$gh_token        = isset( $_POST['gh_token'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_token'] ) ) : '';
+		$update_trigger  = isset( $_POST['update_trigger'] ) ? sanitize_title( wp_unslash( $_POST['update_trigger'] ) ) : '';
+
 		$settings                   = $existing;
+		$settings['update_enabled']  = $update_enabled;
+		$settings['update_auto']     = $update_auto;
+		$settings['update_source']   = $update_source;
+		$settings['update_manifest'] = $update_manifest;
+		$settings['update_manifest_key'] = $update_mkey;
+		$settings['gh_owner']        = $gh_owner;
+		$settings['gh_repo']         = $gh_repo;
+		$settings['gh_asset']        = $gh_asset;
+		$settings['gh_token']        = $gh_token;
+		$settings['update_trigger']  = $update_trigger;
 		$settings['link_domain']    = $link_domain;
 		$settings['shortcode_page'] = $shortcode_page;
 		$settings['people']         = $people;
@@ -514,6 +536,9 @@ class ACPS_LS_Admin {
 		unset( $settings['default_type'] ); // obsolete
 
 		update_option( ACPS_LS_OPT_SETTINGS, $settings );
+
+		// Forget any cached update lookup so a changed source takes effect now.
+		delete_transient( 'acps_ls_update_remote' );
 
 		// Ensure the cron events exist when enabling.
 		if ( $sync_enabled && ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
@@ -1008,6 +1033,7 @@ class ACPS_LS_Admin {
 		$sheet_url    = ! empty( $settings['sheet_url'] ) ? $settings['sheet_url'] : '';
 		$sheet_secret = ! empty( $settings['sheet_secret'] ) ? $settings['sheet_secret'] : '';
 		$last_sync    = get_option( 'acps_ls_last_sync' );
+		$upd          = ACPS_LS_Updater::config();
 		$chk           = ACPS_LS_Checker::settings();
 		$notify_email  = $chk['notify_email'] ? $chk['notify_email'] : get_option( 'admin_email' );
 		$exclusions    = implode( "\n", $chk['exclusions'] );
@@ -1405,6 +1431,83 @@ class ACPS_LS_Admin {
 					</tbody>
 				</table>
 				<p class="description"><?php esc_html_e( 'To delete a rule, clear its pattern and save. Empty rows are ignored.', 'acps-link-shortener' ); ?></p>
+
+				<h2><?php esc_html_e( 'Automatic updates', 'acps-link-shortener' ); ?></h2>
+				<p class="description">
+					<?php esc_html_e( 'Let this plugin update itself from a source you control — a file you host, or a GitHub release. When a newer version is published, WordPress shows an “Update now” button (and installs it silently if auto-update is on).', 'acps-link-shortener' ); ?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tbody>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Enable updates', 'acps-link-shortener' ); ?></th>
+							<td>
+								<label><input type="checkbox" name="update_enabled" value="1" <?php checked( ! empty( $upd['enabled'] ) ); ?> /> <?php esc_html_e( 'Check the update source and offer updates', 'acps-link-shortener' ); ?></label><br />
+								<label><input type="checkbox" name="update_auto" value="1" <?php checked( ! empty( $upd['auto'] ) ); ?> /> <?php esc_html_e( 'Install updates automatically in the background (no click needed)', 'acps-link-shortener' ); ?></label>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Update source', 'acps-link-shortener' ); ?></th>
+							<td>
+								<label><input type="radio" name="update_source" value="url" <?php checked( 'url', $upd['source'] ); ?> /> <?php esc_html_e( 'A file I host (a JSON manifest URL)', 'acps-link-shortener' ); ?></label><br />
+								<label><input type="radio" name="update_source" value="github" <?php checked( 'github', $upd['source'] ); ?> /> <?php esc_html_e( 'GitHub releases', 'acps-link-shortener' ); ?></label>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-update-manifest"><?php esc_html_e( 'Manifest URL', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="url" name="update_manifest" id="acps-ls-update-manifest" class="regular-text code" value="<?php echo esc_attr( $upd['manifest'] ); ?>" placeholder="https://updates.example.org/acps-link-shortener/update.json" />
+								<p class="description">
+									<?php esc_html_e( 'A URL that returns JSON like:', 'acps-link-shortener' ); ?>
+									<code>{"version":"1.14.0","download_url":"https://…/acps-link-shortener.zip","changelog":"…"}</code><br />
+									<?php esc_html_e( 'Host that file and the zip anywhere over HTTPS. To ship an update: upload the new zip, bump "version" in the JSON.', 'acps-link-shortener' ); ?>
+								</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-update-mkey"><?php esc_html_e( 'Manifest secret (optional)', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="text" name="update_manifest_key" id="acps-ls-update-mkey" class="regular-text" value="<?php echo esc_attr( $upd['manifest_key'] ); ?>" autocomplete="off" />
+								<p class="description"><?php esc_html_e( 'If set, it is added to the manifest URL as ?key=… so only sites that know it can read the manifest.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'GitHub repository', 'acps-link-shortener' ); ?></th>
+							<td>
+								<input type="text" name="gh_owner" class="regular-text" style="max-width:150px;" value="<?php echo esc_attr( $upd['owner'] ); ?>" placeholder="owner" aria-label="<?php esc_attr_e( 'GitHub owner', 'acps-link-shortener' ); ?>" />
+								<span aria-hidden="true"> / </span>
+								<input type="text" name="gh_repo" class="regular-text" style="max-width:150px;" value="<?php echo esc_attr( $upd['repo'] ); ?>" placeholder="repo" aria-label="<?php esc_attr_e( 'GitHub repo', 'acps-link-shortener' ); ?>" />
+								<p class="description"><?php esc_html_e( 'Only used when the source is “GitHub releases”. Attach the built zip to each release as an asset.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-gh-asset"><?php esc_html_e( 'Release asset name', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="text" name="gh_asset" id="acps-ls-gh-asset" class="regular-text" value="<?php echo esc_attr( $upd['asset'] ); ?>" placeholder="acps-link-shortener.zip" />
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-gh-token"><?php esc_html_e( 'GitHub token (private repos)', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="password" name="gh_token" id="acps-ls-gh-token" class="regular-text" value="<?php echo esc_attr( $upd['token'] ); ?>" autocomplete="off" />
+								<p class="description"><?php esc_html_e( 'Leave blank for a public repo. For a private repo, paste a fine-scoped personal access token with read access to the repo.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-update-trigger"><?php esc_html_e( 'Force-update URL word', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="text" name="update_trigger" id="acps-ls-update-trigger" class="regular-text" value="<?php echo esc_attr( $upd['trigger'] ); ?>" autocomplete="off" />
+								<?php if ( ! empty( $upd['trigger'] ) ) : ?>
+									<p class="description">
+										<?php esc_html_e( 'Visit this secret URL to force an immediate update check + install:', 'acps-link-shortener' ); ?><br />
+										<code><?php echo esc_html( home_url( '/' . $upd['trigger'] ) ); ?></code>
+										<?php esc_html_e( '(or', 'acps-link-shortener' ); ?> <code><?php echo esc_html( home_url( '/?acps_ls_update=' . rawurlencode( $upd['trigger'] ) ) ); ?></code>)<br />
+										<?php esc_html_e( 'Keep this word secret — anyone who knows it can trigger an update to the latest published version. Change it here to rotate it.', 'acps-link-shortener' ); ?>
+									</p>
+								<?php endif; ?>
+							</td>
+						</tr>
+					</tbody>
+				</table>
 
 				<p>
 					<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings', false ); ?>

@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.13.0
+Stable tag: 1.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,26 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.14.0 =
+* Self-updating: the plugin can now update itself from a source you control, so
+  you don't have to re-upload the zip on every site by hand. Two sources:
+  - "A file I host": point it at a small JSON manifest URL you host anywhere over
+    HTTPS ({"version":"…","download_url":"https://…/acps-link-shortener.zip"}).
+    To ship an update, upload the new zip and bump the version in the JSON.
+  - "GitHub releases": point it at owner/repo and attach the built zip to each
+    release as an asset (public repo needs no token; private repo takes a
+    fine-scoped personal access token, stored in Settings).
+  When a newer version is published, WordPress shows the normal "Update now"
+  button. Turn on "Install automatically" to have sites self-update silently in
+  the background.
+* Secret force-update URL: visiting a private URL word (default
+  /protcol_U999_update, configurable in Settings) forces an immediate check and
+  install and prints a short status page. Also available as
+  /?acps_ls_update=<word>. Keep the word secret; change it to rotate it.
+* All update code is wrapped so a bad manifest, an unreachable host, or a failed
+  download can never take the site down. Configure under
+  Settings → Link Shortener → Automatic updates.
 
 = 1.13.0 =
 * Link Manager now shows how long each broken link has been broken. Every row in
