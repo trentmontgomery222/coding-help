@@ -40,7 +40,40 @@ class Admin {
 		add_action( 'admin_post_acps_st_import_google', array( $this, 'handle_import_google' ) );
 		add_action( 'admin_post_acps_st_visitor_action', array( $this, 'handle_visitor_action' ) );
 		add_action( 'admin_post_acps_st_db_action', array( $this, 'handle_db_action' ) );
+		add_action( 'admin_post_acps_st_check_update', array( $this, 'handle_check_update' ) );
 		add_action( 'wp_ajax_acps_st_active', array( $this, 'ajax_active' ) );
+	}
+
+	/**
+	 * Force a fresh update check right now (spec Part A) and refresh core's
+	 * own `update_plugins` transient so the Plugins screen reflects it
+	 * immediately, without waiting on the next cron run.
+	 */
+	public function handle_check_update() {
+		$this->require_cap( 'manage_options' );
+		check_admin_referer( 'acps_st_check_update' );
+
+		$remote = false;
+		if ( class_exists( '\\ACPS\\SiteToolkit\\Updater' ) ) {
+			$updater = new \ACPS\SiteToolkit\Updater();
+			$remote  = $updater->remote( true );
+		}
+
+		if ( function_exists( 'wp_update_plugins' ) ) {
+			delete_site_transient( 'update_plugins' );
+			wp_update_plugins();
+		}
+
+		$found = ( $remote && ! empty( $remote['version'] ) && version_compare( $remote['version'], ACPS_ST_VERSION, '>' ) );
+		$url   = add_query_arg(
+			array(
+				'checked' => 1,
+				'found'   => $found ? 1 : 0,
+			),
+			self::settings_url()
+		);
+		wp_safe_redirect( $url . '#acps-tab-updates' );
+		exit;
 	}
 
 	/**

@@ -46,6 +46,23 @@ if ( '' !== $view_uid ) {
 						<tr><th scope="row"><?php esc_html_e( 'Visitor ID', 'acps-site-toolkit' ); ?></th><td><code><?php echo esc_html( $visitor->uid ); ?></code></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->name ? $visitor->name : '—' ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Last IP address', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( ! empty( $visitor->last_ip ) ? $visitor->last_ip : '—' ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Logged-in account', 'acps-site-toolkit' ); ?></th>
+						<td>
+							<?php
+							$wp_user = ! empty( $visitor->user_id ) ? get_userdata( (int) $visitor->user_id ) : false;
+							if ( $wp_user ) {
+								$edit = get_edit_user_link( $wp_user->ID );
+								printf(
+									'<a href="%s">%s</a> (%s)',
+									esc_url( $edit ),
+									esc_html( $wp_user->display_name ? $wp_user->display_name : $wp_user->user_login ),
+									esc_html( $wp_user->user_email )
+								);
+							} else {
+								esc_html_e( 'Not signed in', 'acps-site-toolkit' );
+							}
+							?>
+						</td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->first_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->last_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( count( $entries ) ); ?></td></tr>

@@ -24,6 +24,8 @@ class Plugin {
 	public $privacy;
 	/** @var Integrations */
 	public $integrations;
+	/** @var Updater|null Self-updater. Null if the class file failed to load. */
+	public $updater;
 
 	/**
 	 * Boot.
@@ -38,6 +40,11 @@ class Plugin {
 		$this->rest         = new REST_Controller();
 		$this->privacy      = new Privacy();
 		$this->integrations = new Integrations();
+
+		// Self-hosted/GitHub plugin updates (see /Self-Update-System-Spec.md,
+		// PART A). Guarded so a missing/failed class file pauses just this
+		// feature instead of fataling the whole plugin (spec §A7/§A8).
+		$this->updater = class_exists( __NAMESPACE__ . '\\Updater' ) ? new Updater() : null;
 
 		$this->hooks();
 	}
@@ -91,6 +98,15 @@ class Plugin {
 
 		// Keep feedback categories synced when settings change.
 		add_action( 'update_option_' . ACPS_ST_OPT_SETTINGS, array( __NAMESPACE__ . '\\Feedback', 'sync_categories' ) );
+
+		// Self-updater: hooks itself (checks `update_enabled`; spec §A1), plus
+		// flush its cache immediately when settings change so a changed
+		// source takes effect right away rather than after the old cached
+		// lookup expires (spec §A8). Both gated on the class having loaded.
+		if ( $this->updater ) {
+			$this->updater->register();
+			add_action( 'update_option_' . ACPS_ST_OPT_SETTINGS, array( __NAMESPACE__ . '\\Updater', 'flush_cache' ) );
+		}
 
 		// Privacy hooks + purge cron.
 		$this->privacy->register();

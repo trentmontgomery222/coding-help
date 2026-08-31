@@ -109,6 +109,20 @@ class Settings {
 			// Help.
 			'help_guide_url'        => '', // optional external help guide link.
 
+			// Self-update (see /Self-Update-System-Spec.md, PART A). Lets
+			// "Update now" work without wordpress.org, from either a
+			// self-hosted manifest or GitHub releases.
+			'update_enabled'        => 1,  // master on/off for the whole updater.
+			'update_auto'           => 0,  // install automatically in the background.
+			'update_source'         => 'url', // 'url' | 'github'.
+			'update_manifest'       => '', // manifest URL, for the 'url' source.
+			'update_manifest_key'   => '', // optional shared secret, sent as ?key=.
+			'gh_owner'              => '', // GitHub owner, for the 'github' source.
+			'gh_repo'               => '', // GitHub repo, for the 'github' source.
+			'gh_asset'              => 'acps-site-toolkit.zip', // release asset filename to download.
+			'gh_token'              => '', // PAT for private repos; blank = public.
+			'update_trigger'        => '', // secret word for the force-update URL; seeded randomly on activation.
+
 			// Capabilities.
 			'editors_view_reports'  => 0, // grant read-only feedback/analytics to editors (spec §9.1).
 
@@ -199,6 +213,8 @@ class Settings {
 			'spam_challenge_enable',
 			'editors_view_reports',
 			'preserve_data',
+			'update_enabled',
+			'update_auto',
 		);
 		foreach ( $checkboxes as $key ) {
 			$out[ $key ] = empty( $input[ $key ] ) ? 0 : 1;
@@ -226,6 +242,35 @@ class Settings {
 		$out['custom_css'] = isset( $input['custom_css'] ) ? wp_strip_all_tags( (string) $input['custom_css'] ) : '';
 
 		$out['help_guide_url'] = isset( $input['help_guide_url'] ) ? esc_url_raw( trim( $input['help_guide_url'] ) ) : '';
+
+		// Self-update (spec Part A, §A3/§A8/§A9).
+		if ( isset( $input['update_source'] ) && in_array( $input['update_source'], array( 'url', 'github' ), true ) ) {
+			$out['update_source'] = $input['update_source'];
+		}
+		$out['update_manifest']     = isset( $input['update_manifest'] ) ? esc_url_raw( trim( $input['update_manifest'] ) ) : '';
+		$out['update_manifest_key'] = isset( $input['update_manifest_key'] ) ? sanitize_text_field( $input['update_manifest_key'] ) : '';
+		$out['gh_owner']            = isset( $input['gh_owner'] ) ? sanitize_text_field( trim( $input['gh_owner'] ) ) : '';
+		$out['gh_repo']             = isset( $input['gh_repo'] ) ? sanitize_text_field( trim( $input['gh_repo'] ) ) : '';
+		$out['gh_asset']            = ( isset( $input['gh_asset'] ) && '' !== trim( $input['gh_asset'] ) )
+			? sanitize_file_name( $input['gh_asset'] )
+			: $defaults['gh_asset'];
+
+		// GitHub token: blank input keeps the existing value (it's never
+		// redisplayed); an explicit "clear" checkbox removes it.
+		if ( ! empty( $input['gh_token_clear'] ) ) {
+			$out['gh_token'] = '';
+		} elseif ( ! empty( $input['gh_token'] ) ) {
+			$out['gh_token'] = sanitize_text_field( $input['gh_token'] );
+		}
+
+		// Force-update secret: "Regenerate" wins if checked; otherwise a
+		// typed value is sanitized and used; otherwise the existing secret is
+		// kept — it should never be silently blanked out.
+		if ( ! empty( $input['update_trigger_regenerate'] ) ) {
+			$out['update_trigger'] = sanitize_title( wp_generate_password( 24, false, false ) );
+		} elseif ( isset( $input['update_trigger'] ) && '' !== trim( (string) $input['update_trigger'] ) ) {
+			$out['update_trigger'] = sanitize_title( $input['update_trigger'] );
+		}
 
 		// Page ID lists.
 		foreach ( array( 'trigger_pages' ) as $key ) {

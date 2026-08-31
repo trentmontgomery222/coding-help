@@ -152,7 +152,7 @@ class Submission {
 		$visitor_uid = '';
 		if ( Settings::get( 'analytics_enabled' ) && Settings::get( 'track_visitors' ) ) {
 			$visitor_uid = Visitors::fingerprint();
-			Visitors::record( $visitor_uid, Session::client_ip() );
+			Visitors::record( $visitor_uid, Session::client_ip(), get_current_user_id() );
 			$accname = self::accname_value( $fields, $values );
 			if ( '' !== $accname ) {
 				Visitors::set_name( $visitor_uid, $accname );

@@ -42,9 +42,11 @@ class Visitors {
 	 * sight inserts a row; later sights only bump last_seen. UNIQUE(uid) makes
 	 * this dupe-proof even under concurrent beacons.
 	 *
-	 * @param string|null $uid Explicit id, or null to use the fingerprint.
+	 * @param string|null $uid     Explicit id, or null to use the fingerprint.
+	 * @param string|null $ip      Client IP to store (front-end sightings only).
+	 * @param int|null    $user_id Logged-in WordPress user id, if any.
 	 */
-	public static function record( $uid = null, $ip = null ) {
+	public static function record( $uid = null, $ip = null, $user_id = null ) {
 		$uid = ( null === $uid || '' === $uid ) ? self::fingerprint() : self::sanitize( $uid );
 		if ( '' === $uid ) {
 			return;
@@ -52,24 +54,8 @@ class Visitors {
 		global $wpdb;
 		$t   = Schema::table( 'visitors' );
 		$now = current_time( 'mysql' );
-		$ip  = ( null === $ip ) ? '' : trim( (string) $ip );
 
-		// Store the visitor's IP only when we're recording a real front-end
-		// sighting (an IP was passed) — never overwrite it from an admin call.
-		if ( '' !== $ip && self::has_column( 'visitors', 'last_ip' ) ) {
-			$wpdb->query( // phpcs:ignore WordPress.DB
-				$wpdb->prepare(
-					"INSERT INTO {$t} (uid, first_seen, last_seen, last_ip) VALUES (%s, %s, %s, %s)
-					 ON DUPLICATE KEY UPDATE last_seen = VALUES(last_seen), last_ip = VALUES(last_ip)",
-					$uid,
-					$now,
-					$now,
-					$ip
-				)
-			);
-			return;
-		}
-
+		// Base upsert: create the row on first sight, bump last_seen thereafter.
 		$wpdb->query( // phpcs:ignore WordPress.DB
 			$wpdb->prepare(
 				"INSERT INTO {$t} (uid, first_seen, last_seen) VALUES (%s, %s, %s)
@@ -79,6 +65,20 @@ class Visitors {
 				$now
 			)
 		);
+
+		// Extra identifiers, stored only on real front-end sightings (an IP or
+		// user id was passed) — never overwritten from an admin ensure-row call.
+		$updates = array();
+		$ip      = ( null === $ip ) ? '' : trim( (string) $ip );
+		if ( '' !== $ip && self::has_column( 'visitors', 'last_ip' ) ) {
+			$updates['last_ip'] = $ip;
+		}
+		if ( $user_id && (int) $user_id > 0 && self::has_column( 'visitors', 'user_id' ) ) {
+			$updates['user_id'] = (int) $user_id;
+		}
+		if ( $updates ) {
+			$wpdb->update( $t, $updates, array( 'uid' => $uid ) ); // phpcs:ignore WordPress.DB
+		}
 	}
 
 	/**

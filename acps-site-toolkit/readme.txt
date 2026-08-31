@@ -4,7 +4,7 @@ Tags: feedback, analytics, forms, accessibility, journey
 Requires at least: 6.2
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.29.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,12 @@ No. Deactivation never removes data. Even deleting the plugin preserves data
 unless you turn off "Preserve data on uninstall" in Settings.
 
 == Changelog ==
+
+= 1.29.0 =
+* New: self-hosted plugin updates. "Update now" now works from the Plugins
+  screen without wordpress.org, checking either a self-hosted JSON manifest
+  or GitHub releases (Settings → Updates). Supports optional fully-automatic
+  background installs and a secret force-update URL for cron/deploy hooks.
 
 = 1.1.0 =
 * Feedback: delete feedback items (single delete + bulk trash/delete).

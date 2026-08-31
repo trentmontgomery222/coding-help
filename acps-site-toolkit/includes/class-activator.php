@@ -34,6 +34,15 @@ class Activator {
 			update_option( ACPS_ST_OPT_SETTINGS, wp_parse_args( $existing, Settings::defaults() ) );
 		}
 
+		// Give the self-updater's force-update URL a non-guessable secret the
+		// first time the plugin activates (spec Part A, §A3/§A6/§A9). Never
+		// ship a hardcoded default — generate one per install.
+		$settings = get_option( ACPS_ST_OPT_SETTINGS );
+		if ( is_array( $settings ) && empty( $settings['update_trigger'] ) ) {
+			$settings['update_trigger'] = sanitize_title( wp_generate_password( 24, false, false ) );
+			update_option( ACPS_ST_OPT_SETTINGS, $settings );
+		}
+
 		// Ensure the built-in feedback + contact form templates exist.
 		Feedback::ensure_feedback_form();
 		Help::ensure_contact_form();

@@ -12,6 +12,7 @@
 namespace ACPS\SiteToolkit\Admin;
 
 use ACPS\SiteToolkit\Settings;
+use ACPS\SiteToolkit\Updater;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -70,6 +71,7 @@ $checked = function ( $key ) use ( $s ) {
 		<a href="#acps-tab-appearance" class="nav-tab"><?php esc_html_e( 'Appearance', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-help" class="nav-tab"><?php esc_html_e( 'Help', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-access" class="nav-tab"><?php esc_html_e( 'Access & data', 'acps-site-toolkit' ); ?></a>
+		<a href="#acps-tab-updates" class="nav-tab"><?php esc_html_e( 'Updates', 'acps-site-toolkit' ); ?></a>
 	</h2>
 
 	<form method="post" action="options.php">
@@ -483,8 +485,122 @@ $checked = function ( $key ) use ( $s ) {
 			</table>
 		</div>
 
+		<!-- ============================= UPDATES =========================== -->
+		<div class="acps-tab-panel" id="acps-tab-updates" hidden>
+			<h2 class="title"><?php esc_html_e( 'Updates', 'acps-site-toolkit' ); ?></h2>
+			<p class="description" style="max-width:48rem"><?php esc_html_e( 'This plugin does not live on wordpress.org, so it checks a source you control for new versions. When a newer version is found, "Update now" appears on the Plugins screen exactly like a wordpress.org plugin.', 'acps-site-toolkit' ); ?></p>
+
+			<?php
+			if ( isset( $_GET['checked'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				if ( ! empty( $_GET['found'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'A newer version was found — see the Plugins screen to install it.', 'acps-site-toolkit' ) . '</p></div>';
+				} else {
+					echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Checked — this is already the latest version.', 'acps-site-toolkit' ) . '</p></div>';
+				}
+			}
+			?>
+
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Self-updates', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'update_enabled' ) ); ?>" value="1" <?php echo $checked( 'update_enabled' ); ?>> <?php esc_html_e( 'On — check the source below and offer "Update now" when a newer version exists', 'acps-site-toolkit' ); ?></label><br>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'update_auto' ) ); ?>" value="1" <?php echo $checked( 'update_auto' ); ?>> <?php esc_html_e( 'Also install new versions automatically in the background (WordPress\' normal auto-update cron)', 'acps-site-toolkit' ); ?></label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-update-source"><?php esc_html_e( 'Update source', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<select id="acps-update-source" name="<?php echo esc_attr( $name( 'update_source' ) ); ?>">
+							<option value="url" <?php selected( $s['update_source'], 'url' ); ?>><?php esc_html_e( 'Self-hosted manifest (a JSON file + zip you host)', 'acps-site-toolkit' ); ?></option>
+							<option value="github" <?php selected( $s['update_source'], 'github' ); ?>><?php esc_html_e( 'GitHub releases', 'acps-site-toolkit' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Only the fields for the selected source are used — the other section is ignored.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-update-manifest"><?php esc_html_e( 'Manifest URL', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="url" id="acps-update-manifest" name="<?php echo esc_attr( $name( 'update_manifest' ) ); ?>" value="<?php echo esc_attr( $s['update_manifest'] ); ?>" class="large-text code" placeholder="https://updates.example.org/acps-site-toolkit/update.json">
+						<p class="description"><?php esc_html_e( 'Used when the source above is "Self-hosted manifest". Must return HTTP 200 JSON with at least version and download_url.', 'acps-site-toolkit' ); ?></p>
+						<label for="acps-update-manifest-key"><?php esc_html_e( 'Optional shared secret', 'acps-site-toolkit' ); ?></label>
+						<input type="text" id="acps-update-manifest-key" name="<?php echo esc_attr( $name( 'update_manifest_key' ) ); ?>" value="<?php echo esc_attr( $s['update_manifest_key'] ); ?>" class="regular-text">
+						<p class="description"><?php esc_html_e( 'If set, sent as ?key=… on every request to the manifest URL. Leave blank if your host doesn\'t check it.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'GitHub repository', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label for="acps-gh-owner"><?php esc_html_e( 'Owner', 'acps-site-toolkit' ); ?></label>
+						<input type="text" id="acps-gh-owner" name="<?php echo esc_attr( $name( 'gh_owner' ) ); ?>" value="<?php echo esc_attr( $s['gh_owner'] ); ?>" class="regular-text" placeholder="acps">
+						&nbsp;
+						<label for="acps-gh-repo"><?php esc_html_e( 'Repo', 'acps-site-toolkit' ); ?></label>
+						<input type="text" id="acps-gh-repo" name="<?php echo esc_attr( $name( 'gh_repo' ) ); ?>" value="<?php echo esc_attr( $s['gh_repo'] ); ?>" class="regular-text" placeholder="acps-site-toolkit">
+						<p class="description"><?php esc_html_e( 'Used when the source above is "GitHub releases". Reads the latest release from the GitHub Releases API.', 'acps-site-toolkit' ); ?></p>
+
+						<label for="acps-gh-asset"><?php esc_html_e( 'Release asset filename', 'acps-site-toolkit' ); ?></label>
+						<input type="text" id="acps-gh-asset" name="<?php echo esc_attr( $name( 'gh_asset' ) ); ?>" value="<?php echo esc_attr( $s['gh_asset'] ); ?>" class="regular-text code" placeholder="acps-site-toolkit.zip">
+						<p class="description"><?php esc_html_e( 'The exact filename of the build zip attached to each GitHub release (not the auto-generated source zip).', 'acps-site-toolkit' ); ?></p>
+
+						<label for="acps-gh-token"><?php esc_html_e( 'Access token (private repos only)', 'acps-site-toolkit' ); ?></label>
+						<input type="password" id="acps-gh-token" name="<?php echo esc_attr( $name( 'gh_token' ) ); ?>" value="" class="regular-text" autocomplete="off" placeholder="<?php echo $s['gh_token'] ? esc_attr__( '••••••••  (leave blank to keep)', 'acps-site-toolkit' ) : esc_attr__( 'not set — repo is public', 'acps-site-toolkit' ); ?>">
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'gh_token_clear' ) ); ?>" value="1"> <?php esc_html_e( 'Clear the saved token', 'acps-site-toolkit' ); ?></label>
+						<p class="description"><?php esc_html_e( 'Leave blank for a public repo. For a private repo, a token is required and is never shown again once saved — leave it blank on later saves to keep it.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-update-trigger"><?php esc_html_e( 'Force-update secret', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="text" id="acps-update-trigger" name="<?php echo esc_attr( $name( 'update_trigger' ) ); ?>" value="<?php echo esc_attr( $s['update_trigger'] ); ?>" class="regular-text code">
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'update_trigger_regenerate' ) ); ?>" value="1"> <?php esc_html_e( 'Regenerate on save', 'acps-site-toolkit' ); ?></label>
+						<?php $force_url = Updater::force_update_url(); ?>
+						<?php if ( $force_url ) : ?>
+							<p class="description">
+								<?php esc_html_e( 'Visiting this URL forces an immediate check + install (e.g. from cron or a deploy hook). Keep it private — it is the only thing guarding it:', 'acps-site-toolkit' ); ?><br>
+								<input type="text" readonly value="<?php echo esc_url( $force_url ); ?>" class="large-text code" onclick="this.select();">
+							</p>
+						<?php endif; ?>
+					</td>
+				</tr>
+			</table>
+		</div>
+
 		<?php submit_button(); ?>
 	</form>
+
+	<!-- Deliberately OUTSIDE the form above (which posts to options.php) —
+	     this is its own form posting to admin-post.php, same pattern as the
+	     "Database tools" card near the top. A <form> nested inside another
+	     <form> is invalid HTML; browsers silently close the outer one early,
+	     which detaches Save from the fields above it. -->
+	<div class="acps-card" style="border-left:4px solid #2271b1;max-width:48rem">
+		<h2><?php esc_html_e( 'Update status', 'acps-site-toolkit' ); ?></h2>
+		<p><?php echo esc_html( sprintf(
+			/* translators: %s: installed plugin version */
+			__( 'Installed version: %s', 'acps-site-toolkit' ),
+			ACPS_ST_VERSION
+		) ); ?></p>
+		<?php $status = Updater::peek_status(); ?>
+		<?php if ( ! $status['checked'] ) : ?>
+			<p class="description"><?php esc_html_e( 'Not checked yet in this cache window.', 'acps-site-toolkit' ); ?></p>
+		<?php elseif ( $status['remote'] ) : ?>
+			<p><?php echo esc_html( sprintf(
+				/* translators: %s: latest known version */
+				__( 'Latest known version: %s', 'acps-site-toolkit' ),
+				$status['remote']['version']
+			) ); ?>
+			<?php echo $status['has_update'] ? '— <strong>' . esc_html__( 'update available', 'acps-site-toolkit' ) . '</strong>' : '— ' . esc_html__( 'up to date', 'acps-site-toolkit' ); ?></p>
+		<?php else : ?>
+			<p class="description"><?php esc_html_e( 'The last check could not reach the configured source. Confirm the settings on the Updates tab above.', 'acps-site-toolkit' ); ?></p>
+		<?php endif; ?>
+
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<?php wp_nonce_field( 'acps_st_check_update' ); ?>
+			<input type="hidden" name="action" value="acps_st_check_update">
+			<button type="submit" class="button"><?php esc_html_e( 'Check for updates now', 'acps-site-toolkit' ); ?></button>
+		</form>
+		<p class="description"><?php esc_html_e( 'This checks the configured source right away instead of waiting for the normal cache window, and refreshes the Plugins screen\'s update status. Save any changed settings on the Updates tab first.', 'acps-site-toolkit' ); ?></p>
+	</div>
 </div>
 
 <script>
