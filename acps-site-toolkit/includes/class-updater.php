@@ -74,6 +74,109 @@ class Updater {
 		// Surface a rolled-back update to admins (shown by whatever version is
 		// active once the plugin runs again).
 		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+
+		// Staged rollout: a dev install publishes its verified status here, which
+		// a production install checks before it will offer/apply the update.
+		add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
+	}
+
+	/**
+	 * REST: GET /update-status — a dev install reports the version it has
+	 * verified (installed + passed the load test). Key-guarded so only the
+	 * paired production site can read it.
+	 */
+	public function register_status_route() {
+		register_rest_route(
+			ACPS_ST_REST_NAMESPACE,
+			'/update-status',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'rest_status' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+
+	/**
+	 * @param \WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function rest_status( $req ) {
+		nocache_headers();
+		$key      = trim( (string) Settings::get( 'verify_status_key' ) );
+		$given    = (string) $req->get_param( 'key' );
+		if ( '' === $key || ! hash_equals( $key, $given ) ) {
+			return new \WP_REST_Response( array( 'ok' => false ), 403 );
+		}
+		$verified = get_option( 'acps_st_verified' );
+		return new \WP_REST_Response(
+			array(
+				'ok'       => true,
+				'role'     => Settings::get( 'update_role' ),
+				'running'  => ACPS_ST_VERSION,
+				'verified' => is_array( $verified ) && ! empty( $verified['version'] ) ? $verified['version'] : '',
+				'tested'   => is_array( $verified ) && ! empty( $verified['time'] ) ? (int) $verified['time'] : 0,
+			),
+			200
+		);
+	}
+
+	/**
+	 * For a production install: the version the paired dev site has verified,
+	 * fetched from its /update-status endpoint and cached briefly. '' when the
+	 * site isn't a production install, isn't configured, or can't be reached
+	 * (in which case production deliberately holds rather than updating blind).
+	 *
+	 * @return string
+	 */
+	private function dev_verified_version() {
+		if ( 'production' !== Settings::get( 'update_role' ) ) {
+			return ''; // Not gated.
+		}
+		$url = trim( (string) Settings::get( 'verify_status_url' ) );
+		$key = trim( (string) Settings::get( 'verify_status_key' ) );
+		if ( '' === $url || '' === $key ) {
+			return '';
+		}
+
+		$cache_key = 'acps_st_devstatus';
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return (string) $cached;
+		}
+
+		$resp = wp_remote_get(
+			add_query_arg( 'key', rawurlencode( $key ), $url ),
+			array( 'timeout' => 12, 'sslverify' => true )
+		);
+		$verified = '';
+		if ( ! is_wp_error( $resp ) && 200 === (int) wp_remote_retrieve_response_code( $resp ) ) {
+			$body = json_decode( (string) wp_remote_retrieve_body( $resp ), true );
+			if ( is_array( $body ) && ! empty( $body['verified'] ) ) {
+				$verified = (string) $body['verified'];
+			}
+		}
+		set_transient( $cache_key, $verified, 10 * MINUTE_IN_SECONDS );
+		return $verified;
+	}
+
+	/**
+	 * Production gate: may this install offer/apply an update to $version? Only
+	 * when the paired dev site has verified that version (or newer). Non-
+	 * production installs are never gated.
+	 *
+	 * @param string $version Candidate version.
+	 * @return bool
+	 */
+	private function rollout_allows( $version ) {
+		if ( 'production' !== Settings::get( 'update_role' ) ) {
+			return true;
+		}
+		$verified = $this->dev_verified_version();
+		if ( '' === $verified ) {
+			return false; // No confirmation yet — hold.
+		}
+		return version_compare( $verified, $version, '>=' );
 	}
 
 	/**
@@ -132,7 +235,7 @@ class Updater {
 				return $transient;
 			}
 
-			if ( version_compare( $remote['version'], ACPS_ST_VERSION, '>' ) ) {
+			if ( version_compare( $remote['version'], ACPS_ST_VERSION, '>' ) && $this->rollout_allows( $remote['version'] ) ) {
 				if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
 					$transient->response = array();
 				}
@@ -290,6 +393,11 @@ class Updater {
 			if ( empty( $item->plugin ) || ACPS_ST_BASENAME !== $item->plugin ) {
 				return $update;
 			}
+			// Production only auto-updates a version the dev site has verified.
+			$version = ! empty( $item->new_version ) ? (string) $item->new_version : '';
+			if ( '' !== $version && ! $this->rollout_allows( $version ) ) {
+				return false;
+			}
 			return (bool) Settings::get( 'update_auto' );
 		} catch ( \Throwable $e ) {
 			self::log_error( 'maybe_auto_update: ' . $e->getMessage() );
@@ -380,6 +488,13 @@ class Updater {
 			// perfectly healthy update.
 			if ( 'ok' === $result ) {
 				delete_option( 'acps_st_update_failed' );
+				// Publish that this exact version passed here — a production site
+				// pointed at this (dev) install reads this before it will update.
+				update_option(
+					'acps_st_verified',
+					array( 'version' => ACPS_ST_VERSION, 'time' => time() ),
+					false
+				);
 			} else {
 				self::log_error( 'verify_after_upgrade: load self-test inconclusive (loopback blocked or uncached); left the plugin enabled.' );
 			}
@@ -592,6 +707,7 @@ class Updater {
 	 */
 	public static function flush_cache() {
 		delete_transient( self::CACHE_KEY );
+		delete_transient( 'acps_st_devstatus' );
 	}
 
 	/**

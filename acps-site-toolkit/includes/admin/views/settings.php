@@ -564,6 +564,48 @@ $checked = function ( $key ) use ( $s ) {
 					</td>
 				</tr>
 			</table>
+
+			<h3><?php esc_html_e( 'Staged rollout (dev → production)', 'acps-site-toolkit' ); ?></h3>
+			<p class="description" style="max-width:48rem"><?php esc_html_e( 'Test each version on a dev site first. When it installs there and passes its load test, the dev site reports “verified”. A production site set below will only offer/apply an update once its paired dev site has verified that exact version.', 'acps-site-toolkit' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="acps-update-role"><?php esc_html_e( 'This site’s role', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<select id="acps-update-role" name="<?php echo esc_attr( $name( 'update_role' ) ); ?>">
+							<?php
+							$roles = array(
+								'standalone' => __( 'Standalone (update normally)', 'acps-site-toolkit' ),
+								'dev'        => __( 'Dev / staging (tests + verifies versions)', 'acps-site-toolkit' ),
+								'production' => __( 'Production (only update after dev verifies)', 'acps-site-toolkit' ),
+							);
+							foreach ( $roles as $val => $lbl ) {
+								printf( '<option value="%s" %s>%s</option>', esc_attr( $val ), selected( $s['update_role'], $val, false ), esc_html( $lbl ) );
+							}
+							?>
+						</select>
+						<?php if ( 'dev' === $s['update_role'] ) : ?>
+							<p class="description">
+								<?php esc_html_e( 'This dev site publishes its verified status at the URL below — paste it into the production site’s “Dev status URL”, and use the same status key on both:', 'acps-site-toolkit' ); ?><br>
+								<input type="text" readonly value="<?php echo esc_url( rest_url( ACPS_ST_REST_NAMESPACE . '/update-status' ) ); ?>" class="large-text code" onclick="this.select();">
+							</p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-verify-url"><?php esc_html_e( 'Dev status URL', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="url" id="acps-verify-url" name="<?php echo esc_attr( $name( 'verify_status_url' ) ); ?>" value="<?php echo esc_attr( $s['verify_status_url'] ); ?>" class="large-text code" placeholder="https://dev.example.com/wp-json/acps-st/v1/update-status">
+						<p class="description"><?php esc_html_e( 'Production only: the dev site’s /update-status endpoint (shown on the dev site when its role is set to Dev).', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-verify-key"><?php esc_html_e( 'Status key (shared)', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="text" id="acps-verify-key" name="<?php echo esc_attr( $name( 'verify_status_key' ) ); ?>" value="<?php echo esc_attr( $s['verify_status_key'] ); ?>" class="regular-text code">
+						<p class="description"><?php esc_html_e( 'A shared secret set to the SAME value on the dev and production sites. The dev site only reveals its status to a request carrying this key.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+			</table>
 		</div>
 
 		<?php submit_button(); ?>

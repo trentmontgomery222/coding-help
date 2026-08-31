@@ -124,6 +124,11 @@ class Settings {
 			'gh_token'              => '', // PAT for private repos; blank = public.
 			'update_trigger'        => '', // secret word for the force-update URL; seeded randomly on activation.
 
+			// Staged rollout (dev → production).
+			'update_role'           => 'standalone', // 'standalone' | 'dev' | 'production'.
+			'verify_status_url'     => '', // production: the dev site's /update-status endpoint.
+			'verify_status_key'     => '', // shared secret between dev + production for that endpoint.
+
 			// Capabilities.
 			'editors_view_reports'  => 0, // grant read-only feedback/analytics to editors (spec §9.1).
 
@@ -273,6 +278,13 @@ class Settings {
 		} elseif ( isset( $input['update_trigger'] ) && '' !== trim( (string) $input['update_trigger'] ) ) {
 			$out['update_trigger'] = sanitize_title( $input['update_trigger'] );
 		}
+
+		// Staged rollout.
+		if ( isset( $input['update_role'] ) && in_array( $input['update_role'], array( 'standalone', 'dev', 'production' ), true ) ) {
+			$out['update_role'] = $input['update_role'];
+		}
+		$out['verify_status_url'] = isset( $input['verify_status_url'] ) ? esc_url_raw( trim( $input['verify_status_url'] ) ) : '';
+		$out['verify_status_key'] = isset( $input['verify_status_key'] ) ? sanitize_text_field( $input['verify_status_key'] ) : '';
 
 		// Page ID lists.
 		foreach ( array( 'trigger_pages' ) as $key ) {

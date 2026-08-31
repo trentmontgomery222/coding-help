@@ -40,7 +40,10 @@ delete_option( 'acps_st_version' );
 delete_option( 'acps_st_qa' );
 delete_option( 'acps_st_admin_presence' );
 delete_transient( 'acps_st_update_remote' );
+delete_transient( 'acps_st_devstatus' );
 delete_option( 'acps_st_update_failed' );
+delete_option( 'acps_st_verified' );
+delete_option( 'acps_st_safe_mode' );
 
 // Clear the scheduled purge.
 wp_clear_scheduled_hook( 'acps_st_daily_purge' );
