@@ -87,6 +87,7 @@ class ACPS_Sitemap_Admin {
 		$clean    = array();
 
 		$clean['enable_xml']           = empty( $input['enable_xml'] ) ? 0 : 1;
+		$clean['public_only']          = empty( $input['public_only'] ) ? 0 : 1;
 		$clean['disable_core_sitemap'] = empty( $input['disable_core_sitemap'] ) ? 0 : 1;
 		$clean['add_to_robots']        = empty( $input['add_to_robots'] ) ? 0 : 1;
 
@@ -234,6 +235,19 @@ class ACPS_Sitemap_Admin {
 								<input type="checkbox" name="<?php echo esc_attr( ACPS_Sitemap::OPTION ); ?>[enable_xml]" value="1" <?php checked( $settings['enable_xml'], 1 ); ?> />
 								<?php esc_html_e( 'Enable the XML sitemap for search engines', 'acps-sitemap' ); ?>
 							</label>
+						</td>
+					</tr>
+
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Content visibility', 'acps-sitemap' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( ACPS_Sitemap::OPTION ); ?>[public_only]" value="1" <?php checked( $settings['public_only'], 1 ); ?> />
+								<?php esc_html_e( 'Only include public content', 'acps-sitemap' ); ?>
+							</label>
+							<p class="description">
+								<?php esc_html_e( 'Leaves out password-protected posts/pages and anything marked "noindex" by your SEO plugin (Yoast SEO, Rank Math, All in One SEO, or SEOPress). Turn this off to list everything regardless of visibility.', 'acps-sitemap' ); ?>
+							</p>
 						</td>
 					</tr>
 

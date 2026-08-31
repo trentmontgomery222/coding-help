@@ -96,6 +96,7 @@ class ACPS_Sitemap {
 	public static function defaults() {
 		return array(
 			'enable_xml'           => 1,
+			'public_only'          => 1,
 			'post_types'           => array( 'post', 'page' ),
 			'taxonomies'           => array(),
 			'exclude_ids'          => array(),
@@ -128,6 +129,69 @@ class ACPS_Sitemap {
 	public static function get_setting( $key, $default = null ) {
 		$settings = self::get_settings();
 		return array_key_exists( $key, $settings ) ? $settings[ $key ] : $default;
+	}
+
+	/* --------------------------------------------------------------------- *
+	 * Public-content filtering.
+	 * --------------------------------------------------------------------- */
+
+	/**
+	 * IDs of posts of a given type that should be left out of the sitemap
+	 * because they are not public: password-protected, or flagged "noindex"
+	 * by a common SEO plugin (Yoast SEO, Rank Math, All in One SEO,
+	 * SEOPress). Returns an empty array when the "public only" setting is
+	 * off, so nothing extra is excluded.
+	 *
+	 * @param string $post_type Post type.
+	 * @return int[]
+	 */
+	public static function non_public_post_ids( $post_type ) {
+		if ( ! self::get_setting( 'public_only', 1 ) ) {
+			return array();
+		}
+
+		$password_protected = get_posts(
+			array(
+				'post_type'        => $post_type,
+				'post_status'      => 'publish',
+				'has_password'     => true,
+				'posts_per_page'   => -1,
+				'fields'           => 'ids',
+				'suppress_filters' => false,
+			)
+		);
+
+		$noindexed = get_posts(
+			array(
+				'post_type'        => $post_type,
+				'post_status'      => 'publish',
+				'posts_per_page'   => -1,
+				'fields'           => 'ids',
+				'suppress_filters' => false,
+				'meta_query'       => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					'relation' => 'OR',
+					array(
+						'key'   => '_yoast_wpseo_meta-robots-noindex',
+						'value' => '1',
+					),
+					array(
+						'key'   => '_aioseo_noindex',
+						'value' => '1',
+					),
+					array(
+						'key'   => '_seopress_robots_noindex',
+						'value' => 'yes',
+					),
+					array(
+						'key'     => 'rank_math_robots',
+						'value'   => 'noindex',
+						'compare' => 'LIKE',
+					),
+				),
+			)
+		);
+
+		return array_values( array_unique( array_map( 'intval', array_merge( $password_protected, $noindexed ) ) ) );
 	}
 
 	/* --------------------------------------------------------------------- *

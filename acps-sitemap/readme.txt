@@ -4,7 +4,7 @@ Tags: sitemap, xml sitemap, html sitemap, seo, single site
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.0
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -18,6 +18,7 @@ ACPS Sitemap creates a search-engine XML sitemap and an optional visitor-facing 
 
 * XML sitemap index at `/sitemap.xml` with per-type sub-sitemaps (`/sitemap-pt-post.xml`, etc.).
 * Automatic pagination for large content sets (configurable URLs per file).
+* "Only include public content" toggle: leaves out password-protected posts/pages and anything marked "noindex" by your SEO plugin (Yoast SEO, Rank Math, All in One SEO, SEOPress).
 * Choose exactly which post types and taxonomies to include.
 * Exclude specific pages/posts by ID.
 * Adds a `Sitemap:` line to `robots.txt`.
@@ -47,6 +48,9 @@ Put the shortcode `[acps_sitemap]` on any page, or use the **Create sitemap page
 It runs on individual sites within a multisite network, but it must be activated per-site — it will not activate network-wide.
 
 == Changelog ==
+
+= 1.1.0 =
+* Added an "Only include public content" setting (on by default) that excludes password-protected posts/pages and content marked "noindex" by Yoast SEO, Rank Math, All in One SEO, or SEOPress from both the XML and HTML sitemaps.
 
 = 1.0.0 =
 * Initial release: XML sitemap index with pagination, HTML shortcode, admin settings page, robots.txt integration, and caching.

@@ -83,6 +83,8 @@ class ACPS_Sitemap_HTML {
 		$object = get_post_type_object( $post_type );
 		$label  = $object ? $object->labels->name : $post_type;
 
+		$exclude = array_values( array_unique( array_merge( $exclude, ACPS_Sitemap::non_public_post_ids( $post_type ) ) ) );
+
 		// Hierarchical types (pages) get a nested list; others a flat list.
 		if ( is_post_type_hierarchical( $post_type ) ) {
 			$items = wp_list_pages(

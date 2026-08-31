@@ -363,6 +363,8 @@ class ACPS_Sitemap_XML {
 	private function post_type_urls( $post_type, $page ) {
 		$per_page = $this->per_page();
 
+		$exclude = array_merge( $this->excluded_ids(), ACPS_Sitemap::non_public_post_ids( $post_type ) );
+
 		$query = new WP_Query(
 			array(
 				'post_type'              => $post_type,
@@ -372,8 +374,7 @@ class ACPS_Sitemap_XML {
 				'orderby'                => 'modified',
 				'order'                  => 'DESC',
 				'ignore_sticky_posts'    => true,
-				'has_password'           => false,
-				'post__not_in'           => $this->excluded_ids(),
+				'post__not_in'           => $exclude,
 				'no_found_rows'          => true,
 				'update_post_meta_cache' => false,
 				'update_post_term_cache' => false,
