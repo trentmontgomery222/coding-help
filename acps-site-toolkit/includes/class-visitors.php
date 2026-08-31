@@ -115,6 +115,49 @@ class Visitors {
 	}
 
 	/**
+	 * All of a visitor's sessions with their device/environment context, newest
+	 * first — the same signals a form submission captures (device, browser/OS,
+	 * viewport, referrer, entry page, IP).
+	 *
+	 * @param string $uid   Visitor id.
+	 * @param int    $limit Max rows.
+	 * @return array[] session rows.
+	 */
+	public static function sessions( $uid, $limit = 100 ) {
+		$uid = self::sanitize( $uid );
+		if ( '' === $uid || ! self::has_column( 'sessions', 'visitor_uid' ) ) {
+			return array();
+		}
+		global $wpdb;
+		$se    = Schema::table( 'sessions' );
+		$limit = max( 1, min( 500, (int) $limit ) );
+		$rows  = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			$wpdb->prepare(
+				"SELECT started_at, last_activity_at, device_type, user_agent_summary, viewport, referrer, entry_url, entry_page_id, ip_anon
+				 FROM {$se}
+				 WHERE visitor_uid = %s
+				 ORDER BY started_at DESC
+				 LIMIT %d",
+				$uid,
+				$limit
+			),
+			ARRAY_A
+		);
+		return $rows ? $rows : array();
+	}
+
+	/**
+	 * The visitor's most recent session (device/environment summary), or null.
+	 *
+	 * @param string $uid Visitor id.
+	 * @return array|null
+	 */
+	public static function latest_session( $uid ) {
+		$rows = self::sessions( $uid, 1 );
+		return $rows ? $rows[0] : null;
+	}
+
+	/**
 	 * Whether a table has a column (cached per request). Guards writes/reads
 	 * against a schema that hasn't finished upgrading yet.
 	 *

@@ -63,6 +63,12 @@ if ( '' !== $view_uid ) {
 							}
 							?>
 						</td></tr>
+						<?php $latest = Visitors::latest_session( $view_uid ); ?>
+						<tr><th scope="row"><?php esc_html_e( 'Device', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $latest && $latest['device_type'] ? $latest['device_type'] : '—' ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Browser / OS', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $latest && $latest['user_agent_summary'] ? $latest['user_agent_summary'] : '—' ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Window size', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $latest && $latest['viewport'] ? $latest['viewport'] : '—' ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Entry page', 'acps-site-toolkit' ); ?></th><td><?php echo $latest && $latest['entry_url'] ? '<a href="' . esc_url( $latest['entry_url'] ) . '" target="_blank" rel="noopener">' . esc_html( $latest['entry_url'] ) . '</a>' : '—'; ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Came from (referrer)', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $latest && $latest['referrer'] ? $latest['referrer'] : '—' ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->first_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->last_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( count( $entries ) ); ?></td></tr>
@@ -91,6 +97,36 @@ if ( '' !== $view_uid ) {
 									<td><?php echo esc_html( $p['visited_at'] ); ?></td>
 									<td><?php echo $p['url'] ? '<a href="' . esc_url( $p['url'] ) . '" target="_blank" rel="noopener">' . esc_html( $title ) . '</a>' : esc_html( $title ); ?></td>
 									<td><?php echo esc_html( $ontime ); ?></td>
+								</tr>
+							<?php endforeach; ?>
+						<?php endif; ?>
+					</tbody>
+				</table>
+
+				<?php $vsessions = Visitors::sessions( $view_uid, 100 ); ?>
+				<h2><?php esc_html_e( 'Sessions (device & environment)', 'acps-site-toolkit' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Each visit session, with the same device details a form submission records.', 'acps-site-toolkit' ); ?></p>
+				<table class="widefat striped">
+					<thead><tr>
+						<th scope="col"><?php esc_html_e( 'Started', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Device', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Browser / OS', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Window', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'IP', 'acps-site-toolkit' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Came from', 'acps-site-toolkit' ); ?></th>
+					</tr></thead>
+					<tbody>
+						<?php if ( ! $vsessions ) : ?>
+							<tr><td colspan="6"><?php esc_html_e( 'No sessions recorded for this visitor.', 'acps-site-toolkit' ); ?></td></tr>
+						<?php else : ?>
+							<?php foreach ( $vsessions as $ss ) : ?>
+								<tr>
+									<td><?php echo esc_html( $ss['started_at'] ); ?></td>
+									<td><?php echo esc_html( $ss['device_type'] ? $ss['device_type'] : '—' ); ?></td>
+									<td><?php echo esc_html( $ss['user_agent_summary'] ? $ss['user_agent_summary'] : '—' ); ?></td>
+									<td><?php echo esc_html( $ss['viewport'] ? $ss['viewport'] : '—' ); ?></td>
+									<td><?php echo esc_html( $ss['ip_anon'] ? $ss['ip_anon'] : '—' ); ?></td>
+									<td><?php echo esc_html( $ss['referrer'] ? $ss['referrer'] : '—' ); ?></td>
 								</tr>
 							<?php endforeach; ?>
 						<?php endif; ?>
