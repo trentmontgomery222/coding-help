@@ -78,6 +78,7 @@ class Settings {
 			'track_visitors'        => 1, // unique users (server IP+UA fingerprint).
 			'track_time_on_page'    => 1, // backfill time-on-page from the next view.
 			'track_referrers'       => 1, // store where visitors came from.
+			'track_admins'          => 0, // also track logged-in admins/staff (normally excluded).
 			'analytics_sample_rate' => 100, // % of pageviews that send a beacon (lower = far less origin load).
 			// What to SHOW on the Analytics dashboard. Turning a card off also
 			// skips the queries that build it, so these double as perf levers.
@@ -199,6 +200,7 @@ class Settings {
 			'track_visitors',
 			'track_time_on_page',
 			'track_referrers',
+			'track_admins',
 			'show_live',
 			'show_unique_users',
 			'show_pages',
