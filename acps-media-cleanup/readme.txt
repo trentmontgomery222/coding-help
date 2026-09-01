@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.14.1
+Stable tag: 1.14.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,15 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.14.2 =
+* Fixed: files were being reported as "used" with the location
+  "Site option: acps_media_cleanup_results" (and could show as used in the grid).
+  The plugin was matching each file against its OWN saved scan data. The
+  where-used lookup and the usage scanner now skip the plugin's own options
+  (results, scan-meta and settings), so a file is only "used" when something on
+  your actual site references it. Re-run "Scan usage now" to refresh the
+  used/unused colours.
 
 = 1.14.1 =
 * New "Used & unused" filter in the toolbar that works INSIDE the folder you're

@@ -123,8 +123,13 @@ class ACPS_MC_Usage {
 
 		// ---- Options (widgets, theme mods, plugin settings) ----
 		if ( $stems ) {
+			// Never count the plugin's OWN storage as a "use": the results option
+			// contains every scanned attachment ID (as array keys), the settings
+			// option holds excluded/target IDs, and scan-meta holds counts — a file
+			// appearing there is not a real reference and would mark everything used.
+			$skip    = array( ACPS_MC_OPT_RESULTS, ACPS_MC_OPT_SCANMETA, ACPS_MC_OPT_SETTINGS );
 			$clauses = array();
-			$args    = array();
+			$args    = $skip;
 			foreach ( $stems as $s ) {
 				$clauses[] = 'option_value LIKE %s';
 				$args[]    = '%' . $wpdb->esc_like( $s ) . '%';
@@ -132,6 +137,7 @@ class ACPS_MC_Usage {
 			$sql = "SELECT option_name FROM {$wpdb->options}
 				WHERE option_name NOT LIKE '\_transient\_%'
 				  AND option_name NOT LIKE '\_site\_transient\_%'
+				  AND option_name NOT IN ( " . implode( ', ', array_fill( 0, count( $skip ), '%s' ) ) . " )
 				  AND (" . implode( ' OR ', $clauses ) . ')
 				LIMIT 25';
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared

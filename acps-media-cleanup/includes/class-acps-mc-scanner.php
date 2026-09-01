@@ -559,7 +559,10 @@ class ACPS_MC_Scanner {
 
 	protected function index_options( $offset, $batch ) {
 		global $wpdb;
-		$skip = array( ACPS_MC_OPT_RESULTS, ACPS_MC_OPT_SCANMETA, ACPS_MC_TRANSIENT_INDEX );
+		// Never scan the plugin's own storage — the results option holds every
+		// scanned attachment ID and the settings option holds excluded/target IDs,
+		// so scanning them would mark those files "used" against themselves.
+		$skip = array( ACPS_MC_OPT_RESULTS, ACPS_MC_OPT_SCANMETA, ACPS_MC_OPT_SETTINGS, ACPS_MC_TRANSIENT_INDEX );
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT option_name, option_value FROM {$wpdb->options}
