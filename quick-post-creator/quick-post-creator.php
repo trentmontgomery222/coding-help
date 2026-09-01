@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Quick Post Creator
- * Description: A stripped-down admin page for making a post fast: a title, some text, a featured image, extra images, full category/tag support, and Yoast SEO fields when Yoast is active. No frills, no extra meta boxes to hunt through. Activate per-site (not a network/multisite plugin).
- * Version: 1.1.0
+ * Description: A stripped-down admin page for making a post fast: a title, some text, a featured image, extra images, and full category/tag support. Hands off to the normal post editor afterward so Yoast SEO's own box (snippet preview, analysis, AI suggestions) works as usual. Activate per-site (not a network/multisite plugin).
+ * Version: 1.2.0
  * Requires at least: 5.0
  * Requires PHP: 7.4
  * Author:
@@ -57,13 +57,13 @@ class Quick_Post_Creator {
 			'qpc-admin',
 			plugins_url( 'assets/quick-post.css', __FILE__ ),
 			array(),
-			'1.1.0'
+			'1.2.0'
 		);
 		wp_enqueue_script(
 			'qpc-admin',
 			plugins_url( 'assets/quick-post.js', __FILE__ ),
 			array( 'jquery' ),
-			'1.1.0',
+			'1.2.0',
 			true
 		);
 	}
@@ -75,7 +75,7 @@ class Quick_Post_Creator {
 		?>
 		<div class="wrap qpc-wrap">
 			<h1>Quick Post</h1>
-			<p>Title, some text, a featured image, a few extra images, categories, tags<?php echo $this->yoast_active() ? ', and SEO' : ''; ?>. That's it.</p>
+			<p>Title, some text, a featured image, a few extra images, categories, and tags. That's it — you'll land in the full editor next<?php echo $this->yoast_active() ? ' to finish up with Yoast SEO' : ''; ?>.</p>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" id="qpc-form">
 				<?php wp_nonce_field( self::NONCE, 'qpc_nonce' ); ?>
@@ -177,31 +177,6 @@ class Quick_Post_Creator {
 						</td>
 					</tr>
 				</table>
-
-				<?php if ( $this->yoast_active() ) : ?>
-					<h2>SEO (Yoast)</h2>
-					<table class="form-table" role="presentation">
-						<tr>
-							<th><label for="qpc_seo_title">SEO Title</label></th>
-							<td>
-								<input type="text" id="qpc_seo_title" name="qpc_seo_title" class="large-text">
-								<p class="description">Leave blank to let Yoast use its default title template.</p>
-							</td>
-						</tr>
-						<tr>
-							<th><label for="qpc_seo_desc">Meta Description</label></th>
-							<td>
-								<textarea id="qpc_seo_desc" name="qpc_seo_desc" class="large-text" rows="3"></textarea>
-							</td>
-						</tr>
-						<tr>
-							<th><label for="qpc_seo_focus_kw">Focus Keyphrase</label></th>
-							<td>
-								<input type="text" id="qpc_seo_focus_kw" name="qpc_seo_focus_kw" class="regular-text">
-							</td>
-						</tr>
-					</table>
-				<?php endif; ?>
 
 				<p class="submit">
 					<button type="submit" name="qpc_status" value="publish" class="button button-primary">Publish</button>
@@ -310,23 +285,19 @@ class Quick_Post_Creator {
 			set_post_thumbnail( $post_id, $featured_id );
 		}
 
-		if ( $this->yoast_active() ) {
-			$seo_title    = isset( $_POST['qpc_seo_title'] ) ? sanitize_text_field( wp_unslash( $_POST['qpc_seo_title'] ) ) : '';
-			$seo_desc     = isset( $_POST['qpc_seo_desc'] ) ? sanitize_textarea_field( wp_unslash( $_POST['qpc_seo_desc'] ) ) : '';
-			$seo_focus_kw = isset( $_POST['qpc_seo_focus_kw'] ) ? sanitize_text_field( wp_unslash( $_POST['qpc_seo_focus_kw'] ) ) : '';
-
-			if ( '' !== $seo_title ) {
-				update_post_meta( $post_id, '_yoast_wpseo_title', $seo_title );
-			}
-			if ( '' !== $seo_desc ) {
-				update_post_meta( $post_id, '_yoast_wpseo_metadesc', $seo_desc );
-			}
-			if ( '' !== $seo_focus_kw ) {
-				update_post_meta( $post_id, '_yoast_wpseo_focuskw', $seo_focus_kw );
-			}
-		}
-
-		$this->redirect_with_message( 'success', $post_id );
+		// Hand off to the real post editor so Yoast's own metabox (snippet
+		// preview, SEO/readability analysis, AI title & description
+		// suggestions) runs exactly as it does for any normal post.
+		$url = add_query_arg(
+			array(
+				'post'        => $post_id,
+				'action'      => 'edit',
+				'qpc_created' => 1,
+			),
+			admin_url( 'post.php' )
+		);
+		wp_safe_redirect( $url );
+		exit;
 	}
 
 	private function redirect_with_message( $type, $post_id ) {
@@ -343,21 +314,25 @@ class Quick_Post_Creator {
 	}
 
 	public function admin_notices() {
-		if ( ! isset( $_GET['page'] ) || self::SLUG !== $_GET['page'] || ! isset( $_GET['qpc_message'] ) ) {
+		if ( isset( $_GET['page'] ) && self::SLUG === $_GET['page'] && isset( $_GET['qpc_message'] ) ) {
+			$message = sanitize_text_field( wp_unslash( $_GET['qpc_message'] ) );
+			if ( 'error' === $message ) {
+				echo '<div class="notice notice-error is-dismissible"><p>Could not create the post. Make sure it has a title and try again.</p></div>';
+			}
 			return;
 		}
 
-		$message = sanitize_text_field( wp_unslash( $_GET['qpc_message'] ) );
-		$post_id = isset( $_GET['qpc_post_id'] ) ? absint( $_GET['qpc_post_id'] ) : 0;
-
-		if ( 'success' === $message && $post_id > 0 ) {
-			printf(
-				'<div class="notice notice-success is-dismissible"><p>Post created. <a href="%1$s">Edit it</a> or <a href="%2$s">view it</a>.</p></div>',
-				esc_url( get_edit_post_link( $post_id, 'raw' ) ),
-				esc_url( get_permalink( $post_id ) )
-			);
-		} elseif ( 'error' === $message ) {
-			echo '<div class="notice notice-error is-dismissible"><p>Could not create the post. Make sure it has a title and try again.</p></div>';
+		if ( isset( $_GET['qpc_created'] ) && function_exists( 'get_current_screen' ) ) {
+			$screen = get_current_screen();
+			if ( $screen && 'post' === $screen->base ) {
+				$message = $this->yoast_active()
+					? 'Post created with Quick Post. Scroll down to the Yoast SEO box to set the snippet, run the analysis, or try its AI suggestions.'
+					: 'Post created with Quick Post. Review it here before publishing further changes.';
+				printf(
+					'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+					esc_html( $message )
+				);
+			}
 		}
 	}
 }
