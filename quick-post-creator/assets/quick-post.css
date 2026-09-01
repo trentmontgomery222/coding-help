@@ -1,0 +1,48 @@
+.qpc-wrap .form-table th {
+	width: 180px;
+}
+
+.qpc-preview img {
+	max-width: 150px;
+	max-height: 150px;
+	display: block;
+	margin-bottom: 8px;
+	border: 1px solid #ccd0d4;
+	padding: 2px;
+	background: #fff;
+}
+
+.qpc-preview-multi {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.qpc-gallery-thumb {
+	position: relative;
+	width: 90px;
+}
+
+.qpc-gallery-thumb img {
+	max-width: 90px;
+	max-height: 90px;
+	display: block;
+	border: 1px solid #ccd0d4;
+	padding: 2px;
+	background: #fff;
+}
+
+.qpc-gallery-remove {
+	position: absolute;
+	top: -6px;
+	right: -6px;
+	width: 20px;
+	height: 20px;
+	line-height: 18px;
+	padding: 0;
+	border-radius: 50%;
+	border: 1px solid #ccd0d4;
+	background: #fff;
+	cursor: pointer;
+	text-align: center;
+}
