@@ -188,18 +188,55 @@ if ( '' !== $view_uid ) {
 /* -------------------------------------------------------------------------
  * List
  * ---------------------------------------------------------------------- */
-$search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
-$paged  = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1; // phpcs:ignore
-$result = Visitors::query( array( 'search' => $search, 'paged' => $paged, 'per_page' => 50 ) );
-$rows   = $result['rows'];
-$total  = $result['total'];
+$search  = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+$paged   = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1; // phpcs:ignore
+$orderby = isset( $_GET['orderby'] ) ? sanitize_key( $_GET['orderby'] ) : 'last_seen'; // phpcs:ignore WordPress.Security.NonceVerification
+$order   = ( isset( $_GET['order'] ) && 'asc' === strtolower( $_GET['order'] ) ) ? 'asc' : 'desc'; // phpcs:ignore WordPress.Security.NonceVerification
+$result  = Visitors::query( array( 'search' => $search, 'paged' => $paged, 'per_page' => 50, 'orderby' => $orderby, 'order' => $order ) );
+$rows    = $result['rows'];
+$total   = $result['total'];
+
+$visits_total = \ACPS\SiteToolkit\Analytics::requests_summary();
+
+/**
+ * Build a sortable-column header link. Clicking toggles asc/desc for that
+ * column; the active column shows the WordPress sorted arrow.
+ */
+$sort_th = function ( $col, $label ) use ( $orderby, $order, $search ) {
+	$is_active = ( $orderby === $col );
+	$new_order = ( $is_active && 'asc' === $order ) ? 'desc' : 'asc';
+	$class     = 'manage-column sortable ' . ( $is_active ? $order : 'desc' );
+	if ( $is_active ) {
+		$class .= ' sorted';
+	}
+	$url = add_query_arg(
+		array(
+			'page'    => 'acps-st-visitors',
+			's'       => $search,
+			'orderby' => $col,
+			'order'   => $new_order,
+		),
+		admin_url( 'admin.php' )
+	);
+	$aria = $is_active ? ( 'asc' === $order ? 'ascending' : 'descending' ) : 'none';
+	return '<th scope="col" class="' . esc_attr( $class ) . '" aria-sort="' . esc_attr( $aria ) . '">'
+		. '<a href="' . esc_url( $url ) . '"><span>' . esc_html( $label ) . '</span><span class="sorting-indicator"></span></a></th>';
+};
 ?>
 <div class="wrap acps-admin">
 	<h1><?php esc_html_e( 'Visitors', 'acps-site-toolkit' ); ?></h1>
-	<p class="description"><?php esc_html_e( 'Every unique visitor (by first-party fingerprint). Search by ID, name or IP address. Names are set automatically when a form has an "accname" field. Open a visitor to see their IP and full page navigation.', 'acps-site-toolkit' ); ?></p>
+	<p class="description"><?php esc_html_e( 'Every unique visitor (by first-party fingerprint). Search by ID, name or IP address. Names are set automatically when a form has an "accname" field. Open a visitor to see their IP and full page navigation. Click a column heading to sort.', 'acps-site-toolkit' ); ?></p>
+
+	<div class="acps-stat-row">
+		<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $total ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'Unique visitors', 'acps-site-toolkit' ); ?></span></div>
+		<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $visits_total['total'] ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'Website total visits', 'acps-site-toolkit' ); ?></span></div>
+		<div class="acps-stat"><span class="acps-stat-num"><?php echo esc_html( number_format_i18n( $visits_total['today'] ) ); ?></span><span class="acps-stat-lbl"><?php esc_html_e( 'Visits today', 'acps-site-toolkit' ); ?></span></div>
+	</div>
 
 	<form method="get" class="acps-filters">
 		<input type="hidden" name="page" value="acps-st-visitors">
+		<input type="hidden" name="orderby" value="<?php echo esc_attr( $orderby ); ?>">
+		<input type="hidden" name="order" value="<?php echo esc_attr( $order ); ?>">
 		<label for="acps-visitor-search" class="screen-reader-text"><?php esc_html_e( 'Search visitors', 'acps-site-toolkit' ); ?></label>
 		<input type="search" id="acps-visitor-search" name="s" value="<?php echo esc_attr( $search ); ?>" placeholder="<?php esc_attr_e( 'Search ID or name…', 'acps-site-toolkit' ); ?>">
 		<button type="submit" class="button"><?php esc_html_e( 'Search', 'acps-site-toolkit' ); ?></button>
@@ -208,12 +245,16 @@ $total  = $result['total'];
 	<table class="widefat striped acps-table">
 		<caption class="screen-reader-text"><?php esc_html_e( 'Unique visitors', 'acps-site-toolkit' ); ?></caption>
 		<thead><tr>
-			<th scope="col"><?php esc_html_e( 'Name', 'acps-site-toolkit' ); ?></th>
+			<?php
+			echo $sort_th( 'name', __( 'Name', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
+			?>
 			<th scope="col"><?php esc_html_e( 'Visitor ID', 'acps-site-toolkit' ); ?></th>
-			<th scope="col"><?php esc_html_e( 'Last IP', 'acps-site-toolkit' ); ?></th>
-			<th scope="col"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th>
-			<th scope="col"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th>
-			<th scope="col"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th>
+			<?php
+			echo $sort_th( 'last_ip', __( 'Last IP', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
+			echo $sort_th( 'entry_count', __( 'Submissions', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
+			echo $sort_th( 'first_seen', __( 'First seen', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
+			echo $sort_th( 'last_seen', __( 'Last seen', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
+			?>
 		</tr></thead>
 		<tbody>
 			<?php if ( ! $rows ) : ?>

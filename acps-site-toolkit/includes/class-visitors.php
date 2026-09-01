@@ -238,7 +238,22 @@ class Visitors {
 		$v = Schema::table( 'visitors' );
 		$e = Schema::table( 'entries' );
 
-		$args = wp_parse_args( $args, array( 'search' => '', 'per_page' => 50, 'paged' => 1 ) );
+		$args = wp_parse_args( $args, array( 'search' => '', 'per_page' => 50, 'paged' => 1, 'orderby' => 'last_seen', 'order' => 'desc' ) );
+
+		// Whitelist sort columns (map friendly keys → safe SQL).
+		$order_cols = array(
+			'name'        => 'vv.name',
+			'uid'         => 'vv.uid',
+			'last_ip'     => 'vv.last_ip',
+			'entry_count' => 'entry_count',
+			'first_seen'  => 'vv.first_seen',
+			'last_seen'   => 'vv.last_seen',
+		);
+		$orderby = isset( $order_cols[ $args['orderby'] ] ) ? $order_cols[ $args['orderby'] ] : 'vv.last_seen';
+		if ( 'vv.last_ip' === $orderby && ! self::has_column( 'visitors', 'last_ip' ) ) {
+			$orderby = 'vv.last_seen';
+		}
+		$order = ( 'asc' === strtolower( (string) $args['order'] ) ) ? 'ASC' : 'DESC';
 
 		$where  = array( '1=1' );
 		$params = array();
@@ -263,8 +278,9 @@ class Visitors {
 		$count_sql = "SELECT COUNT(*) FROM {$v} WHERE {$where_sql}";
 		$total     = (int) $wpdb->get_var( $params ? $wpdb->prepare( $count_sql, $params ) : $count_sql ); // phpcs:ignore WordPress.DB
 
+		// $orderby/$order come from a fixed whitelist above, never from raw input.
 		$sql  = "SELECT vv.*, ( SELECT COUNT(*) FROM {$e} en WHERE en.visitor_uid = vv.uid AND en.status NOT IN ('spam','trashed') ) AS entry_count
-				 FROM {$v} vv WHERE {$where_sql} ORDER BY vv.last_seen DESC LIMIT %d OFFSET %d";
+				 FROM {$v} vv WHERE {$where_sql} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $params, array( $per_page, $offset ) ) ) ); // phpcs:ignore WordPress.DB
 		return array( 'rows' => $rows ? $rows : array(), 'total' => $total );
 	}
