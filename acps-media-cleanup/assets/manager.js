@@ -5,7 +5,7 @@
 	var A = window.ACPS_MM || {};
 	var i18n = A.i18n || {};
 
-	var state = { folder: 'all', search: '', type: '', sort: 'date', recursive: false };
+	var state = { folder: 'all', search: '', type: '', sort: 'date', usage: '', recursive: false };
 	var selection = {};
 	var selectMode = false;   // click cards to highlight/select instead of opening them
 	var lastClicked = null;   // anchor id for shift-click range selection
@@ -25,6 +25,7 @@
 	var OPEN_KEY = 'acps_mm_open';
 	var SCROLL_KEY = 'acps_mm_scroll';
 	var RECURSIVE_KEY = 'acps_mm_recursive';
+	var USAGE_KEY = 'acps_mm_usage';         // usage filter within a folder
 
 	function lsSet( k, v ) { try { window.localStorage.setItem( k, v ); } catch ( e ) {} }
 	function lsGet( k ) { try { return window.localStorage.getItem( k ); } catch ( e ) { return null; } }
@@ -206,6 +207,7 @@
 			search: state.search,
 			type: state.type,
 			sort: state.sort,
+			usage: state.usage,
 			recursive: state.recursive ? 1 : 0,
 			per_page: 20000
 		} ).done( function ( res ) {
@@ -303,7 +305,13 @@
 
 		if ( ! items.length ) {
 			if ( ! subfolders.length ) {
-				$grid.html( '<p class="acps-mm-muted">' + esc( i18n.noResults ) + '</p>' );
+				var emptyMsg = i18n.noResults;
+				// If the usage filter needs scan data and none exists yet, point the
+				// user at the scan button instead of a bare "nothing here".
+				if ( ( state.usage === 'unused' || state.usage === 'used' ) && lastFolderData && ! lastFolderData.hasScan ) {
+					emptyMsg = i18n.usageNeedsScan || emptyMsg;
+				}
+				$grid.html( '<p class="acps-mm-muted">' + esc( emptyMsg ) + '</p>' );
 			}
 			if ( onDone ) { onDone(); }
 			return;
@@ -1299,6 +1307,11 @@
 			if ( savedFolder.indexOf( 'page:' ) === 0 ) { $( '#acps-mm-page' ).val( savedFolder ); }
 		}
 		if ( lsGet( RECURSIVE_KEY ) === '1' ) { state.recursive = true; $( '#acps-mm-recursive' ).prop( 'checked', true ); }
+		var savedUsage = lsGet( USAGE_KEY );
+		if ( savedUsage === 'unused' || savedUsage === 'used' || savedUsage === 'unknown' ) {
+			state.usage = savedUsage;
+			$( '#acps-mm-usage' ).val( savedUsage );
+		}
 
 		loadFolders();
 		loadGrid( function () {
@@ -1424,6 +1437,11 @@
 		} );
 		$( '#acps-mm-type' ).on( 'change', function () { state.type = this.value; loadGrid(); } );
 		$( '#acps-mm-sort' ).on( 'change', function () { state.sort = this.value; loadGrid(); } );
+		$( '#acps-mm-usage' ).on( 'change', function () {
+			state.usage = this.value;
+			lsSet( USAGE_KEY, state.usage );
+			loadGrid();
+		} );
 
 		$( document ).on( 'change', '.acps-mm-cb', function ( e ) {
 			e.stopPropagation();

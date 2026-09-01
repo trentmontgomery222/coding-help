@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.14.0
+Stable tag: 1.14.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,14 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.14.1 =
+* New "Used & unused" filter in the toolbar that works INSIDE the folder you're
+  viewing. Open a folder, choose "Unused only" (or "Used only" / "Not scanned
+  yet"), then "Select" ▸ "Select all shown" to move or delete just those files.
+  The filter combines with the folder instead of replacing it, and is
+  remembered between visits. (The site-wide "Unused"/"Used" sidebar views still
+  work as before.)
 
 = 1.14.0 =
 * "Add Media File" is now the FileMedia uploader (1:1 replacement for the

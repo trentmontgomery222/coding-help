@@ -117,6 +117,36 @@ class ACPS_MC_Manager_Ajax {
 	}
 
 	/**
+	 * Resolve the attachment IDs that match a usage filter, so it can be combined
+	 * with any folder (e.g. "unused files inside the Athletics folder").
+	 *
+	 * @param string $usage 'used' | 'unused' | 'unknown'
+	 * @return array Attachment IDs.
+	 */
+	protected function ids_for_usage( $usage ) {
+		$map = $this->results_map();
+		$out = array();
+		if ( 'unknown' === $usage ) {
+			// Attachments that have never been classified by a scan.
+			global $wpdb;
+			$all = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type='attachment' AND post_status<>'trash'" );
+			foreach ( (array) $all as $id ) {
+				if ( ! isset( $map[ (int) $id ] ) ) {
+					$out[] = (int) $id;
+				}
+			}
+			return $out;
+		}
+		$want = ( 'used' === $usage );
+		foreach ( $map as $id => $is_used ) {
+			if ( (bool) $is_used === $want ) {
+				$out[] = (int) $id;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * Resolve the attachment IDs that belong to a folder selection.
 	 *
 	 * @param string $folder    'all' | 'unfiled' | numeric id
@@ -180,6 +210,11 @@ class ACPS_MC_Manager_Ajax {
 		$search = isset( $_POST['search'] ) ? sanitize_text_field( wp_unslash( $_POST['search'] ) ) : '';
 		$type   = isset( $_POST['type'] ) ? sanitize_text_field( wp_unslash( $_POST['type'] ) ) : '';
 		$sort   = isset( $_POST['sort'] ) ? sanitize_key( wp_unslash( $_POST['sort'] ) ) : 'date';
+		// Usage filter that combines with the folder: '' (any) | used | unused | unknown.
+		$usage  = isset( $_POST['usage'] ) ? sanitize_key( wp_unslash( $_POST['usage'] ) ) : '';
+		if ( ! in_array( $usage, array( 'used', 'unused', 'unknown' ), true ) ) {
+			$usage = '';
+		}
 		$paged  = max( 1, isset( $_POST['paged'] ) ? absint( $_POST['paged'] ) : 1 );
 		// The manager loads everything at once; keep a generous hard cap so a
 		// giant library cannot exhaust memory in a single response.
@@ -189,12 +224,20 @@ class ACPS_MC_Manager_Ajax {
 		// Immediate sub-folders shown as tiles (only when browsing a real folder
 		// non-recursively, with no search active).
 		$is_folder  = ( ctype_digit( (string) $folder ) && (int) $folder > 0 );
-		$subfolders = ( $is_folder && ! $recursive && '' === $search ) ? $this->subfolders_for( (int) $folder ) : array();
+		$subfolders = ( $is_folder && ! $recursive && '' === $search && '' === $usage ) ? $this->subfolders_for( (int) $folder ) : array();
 
 		$where = array( "p.post_type = 'attachment'", "p.post_status <> 'trash'" );
 
 		// Folder filter.
 		$ids = $this->ids_for_folder( $folder, $recursive );
+
+		// Combine the usage filter with the folder so you can see (and then
+		// select/move/delete) just the unused — or used — files inside a folder.
+		if ( '' !== $usage ) {
+			$usage_ids = $this->ids_for_usage( $usage );
+			$ids       = is_array( $ids ) ? array_values( array_intersect( $ids, $usage_ids ) ) : $usage_ids;
+		}
+
 		if ( is_array( $ids ) ) {
 			if ( empty( $ids ) ) {
 				wp_send_json_success( array( 'items' => array(), 'total' => 0, 'returned' => 0, 'capped' => false, 'subfolders' => $subfolders ) );
@@ -236,7 +279,7 @@ class ACPS_MC_Manager_Ajax {
 
 		// Serve the heavy card list from a short-lived cache (rebuilt only when
 		// something changes, via the version counter) so repeat loads are fast.
-		$sig  = md5( wp_json_encode( array( $folder, $search, $type, $sort, $per, $recursive, $this->version(), ACPS_MC_VERSION ) ) );
+		$sig  = md5( wp_json_encode( array( $folder, $search, $type, $sort, $usage, $per, $recursive, $this->version(), ACPS_MC_VERSION ) ) );
 		$ckey = 'acps_mm_q_' . $sig;
 		$cache = get_transient( $ckey );
 

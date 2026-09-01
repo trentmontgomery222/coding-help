@@ -148,6 +148,7 @@ class ACPS_MC_Manager {
 					'used'          => __( 'Used', 'acps-media-cleanup' ),
 					'loading'       => __( 'Loading…', 'acps-media-cleanup' ),
 					'noResults'     => __( 'No media found here.', 'acps-media-cleanup' ),
+					'usageNeedsScan' => __( 'Run “Scan usage now” first to see which files here are used or unused.', 'acps-media-cleanup' ),
 					'copied'        => __( 'Copied!', 'acps-media-cleanup' ),
 					'copyUrl'       => __( 'Copy URL', 'acps-media-cleanup' ),
 					'whereUsed'     => __( 'Where is this used?', 'acps-media-cleanup' ),
@@ -403,6 +404,12 @@ class ACPS_MC_Manager {
 							<option value="date"><?php esc_html_e( 'Newest first', 'acps-media-cleanup' ); ?></option>
 							<option value="date_asc"><?php esc_html_e( 'Oldest first', 'acps-media-cleanup' ); ?></option>
 							<option value="title"><?php esc_html_e( 'Name A–Z', 'acps-media-cleanup' ); ?></option>
+						</select>
+						<select id="acps-mm-usage" title="<?php esc_attr_e( 'Filter by usage within this folder', 'acps-media-cleanup' ); ?>">
+							<option value=""><?php esc_html_e( 'Used & unused', 'acps-media-cleanup' ); ?></option>
+							<option value="unused"><?php esc_html_e( 'Unused only', 'acps-media-cleanup' ); ?></option>
+							<option value="used"><?php esc_html_e( 'Used only', 'acps-media-cleanup' ); ?></option>
+							<option value="unknown"><?php esc_html_e( 'Not scanned yet', 'acps-media-cleanup' ); ?></option>
 						</select>
 						<select id="acps-mm-page"><option value=""><?php esc_html_e( '— Used on page: any —', 'acps-media-cleanup' ); ?></option></select>
 						<label class="acps-mm-subtoggle"><input type="checkbox" id="acps-mm-recursive"> <?php esc_html_e( 'Include sub-folders', 'acps-media-cleanup' ); ?></label>
