@@ -30,6 +30,11 @@ $name = function ( $key ) use ( $opt ) {
 $checked = function ( $key ) use ( $s ) {
 	return checked( ! empty( $s[ $key ] ), true, false );
 };
+
+// The Updates tab is deliberately hidden from the menus and the tab bar — it
+// only appears when you type its specific URL (…?page=acps-st-settings&acps_updates=1),
+// so update settings can't be changed by accident from normal navigation.
+$show_updates = isset( $_GET['acps_updates'] ); // phpcs:ignore WordPress.Security.NonceVerification
 ?>
 <div class="wrap acps-admin">
 	<h1><?php esc_html_e( 'Cayden Form Manager Settings', 'acps-site-toolkit' ); ?></h1>
@@ -71,7 +76,9 @@ $checked = function ( $key ) use ( $s ) {
 		<a href="#acps-tab-appearance" class="nav-tab"><?php esc_html_e( 'Appearance', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-help" class="nav-tab"><?php esc_html_e( 'Help', 'acps-site-toolkit' ); ?></a>
 		<a href="#acps-tab-access" class="nav-tab"><?php esc_html_e( 'Access & data', 'acps-site-toolkit' ); ?></a>
-		<a href="#acps-tab-updates" class="nav-tab"><?php esc_html_e( 'Updates', 'acps-site-toolkit' ); ?></a>
+		<?php if ( $show_updates ) : ?>
+			<a href="#acps-tab-updates" class="nav-tab"><?php esc_html_e( 'Updates', 'acps-site-toolkit' ); ?></a>
+		<?php endif; ?>
 	</h2>
 
 	<form method="post" action="options.php">
@@ -487,6 +494,7 @@ $checked = function ( $key ) use ( $s ) {
 		</div>
 
 		<!-- ============================= UPDATES =========================== -->
+		<?php if ( $show_updates ) : ?>
 		<div class="acps-tab-panel" id="acps-tab-updates" hidden>
 			<h2 class="title"><?php esc_html_e( 'Updates', 'acps-site-toolkit' ); ?></h2>
 			<p class="description" style="max-width:48rem"><?php esc_html_e( 'This plugin does not live on wordpress.org, so it checks a source you control for new versions. When a newer version is found, "Update now" appears on the Plugins screen exactly like a wordpress.org plugin.', 'acps-site-toolkit' ); ?></p>
@@ -607,10 +615,12 @@ $checked = function ( $key ) use ( $s ) {
 				</tr>
 			</table>
 		</div>
+		<?php endif; // $show_updates ?>
 
 		<?php submit_button(); ?>
 	</form>
 
+	<?php if ( $show_updates ) : ?>
 	<!-- Deliberately OUTSIDE the form above (which posts to options.php) —
 	     this is its own form posting to admin-post.php, same pattern as the
 	     "Database tools" card near the top. A <form> nested inside another
@@ -644,6 +654,7 @@ $checked = function ( $key ) use ( $s ) {
 		</form>
 		<p class="description"><?php esc_html_e( 'This checks the configured source right away instead of waiting for the normal cache window, and refreshes the Plugins screen\'s update status. Save any changed settings on the Updates tab first.', 'acps-site-toolkit' ); ?></p>
 	</div>
+	<?php endif; // $show_updates ?>
 </div>
 
 <script>
@@ -673,7 +684,10 @@ $checked = function ( $key ) use ( $s ) {
 	} );
 	// Restore the last tab after a save (options.php redirects back), or honour a #hash.
 	var initial = '';
-	if ( location.hash && document.getElementById( location.hash.slice( 1 ) ) ) {
+	// When the hidden Updates URL is used, open straight to that tab.
+	if ( /[?&]acps_updates=/.test( location.search ) && document.getElementById( 'acps-tab-updates' ) ) {
+		initial = 'acps-tab-updates';
+	} else if ( location.hash && document.getElementById( location.hash.slice( 1 ) ) ) {
 		initial = location.hash.slice( 1 );
 	} else {
 		try { var saved = sessionStorage.getItem( 'acpsStTab' ); if ( saved && document.getElementById( saved ) ) { initial = saved; } } catch ( e ) {}
