@@ -147,6 +147,22 @@ class Visitors {
 	}
 
 	/**
+	 * How many times this visitor has visited the site (their session count).
+	 *
+	 * @param string $uid Visitor id.
+	 * @return int
+	 */
+	public static function visit_count( $uid ) {
+		$uid = self::sanitize( $uid );
+		if ( '' === $uid || ! self::has_column( 'sessions', 'visitor_uid' ) ) {
+			return 0;
+		}
+		global $wpdb;
+		$se = Schema::table( 'sessions' );
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$se} WHERE visitor_uid = %s", $uid ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
 	 * The visitor's most recent session (device/environment summary), or null.
 	 *
 	 * @param string $uid Visitor id.
@@ -246,6 +262,7 @@ class Visitors {
 			'uid'         => 'vv.uid',
 			'last_ip'     => 'vv.last_ip',
 			'entry_count' => 'entry_count',
+			'visit_count' => 'visit_count',
 			'first_seen'  => 'vv.first_seen',
 			'last_seen'   => 'vv.last_seen',
 		);
@@ -278,8 +295,19 @@ class Visitors {
 		$count_sql = "SELECT COUNT(*) FROM {$v} WHERE {$where_sql}";
 		$total     = (int) $wpdb->get_var( $params ? $wpdb->prepare( $count_sql, $params ) : $count_sql ); // phpcs:ignore WordPress.DB
 
+		// How many times this visitor has visited (their session count). Only
+		// available once sessions carry the visitor fingerprint; else 0.
+		$sess         = Schema::table( 'sessions' );
+		$visit_select = self::has_column( 'sessions', 'visitor_uid' )
+			? "( SELECT COUNT(*) FROM {$sess} se2 WHERE se2.visitor_uid = vv.uid )"
+			: '0';
+		if ( 'visit_count' === $orderby && '0' === $visit_select ) {
+			$orderby = 'vv.last_seen';
+		}
+
 		// $orderby/$order come from a fixed whitelist above, never from raw input.
-		$sql  = "SELECT vv.*, ( SELECT COUNT(*) FROM {$e} en WHERE en.visitor_uid = vv.uid AND en.status NOT IN ('spam','trashed') ) AS entry_count
+		$sql  = "SELECT vv.*, ( SELECT COUNT(*) FROM {$e} en WHERE en.visitor_uid = vv.uid AND en.status NOT IN ('spam','trashed') ) AS entry_count,
+				 {$visit_select} AS visit_count
 				 FROM {$v} vv WHERE {$where_sql} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $params, array( $per_page, $offset ) ) ) ); // phpcs:ignore WordPress.DB
 		return array( 'rows' => $rows ? $rows : array(), 'total' => $total );

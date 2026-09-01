@@ -71,6 +71,7 @@ if ( '' !== $view_uid ) {
 						<tr><th scope="row"><?php esc_html_e( 'Came from (referrer)', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $latest && $latest['referrer'] ? $latest['referrer'] : '—' ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->first_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->last_seen ); ?></td></tr>
+						<tr><th scope="row"><?php esc_html_e( 'Total visits', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( number_format_i18n( Visitors::visit_count( $view_uid ) ) ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Submissions', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( count( $entries ) ); ?></td></tr>
 					</tbody>
 				</table>
@@ -251,6 +252,7 @@ $sort_th = function ( $col, $label ) use ( $orderby, $order, $search ) {
 			<th scope="col"><?php esc_html_e( 'Visitor ID', 'acps-site-toolkit' ); ?></th>
 			<?php
 			echo $sort_th( 'last_ip', __( 'Last IP', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
+			echo $sort_th( 'visit_count', __( 'Total visits', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 			echo $sort_th( 'entry_count', __( 'Submissions', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 			echo $sort_th( 'first_seen', __( 'First seen', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 			echo $sort_th( 'last_seen', __( 'Last seen', 'acps-site-toolkit' ) ); // phpcs:ignore WordPress.Security.EscapeOutput
@@ -258,7 +260,7 @@ $sort_th = function ( $col, $label ) use ( $orderby, $order, $search ) {
 		</tr></thead>
 		<tbody>
 			<?php if ( ! $rows ) : ?>
-				<tr><td colspan="6"><?php esc_html_e( 'No visitors yet.', 'acps-site-toolkit' ); ?></td></tr>
+				<tr><td colspan="7"><?php esc_html_e( 'No visitors yet.', 'acps-site-toolkit' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $rows as $v ) :
 					$link = admin_url( 'admin.php?page=acps-st-visitors&visitor=' . rawurlencode( $v->uid ) );
@@ -267,6 +269,7 @@ $sort_th = function ( $col, $label ) use ( $orderby, $order, $search ) {
 						<td><a href="<?php echo esc_url( $link ); ?>"><strong><?php echo esc_html( $v->name ? $v->name : __( '(unnamed)', 'acps-site-toolkit' ) ); ?></strong></a></td>
 						<td><code><?php echo esc_html( $v->uid ); ?></code></td>
 						<td><?php echo esc_html( ! empty( $v->last_ip ) ? $v->last_ip : '—' ); ?></td>
+						<td><?php echo esc_html( number_format_i18n( isset( $v->visit_count ) ? (int) $v->visit_count : 0 ) ); ?></td>
 						<td><?php echo esc_html( (int) $v->entry_count ); ?></td>
 						<td><?php echo esc_html( $v->first_seen ); ?></td>
 						<td><?php echo esc_html( $v->last_seen ); ?></td>
