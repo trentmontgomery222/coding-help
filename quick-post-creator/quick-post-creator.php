@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Quick Post Creator
- * Description: A stripped-down admin page for making a post fast: a title, some text, a featured image, and a few extra images. No frills, no extra meta boxes to hunt through. Activate per-site (not a network/multisite plugin).
- * Version: 1.0.0
+ * Description: A stripped-down admin page for making a post fast: a title, some text, a featured image, extra images, full category/tag support, and Yoast SEO fields when Yoast is active. No frills, no extra meta boxes to hunt through. Activate per-site (not a network/multisite plugin).
+ * Version: 1.1.0
  * Requires at least: 5.0
  * Requires PHP: 7.4
  * Author:
@@ -44,6 +44,10 @@ class Quick_Post_Creator {
 		);
 	}
 
+	private function yoast_active() {
+		return defined( 'WPSEO_VERSION' );
+	}
+
 	public function enqueue_assets( $hook ) {
 		if ( 'toplevel_page_' . self::SLUG !== $hook ) {
 			return;
@@ -53,13 +57,13 @@ class Quick_Post_Creator {
 			'qpc-admin',
 			plugins_url( 'assets/quick-post.css', __FILE__ ),
 			array(),
-			'1.0.0'
+			'1.1.0'
 		);
 		wp_enqueue_script(
 			'qpc-admin',
 			plugins_url( 'assets/quick-post.js', __FILE__ ),
 			array( 'jquery' ),
-			'1.0.0',
+			'1.1.0',
 			true
 		);
 	}
@@ -71,7 +75,7 @@ class Quick_Post_Creator {
 		?>
 		<div class="wrap qpc-wrap">
 			<h1>Quick Post</h1>
-			<p>Title, some text, a featured image, a few extra images. That's it.</p>
+			<p>Title, some text, a featured image, a few extra images, categories, tags<?php echo $this->yoast_active() ? ', and SEO' : ''; ?>. That's it.</p>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" id="qpc-form">
 				<?php wp_nonce_field( self::NONCE, 'qpc_nonce' ); ?>
@@ -124,21 +128,80 @@ class Quick_Post_Creator {
 						</td>
 					</tr>
 					<tr>
-						<th><label for="qpc_category">Category</label></th>
+						<th><label>Categories</label></th>
 						<td>
+							<div class="categorydiv">
+								<ul class="categorychecklist qpc-cat-list">
+									<?php
+									wp_terms_checklist(
+										0,
+										array(
+											'taxonomy' => 'category',
+											'echo'     => true,
+										)
+									);
+									?>
+								</ul>
+							</div>
+							<?php if ( current_user_can( 'manage_categories' ) ) : ?>
+								<p>
+									<label for="qpc_new_categories">Add new categories (comma-separated)</label><br>
+									<input type="text" id="qpc_new_categories" name="qpc_new_categories" class="regular-text" placeholder="e.g. News, Events">
+								</p>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="qpc_tags">Tags</label></th>
+						<td>
+							<input type="text" id="qpc_tags" name="qpc_tags" class="large-text" placeholder="comma, separated, tags">
 							<?php
-							wp_dropdown_categories(
+							$popular_tags = get_terms(
 								array(
-									'name'             => 'qpc_category',
-									'id'               => 'qpc_category',
-									'show_option_none' => 'Uncategorized',
-									'hide_empty'       => 0,
+									'taxonomy'   => 'post_tag',
+									'orderby'    => 'count',
+									'order'      => 'DESC',
+									'number'     => 20,
+									'hide_empty' => false,
 								)
 							);
-							?>
+							if ( ! is_wp_error( $popular_tags ) && ! empty( $popular_tags ) ) :
+								?>
+								<p class="qpc-tag-chips">
+									<span class="description">Popular tags:</span>
+									<?php foreach ( $popular_tags as $tag ) : ?>
+										<button type="button" class="button button-small qpc-tag-chip" data-tag="<?php echo esc_attr( $tag->name ); ?>"><?php echo esc_html( $tag->name ); ?></button>
+									<?php endforeach; ?>
+								</p>
+							<?php endif; ?>
 						</td>
 					</tr>
 				</table>
+
+				<?php if ( $this->yoast_active() ) : ?>
+					<h2>SEO (Yoast)</h2>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th><label for="qpc_seo_title">SEO Title</label></th>
+							<td>
+								<input type="text" id="qpc_seo_title" name="qpc_seo_title" class="large-text">
+								<p class="description">Leave blank to let Yoast use its default title template.</p>
+							</td>
+						</tr>
+						<tr>
+							<th><label for="qpc_seo_desc">Meta Description</label></th>
+							<td>
+								<textarea id="qpc_seo_desc" name="qpc_seo_desc" class="large-text" rows="3"></textarea>
+							</td>
+						</tr>
+						<tr>
+							<th><label for="qpc_seo_focus_kw">Focus Keyphrase</label></th>
+							<td>
+								<input type="text" id="qpc_seo_focus_kw" name="qpc_seo_focus_kw" class="regular-text">
+							</td>
+						</tr>
+					</table>
+				<?php endif; ?>
 
 				<p class="submit">
 					<button type="submit" name="qpc_status" value="publish" class="button button-primary">Publish</button>
@@ -161,7 +224,6 @@ class Quick_Post_Creator {
 		$title   = isset( $_POST['qpc_title'] ) ? sanitize_text_field( wp_unslash( $_POST['qpc_title'] ) ) : '';
 		$content = isset( $_POST['qpc_content'] ) ? wp_kses_post( wp_unslash( $_POST['qpc_content'] ) ) : '';
 		$status  = ( isset( $_POST['qpc_status'] ) && 'publish' === $_POST['qpc_status'] ) ? 'publish' : 'draft';
-		$cat_id  = isset( $_POST['qpc_category'] ) ? absint( $_POST['qpc_category'] ) : 0;
 
 		if ( '' === trim( $title ) ) {
 			$this->redirect_with_message( 'error', 0 );
@@ -182,6 +244,45 @@ class Quick_Post_Creator {
 			$content .= "\n[gallery ids=\"" . implode( ',', $gallery_ids ) . "\"]";
 		}
 
+		// Existing categories checked in the checklist.
+		$category_ids = array();
+		if ( ! empty( $_POST['post_category'] ) && is_array( $_POST['post_category'] ) ) {
+			$category_ids = array_map( 'absint', wp_unslash( $_POST['post_category'] ) );
+		}
+
+		// Brand-new categories, only if the current user is allowed to create them.
+		if ( current_user_can( 'manage_categories' ) && ! empty( $_POST['qpc_new_categories'] ) ) {
+			$new_cat_names = explode( ',', sanitize_text_field( wp_unslash( $_POST['qpc_new_categories'] ) ) );
+			foreach ( $new_cat_names as $new_cat_name ) {
+				$new_cat_name = trim( $new_cat_name );
+				if ( '' === $new_cat_name ) {
+					continue;
+				}
+				$existing = term_exists( $new_cat_name, 'category' );
+				if ( $existing ) {
+					$category_ids[] = (int) ( is_array( $existing ) ? $existing['term_id'] : $existing );
+					continue;
+				}
+				$created = wp_insert_term( $new_cat_name, 'category' );
+				if ( ! is_wp_error( $created ) ) {
+					$category_ids[] = (int) $created['term_id'];
+				}
+			}
+		}
+		$category_ids = array_values( array_unique( array_filter( $category_ids ) ) );
+
+		// Tags: comma-separated names, WordPress creates any that don't exist yet.
+		$tag_names = array();
+		if ( ! empty( $_POST['qpc_tags'] ) ) {
+			$raw_tags = explode( ',', sanitize_text_field( wp_unslash( $_POST['qpc_tags'] ) ) );
+			foreach ( $raw_tags as $raw_tag ) {
+				$raw_tag = trim( $raw_tag );
+				if ( '' !== $raw_tag ) {
+					$tag_names[] = $raw_tag;
+				}
+			}
+		}
+
 		$postarr = array(
 			'post_title'   => $title,
 			'post_content' => $content,
@@ -190,8 +291,12 @@ class Quick_Post_Creator {
 			'post_author'  => get_current_user_id(),
 		);
 
-		if ( $cat_id > 0 ) {
-			$postarr['post_category'] = array( $cat_id );
+		if ( ! empty( $category_ids ) ) {
+			$postarr['post_category'] = $category_ids;
+		}
+
+		if ( ! empty( $tag_names ) ) {
+			$postarr['tags_input'] = $tag_names;
 		}
 
 		$post_id = wp_insert_post( $postarr, true );
@@ -205,15 +310,31 @@ class Quick_Post_Creator {
 			set_post_thumbnail( $post_id, $featured_id );
 		}
 
+		if ( $this->yoast_active() ) {
+			$seo_title    = isset( $_POST['qpc_seo_title'] ) ? sanitize_text_field( wp_unslash( $_POST['qpc_seo_title'] ) ) : '';
+			$seo_desc     = isset( $_POST['qpc_seo_desc'] ) ? sanitize_textarea_field( wp_unslash( $_POST['qpc_seo_desc'] ) ) : '';
+			$seo_focus_kw = isset( $_POST['qpc_seo_focus_kw'] ) ? sanitize_text_field( wp_unslash( $_POST['qpc_seo_focus_kw'] ) ) : '';
+
+			if ( '' !== $seo_title ) {
+				update_post_meta( $post_id, '_yoast_wpseo_title', $seo_title );
+			}
+			if ( '' !== $seo_desc ) {
+				update_post_meta( $post_id, '_yoast_wpseo_metadesc', $seo_desc );
+			}
+			if ( '' !== $seo_focus_kw ) {
+				update_post_meta( $post_id, '_yoast_wpseo_focuskw', $seo_focus_kw );
+			}
+		}
+
 		$this->redirect_with_message( 'success', $post_id );
 	}
 
 	private function redirect_with_message( $type, $post_id ) {
 		$url = add_query_arg(
 			array(
-				'page'         => self::SLUG,
-				'qpc_message'  => $type,
-				'qpc_post_id'  => $post_id,
+				'page'        => self::SLUG,
+				'qpc_message' => $type,
+				'qpc_post_id' => $post_id,
 			),
 			admin_url( 'admin.php' )
 		);
@@ -226,8 +347,8 @@ class Quick_Post_Creator {
 			return;
 		}
 
-		$message  = sanitize_text_field( wp_unslash( $_GET['qpc_message'] ) );
-		$post_id  = isset( $_GET['qpc_post_id'] ) ? absint( $_GET['qpc_post_id'] ) : 0;
+		$message = sanitize_text_field( wp_unslash( $_GET['qpc_message'] ) );
+		$post_id = isset( $_GET['qpc_post_id'] ) ? absint( $_GET['qpc_post_id'] ) : 0;
 
 		if ( 'success' === $message && $post_id > 0 ) {
 			printf(

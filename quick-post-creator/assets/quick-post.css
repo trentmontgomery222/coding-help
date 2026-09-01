@@ -46,3 +46,24 @@
 	cursor: pointer;
 	text-align: center;
 }
+
+.categorydiv {
+	max-width: 400px;
+}
+
+.qpc-cat-list {
+	max-height: 200px;
+	overflow-y: auto;
+	border: 1px solid #ccd0d4;
+	background: #fff;
+	padding: 8px;
+	margin: 0;
+}
+
+.qpc-tag-chips {
+	margin-top: 8px;
+}
+
+.qpc-tag-chip {
+	margin: 2px 4px 2px 0;
+}

@@ -104,4 +104,24 @@ jQuery( function ( $ ) {
 		$( '#qpc_gallery_ids' ).val( galleryIds.join( ',' ) );
 		$thumb.remove();
 	} );
+
+	// --- Popular tag chips ---
+	$( '.qpc-tag-chips' ).on( 'click', '.qpc-tag-chip', function ( e ) {
+		e.preventDefault();
+
+		var tag = $( this ).data( 'tag' ).toString();
+		var $field = $( '#qpc_tags' );
+		var current = $field.val();
+		var existing = current
+			? current.split( ',' ).map( function ( t ) {
+				return t.trim().toLowerCase();
+			} )
+			: [];
+
+		if ( existing.indexOf( tag.toLowerCase() ) !== -1 ) {
+			return;
+		}
+
+		$field.val( current ? current.replace( /\s*,\s*$/, '' ) + ', ' + tag : tag );
+	} );
 } );
