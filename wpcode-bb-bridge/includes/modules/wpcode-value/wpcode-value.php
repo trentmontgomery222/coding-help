@@ -49,13 +49,17 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 			'values' => array(),
 		);
 
-		if ( ! class_exists( 'WPCodeBB_Config_CPT' ) ) {
-			return $empty;
-		}
-
 		$config_id = isset( $this->settings->wpcode_config ) ? $this->settings->wpcode_config : '';
 
 		if ( ! $config_id ) {
+			return $empty;
+		}
+
+		if ( '__custom__' === $config_id ) {
+			return $this->get_custom_render_data( $empty );
+		}
+
+		if ( ! class_exists( 'WPCodeBB_Config_CPT' ) ) {
 			return $empty;
 		}
 
@@ -107,5 +111,98 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 			'atts'   => $atts,
 			'values' => $values,
 		);
+	}
+
+	/**
+	 * Render data for "Custom" mode: a shortcode tag plus a free-form
+	 * block of "key = value" lines typed directly into the module by
+	 * whoever is editing the page - no pre-defined Configuration
+	 * needed. Fully defensive: any unexpected input just yields fewer
+	 * (or no) variables rather than an error.
+	 *
+	 * @param array $empty The empty fallback shape to return on failure.
+	 * @return array{tag:string|null, atts:array, values:array}
+	 */
+	private function get_custom_render_data( $empty ) {
+		$tag = isset( $this->settings->custom_shortcode_tag ) ? trim( (string) $this->settings->custom_shortcode_tag ) : '';
+		$tag = preg_replace( '/[^a-zA-Z0-9_\-]/', '', $tag );
+
+		if ( '' === $tag ) {
+			return $empty;
+		}
+
+		$text = isset( $this->settings->custom_variables ) ? (string) $this->settings->custom_variables : '';
+
+		try {
+			$atts = self::parse_custom_variables( $text );
+		} catch ( \Throwable $e ) {
+			$atts = array();
+		}
+
+		return array(
+			'tag'    => $tag,
+			'atts'   => $atts,
+			'values' => $atts,
+		);
+	}
+
+	/**
+	 * Parses "Variables" textarea content into a key => value array.
+	 * Format, one per line:
+	 *   key = value
+	 *   # a comment line, ignored
+	 * Blank lines and lines without an "=" are ignored. Values may
+	 * optionally be wrapped in matching quotes.
+	 *
+	 * @param string $text
+	 * @return array<string, string>
+	 */
+	public static function parse_custom_variables( $text ) {
+		$atts = array();
+
+		if ( ! is_string( $text ) || '' === trim( $text ) ) {
+			return $atts;
+		}
+
+		$reserved = array( '', 'id', 'type', 'node', 'parent', 'position', 'settings', 'wpcode_config', 'custom_shortcode_tag', 'custom_variables' );
+		$lines    = preg_split( '/\r\n|\r|\n/', $text );
+
+		if ( ! is_array( $lines ) ) {
+			return $atts;
+		}
+
+		foreach ( $lines as $line ) {
+			$line = trim( (string) $line );
+
+			if ( '' === $line || '#' === substr( $line, 0, 1 ) || '//' === substr( $line, 0, 2 ) ) {
+				continue;
+			}
+
+			$eq = strpos( $line, '=' );
+
+			if ( false === $eq ) {
+				continue;
+			}
+
+			$key = sanitize_key( trim( substr( $line, 0, $eq ) ) );
+			$val = trim( substr( $line, $eq + 1 ) );
+
+			if ( in_array( $key, $reserved, true ) ) {
+				continue;
+			}
+
+			if ( strlen( $val ) >= 2 ) {
+				$first = substr( $val, 0, 1 );
+				$last  = substr( $val, -1 );
+
+				if ( ( '"' === $first && '"' === $last ) || ( "'" === $first && "'" === $last ) ) {
+					$val = substr( $val, 1, -1 );
+				}
+			}
+
+			$atts[ $key ] = $val;
+		}
+
+		return $atts;
 	}
 }

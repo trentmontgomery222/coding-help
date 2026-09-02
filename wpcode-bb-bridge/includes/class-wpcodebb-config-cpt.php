@@ -324,7 +324,7 @@ class WPCodeBB_Config_CPT {
 		update_post_meta( $post_id, '_wpcodebb_shortcode_tag', $tag );
 
 		$raw_fields    = isset( $_POST['wpcodebb_fields'] ) && is_array( $_POST['wpcodebb_fields'] ) ? wp_unslash( $_POST['wpcodebb_fields'] ) : array();
-		$reserved_keys = array( 'id', 'type', 'node', 'parent', 'position', 'settings', 'template_id', 'template_node_id', 'panel', 'template_settings', 'animation', 'css_id', 'css_class', 'visibility_display', 'wpcode_config', 'class', 'style' );
+		$reserved_keys = array( 'id', 'type', 'node', 'parent', 'position', 'settings', 'template_id', 'template_node_id', 'panel', 'template_settings', 'animation', 'css_id', 'css_class', 'visibility_display', 'wpcode_config', 'class', 'style', 'custom_shortcode_tag', 'custom_variables' );
 		$clean_fields  = array();
 		$seen_keys     = array();
 

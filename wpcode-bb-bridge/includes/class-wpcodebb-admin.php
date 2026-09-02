@@ -68,10 +68,22 @@ echo esc_html( $values['headline'] ?? '' );</pre>
 			<h2><?php esc_html_e( '3. Use the module in Beaver Builder', 'wpcode-bb-bridge' ); ?></h2>
 			<p><?php esc_html_e( 'Open a page in the Beaver Builder editor, add the "WPCode Value" module (under the WPCode category), pick your Configuration from the dropdown, and the fields you defined will appear right there for editing. The snippet renders live with those values.', 'wpcode-bb-bridge' ); ?></p>
 
+			<h2><?php esc_html_e( 'Skip the setup: "Custom" mode', 'wpcode-bb-bridge' ); ?></h2>
+			<p><?php esc_html_e( 'Don\'t want to create a Configuration first? In the module\'s dropdown, choose "Custom (type your own variables)" instead. Two fields appear:', 'wpcode-bb-bridge' ); ?></p>
+			<ul style="list-style: disc; padding-left: 20px;">
+				<li><?php esc_html_e( 'Shortcode Tag - the tag from your WPCode snippet.', 'wpcode-bb-bridge' ); ?></li>
+				<li><?php esc_html_e( 'Variables - a plain text editor box. Type one variable per line, as key = value:', 'wpcode-bb-bridge' ); ?></li>
+			</ul>
+			<pre>headline = Welcome to our clinic
+button_color = #1a7f37
+show_banner = yes
+# a line starting with # is a comment and is ignored</pre>
+			<p><?php esc_html_e( 'Each line becomes a shortcode attribute your snippet can read, exactly like the fields from a Configuration. This box only ever appears while you are editing the page in Beaver Builder - it is never shown on the live site, and never to regular visitors.', 'wpcode-bb-bridge' ); ?></p>
+
 			<h2><?php esc_html_e( 'Notes', 'wpcode-bb-bridge' ); ?></h2>
 			<ul style="list-style: disc; padding-left: 20px;">
-				<li><?php esc_html_e( 'Field keys become shortcode attribute names, so keep them lowercase with underscores (e.g. button_text).', 'wpcode-bb-bridge' ); ?></li>
-				<li><?php esc_html_e( 'Values are stored per module instance, so the same Configuration can be reused on multiple pages with different values on each.', 'wpcode-bb-bridge' ); ?></li>
+				<li><?php esc_html_e( 'Field/variable keys become shortcode attribute names, so keep them lowercase with underscores (e.g. button_text).', 'wpcode-bb-bridge' ); ?></li>
+				<li><?php esc_html_e( 'Values are stored per module instance, so the same Configuration (or the same snippet in Custom mode) can be reused on multiple pages with different values on each.', 'wpcode-bb-bridge' ); ?></li>
 				<li><?php esc_html_e( 'This plugin is site-managed only and does not support multisite network activation.', 'wpcode-bb-bridge' ); ?></li>
 			</ul>
 		</div>

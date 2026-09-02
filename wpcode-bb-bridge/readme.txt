@@ -26,6 +26,11 @@ This plugin closes that gap for Beaver Builder sites. It adds:
   Beaver Builder settings panel. Each page instance stores its own
   values, so the same snippet/config can be reused across many pages
   with different values on each.
+* A **"Custom" mode** on that same module for when you don't want to set
+  up a Configuration first: type the shortcode tag and a list of
+  `key = value` variables directly into a text-editor-style box inside
+  the Beaver Builder panel. That box only ever appears while editing the
+  page - never on the live site.
 * At render time, the module calls your WPCode snippet's shortcode and
   passes the configured values in as shortcode attributes
   (`$atts['your_key']`), and also exposes them via

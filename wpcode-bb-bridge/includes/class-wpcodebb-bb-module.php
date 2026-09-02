@@ -31,7 +31,7 @@ class WPCodeBB_BB_Module {
 	}
 
 	public function register() {
-		if ( ! class_exists( 'FLBuilder' ) || ! class_exists( 'FLBuilderModule' ) || ! class_exists( 'WPCodeBB_Config_CPT' ) ) {
+		if ( ! class_exists( 'FLBuilder' ) || ! class_exists( 'FLBuilderModule' ) ) {
 			return;
 		}
 
@@ -91,10 +91,12 @@ class WPCodeBB_BB_Module {
 		}
 
 		$config_options = array(
-			'' => __( '— Select a Configuration —', 'wpcode-bb-bridge' ),
+			''         => __( '— Select a Configuration —', 'wpcode-bb-bridge' ),
+			'__custom__' => __( '✎ Custom (type your own variables)', 'wpcode-bb-bridge' ),
 		);
 		$toggle = array(
-			'' => array( 'fields' => array() ),
+			''           => array( 'fields' => array() ),
+			'__custom__' => array( 'fields' => $this->custom_mode_fields() ),
 		);
 
 		foreach ( $configs as $config_id => $config ) {
@@ -138,7 +140,31 @@ class WPCodeBB_BB_Module {
 				'default' => '',
 				'options' => $config_options,
 				'toggle'  => $toggle,
-				'help'    => __( 'Choose which WPCode Configuration this block should render. Manage Configurations under WPCode BB Configs in the admin menu.', 'wpcode-bb-bridge' ),
+				'help'    => __( 'Pick a saved Configuration, or choose "Custom" to type your own variables for this one instance without setting anything up in advance. This panel only ever appears here while editing the page - it is never shown on the live site.', 'wpcode-bb-bridge' ),
+			),
+		);
+	}
+
+	/**
+	 * Fields shown for the "Custom" mode: a shortcode tag plus a free-
+	 * form, code-editor-style textbox where the admin can type whatever
+	 * variables the snippet needs, one per line, without having to
+	 * predefine a Configuration first.
+	 */
+	private function custom_mode_fields() {
+		return array(
+			'custom_shortcode_tag' => array(
+				'type'    => 'text',
+				'label'   => __( 'Shortcode Tag', 'wpcode-bb-bridge' ),
+				'default' => '',
+				'help'    => __( 'The shortcode tag from your WPCode snippet (WPCode > your snippet > Insertion > Shortcode), without the brackets. Example: wpcode_snippet_123', 'wpcode-bb-bridge' ),
+			),
+			'custom_variables'     => array(
+				'type'    => 'code',
+				'editor'  => 'html',
+				'label'   => __( 'Variables', 'wpcode-bb-bridge' ),
+				'default' => '',
+				'help'    => __( 'One variable per line, as key = value. Lines starting with # are ignored. These become $atts[\'key\'] in your snippet (shortcode attributes) and are also available as $GLOBALS[\'wpcode_bb_values\'][\'key\'].', 'wpcode-bb-bridge' ),
 			),
 		);
 	}

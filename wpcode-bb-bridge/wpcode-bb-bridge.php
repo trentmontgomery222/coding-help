@@ -188,9 +188,11 @@ function wpcodebb_bootstrap() {
 		wpcodebb_safe_boot( 'WPCodeBB_Admin' );
 	}
 
-	// The Beaver Builder module depends on the config class above, so
-	// only attempt it if that loaded successfully.
-	if ( class_exists( 'WPCodeBB_Config_CPT' ) && wpcodebb_safe_require( 'includes/class-wpcodebb-bb-module.php' ) ) {
+	// The Beaver Builder module's "Custom Variables" mode works even if
+	// the Configurations subsystem above failed to load - only the
+	// saved-Configuration dropdown options would be missing in that
+	// case, so this is intentionally not gated on it.
+	if ( wpcodebb_safe_require( 'includes/class-wpcodebb-bb-module.php' ) ) {
 		wpcodebb_safe_boot( 'WPCodeBB_BB_Module' );
 	}
 
