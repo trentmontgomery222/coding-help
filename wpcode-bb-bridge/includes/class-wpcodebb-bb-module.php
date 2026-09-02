@@ -33,29 +33,6 @@ class WPCodeBB_BB_Module {
 
 	private function __construct() {
 		add_action( 'init', array( $this, 'register' ), 20 );
-		add_filter( 'fl_builder_enabled_modules', array( $this, 'force_enable_module' ) );
-	}
-
-	/**
-	 * Keeps the module out of Beaver Builder's "enabled modules" blind
-	 * spot. If a site has ever saved a restricted module list under
-	 * Settings > Beaver Builder > Modules, modules registered later are
-	 * not in that list and never appear in the editor - which looks
-	 * exactly like the module failing to register. Harmless when the
-	 * list is unrestricted, and a no-op on Beaver Builder versions that
-	 * do not offer this filter.
-	 *
-	 * @param mixed $modules Enabled module slugs, per Beaver Builder.
-	 * @return mixed
-	 */
-	public function force_enable_module( $modules ) {
-		if ( ! is_array( $modules ) || in_array( 'wpcode-value', $modules, true ) ) {
-			return $modules;
-		}
-
-		$modules[] = 'wpcode-value';
-
-		return $modules;
 	}
 
 	public function register() {
@@ -149,11 +126,14 @@ class WPCodeBB_BB_Module {
 				}
 			}
 
+			// A Configuration with no fields yet simply contributes no
+			// fields. Do not synthesise a placeholder field to explain
+			// that: every entry here has to be a field type Beaver
+			// Builder actually knows how to render and, more
+			// importantly, to sanitise on save. An unrecognised type is
+			// a good way to break saving the whole page.
 			if ( empty( $bb_fields ) ) {
-				$bb_fields['_no_fields_notice'] = array(
-					'type' => 'html',
-					'html' => '<p>' . esc_html__( 'This Configuration has no editable fields yet. Add some from Configurations > edit this Configuration.', 'wpcode-bb-bridge' ) . '</p>',
-				);
+				$config_options[ $config_id ] .= ' ' . __( '(no fields yet)', 'wpcode-bb-bridge' );
 			}
 
 			$toggle[ $config_id ] = array(
@@ -188,8 +168,8 @@ class WPCodeBB_BB_Module {
 				'help'    => __( 'The shortcode tag from your WPCode snippet (WPCode > your snippet > Insertion > Shortcode), without the brackets. Example: wpcode_snippet_123', 'wpcode-bb-bridge' ),
 			),
 			'custom_variables'     => array(
-				'type'    => 'code',
-				'editor'  => 'html',
+				'type'    => 'textarea',
+				'rows'    => 10,
 				'label'   => __( 'Variables', 'wpcode-bb-bridge' ),
 				'default' => '',
 				'help'    => __( 'One variable per line, as key = value. Lines starting with # are ignored. These become $atts[\'key\'] in your snippet (shortcode attributes) and are also available as $GLOBALS[\'wpcode_bb_values\'][\'key\'].', 'wpcode-bb-bridge' ),

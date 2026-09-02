@@ -4,7 +4,7 @@ Tags: wpcode, beaver builder, shortcode, snippets
 Requires at least: 5.8
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -83,6 +83,12 @@ Right before the shortcode runs, the module sets
 current instance, so your snippet can read from there instead.
 
 == Changelog ==
+
+= 1.0.3 =
+* Fixed Beaver Builder's "detected a plugin conflict that is preventing the page from saving" error. Three things in the module could corrupt Beaver Builder's AJAX response or its settings form: a field declared with a "html" type that Beaver Builder does not recognise, the ACE code editor used for the Variables box, and unbuffered output from the WPCode snippet itself.
+* The Variables box is now a plain textarea - same "key = value" lines, no JavaScript editor to fail.
+* Snippet output is now buffered, so a PHP notice or a half-finished render inside your snippet stays inside the module instead of landing in the middle of Beaver Builder's JSON.
+* Removed the enabled-modules filter added in 1.0.2. It was based on an unverified assumption about a Beaver Builder hook and was the plugin's only global Beaver Builder hook.
 
 = 1.0.2 =
 * Fixed: the plugin silently did nothing at all. Its double-load guard tested for a class the same file declares, and PHP early-binds such a class at compile time, so the guard was already true on the first load and the plugin returned before registering anything - no menu, no module, no error. The guard is now a constant check.

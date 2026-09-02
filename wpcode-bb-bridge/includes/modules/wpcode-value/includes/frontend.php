@@ -54,8 +54,23 @@ try {
 	$previous_global              = isset( $GLOBALS['wpcode_bb_values'] ) ? $GLOBALS['wpcode_bb_values'] : null;
 	$GLOBALS['wpcode_bb_values'] = (array) $data['values'];
 
+	// Buffer the snippet's output rather than echoing it straight out.
+	// Beaver Builder saves and refreshes a layout over AJAX and expects a
+	// clean JSON response; a PHP notice or a stray echo from the snippet
+	// would otherwise land in the middle of that response and show up as
+	// Beaver Builder's "detected a plugin conflict" error. Buffering keeps
+	// anything the snippet emits inside this module's own markup, and
+	// discards it entirely if the snippet throws part way through.
+	$rendered = '';
+
+	ob_start();
+
 	try {
 		echo do_shortcode( $shortcode );
+		$rendered = ob_get_clean();
+	} catch ( \Throwable $e ) {
+		ob_end_clean();
+		throw $e;
 	} finally {
 		if ( null === $previous_global ) {
 			unset( $GLOBALS['wpcode_bb_values'] );
@@ -63,6 +78,8 @@ try {
 			$GLOBALS['wpcode_bb_values'] = $previous_global;
 		}
 	}
+
+	echo $rendered;
 } catch ( \Throwable $e ) {
 	if ( function_exists( 'wpcodebb_log_error' ) ) {
 		wpcodebb_log_error( 'frontend render', $e );

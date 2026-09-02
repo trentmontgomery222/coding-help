@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Exposes editable "value" fields for your WPCode snippets as a Beaver Builder module, so page editors can tweak snippet values (via shortcode attributes) directly from the Beaver Builder editor without touching code.
- * Version:           1.0.2
+ * Version:           1.0.3
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -56,7 +56,7 @@ if ( defined( 'WPCODEBB_VERSION' ) ) {
 	return; // Already loaded (e.g. accidentally included twice).
 }
 
-define( 'WPCODEBB_VERSION', '1.0.2' );
+define( 'WPCODEBB_VERSION', '1.0.3' );
 define( 'WPCODEBB_FILE', __FILE__ );
 define( 'WPCODEBB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBB_URL', plugin_dir_url( __FILE__ ) );
