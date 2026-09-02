@@ -7,6 +7,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+if ( class_exists( 'WPCodeBB_Admin', false ) ) {
+	return;
+}
+
 class WPCodeBB_Admin {
 
 	private static $instance = null;

@@ -10,6 +10,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+if ( class_exists( 'WPCodeBB_Config_CPT', false ) ) {
+	return;
+}
+
 class WPCodeBB_Config_CPT {
 
 	/** @var self */
@@ -144,18 +148,34 @@ class WPCodeBB_Config_CPT {
 			return array();
 		}
 
-		$snippets = get_posts(
-			array(
-				'post_type'      => 'wpcode',
-				'post_status'    => 'publish',
-				'posts_per_page' => -1,
-				'no_found_rows'  => true,
-			)
-		);
+		// Best-effort only: WPCode's internal meta keys aren't a stable
+		// public API, so if anything about this query misbehaves we
+		// just fall back to an empty list instead of breaking the
+		// Configuration screen.
+		try {
+			$snippets = get_posts(
+				array(
+					'post_type'      => 'wpcode',
+					'post_status'    => 'publish',
+					'posts_per_page' => -1,
+					'no_found_rows'  => true,
+				)
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		if ( ! is_array( $snippets ) ) {
+			return array();
+		}
 
 		$results = array();
 
 		foreach ( $snippets as $snippet ) {
+			if ( ! is_object( $snippet ) || empty( $snippet->ID ) ) {
+				continue;
+			}
+
 			$insert_method = get_post_meta( $snippet->ID, 'wpcode_auto_insert_method', true );
 
 			// Only surface snippets that are actually usable as a shortcode.
@@ -366,20 +386,32 @@ class WPCodeBB_Config_CPT {
 	 * @return array<int, array{title:string, shortcode_tag:string, fields:array}>
 	 */
 	public static function get_configs() {
-		$posts = get_posts(
-			array(
-				'post_type'      => WPCODEBB_CPT,
-				'post_status'    => 'publish',
-				'posts_per_page' => -1,
-				'orderby'        => 'title',
-				'order'          => 'ASC',
-				'no_found_rows'  => true,
-			)
-		);
-
 		$configs = array();
 
+		try {
+			$posts = get_posts(
+				array(
+					'post_type'      => WPCODEBB_CPT,
+					'post_status'    => 'publish',
+					'posts_per_page' => -1,
+					'orderby'        => 'title',
+					'order'          => 'ASC',
+					'no_found_rows'  => true,
+				)
+			);
+		} catch ( \Throwable $e ) {
+			return $configs;
+		}
+
+		if ( ! is_array( $posts ) ) {
+			return $configs;
+		}
+
 		foreach ( $posts as $post ) {
+			if ( ! is_object( $post ) || empty( $post->ID ) ) {
+				continue;
+			}
+
 			$fields = get_post_meta( $post->ID, '_wpcodebb_fields', true );
 
 			$configs[ $post->ID ] = array(

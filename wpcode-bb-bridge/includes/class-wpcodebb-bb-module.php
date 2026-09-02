@@ -11,6 +11,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+if ( class_exists( 'WPCodeBB_BB_Module', false ) ) {
+	return;
+}
+
 class WPCodeBB_BB_Module {
 
 	private static $instance = null;
@@ -27,26 +31,46 @@ class WPCodeBB_BB_Module {
 	}
 
 	public function register() {
-		if ( ! class_exists( 'FLBuilder' ) ) {
+		if ( ! class_exists( 'FLBuilder' ) || ! class_exists( 'FLBuilderModule' ) || ! class_exists( 'WPCodeBB_Config_CPT' ) ) {
 			return;
 		}
 
-		require_once WPCODEBB_DIR . 'includes/modules/wpcode-value/wpcode-value.php';
+		if ( ! is_callable( array( 'FLBuilder', 'register_module' ) ) ) {
+			return;
+		}
 
-		FLBuilder::register_module(
-			'WPCodeBB_Value_Module',
-			array(
-				'general' => array(
-					'title'    => __( 'WPCode Value', 'wpcode-bb-bridge' ),
-					'sections' => array(
-						'general' => array(
-							'title'  => '',
-							'fields' => $this->build_fields(),
+		$module_file = WPCODEBB_DIR . 'includes/modules/wpcode-value/wpcode-value.php';
+
+		if ( ! file_exists( $module_file ) ) {
+			return;
+		}
+
+		try {
+			if ( ! class_exists( 'WPCodeBB_Value_Module', false ) ) {
+				require_once $module_file;
+			}
+
+			if ( ! class_exists( 'WPCodeBB_Value_Module' ) ) {
+				return;
+			}
+
+			FLBuilder::register_module(
+				'WPCodeBB_Value_Module',
+				array(
+					'general' => array(
+						'title'    => __( 'WPCode Value', 'wpcode-bb-bridge' ),
+						'sections' => array(
+							'general' => array(
+								'title'  => '',
+								'fields' => $this->build_fields(),
+							),
 						),
 					),
-				),
-			)
-		);
+				)
+			);
+		} catch ( \Throwable $e ) {
+			wpcodebb_log_error( 'register BB module', $e );
+		}
 	}
 
 	/**
@@ -55,7 +79,16 @@ class WPCodeBB_BB_Module {
 	 * "wpcode_config" select field.
 	 */
 	private function build_fields() {
-		$configs = WPCodeBB_Config_CPT::get_configs();
+		try {
+			$configs = WPCodeBB_Config_CPT::get_configs();
+		} catch ( \Throwable $e ) {
+			wpcodebb_log_error( 'get_configs', $e );
+			$configs = array();
+		}
+
+		if ( ! is_array( $configs ) ) {
+			$configs = array();
+		}
 
 		$config_options = array(
 			'' => __( '— Select a Configuration —', 'wpcode-bb-bridge' ),
@@ -65,11 +98,20 @@ class WPCodeBB_BB_Module {
 		);
 
 		foreach ( $configs as $config_id => $config ) {
-			$config_options[ $config_id ] = $config['title'];
+			if ( ! is_array( $config ) || ! is_numeric( $config_id ) ) {
+				continue;
+			}
+
+			$config_options[ $config_id ] = isset( $config['title'] ) && '' !== $config['title'] ? $config['title'] : sprintf( '#%d', (int) $config_id );
 
 			$bb_fields = array();
+			$fields    = isset( $config['fields'] ) && is_array( $config['fields'] ) ? $config['fields'] : array();
 
-			foreach ( $config['fields'] as $field ) {
+			foreach ( $fields as $field ) {
+				if ( ! is_array( $field ) || empty( $field['key'] ) ) {
+					continue;
+				}
+
 				$bb_field = $this->convert_field( $field );
 
 				if ( $bb_field ) {
@@ -106,6 +148,18 @@ class WPCodeBB_BB_Module {
 	 * @return array|null Beaver Builder field definition, or null if the type is unsupported.
 	 */
 	private function convert_field( $field ) {
+		$field = wp_parse_args(
+			$field,
+			array(
+				'key'     => '',
+				'label'   => '',
+				'type'    => 'text',
+				'default' => '',
+				'options' => '',
+				'help'    => '',
+			)
+		);
+
 		$label = $field['label'] ? $field['label'] : $field['key'];
 		$help  = ! empty( $field['help'] ) ? $field['help'] : '';
 

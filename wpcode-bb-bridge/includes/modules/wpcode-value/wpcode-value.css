@@ -6,3 +6,9 @@
 	color: #50575e;
 	font-size: 13px;
 }
+
+.wpcodebb-placeholder.wpcodebb-error {
+	background: #fcf0f1;
+	border-color: #d63638;
+	color: #8a2424;
+}
