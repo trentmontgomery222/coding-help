@@ -11,9 +11,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( class_exists( 'WPCodeBB_BB_Module', false ) ) {
-	return;
-}
+/*
+ * No class_exists() guard here on purpose. These classes declare no
+ * parent, so PHP early-binds them at compile time - the guard would
+ * already be true on the first load and skip the rest of the file.
+ * Single loading is guaranteed by the require_once in the bootstrap,
+ * which is also the only thing that can prevent a redeclaration
+ * fatal, since early binding happens before any runtime check.
+ */
 
 class WPCodeBB_BB_Module {
 
@@ -28,6 +33,29 @@ class WPCodeBB_BB_Module {
 
 	private function __construct() {
 		add_action( 'init', array( $this, 'register' ), 20 );
+		add_filter( 'fl_builder_enabled_modules', array( $this, 'force_enable_module' ) );
+	}
+
+	/**
+	 * Keeps the module out of Beaver Builder's "enabled modules" blind
+	 * spot. If a site has ever saved a restricted module list under
+	 * Settings > Beaver Builder > Modules, modules registered later are
+	 * not in that list and never appear in the editor - which looks
+	 * exactly like the module failing to register. Harmless when the
+	 * list is unrestricted, and a no-op on Beaver Builder versions that
+	 * do not offer this filter.
+	 *
+	 * @param mixed $modules Enabled module slugs, per Beaver Builder.
+	 * @return mixed
+	 */
+	public function force_enable_module( $modules ) {
+		if ( ! is_array( $modules ) || in_array( 'wpcode-value', $modules, true ) ) {
+			return $modules;
+		}
+
+		$modules[] = 'wpcode-value';
+
+		return $modules;
 	}
 
 	public function register() {

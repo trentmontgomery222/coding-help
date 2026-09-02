@@ -4,7 +4,7 @@ Tags: wpcode, beaver builder, shortcode, snippets
 Requires at least: 5.8
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -83,6 +83,13 @@ Right before the shortcode runs, the module sets
 current instance, so your snippet can read from there instead.
 
 == Changelog ==
+
+= 1.0.2 =
+* Fixed: the plugin silently did nothing at all. Its double-load guard tested for a class the same file declares, and PHP early-binds such a class at compile time, so the guard was already true on the first load and the plugin returned before registering anything - no menu, no module, no error. The guard is now a constant check.
+* Fixed: the same self-defeating guard pattern in the three includes/ class files.
+* Removed the refusal to run when network-activated on multisite, which produced the same invisible no-op. Configurations are per-site posts, so network activation is fine.
+* Lowered the PHP floor to 7.0 (nothing here needs 7.4).
+* The Beaver Builder module now adds itself to a restricted "enabled modules" list, so it cannot be hidden by that setting.
 
 = 1.0.1 =
 * Added a Status panel to the "How It Works" screen so you can confirm at a glance that the plugin is loaded and whether Beaver Builder and WPCode were detected.

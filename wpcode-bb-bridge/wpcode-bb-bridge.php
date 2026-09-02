@@ -3,16 +3,15 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Exposes editable "value" fields for your WPCode snippets as a Beaver Builder module, so page editors can tweak snippet values (via shortcode attributes) directly from the Beaver Builder editor without touching code.
- * Version:           1.0.1
+ * Version:           1.0.2
  * Requires at least: 5.8
- * Requires PHP:      7.4
+ * Requires PHP:      7.0
  * Author:            ACPS
  * Text Domain:       wpcode-bb-bridge
- * Network:           false
  *
- * This plugin is site-managed only. It intentionally does NOT support
- * network activation - it is meant to be activated per-site from the
- * normal wp-admin > Plugins screen.
+ * Configurations are stored as per-site posts, so on multisite each
+ * site keeps its own set whether the plugin is activated per-site or
+ * network-wide.
  *
  * ---------------------------------------------------------------------
  * FAIL-SAFE DESIGN NOTES
@@ -44,17 +43,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-if ( class_exists( 'WPCodeBB_Bootstrap_Guard', false ) ) {
-	return; // Already loaded (e.g. accidentally included twice) - do nothing.
+/*
+ * Double-load guard.
+ *
+ * This MUST be a constant check, not a class check. PHP early-binds an
+ * unconditional, parentless class declaration at compile time - before
+ * the first statement of the file runs - so guarding on a class that
+ * this same file declares is always true and would make the plugin
+ * return here on its very first load, silently doing nothing at all.
+ */
+if ( defined( 'WPCODEBB_VERSION' ) ) {
+	return; // Already loaded (e.g. accidentally included twice).
 }
-class WPCodeBB_Bootstrap_Guard {}
 
-define( 'WPCODEBB_VERSION', '1.0.1' );
+define( 'WPCODEBB_VERSION', '1.0.2' );
 define( 'WPCODEBB_FILE', __FILE__ );
 define( 'WPCODEBB_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBB_URL', plugin_dir_url( __FILE__ ) );
 define( 'WPCODEBB_CPT', 'wpcodebb_config' );
-define( 'WPCODEBB_MIN_PHP', '7.4' );
+define( 'WPCODEBB_MIN_PHP', '7.0' );
 
 /**
  * Collected boot problems, surfaced as one admin notice instead of a
@@ -144,26 +151,6 @@ function wpcodebb_log_error( $context, $e ) {
 }
 
 /**
- * Refuse to run as a network-activated plugin. This plugin manages
- * per-site configurations only and is not designed for multisite
- * network administration.
- */
-function wpcodebb_is_network_activated() {
-	if ( ! is_multisite() ) {
-		return false;
-	}
-
-	if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
-		if ( ! file_exists( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
-			return false; // Can't determine it - fail open rather than block boot.
-		}
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-	}
-
-	return is_plugin_active_for_network( plugin_basename( WPCODEBB_FILE ) );
-}
-
-/**
  * Bootstrap the plugin once all other plugins have loaded, so we can
  * reliably detect whether WPCode and Beaver Builder are active.
  * Every step here is defensive: a problem in one subsystem never
@@ -172,11 +159,6 @@ function wpcodebb_is_network_activated() {
 function wpcodebb_bootstrap() {
 	if ( version_compare( PHP_VERSION, WPCODEBB_MIN_PHP, '<' ) ) {
 		add_action( 'admin_notices', 'wpcodebb_php_version_notice' );
-		return;
-	}
-
-	if ( wpcodebb_is_network_activated() ) {
-		add_action( 'admin_notices', 'wpcodebb_network_activation_notice' );
 		return;
 	}
 
@@ -207,16 +189,6 @@ add_action( 'plugins_loaded', 'wpcodebb_bootstrap' );
  * activation - Beaver Builder or WPCode may simply not be active yet,
  * or may be activated afterwards.
  */
-function wpcodebb_network_activation_notice() {
-	?>
-	<div class="notice notice-error">
-		<p>
-			<?php esc_html_e( 'WPCode Values for Beaver Builder is not supported as a network-activated plugin. Please network-deactivate it and activate it individually on each site that needs it.', 'wpcode-bb-bridge' ); ?>
-		</p>
-	</div>
-	<?php
-}
-
 function wpcodebb_php_version_notice() {
 	?>
 	<div class="notice notice-error">
@@ -252,7 +224,7 @@ function wpcodebb_boot_errors_notice() {
 }
 
 function wpcodebb_missing_requirements_notice() {
-	if ( version_compare( PHP_VERSION, WPCODEBB_MIN_PHP, '<' ) || wpcodebb_is_network_activated() ) {
+	if ( version_compare( PHP_VERSION, WPCODEBB_MIN_PHP, '<' ) ) {
 		return;
 	}
 

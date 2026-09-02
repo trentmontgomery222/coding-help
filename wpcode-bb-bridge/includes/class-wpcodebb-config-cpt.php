@@ -10,9 +10,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( class_exists( 'WPCodeBB_Config_CPT', false ) ) {
-	return;
-}
+/*
+ * No class_exists() guard here on purpose. These classes declare no
+ * parent, so PHP early-binds them at compile time - the guard would
+ * already be true on the first load and skip the rest of the file.
+ * Single loading is guaranteed by the require_once in the bootstrap,
+ * which is also the only thing that can prevent a redeclaration
+ * fatal, since early binding happens before any runtime check.
+ */
 
 class WPCodeBB_Config_CPT {
 

@@ -6,14 +6,23 @@
  *
  * This file is only ever require()'d after confirming FLBuilderModule
  * exists (see WPCodeBB_BB_Module::register()), so extending it here is
- * safe.
+ * safe; the guard below is a second line of defence.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( class_exists( 'WPCodeBB_Value_Module', false ) || ! class_exists( 'FLBuilderModule' ) ) {
+/*
+ * Only the parent check is meaningful here. PHP early-binds this class
+ * at compile time whenever FLBuilderModule is already loaded, so a
+ * "did I already declare myself?" test would be true on the first load
+ * and is useless; the require_once in WPCodeBB_BB_Module::register()
+ * is what prevents a double load. When Beaver Builder is NOT loaded,
+ * the declaration cannot be early-bound, and this return stops it from
+ * ever running - so we never try to extend a class that isn't there.
+ */
+if ( ! class_exists( 'FLBuilderModule' ) ) {
 	return;
 }
 
