@@ -37,10 +37,82 @@ class WPCodeBB_Admin {
 		);
 	}
 
+	/**
+	 * A short "is this thing actually working?" panel. If an admin can
+	 * see this screen at all, the plugin is loaded - so the rows below
+	 * are about the pieces the plugin depends on, which are the usual
+	 * reason the Beaver Builder module doesn't show up.
+	 */
+	public function render_status() {
+		$bb_active     = class_exists( 'FLBuilder' );
+		$wpcode_active = function_exists( 'wpcode_init' ) || post_type_exists( 'wpcode' );
+		$module_ready  = $bb_active && class_exists( 'WPCodeBB_Value_Module' );
+
+		$configs = array();
+
+		if ( class_exists( 'WPCodeBB_Config_CPT' ) && is_callable( array( 'WPCodeBB_Config_CPT', 'get_configs' ) ) ) {
+			try {
+				$configs = (array) WPCodeBB_Config_CPT::get_configs();
+			} catch ( \Throwable $e ) {
+				$configs = array();
+			}
+		}
+
+		$rows = array(
+			array(
+				'label' => __( 'Plugin loaded', 'wpcode-bb-bridge' ),
+				'ok'    => true,
+				'note'  => sprintf( 'v%s, PHP %s', WPCODEBB_VERSION, PHP_VERSION ),
+			),
+			array(
+				'label' => __( 'Beaver Builder active', 'wpcode-bb-bridge' ),
+				'ok'    => $bb_active,
+				'note'  => $bb_active ? '' : __( 'The "WPCode Value" module cannot appear in the Beaver Builder editor until Beaver Builder itself is active.', 'wpcode-bb-bridge' ),
+			),
+			array(
+				'label' => __( 'WPCode active', 'wpcode-bb-bridge' ),
+				'ok'    => $wpcode_active,
+				'note'  => $wpcode_active ? '' : __( 'Snippet detection is unavailable, but you can still type a shortcode tag by hand.', 'wpcode-bb-bridge' ),
+			),
+			array(
+				'label' => __( '"WPCode Value" module registered', 'wpcode-bb-bridge' ),
+				'ok'    => $module_ready,
+				'note'  => $module_ready
+					? __( 'If it still is not listed in the editor, check Settings > Beaver Builder > Modules and make sure the "WPCode" group is enabled.', 'wpcode-bb-bridge' )
+					: __( 'Not registered. This is expected while Beaver Builder is inactive.', 'wpcode-bb-bridge' ),
+			),
+			array(
+				'label' => __( 'Configurations published', 'wpcode-bb-bridge' ),
+				'ok'    => ! empty( $configs ),
+				'note'  => sprintf(
+					/* translators: %d: number of published configurations */
+					_n( '%d configuration.', '%d configurations.', count( $configs ), 'wpcode-bb-bridge' ),
+					count( $configs )
+				) . ' ' . __( 'None is required - the module\'s "Custom" mode works without any.', 'wpcode-bb-bridge' ),
+			),
+		);
+		?>
+		<h2><?php esc_html_e( 'Status', 'wpcode-bb-bridge' ); ?></h2>
+		<table class="widefat striped" style="max-width: 780px;">
+			<tbody>
+			<?php foreach ( $rows as $row ) : ?>
+				<tr>
+					<td style="width: 30px;"><span class="dashicons <?php echo $row['ok'] ? 'dashicons-yes' : 'dashicons-warning'; ?>" style="color: <?php echo $row['ok'] ? '#1a7f37' : '#b26200'; ?>;"></span></td>
+					<td style="width: 260px;"><strong><?php echo esc_html( $row['label'] ); ?></strong></td>
+					<td><?php echo esc_html( $row['note'] ); ?></td>
+				</tr>
+			<?php endforeach; ?>
+			</tbody>
+		</table>
+		<?php
+	}
+
 	public function render_help_page() {
 		?>
 		<div class="wrap wpcodebb-help">
 			<h1><?php esc_html_e( 'WPCode Values for Beaver Builder', 'wpcode-bb-bridge' ); ?></h1>
+
+			<?php $this->render_status(); ?>
 
 			<p><?php esc_html_e( 'This plugin lets a page editor change the values a WPCode snippet uses, right from the Beaver Builder editor, without opening the Code Snippets screen.', 'wpcode-bb-bridge' ); ?></p>
 

@@ -4,7 +4,7 @@ Tags: wpcode, beaver builder, shortcode, snippets
 Requires at least: 5.8
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -83,6 +83,9 @@ Right before the shortcode runs, the module sets
 current instance, so your snippet can read from there instead.
 
 == Changelog ==
+
+= 1.0.1 =
+* Added a Status panel to the "How It Works" screen so you can confirm at a glance that the plugin is loaded and whether Beaver Builder and WPCode were detected.
 
 = 1.0.0 =
 * Initial release.
