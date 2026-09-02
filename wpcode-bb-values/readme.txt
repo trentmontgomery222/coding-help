@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 2.0.0
+Stable tag: 2.0.1
 License: GPLv2 or later
 
 Adds one Beaver Builder module where you type values in the editor and pass
@@ -39,6 +39,15 @@ Add a second module, or open an issue - the number of rows is a single
 constant (WPCODEBBV_SLOTS) in the main plugin file.
 
 == Changelog ==
+
+= 2.0.1 =
+* Removed the last key in the module's field schema that is not one Beaver
+  Builder's own modules use (a section "description"), after confirming the
+  earlier conflict appeared when opening the module for editing rather than
+  when saving. That is the settings-form render path, where Beaver Builder
+  loads a file named after each field's type - so an invented type or key
+  breaks the response instead of being ignored. The guidance moved to a
+  field help tooltip.
 
 = 2.0.0 =
 * Complete rewrite. The previous version built its Beaver Builder fields at

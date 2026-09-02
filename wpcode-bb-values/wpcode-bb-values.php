@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Adds one Beaver Builder module where you type values in the editor and pass them straight to a WPCode snippet as shortcode attributes.
- * Version:           2.0.0
+ * Version:           2.0.1
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -21,9 +21,14 @@
  *
  *  - The module's field schema is FIXED. Same fields, same order, every
  *    request, on every site. Nothing about it depends on the database.
- *  - Every field is 'text'. No code editors, no rich text, no colour
- *    pickers, no toggles - nothing that needs JavaScript to initialise
- *    before the settings form can be saved.
+ *  - Every field is 'text', and every key used in the schema below is
+ *    one Beaver Builder's own modules use. Beaver Builder renders each
+ *    field by loading a file named after its 'type', so an invented
+ *    type does not degrade - the include fails, PHP prints a warning
+ *    into the middle of the AJAX response, and Beaver Builder reports
+ *    a plugin conflict the moment you open the module to edit it. An
+ *    earlier version of this plugin did exactly that with a made-up
+ *    'html' field type.
  *  - The plugin hooks exactly one thing: 'init', to register the
  *    module. It adds no filters to anything Beaver Builder owns.
  *  - The snippet's own output is buffered, so a stray notice from your
@@ -45,7 +50,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '2.0.0' );
+define( 'WPCODEBBV_VERSION', '2.0.1' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -82,6 +87,9 @@ function wpcodebbv_form() {
 				$i
 			),
 			'default' => '',
+			'help'    => 1 === $i
+				? __( 'Type a name here and its value in the box below. Each filled-in row reaches your snippet as a shortcode attribute, so the name "headline" arrives as $atts[\'headline\']. Leave a row blank to skip it.', 'wpcode-bb-values' )
+				: '',
 		);
 
 		$value_fields[ 'value_' . $i ] = array(
@@ -111,9 +119,8 @@ function wpcodebbv_form() {
 					),
 				),
 				'values'  => array(
-					'title'       => __( 'Values', 'wpcode-bb-values' ),
-					'description' => __( 'Type a name and a value on the same row. Each row is passed to the snippet as a shortcode attribute, so a name of "headline" arrives as $atts[\'headline\']. Leave a row blank to skip it.', 'wpcode-bb-values' ),
-					'fields'      => $value_fields,
+					'title'  => __( 'Values', 'wpcode-bb-values' ),
+					'fields' => $value_fields,
 				),
 			),
 		),
