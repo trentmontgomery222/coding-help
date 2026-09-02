@@ -1,0 +1,27 @@
+.wpcodebb-fields-table td {
+	vertical-align: top;
+	padding: 6px 8px;
+}
+
+.wpcodebb-fields-table input,
+.wpcodebb-fields-table select {
+	width: 100%;
+}
+
+.wpcodebb-remove-field {
+	color: #b32d2e;
+	font-size: 18px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.wpcodebb-remove-field:hover {
+	color: #dc3232;
+}
+
+.wpcodebb-help pre {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	padding: 12px 16px;
+	overflow-x: auto;
+}
