@@ -1,0 +1,675 @@
+<script>
+/* ===========================================================================
+ * Client_Core.html
+ * ---------------------------------------------------------------------------
+ * Foundation layer: state, server calls, local storage, logging and the
+ * action registry. No DOM rendering happens here.
+ *
+ * Loaded first. Client_Slideshow.html and Client_UI.html extend the same
+ * `Kiosk` object.
+ * =========================================================================*/
+
+var Kiosk = (function () {
+  'use strict';
+
+  /** Server data inlined by doGet(), with a safe fallback for local testing. */
+  var boot = (window.KIOSK_BOOT && window.KIOSK_BOOT.ok) ? window.KIOSK_BOOT : {
+    config: {}, lang: {}, commands: [], menu: [], settingsMenu: [],
+    version: 'offline'
+  };
+
+  var api = {
+    version: boot.version,
+    cfg: boot.config || {},
+    lang: boot.lang || {},
+    menu: boot.menu || [],
+    commands: boot.commands || [],
+    settingsMenu: boot.settingsMenu || [],
+    sessionKey: null,
+    deviceId: null,
+    deviceName: '',
+    photos: [],          // the active playlist
+    ready: false,
+    online: true
+  };
+
+  /* =========================================================================
+   * Configuration access
+   * ======================================================================*/
+
+  /**
+   * Reads a setting with a typed fallback. Never returns undefined, which is
+   * what produced strings like "12undefined" in the old timing math.
+   */
+  api.get = function (key, fallback) {
+    var value = api.cfg[key];
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof fallback === 'number') {
+      var num = Number(value);
+      return isNaN(num) ? fallback : num;
+    }
+    if (typeof fallback === 'boolean') {
+      return value === true || value === 'true' || value === 1 || value === '1';
+    }
+    return value;
+  };
+
+  /**
+   * Language lookup with {placeholder} substitution.
+   * The old code ran every string through eval() inside a template literal to
+   * do this. A plain replace does the same job without handing the evaluator
+   * whatever happens to be sitting in a spreadsheet cell.
+   */
+  api.t = function (key, vars) {
+    var text = api.lang[key];
+    if (text === undefined) return key;
+    if (!vars) return text;
+    return String(text).replace(/\{(\w+)\}/g, function (match, name) {
+      return vars[name] !== undefined ? vars[name] : match;
+    });
+  };
+
+  /* =========================================================================
+   * Server calls
+   *
+   * google.script.run is callback-based and each call carries hundreds of
+   * milliseconds of latency, so anything that is not time-critical is queued
+   * and flushed together.
+   *
+   * The old QueueManager had the right idea but never stored the promise's
+   * resolve/reject anywhere - so every `await callBackend(...)` in the old
+   * client hung forever, silently. That is fixed here.
+   * ======================================================================*/
+
+  var rpc = (function () {
+    var queue = [];
+    var nextId = 1;
+    var flushTimer = null;
+    var inFlight = false;
+
+    /** True when running inside Apps Script (vs. opened as a local file). */
+    function available() {
+      return typeof google !== 'undefined' &&
+             !!(google.script && google.script.run);
+    }
+
+    /** Fire-and-forget or awaited call, batched with its neighbours. */
+    function call(method, params) {
+      return new Promise(function (resolve, reject) {
+        if (!available()) {
+          reject(new Error('google.script.run unavailable'));
+          return;
+        }
+        queue.push({
+          id: nextId++,
+          method: method,
+          // undefined does not survive JSON; normalise it to null up front.
+          params: (params || []).map(function (p) {
+            return p === undefined ? null : p;
+          }),
+          resolve: resolve,
+          reject: reject
+        });
+        schedule();
+      });
+    }
+
+    /**
+     * Direct, unbatched call. Use for large or latency-sensitive payloads
+     * (the manifest) so they are not held behind a flush timer.
+     */
+    function direct(method, params) {
+      return new Promise(function (resolve, reject) {
+        if (!available()) {
+          reject(new Error('google.script.run unavailable'));
+          return;
+        }
+        var runner = google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(function (err) {
+              reject(err instanceof Error ? err : new Error(String(err && err.message || err)));
+            });
+        runner[method].apply(runner, params || []);
+      });
+    }
+
+    function schedule() {
+      if (flushTimer || inFlight) return;
+      var delay = api.get('BackendFlushSeconds', 15) * 1000;
+      flushTimer = setTimeout(flush, Math.max(1000, delay));
+    }
+
+    /** Sends everything queued as a single processBatch() call. */
+    function flush() {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+
+      if (inFlight || !queue.length || !available()) return;
+
+      var batch = queue.splice(0, 50);
+      var payload = batch.map(function (task) {
+        return {id: task.id, method: task.method, params: task.params};
+      });
+
+      inFlight = true;
+      google.script.run
+        .withSuccessHandler(function (results) {
+          inFlight = false;
+          api.online = true;
+          settle(batch, results);
+          if (queue.length) schedule();
+        })
+        .withFailureHandler(function (err) {
+          inFlight = false;
+          api.online = false;
+          batch.forEach(function (task) {
+            task.reject(err instanceof Error ? err : new Error(String(err)));
+          });
+          if (queue.length) schedule();
+        })
+        .processBatch(JSON.stringify(payload));
+    }
+
+    /** Matches server results back to the promises that are waiting on them. */
+    function settle(batch, results) {
+      var byId = {};
+      (results || []).forEach(function (r) { byId[r.id] = r; });
+
+      batch.forEach(function (task) {
+        var result = byId[task.id];
+        if (!result) {
+          task.reject(new Error('No response for ' + task.method));
+        } else if (result.ok) {
+          task.resolve(result.result);
+        } else {
+          task.reject(new Error(result.error || 'Server error'));
+        }
+      });
+    }
+
+    return {call: call, direct: direct, flush: flush, available: available,
+            size: function () { return queue.length; }};
+  })();
+
+  api.rpc = rpc;
+
+  /* =========================================================================
+   * Logging
+   *
+   * Batched, rate limited, and NOT wired into console. The old client
+   * overrode console.log/error/warn to forward everything to the server,
+   * while the forwarder itself logged to console - a loop it survived only by
+   * a comment begging future readers not to call console inside it.
+   * ======================================================================*/
+
+  var logBuffer = [];
+  var logDropped = 0;
+  var LOG_BUFFER_MAX = 100;
+
+  api.log = function (level, message) {
+    if (!api.get('EnableLogs', true)) return;
+
+    if (logBuffer.length >= LOG_BUFFER_MAX) {
+      logDropped++;                       // never let logging eat memory
+      return;
+    }
+    logBuffer.push({
+      level: level,
+      message: String(message).substring(0, 2000),
+      at: new Date().toISOString()
+    });
+  };
+
+  api.logError = function (context, err) {
+    var detail = err && (err.stack || err.message) || err;
+    console.error(context, err);
+    api.log('error', context + ' :: ' + detail);
+  };
+
+  /** Ships buffered log lines. Called on a timer and before unload. */
+  api.flushLogs = function () {
+    if (!logBuffer.length || !rpc.available()) return;
+
+    if (logDropped) {
+      logBuffer.push({level: 'warn',
+                      message: 'Dropped ' + logDropped + ' log lines (buffer full)',
+                      at: new Date().toISOString()});
+      logDropped = 0;
+    }
+
+    var entries = logBuffer.splice(0, logBuffer.length);
+    rpc.call('logBatch', [entries, api.sessionKey, api.deviceId])
+       .catch(function () { /* logging must never break the slideshow */ });
+  };
+
+  /* =========================================================================
+   * Stats
+   * ======================================================================*/
+
+  var stats = {photosShown: 0, interactions: 0, panelOpens: 0, edits: 0,
+               errors: 0, imageLoadFailures: 0};
+
+  api.count = function (metric, amount) {
+    stats[metric] = (stats[metric] || 0) + (amount || 1);
+  };
+
+  api.flushStats = function () {
+    var payload = {};
+    var any = false;
+    Object.keys(stats).forEach(function (key) {
+      if (stats[key]) { payload[key] = stats[key]; stats[key] = 0; any = true; }
+    });
+    if (!any || !rpc.available()) return;
+    rpc.call('updateStats', [payload]).catch(function () {});
+  };
+
+  /* =========================================================================
+   * localStorage - small values only
+   * ======================================================================*/
+
+  api.store = {
+    get: function (key, fallback) {
+      try {
+        var raw = localStorage.getItem('kiosk.' + key);
+        return raw === null ? fallback : JSON.parse(raw);
+      } catch (err) {
+        return fallback;
+      }
+    },
+    set: function (key, value) {
+      try {
+        localStorage.setItem('kiosk.' + key, JSON.stringify(value));
+        return true;
+      } catch (err) {
+        return false;    // private mode, or quota exhausted
+      }
+    },
+    remove: function (key) {
+      try { localStorage.removeItem('kiosk.' + key); } catch (err) {}
+    }
+  };
+
+  /* =========================================================================
+   * IndexedDB - the photo index
+   *
+   * Stores metadata only. The old version stored base64 image bytes here,
+   * which is what filled the quota and forced the "MEMORY ALLOCATION MAXIMUM"
+   * note at the top of the original file. Metadata for 2000 photos is roughly
+   * 1MB; the same photos as base64 were several gigabytes.
+   * ======================================================================*/
+
+  var DB_NAME = 'KioskArchive';
+  var DB_VERSION = 1;
+  var STORE_PHOTOS = 'photos';
+  var STORE_STATE = 'state';
+
+  var db = {
+    handle: null,
+
+    open: function () {
+      return new Promise(function (resolve, reject) {
+        if (db.handle) { resolve(db.handle); return; }
+        if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+
+        var request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = function (event) {
+          var database = event.target.result;
+          if (!database.objectStoreNames.contains(STORE_PHOTOS)) {
+            var store = database.createObjectStore(STORE_PHOTOS, {keyPath: 'id'});
+            store.createIndex('year', 'year', {unique: false});
+          }
+          if (!database.objectStoreNames.contains(STORE_STATE)) {
+            database.createObjectStore(STORE_STATE, {keyPath: 'key'});
+          }
+        };
+
+        request.onsuccess = function (event) {
+          db.handle = event.target.result;
+          db.handle.onversionchange = function () {
+            db.handle.close();
+            db.handle = null;
+          };
+          resolve(db.handle);
+        };
+        request.onerror = function () { reject(request.error); };
+      });
+    },
+
+    /** Wraps a transaction in a promise that settles on complete/error. */
+    tx: function (storeName, mode, work) {
+      return db.open().then(function (handle) {
+        return new Promise(function (resolve, reject) {
+          var transaction = handle.transaction(storeName, mode);
+          var store = transaction.objectStore(storeName);
+          var output;
+
+          try {
+            output = work(store);
+          } catch (err) {
+            reject(err);
+            return;
+          }
+
+          // The old code returned `tx.complete`, which is not a real property -
+          // it was always undefined, so nothing ever actually waited for a
+          // write to land.
+          transaction.oncomplete = function () { resolve(output); };
+          transaction.onerror = function () { reject(transaction.error); };
+          transaction.onabort = function () { reject(transaction.error); };
+        });
+      });
+    },
+
+    /** Reads a whole store as an array. */
+    all: function (storeName) {
+      return db.open().then(function (handle) {
+        return new Promise(function (resolve, reject) {
+          var request = handle.transaction(storeName, 'readonly')
+                              .objectStore(storeName).getAll();
+          // The old getImagesByYear read req.result BEFORE onsuccess fired, so
+          // it always resolved with undefined. Read it inside the handler.
+          request.onsuccess = function () { resolve(request.result || []); };
+          request.onerror = function () { reject(request.error); };
+        });
+      });
+    },
+
+    putAll: function (storeName, records) {
+      if (!records.length) return Promise.resolve(0);
+      return db.tx(storeName, 'readwrite', function (store) {
+        records.forEach(function (record) { store.put(record); });
+        return records.length;
+      });
+    },
+
+    clear: function (storeName) {
+      return db.tx(storeName, 'readwrite', function (store) { store.clear(); });
+    },
+
+    getState: function (key) {
+      return db.open().then(function (handle) {
+        return new Promise(function (resolve) {
+          var request = handle.transaction(STORE_STATE, 'readonly')
+                              .objectStore(STORE_STATE).get(key);
+          request.onsuccess = function () {
+            resolve(request.result ? request.result.value : null);
+          };
+          request.onerror = function () { resolve(null); };
+        });
+      });
+    },
+
+    setState: function (key, value) {
+      return db.tx(STORE_STATE, 'readwrite', function (store) {
+        store.put({key: key, value: value});
+      });
+    },
+
+    /** Rough free-space check, so we can warn before writes start failing. */
+    quota: function () {
+      if (!navigator.storage || !navigator.storage.estimate) {
+        return Promise.resolve(null);
+      }
+      return navigator.storage.estimate().then(function (estimate) {
+        return {
+          usedMB: +(estimate.usage / 1048576).toFixed(1),
+          quotaMB: +(estimate.quota / 1048576).toFixed(1),
+          freeMB: +((estimate.quota - estimate.usage) / 1048576).toFixed(1)
+        };
+      }).catch(function () { return null; });
+    }
+  };
+
+  api.db = db;
+  api.STORE_PHOTOS = STORE_PHOTOS;
+
+  /* =========================================================================
+   * Device identity
+   * ======================================================================*/
+
+  api.identify = function () {
+    var existing = api.store.get('deviceId', null);
+    if (existing && typeof existing === 'string') {
+      api.deviceId = existing;
+    } else {
+      api.deviceId = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'dev-' + Date.now().toString(36) + '-' +
+            Math.random().toString(36).slice(2, 10);
+      api.store.set('deviceId', api.deviceId);
+    }
+
+    api.sessionKey = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'ses-' + Date.now().toString(36);
+
+    // Greet from the cached name immediately; correct it when the server answers.
+    api.deviceName = api.store.get('deviceName', '');
+
+    if (rpc.available()) {
+      rpc.direct('registerDevice', [api.deviceId]).then(function (info) {
+        if (info && info.name && info.name !== api.deviceName) {
+          api.deviceName = info.name;
+          api.store.set('deviceName', info.name);
+        }
+      }).catch(function (err) { api.logError('registerDevice', err); });
+    }
+    return api.deviceId;
+  };
+
+  /** One-time profile of the hardware, for the admin sheet. */
+  api.reportDevice = function () {
+    if (!api.get('EnableDeviceReporting', true) || !rpc.available()) return;
+
+    var connection = navigator.connection || navigator.webkitConnection || null;
+    rpc.call('reportDevice', [{
+      deviceId: api.deviceId,
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      languages: navigator.languages,
+      cpuCores: navigator.hardwareConcurrency || null,
+      ramGB: navigator.deviceMemory || null,
+      screen: {width: screen.width, height: screen.height,
+               pixelRatio: window.devicePixelRatio || 1},
+      viewport: {width: window.innerWidth, height: window.innerHeight},
+      touch: navigator.maxTouchPoints > 0,
+      connection: connection ? {type: connection.effectiveType,
+                                downlink: connection.downlink} : null,
+      version: api.version,
+      at: new Date().toISOString()
+    }]).catch(function () {});
+  };
+
+  /* =========================================================================
+   * Action registry
+   *
+   * Replaces eval() everywhere. Spreadsheet cells and remote commands name an
+   * action ("next", "pause(60)", "!paused") and this resolves it.
+   *
+   * Beyond the safety argument, eval is genuinely slow: it cannot be JIT
+   * compiled, and the old code called it inside showImage() - so it ran on
+   * every button, on every slide, forever.
+   * ======================================================================*/
+
+  var actions = {};
+
+  /** Registers a named action. */
+  api.action = function (name, fn) { actions[name] = fn; };
+
+  /** Everything currently registered - used by the help overlay. */
+  api.actionNames = function () { return Object.keys(actions).sort(); };
+
+  /**
+   * Parses and runs `expression`.
+   * Understands: "next", "pause(60)", "goto(12)", "!paused".
+   * @return {*} The action's return value, or undefined if unresolved.
+   */
+  api.run = function (expression) {
+    var text = String(expression || '').trim();
+    if (!text) return undefined;
+
+    var negate = text.charAt(0) === '!';
+    if (negate) text = text.slice(1).trim();
+
+    var match = text.match(/^([A-Za-z_][\w.]*)\s*(?:\(([^)]*)\))?\s*;?$/);
+    if (match && actions[match[1]]) {
+      var args = match[2]
+          ? match[2].split(',').map(function (arg) {
+              var trimmed = arg.trim().replace(/^['"]|['"]$/g, '');
+              var num = Number(trimmed);
+              if (trimmed !== '' && !isNaN(num)) return num;
+              if (trimmed === 'true') return true;
+              if (trimmed === 'false') return false;
+              return trimmed;
+            })
+          : [];
+      var result = actions[match[1]].apply(null, args);
+      return negate ? !result : result;
+    }
+
+    // Legacy escape hatch: raw JavaScript straight from the settings sheet.
+    // Off by default; enable AllowLegacyEvalCommands while migrating.
+    if (api.get('AllowLegacyEvalCommands', true)) {
+      try {
+        var value = (new Function('Kiosk', 'return (' + text + ');'))(api);
+        return negate ? !value : value;
+      } catch (err) {
+        try {
+          (new Function('Kiosk', text))(api);      // statement, not expression
+          return undefined;
+        } catch (err2) {
+          api.log('warn', 'Unknown action: ' + expression);
+          return undefined;
+        }
+      }
+    }
+
+    api.log('warn', 'Unknown action: ' + expression);
+    return undefined;
+  };
+
+  /** Evaluates an "is this button active?" expression. Always a boolean. */
+  api.check = function (expression) {
+    if (!expression) return false;
+    try {
+      return !!api.run(expression);
+    } catch (err) {
+      return false;
+    }
+  };
+
+  /* =========================================================================
+   * Scheduling
+   *
+   * A single self-correcting timer instead of the old stack of setIntervals.
+   * Every repeating job is a tick handler here, so there is one place to see
+   * everything that runs on a schedule and one place to stop it.
+   * ======================================================================*/
+
+  var jobs = [];
+  var clockHandle = null;
+
+  /**
+   * @param {string} name
+   * @param {number} everySeconds
+   * @param {function()} fn
+   */
+  api.every = function (name, everySeconds, fn) {
+    jobs.push({name: name, interval: Math.max(1, everySeconds) * 1000,
+               next: Date.now() + everySeconds * 1000, fn: fn});
+  };
+
+  function tick() {
+    var now = Date.now();
+    for (var i = 0; i < jobs.length; i++) {
+      var job = jobs[i];
+      if (now < job.next) continue;
+      job.next = now + job.interval;
+      try {
+        job.fn();
+      } catch (err) {
+        api.logError('job:' + job.name, err);
+      }
+    }
+  }
+
+  api.startClock = function () {
+    if (clockHandle) return;
+    clockHandle = setInterval(tick, 1000);
+  };
+
+  api.stopClock = function () {
+    clearInterval(clockHandle);
+    clockHandle = null;
+  };
+
+  /* =========================================================================
+   * Screen wake lock
+   * ======================================================================*/
+
+  var wakeLock = null;
+
+  api.keepAwake = function () {
+    if (!navigator.wakeLock) return;
+    navigator.wakeLock.request('screen').then(function (lock) {
+      wakeLock = lock;
+      lock.addEventListener('release', function () { wakeLock = null; });
+    }).catch(function (err) {
+      api.log('warn', 'Wake lock refused: ' + err.message);
+    });
+  };
+
+  // The lock is dropped whenever the tab is hidden; take it again on return.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && !wakeLock) api.keepAwake();
+  });
+
+  /* =========================================================================
+   * Scheduled reload / resync
+   * ======================================================================*/
+
+  /** Reloads the page at the configured hour, to clear any accumulated drift. */
+  api.scheduleDailyReload = function () {
+    var hour = api.get('DailyRefreshHour', 23);
+    if (hour < 0 || hour > 23) return;
+
+    var now = new Date();
+    var next = new Date();
+    next.setHours(hour, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+
+    var delay = next - now;
+    api.log('info', 'Daily reload scheduled for ' + next.toISOString());
+
+    setTimeout(function () {
+      api.flushLogs();
+      api.flushStats();
+      api.store.set('reloadedAt', Date.now());
+      setTimeout(function () { location.reload(); }, 1500);
+    }, delay);
+  };
+
+  return api;
+})();
+
+/* ===========================================================================
+ * Compatibility shim
+ *
+ * Old spreadsheet formulas and saved commands call these global names. They
+ * forward to the current API so existing sheets keep working while you
+ * migrate them to action names.
+ * =========================================================================*/
+window.showNotification = function (message, duration) {
+  return Kiosk.toast(message, duration);
+};
+window.PauseManager = {
+  isPaused:     function () { return Kiosk.isPaused(); },
+  togglePause:  function (reason, ms) { return Kiosk.togglePause(reason, ms); },
+  pauseFor:     function (reason, ms) { return Kiosk.pause(reason, ms); },
+  forcePauseFor: function (reason, ms) { return Kiosk.pause(reason, ms, true); },
+  resumeAll:    function () { return Kiosk.resume(); },
+  clearReason:  function (reason) { return Kiosk.resume(reason); },
+  getRemaining: function () { return Kiosk.pauseRemaining(); }
+};
+</script>

@@ -1,0 +1,679 @@
+<script>
+/* ===========================================================================
+ * Client_Slideshow.html
+ * ---------------------------------------------------------------------------
+ * The slideshow engine: syncing the photo index, choosing what to play,
+ * preloading, and running the transition.
+ *
+ * The single most important idea in this file: a photo is fully downloaded
+ * AND decoded before it is ever put on screen. The old code assigned .src and
+ * animated immediately, so the browser was decoding a multi-megabyte JPEG on
+ * the main thread in the middle of a transition. That is the hitch you saw on
+ * every slide change.
+ * =========================================================================*/
+
+(function (Kiosk) {
+  'use strict';
+
+  /* =========================================================================
+   * Elements
+   * ======================================================================*/
+
+  var el = {};
+  var layers = [];
+  var activeLayer = 0;
+
+  function cacheElements() {
+    el.stage = document.getElementById('stage');
+    el.curtain = document.getElementById('curtain');
+    el.curtainText = document.getElementById('curtainText');
+
+    layers = [
+      {img: document.getElementById('slideA'),
+       blur: document.getElementById('backdropA'), cleanup: null},
+      {img: document.getElementById('slideB'),
+       blur: document.getElementById('backdropB'), cleanup: null}
+    ];
+  }
+
+  /* =========================================================================
+   * State
+   * ======================================================================*/
+
+  var playlist = [];
+  var index = 0;
+  var timer = null;
+  var revision = null;
+  var consecutiveFailures = 0;
+
+  /**
+   * Incremented on every advance request. A render only draws if its token is
+   * still the current one.
+   *
+   * The alternative - refusing to start a new transition while one is running -
+   * means a visitor who taps "next" twice gets one photo, which feels broken.
+   * Superseding lets the newest request win instead of dropping it.
+   */
+  var renderToken = 0;
+
+  Kiosk.currentPhoto = null;
+
+  /* =========================================================================
+   * Image URLs
+   *
+   * Google's image CDN resizes server-side when you append "=w<pixels>". A
+   * 1920px-wide kiosk asking for =w1920 downloads roughly 300KB instead of the
+   * 8MB original - and never has to scale it down in the browser.
+   * ======================================================================*/
+
+  /** Rounds the screen width up to a bucket so the CDN can cache the result. */
+  function targetWidth() {
+    var configured = Kiosk.get('ImageWidth', 0);
+    if (configured > 0) return configured;
+
+    var needed = window.innerWidth * (window.devicePixelRatio || 1);
+    var buckets = [1280, 1600, 1920, 2560, 3840];
+    for (var i = 0; i < buckets.length; i++) {
+      if (needed <= buckets[i]) return buckets[i];
+    }
+    return buckets[buckets.length - 1];
+  }
+
+  /**
+   * @param {!Object} photo
+   * @param {number=} attempt Which fallback to use (0 = preferred).
+   * @return {string}
+   */
+  function photoUrl(photo, attempt) {
+    if (photo.mimeType && photo.data) {                    // inline mode
+      return 'data:' + photo.mimeType + ';base64,' + photo.data;
+    }
+    switch (attempt || 0) {
+      case 0:  return 'https://lh3.googleusercontent.com/d/' + photo.id +
+                      '=w' + targetWidth();
+      case 1:  return 'https://lh3.googleusercontent.com/d/' + photo.id;
+      default: return 'https://drive.google.com/thumbnail?id=' + photo.id +
+                      '&sz=w' + targetWidth();
+    }
+  }
+
+  /* =========================================================================
+   * Preloader
+   *
+   * A small LRU of decoded images. Bounded on purpose: an unbounded cache of
+   * full-resolution photos is exactly how the old build ran the tab out of
+   * memory over a long day.
+   * ======================================================================*/
+
+  var PRELOAD_MAX = 6;
+  var preloadCache = new Map();
+
+  function preload(photo, attempt) {
+    var url = photoUrl(photo, attempt);
+    if (preloadCache.has(url)) return preloadCache.get(url);
+
+    var promise = new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+
+      img.onload = function () {
+        // decode() finishes the expensive work off the critical path. If the
+        // browser lacks it, onload alone is still a big improvement.
+        if (img.decode) {
+          img.decode().then(function () { resolve(url); })
+                      .catch(function () { resolve(url); });
+        } else {
+          resolve(url);
+        }
+      };
+      img.onerror = function () {
+        preloadCache.delete(url);
+        reject(new Error('Image failed: ' + photo.id));
+      };
+      img.src = url;
+    });
+
+    preloadCache.set(url, promise);
+
+    // Evict oldest entries once we exceed the cap.
+    if (preloadCache.size > PRELOAD_MAX) {
+      var oldest = preloadCache.keys().next().value;
+      preloadCache.delete(oldest);
+    }
+    return promise;
+  }
+
+  /**
+   * Inline mode: pulls the raw bytes through Apps Script instead of the CDN.
+   *
+   * Only for kiosks that cannot reach lh3.googleusercontent.com. It is far
+   * slower and much heavier on memory, so the bytes are attached to the photo
+   * record for the life of the page and never written to IndexedDB.
+   *
+   * @return {!Promise<?Object>} The photo, with .data/.mimeType attached.
+   */
+  function ensureInlineData(photo) {
+    if (photo.data) return Promise.resolve(photo);
+
+    return Kiosk.rpc.direct('getImageBlobs', [[photo.id]])
+      .then(function (blobs) {
+        var blob = (blobs || [])[0];
+        if (!blob || blob.error || !blob.data) return null;
+        photo.data = blob.data;
+        photo.mimeType = blob.mimeType;
+        return photo;
+      })
+      .catch(function (err) {
+        Kiosk.logError('ensureInlineData', err);
+        return null;
+      });
+  }
+
+  /**
+   * Resolves with a usable URL, walking the fallback chain if the CDN refuses.
+   * @return {!Promise<?string>} null when every option failed.
+   */
+  function resolveUrl(photo) {
+    var chain = (Kiosk.get('ImageSource', 'cdn') === 'inline')
+        ? ensureInlineData(photo).then(function (loaded) {
+            // If the bytes did not arrive, fall through to the CDN anyway
+            // rather than showing nothing at all.
+            return preload(loaded || photo, 0);
+          })
+        : preload(photo, 0);
+
+    return chain
+      .catch(function () { return preload(photo, 1); })
+      .catch(function () { return preload(photo, 2); })
+      .catch(function () {
+        Kiosk.count('imageLoadFailures');
+        Kiosk.log('warn', 'All sources failed for photo ' + photo.id);
+        return null;
+      });
+  }
+
+  /** Warms the next couple of photos while the current one is on screen. */
+  function preloadAhead() {
+    for (var offset = 1; offset <= 2; offset++) {
+      var next = playlist[(index + offset) % playlist.length];
+      if (next) preload(next, 0).catch(function () {});
+    }
+  }
+
+  /* =========================================================================
+   * Syncing the photo index
+   * ======================================================================*/
+
+  /**
+   * Pulls the manifest from the server, page by page, into IndexedDB.
+   * Skips everything when the server says nothing has changed.
+   *
+   * @param {boolean=} force Ignore the cached revision.
+   * @return {!Promise<number>} Photo count.
+   */
+  Kiosk.sync = function (force) {
+    var set = Kiosk.get('UseAlternateSet', false) ? 'alternate' : 'main';
+
+    return Kiosk.db.getState('revision.' + set).then(function (known) {
+      var request = {set: set, page: 0, revision: force ? null : known};
+
+      return Kiosk.rpc.direct('getImageManifest', [request])
+        .then(function (page) {
+          if (page.unchanged) {
+            Kiosk.log('info', 'Photo index already current (' + page.total + ')');
+            return loadFromCache(set);
+          }
+          return fetchAllPages(page, set);
+        });
+    }).catch(function (err) {
+      // Offline or the server errored: fall back to whatever we already have.
+      Kiosk.logError('sync', err);
+      Kiosk.toast(Kiosk.t('sync_Failed'), 4000, true);
+      return loadFromCache(set);
+    });
+  };
+
+  /** Walks the remaining manifest pages and stores them all. */
+  function fetchAllPages(firstPage, set) {
+    var items = (firstPage.items || []).slice();
+    revision = firstPage.revision;
+
+    function next(page) {
+      if (!page.hasMore) return Promise.resolve();
+
+      return Kiosk.rpc.direct('getImageManifest', [
+        {set: set, page: page.page + 1, pageSize: page.pageSize}
+      ]).then(function (following) {
+        items = items.concat(following.items || []);
+        Kiosk.setStatus(Kiosk.t('sync_Updated', {count: items.length}));
+        return next(following);
+      });
+    }
+
+    return next(firstPage).then(function () {
+      // Replace the index wholesale so deleted photos actually disappear.
+      return Kiosk.db.clear(Kiosk.STORE_PHOTOS)
+        .then(function () { return Kiosk.db.putAll(Kiosk.STORE_PHOTOS, items); })
+        .then(function () { return Kiosk.db.setState('revision.' + set, revision); })
+        .then(function () {
+          Kiosk.photos = items;
+          Kiosk.log('info', 'Synced ' + items.length + ' photos (' + revision + ')');
+          return items.length;
+        });
+    });
+  }
+
+  /** Reads the last known index out of IndexedDB. */
+  function loadFromCache(set) {
+    return Kiosk.db.all(Kiosk.STORE_PHOTOS).then(function (items) {
+      Kiosk.photos = items || [];
+      return Kiosk.db.getState('revision.' + set).then(function (rev) {
+        revision = rev;
+        return Kiosk.photos.length;
+      });
+    }).catch(function (err) {
+      Kiosk.logError('loadFromCache', err);
+      Kiosk.photos = [];
+      return 0;
+    });
+  }
+
+  /* =========================================================================
+   * Playlist
+   * ======================================================================*/
+
+  /**
+   * Builds the play order from the photo index.
+   *
+   * "weighted" keeps the archive feeling varied: every year gets at least
+   * MinImagesPerYear slots, and within a year the higher-scoring photos (class
+   * pictures, curated picks, well-rated scans) are more likely to be drawn.
+   */
+  Kiosk.buildPlaylist = function () {
+    var photos = Kiosk.photos || [];
+    var order = String(Kiosk.get('ImageOrder', 'name')).toLowerCase();
+
+    if (!photos.length) { playlist = []; return 0; }
+
+    if (order === 'weighted') {
+      playlist = weightedSelection(photos, Kiosk.get('MinImagesPerYear', 7));
+    } else if (order === 'shuffle') {
+      playlist = shuffle(photos.slice());
+    } else if (order === 'year') {
+      playlist = photos.slice().sort(function (a, b) {
+        return (a.year - b.year) || a.name.localeCompare(b.name);
+      });
+    } else {
+      playlist = photos.slice().sort(function (a, b) {
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    // Resume where the kiosk left off, if that position still exists.
+    var saved = Kiosk.store.get('slideIndex', 0);
+    index = (typeof saved === 'number' && saved >= 0 && saved < playlist.length)
+        ? saved : 0;
+
+    Kiosk.log('info', 'Playlist: ' + playlist.length + ' photos (' + order + ')');
+    return playlist.length;
+  };
+
+  /** Groups by year, then draws from each year proportionally to weight. */
+  function weightedSelection(photos, minPerYear) {
+    var byYear = {};
+    photos.forEach(function (photo) {
+      var year = photo.year || 0;
+      (byYear[year] = byYear[year] || []).push(photo);
+    });
+
+    var selected = [];
+    Object.keys(byYear).sort().forEach(function (year) {
+      var group = byYear[year];
+
+      // Small years play in full - there is nothing to thin out.
+      if (group.length <= minPerYear) {
+        selected = selected.concat(group);
+        return;
+      }
+
+      var picked = group.filter(function (photo) {
+        var weight = Math.max(1, Math.min(100, photo.weight || 50));
+        return Math.random() * 100 <= weight;
+      });
+
+      // A run of unlucky rolls must never empty out a year entirely.
+      if (picked.length < minPerYear) {
+        var byWeight = group.slice().sort(function (a, b) {
+          return (b.weight || 0) - (a.weight || 0);
+        });
+        picked = byWeight.slice(0, minPerYear);
+      }
+      selected = selected.concat(picked);
+    });
+
+    selected.sort(function (a, b) {
+      return (a.year - b.year) || a.name.localeCompare(b.name);
+    });
+    return selected;
+  }
+
+  function shuffle(list) {
+    for (var i = list.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+    }
+    return list;
+  }
+
+  /* =========================================================================
+   * Pause manager
+   *
+   * Pauses are keyed by reason and always carry an expiry, so a pause can
+   * never leak and strand the kiosk on one photo. The old version had a
+   * default duration of 15278971598 ms - about 177 days - which is what
+   * "stuck paused" looked like in practice.
+   * ======================================================================*/
+
+  var pauses = {};
+  var MAX_PAUSE_MS = 30 * 60 * 1000;   // hard ceiling: half an hour
+
+  /**
+   * Tells the UI that something it renders has changed.
+   * Without this, a pause triggered in code (rather than by a button press)
+   * left the pause button showing its old icon until the next photo.
+   */
+  function notifyStateChanged() {
+    if (Kiosk.updateBanner) Kiosk.updateBanner();
+    if (Kiosk.refreshControls) Kiosk.refreshControls();
+  }
+
+  /**
+   * @param {string} reason
+   * @param {number} ms
+   * @param {boolean=} exclusive Clear other pauses first.
+   */
+  Kiosk.pause = function (reason, ms, exclusive) {
+    if (exclusive) pauses = {};
+    var duration = Math.min(Math.max(1000, ms || 30000), MAX_PAUSE_MS);
+    pauses[reason || 'manual'] = Date.now() + duration;
+    notifyStateChanged();
+    return true;
+  };
+
+  /** @param {string=} reason Omit to clear every pause. */
+  Kiosk.resume = function (reason) {
+    if (reason) delete pauses[reason];
+    else pauses = {};
+    notifyStateChanged();
+    return true;
+  };
+
+  Kiosk.isPaused = function () {
+    return Kiosk.pauseRemaining() > 0;
+  };
+
+  /** @return {number} Milliseconds left on the longest active pause. */
+  Kiosk.pauseRemaining = function () {
+    var now = Date.now();
+    var longest = 0;
+    Object.keys(pauses).forEach(function (reason) {
+      if (pauses[reason] <= now) delete pauses[reason];      // self-cleaning
+      else longest = Math.max(longest, pauses[reason] - now);
+    });
+    return longest;
+  };
+
+  Kiosk.pauseReason = function () {
+    var now = Date.now();
+    var best = null;
+    var bestUntil = 0;
+    Object.keys(pauses).forEach(function (reason) {
+      if (pauses[reason] > now && pauses[reason] > bestUntil) {
+        best = reason; bestUntil = pauses[reason];
+      }
+    });
+    return best;
+  };
+
+  Kiosk.togglePause = function (reason, ms) {
+    if (Kiosk.isPaused()) { Kiosk.resume(); return false; }
+    Kiosk.pause(reason || 'Paused', ms || 5 * 60 * 1000, true);
+    return true;
+  };
+
+  /* =========================================================================
+   * Playback
+   * ======================================================================*/
+
+  /** How long the current photo should stay up. */
+  function holdDuration(photo) {
+    var base = Kiosk.get('ImageDisplayTimeByDefault', 12) * 1000;
+    if (photo && photo.isClassPhoto) {
+      base *= Kiosk.get('ClassImageTimeMultiplier', 2);
+    }
+    return Math.max(2000, base);
+  }
+
+  /** Queues the next advance. Self-correcting: always reads config afresh. */
+  function scheduleNext() {
+    clearTimeout(timer);
+    var wait = holdDuration(Kiosk.currentPhoto);
+    timer = setTimeout(onTick, wait);
+  }
+
+  function onTick() {
+    // While paused, keep checking back rather than dropping the loop entirely.
+    if (Kiosk.isPaused()) {
+      timer = setTimeout(onTick, 1000);
+      if (Kiosk.updateBanner) Kiosk.updateBanner();
+      return;
+    }
+    Kiosk.next();
+  }
+
+  /** @param {number=} step Defaults to +1. */
+  Kiosk.next = function (step) {
+    if (!playlist.length) return Promise.resolve(false);
+    var delta = step === undefined ? 1 : Number(step) || 0;
+    return goTo(index + delta, delta >= 0 ? 1 : -1);
+  };
+
+  Kiosk.previous = function (step) {
+    return Kiosk.next(-(step || 1));
+  };
+
+  /** Jumps to an absolute position. */
+  Kiosk.goTo = function (position) {
+    return goTo(Number(position) || 0, 1);
+  };
+
+  /**
+   * The core advance.
+   * @param {number} target   Desired index (wrapped).
+   * @param {number} direction 1 forward, -1 back.
+   */
+  function goTo(target, direction) {
+    if (!playlist.length) return Promise.resolve(false);
+
+    var token = ++renderToken;
+    var count = playlist.length;
+    // Modulo twice so negative targets wrap correctly.
+    var wrapped = ((target % count) + count) % count;
+
+    if (wrapped === 0 && target !== 0 && direction > 0) {
+      Kiosk.log('info', 'Reached the end of the playlist, starting over');
+    }
+
+    index = wrapped;
+    var photo = playlist[index];
+    if (!photo) return Promise.resolve(false);
+
+    Kiosk.store.set('slideIndex', index);
+
+    return resolveUrl(photo).then(function (url) {
+      // A newer request arrived while this photo was downloading. Drop this
+      // one silently rather than fighting the newer transition for the layers.
+      if (token !== renderToken) return false;
+
+      if (!url) {
+        // Could not load this one; skip past it rather than showing a gap.
+        consecutiveFailures++;
+        if (consecutiveFailures > Math.min(10, playlist.length)) {
+          Kiosk.setStatus('Cannot load photos. Check the network connection.');
+          consecutiveFailures = 0;
+          scheduleNext();
+          return false;
+        }
+        return goTo(index + direction, direction);
+      }
+
+      consecutiveFailures = 0;
+      render(photo, url, direction);
+      return true;
+    }).catch(function (err) {
+      Kiosk.logError('goTo', err);
+      if (token === renderToken) scheduleNext();
+      return false;
+    });
+  }
+
+  /**
+   * Swaps the layers. Every property touched here is composited - no layout,
+   * no paint, no main-thread work during the animation.
+   */
+  function render(photo, url, direction) {
+    var incoming = layers[1 - activeLayer];
+    var outgoing = layers[activeLayer];
+    var duration = Kiosk.get('TransitionMs', 1200);
+
+    var enterFrom = direction >= 0 ? 'from-right' : 'from-left';
+    var exitTo    = direction >= 0 ? 'to-left' : 'to-right';
+
+    // A cleanup timer from an earlier transition may still be pending against
+    // this layer. If it fired after we assign the new src below, it would
+    // strip the src off the photo currently on screen.
+    clearTimeout(incoming.cleanup);
+    incoming.cleanup = null;
+
+    // 1. Park the incoming layer off-stage with no transition attached.
+    incoming.img.classList.remove('is-animating', 'is-active',
+                                  'from-left', 'from-right', 'to-left', 'to-right');
+    incoming.img.classList.add(enterFrom);
+    incoming.img.src = url;
+    incoming.img.alt = photo.displayName || photo.name || '';
+    incoming.blur.src = url;
+
+    // 2. One forced reflow so the browser registers the start position.
+    //    (Exactly one, before the animation - not on every frame, which is
+    //    what the old fixOutlines() call did.)
+    void incoming.img.offsetWidth;
+
+    // 3. Turn transitions on and move both layers to their end states.
+    incoming.img.classList.add('is-animating');
+    incoming.blur.classList.add('is-animating');
+    incoming.img.classList.remove(enterFrom);
+    incoming.img.classList.add('is-active');
+    incoming.blur.classList.add('is-active');
+
+    outgoing.img.classList.add('is-animating', exitTo);
+    outgoing.img.classList.remove('is-active');
+    outgoing.blur.classList.remove('is-active');
+
+    activeLayer = 1 - activeLayer;
+    Kiosk.currentPhoto = photo;
+    Kiosk.currentIndex = index;
+
+    // 4. Tidy up once the animation is over so the layer is reusable.
+    clearTimeout(outgoing.cleanup);
+    outgoing.cleanup = setTimeout(function () {
+      outgoing.cleanup = null;
+      outgoing.img.classList.remove('is-animating', exitTo);
+      outgoing.img.removeAttribute('src');    // release the decoded bitmap
+      outgoing.blur.classList.remove('is-animating');
+    }, duration + 60);
+
+    // Lift the boot curtain only now, with a real photo behind it. Hiding it
+    // as soon as the playlist existed meant the first visitor saw an empty
+    // black screen for however long the first image took to decode.
+    if (Kiosk.hideCurtain) Kiosk.hideCurtain();
+
+    Kiosk.count('photosShown');
+    if (Kiosk.onPhotoChanged) Kiosk.onPhotoChanged(photo);
+    preloadAhead();
+    scheduleNext();
+  }
+
+  /* =========================================================================
+   * Lifecycle
+   * ======================================================================*/
+
+  /** Starts (or restarts) playback from the current playlist. */
+  Kiosk.play = function () {
+    cacheElements();
+
+    if (!playlist.length && !Kiosk.buildPlaylist()) {
+      Kiosk.setStatus(Kiosk.t('slideshow_Empty'));
+      return false;
+    }
+
+    // The curtain comes down in render(), once the first photo has decoded.
+    goTo(index, 1);
+    return true;
+  };
+
+  /** Rebuilds the playlist and jumps back to the start. */
+  Kiosk.restart = function () {
+    clearTimeout(timer);
+    Kiosk.buildPlaylist();
+    index = 0;
+    goTo(0, 1);
+    return true;
+  };
+
+  Kiosk.stop = function () {
+    clearTimeout(timer);
+    timer = null;
+  };
+
+  /** Re-syncs from the server and rebuilds the playlist in place. */
+  Kiosk.resync = function () {
+    Kiosk.toast(Kiosk.t('sync_Checking'));
+    return Kiosk.sync(true).then(function (count) {
+      if (!count) {
+        Kiosk.toast(Kiosk.t('slideshow_Empty'), 5000, true);
+        return 0;
+      }
+      Kiosk.buildPlaylist();
+      Kiosk.toast(Kiosk.t('sync_Updated', {count: count}));
+      return count;
+    });
+  };
+
+  /** Read-only accessors used by the UI layer and the HUD. */
+  Kiosk.playlistLength = function () { return playlist.length; };
+  Kiosk.playlistIndex = function () { return index; };
+  Kiosk.preloadCount = function () { return preloadCache.size; };
+
+  /* =========================================================================
+   * Actions - the names usable from the settings sheet and remote commands
+   * ======================================================================*/
+
+  Kiosk.action('next',     function (step) { return Kiosk.next(step || 1); });
+  Kiosk.action('previous', function (step) { return Kiosk.previous(step || 1); });
+  Kiosk.action('forward5', function () { return Kiosk.next(5); });
+  Kiosk.action('back5',    function () { return Kiosk.previous(5); });
+  Kiosk.action('goto',     function (n) { return Kiosk.goTo(n); });
+  Kiosk.action('restart',  function () { return Kiosk.restart(); });
+  Kiosk.action('resync',   function () { return Kiosk.resync(); });
+  Kiosk.action('reload',   function () { location.reload(); return true; });
+
+  Kiosk.action('pause',    function (seconds) {
+    return Kiosk.pause('Paused', (seconds || 300) * 1000, true);
+  });
+  Kiosk.action('resume',      function () { return Kiosk.resume(); });
+  Kiosk.action('togglePause', function () { return Kiosk.togglePause('Paused'); });
+  Kiosk.action('paused',      function () { return Kiosk.isPaused(); });
+
+})(Kiosk);
+</script>

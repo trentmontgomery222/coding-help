@@ -1,0 +1,818 @@
+<script>
+/* ===========================================================================
+ * Client_UI.html
+ * ---------------------------------------------------------------------------
+ * Everything the visitor touches: captions, the details panel, the button
+ * bar, notifications, input handling, and the startup sequence.
+ * =========================================================================*/
+
+(function (Kiosk) {
+  'use strict';
+
+  var el = {};
+  var qrRendered = null;          // photo id the QR currently shows
+  var idleTimer = null;
+  var hardTimer = null;
+  var editing = false;
+
+  function cacheElements() {
+    ['app', 'caption', 'captionText', 'blurb', 'infoPanel', 'infoTitle',
+     'infoDescription', 'infoHint', 'infoClose', 'toolbar', 'toasts', 'banner',
+     'curtain', 'curtainText', 'hud', 'qrBox', 'qrLabel', 'metaYear',
+     'metaProducer', 'metaLicense', 'metaCamera', 'metaLens', 'metaDate']
+      .forEach(function (id) { el[id] = document.getElementById(id); });
+  }
+
+  /* =========================================================================
+   * Notifications
+   * ======================================================================*/
+
+  var MAX_TOASTS = 3;
+
+  /**
+   * @param {string} message
+   * @param {number=} duration ms, default 3200
+   * @param {boolean=} isError
+   */
+  Kiosk.toast = function (message, duration, isError) {
+    if (!el.toasts || !message) return;
+
+    // Cap what is on screen. The old showNotification could stack unbounded
+    // divs, and separately removed each one after 500ms via a stray timer at
+    // the end of the function - so messages flashed and vanished.
+    while (el.toasts.children.length >= MAX_TOASTS) {
+      el.toasts.removeChild(el.toasts.firstChild);
+    }
+
+    var toast = document.createElement('div');
+    toast.className = 'toast' + (isError ? ' is-error' : '');
+    toast.textContent = String(message);
+    el.toasts.appendChild(toast);
+
+    requestAnimationFrame(function () { toast.classList.add('is-visible'); });
+
+    setTimeout(function () {
+      toast.classList.remove('is-visible');
+      setTimeout(function () {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 320);
+    }, duration || 3200);
+  };
+
+  /* =========================================================================
+   * Curtain and banner
+   * ======================================================================*/
+
+  Kiosk.setStatus = function (text) {
+    if (el.curtainText) el.curtainText.textContent = text;
+  };
+
+  Kiosk.showCurtain = function (text) {
+    if (text) Kiosk.setStatus(text);
+    if (el.curtain) el.curtain.classList.remove('is-hidden');
+  };
+
+  Kiosk.hideCurtain = function () {
+    if (el.curtain) el.curtain.classList.add('is-hidden');
+  };
+
+  /** Shows the pause countdown, and hides itself when the pause expires. */
+  Kiosk.updateBanner = function () {
+    if (!el.banner) return;
+
+    var remaining = Kiosk.pauseRemaining();
+
+    // While the panel is open the visitor already knows why nothing is moving;
+    // a countdown banner on top of it is just noise.
+    if (isPanelOpen()) remaining = 0;
+
+    if (remaining <= 0) {
+      el.banner.classList.remove('is-visible');
+      el.banner.hidden = true;
+      return;
+    }
+
+    // A very long pause is a deliberate hold; no need to count it down.
+    if (remaining > 10 * 60 * 1000) {
+      el.banner.hidden = false;
+      el.banner.textContent = 'Paused';
+      el.banner.classList.add('is-visible');
+      return;
+    }
+
+    el.banner.hidden = false;
+    el.banner.textContent = Kiosk.t('paused_Reason', {
+      reason: Kiosk.pauseReason() || 'paused',
+      seconds: Math.ceil(remaining / 1000)
+    });
+    el.banner.classList.add('is-visible');
+  };
+
+  /* =========================================================================
+   * Photo display
+   * ======================================================================*/
+
+  /** Called by the slideshow engine whenever a new photo lands. */
+  Kiosk.onPhotoChanged = function (photo) {
+    if (!photo) return;
+
+    var title = trimTitle(photo.displayName || photo.name);
+    if (el.captionText) el.captionText.textContent = title;
+
+    var nameplate = document.querySelector('.tool-nameplate');
+    if (nameplate) nameplate.textContent = title;
+
+    // Standing description, bottom-right. Only shown when it is real text.
+    var description = String(photo.description || '').trim();
+    if (el.blurb) {
+      if (description.length > 12 && !isPlaceholder(description)) {
+        el.blurb.textContent = description;
+        el.blurb.hidden = false;
+        requestAnimationFrame(function () { el.blurb.classList.add('is-visible'); });
+      } else {
+        el.blurb.classList.remove('is-visible');
+        setTimeout(function () { el.blurb.hidden = true; }, 600);
+      }
+    }
+
+    // Only repaint the panel while it is actually open.
+    if (isPanelOpen()) populatePanel(photo);
+
+    refreshToolbarStates();
+  };
+
+  function trimTitle(text) {
+    var max = Kiosk.get('MaxImageDisplayNameLength', 64);
+    var clean = String(text || '')
+        .replace(/AUTOMATED_ADDITION/g, '')
+        .replace(/\.(jpe?g|png|tiff?|webp)/gi, '')
+        .trim();
+    return clean.length > max ? clean.slice(0, max - 1).trim() + '…' : clean;
+  }
+
+  /** Recognises the old default descriptions so we do not present them. */
+  function isPlaceholder(text) {
+    return /^(click to set one|be the first to write|alternative|null)$/i
+        .test(text.trim());
+  }
+
+  /* =========================================================================
+   * Details panel
+   * ======================================================================*/
+
+  function isPanelOpen() {
+    return el.infoPanel && el.infoPanel.classList.contains('is-open');
+  }
+
+  /** Fills the panel from a photo record. */
+  function populatePanel(photo) {
+    if (!photo) return;
+
+    el.infoTitle.textContent = photo.displayName || photo.name || '';
+
+    var description = String(photo.description || '').trim();
+    el.infoDescription.textContent =
+        (!description || isPlaceholder(description))
+            ? Kiosk.t('info_NoDescription')
+            : description;
+
+    // Hide rows with nothing in them instead of printing a dash.
+    setMeta('metaYear',     photo.year || '');
+    setMeta('metaProducer', photo.producer);
+    setMeta('metaLicense',  photo.license);
+    setMeta('metaCamera',   photo.camera);
+    setMeta('metaLens',     photo.lens);
+    setMeta('metaDate',     photo.dateTaken);
+
+    renderQr(photo);
+  }
+
+  function setMeta(elementId, value) {
+    var node = el[elementId];
+    if (!node) return;
+    var row = node.closest('.meta-row');
+    var text = String(value === undefined || value === null ? '' : value).trim();
+
+    node.textContent = text || '—';
+    if (row) row.classList.toggle('is-empty', !text);
+  }
+
+  /**
+   * Draws the download QR.
+   * Generated lazily, only when the panel opens and only when the photo has
+   * actually changed - the old code rebuilt a QR code on every single slide,
+   * whether or not anyone could see it.
+   */
+  function renderQr(photo) {
+    if (!el.qrBox || typeof QRCode === 'undefined') return;
+    if (qrRendered === photo.id) return;
+
+    el.qrBox.innerHTML = '';
+    qrRendered = null;
+
+    if (photo.downloadable === false) {
+      el.qrLabel.textContent = 'Not available for download';
+      return;
+    }
+
+    try {
+      new QRCode(el.qrBox, {
+        text: 'https://drive.google.com/file/d/' + photo.id + '/view?usp=sharing',
+        width: 132,
+        height: 132,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M   // M is plenty at this size
+      });
+      el.qrLabel.textContent = Kiosk.t('qr_Label');
+      qrRendered = photo.id;
+    } catch (err) {
+      Kiosk.logError('renderQr', err);
+    }
+  }
+
+  /** @param {boolean} open */
+  Kiosk.togglePanel = function (open) {
+    if (!el.infoPanel) return false;
+
+    var shouldOpen = open === undefined ? !isPanelOpen() : !!open;
+    if (shouldOpen === isPanelOpen()) return shouldOpen;
+
+    if (shouldOpen) {
+      populatePanel(Kiosk.currentPhoto);
+      el.infoPanel.classList.add('is-open');
+      el.infoPanel.setAttribute('aria-hidden', 'false');
+      el.app.classList.add('panel-open');
+
+      // Hold the slideshow while someone is reading, but never indefinitely.
+      Kiosk.pause('viewing', Kiosk.get('InfoPanelHardCloseMs', 120000), true);
+      Kiosk.count('panelOpens');
+      resetIdleTimers();
+    } else {
+      saveEdits();
+      el.infoPanel.classList.remove('is-open');
+      el.infoPanel.setAttribute('aria-hidden', 'true');
+      el.app.classList.remove('panel-open');
+      Kiosk.resume('viewing');
+      clearIdleTimers();
+    }
+    return shouldOpen;
+  };
+
+  /* =========================================================================
+   * Editing
+   * ======================================================================*/
+
+  function enableEditing() {
+    var allowed = Kiosk.get('AllowViewerEdits', true);
+    [el.infoTitle, el.infoDescription].forEach(function (node) {
+      if (node) node.setAttribute('contenteditable', allowed ? 'true' : 'false');
+    });
+    if (el.infoHint) {
+      el.infoHint.textContent = allowed
+          ? 'Tap the text to edit. Changes save automatically.'
+          : '';
+    }
+  }
+
+  /** Writes back any change the visitor made, once, on close. */
+  function saveEdits() {
+    var photo = Kiosk.currentPhoto;
+    if (!photo || !Kiosk.get('AllowViewerEdits', true)) return;
+
+    var title = el.infoTitle.textContent.trim();
+    var description = el.infoDescription.textContent.trim();
+    if (isPlaceholder(description) ||
+        description === Kiosk.t('info_NoDescription')) {
+      description = '';
+    }
+
+    var titleChanged = title && title !== (photo.displayName || photo.name);
+    var bodyChanged = description !== String(photo.description || '').trim();
+    if (!titleChanged && !bodyChanged) return;
+
+    // Update the local copy first so the change is visible immediately, even
+    // if the network is slow or down.
+    if (titleChanged) photo.displayName = title;
+    if (bodyChanged) photo.description = description;
+
+    // Persist metadata only. In inline mode `photo.data` holds megabytes of
+    // base64 that must never reach IndexedDB.
+    var persisted = {};
+    Object.keys(photo).forEach(function (key) {
+      if (key !== 'data' && key !== 'mimeType') persisted[key] = photo[key];
+    });
+    Kiosk.db.putAll(Kiosk.STORE_PHOTOS, [persisted]).catch(function () {});
+
+    Kiosk.rpc.call('updateImageData', [{
+      id: photo.id, DisplayName: title, Description: description
+    }]).then(function (result) {
+      Kiosk.toast(result && result.ok ? Kiosk.t('info_Saved')
+                                      : Kiosk.t('info_SaveFailed'),
+                  2500, !(result && result.ok));
+    }).catch(function (err) {
+      Kiosk.logError('saveEdits', err);
+      Kiosk.toast(Kiosk.t('info_SaveFailed'), 3000, true);
+    });
+
+    Kiosk.count('edits');
+    Kiosk.rpc.flush();     // do not leave an edit sitting in the queue
+  }
+
+  function resetIdleTimers() {
+    clearIdleTimers();
+    // Close after inactivity, unless someone is mid-sentence.
+    idleTimer = setTimeout(function () {
+      if (!editing) Kiosk.togglePanel(false);
+    }, Kiosk.get('InfoPanelIdleCloseMs', 60000));
+
+    // And close regardless after the hard limit - a kiosk cannot sit open.
+    hardTimer = setTimeout(function () {
+      Kiosk.togglePanel(false);
+    }, Kiosk.get('InfoPanelHardCloseMs', 120000));
+  }
+
+  function clearIdleTimers() {
+    clearTimeout(idleTimer);
+    clearTimeout(hardTimer);
+  }
+
+  /* =========================================================================
+   * Toolbar
+   * ======================================================================*/
+
+  var toolbarButtons = [];
+
+  /** Builds the button bar from the Bottom Menu Controls sheet. */
+  function buildToolbar() {
+    if (!el.toolbar) return;
+
+    el.toolbar.innerHTML = '';
+    toolbarButtons = [];
+
+    var items = Kiosk.menu || [];
+    if (!items.length) {
+      buildDefaultToolbar();
+      return;
+    }
+
+    items.forEach(function (item) {
+      if (item.isNamePlate) {
+        var plate = document.createElement('div');
+        plate.className = 'tool-nameplate';
+        plate.id = 'nameplate';
+        plate.textContent = '';
+        plate.addEventListener('click', function () { Kiosk.togglePanel(true); });
+        el.toolbar.appendChild(plate);
+        return;
+      }
+
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tool-btn';
+      button.id = item.id;
+      button.title = item.name;
+      button.setAttribute('aria-label', item.name);
+
+      if (item.icon) {
+        var icon = document.createElement('img');
+        icon.src = item.icon;
+        icon.alt = '';
+        // A missing icon leaves a usable text button instead of a blank square.
+        icon.addEventListener('error', function () {
+          button.innerHTML = '';
+          var fallback = document.createElement('span');
+          fallback.className = 'tool-fallback';
+          fallback.textContent = item.name;
+          button.appendChild(fallback);
+        });
+        button.appendChild(icon);
+      } else {
+        var label = document.createElement('span');
+        label.className = 'tool-fallback';
+        label.textContent = item.name;
+        button.appendChild(label);
+      }
+
+      button.addEventListener('click', function () {
+        Kiosk.count('interactions');
+        var isActive = item.check ? Kiosk.check(item.check) : false;
+        Kiosk.run(isActive ? item.activeClick : item.click);
+        refreshToolbarStates();
+      });
+
+      el.toolbar.appendChild(button);
+      toolbarButtons.push({config: item, button: button});
+    });
+
+    refreshToolbarStates();
+  }
+
+  /** Used when the settings sheet has no rows yet, so the kiosk is still usable. */
+  function buildDefaultToolbar() {
+    var defaults = [
+      {name: 'Back', label: '‹‹', action: 'back5'},
+      {name: 'Previous', label: '‹', action: 'previous'},
+      {name: 'Pause', label: '❙❙', action: 'togglePause'},
+      {name: 'Next', label: '›', action: 'next'},
+      {name: 'Forward', label: '››', action: 'forward5'}
+    ];
+
+    defaults.forEach(function (item) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tool-btn';
+      button.title = item.name;
+      button.setAttribute('aria-label', item.name);
+      button.innerHTML = '<span class="tool-fallback" style="font-size:20px">' +
+                         item.label + '</span>';
+      button.addEventListener('click', function () {
+        Kiosk.count('interactions');
+        Kiosk.run(item.action);
+      });
+      el.toolbar.appendChild(button);
+    });
+
+    var plate = document.createElement('div');
+    plate.className = 'tool-nameplate';
+    plate.addEventListener('click', function () { Kiosk.togglePanel(true); });
+    el.toolbar.appendChild(plate);
+  }
+
+  /**
+   * Swaps icons for buttons whose "active" check is true.
+   * The old build re-ran this on every animation frame from inside the debug
+   * overlay loop; it now runs only when something could actually have changed.
+   */
+  Kiosk.refreshControls = function () { refreshToolbarStates(); };
+
+  function refreshToolbarStates() {
+    toolbarButtons.forEach(function (entry) {
+      if (!entry.config.check) return;
+      var active = Kiosk.check(entry.config.check);
+      entry.button.classList.toggle('is-active', active);
+
+      var icon = entry.button.querySelector('img');
+      if (!icon) return;
+      var wanted = active ? (entry.config.activeIcon || entry.config.icon)
+                          : entry.config.icon;
+      if (wanted && icon.getAttribute('src') !== wanted) icon.src = wanted;
+    });
+  }
+
+  /* =========================================================================
+   * Input
+   * ======================================================================*/
+
+  var touchStart = null;
+
+  function bindEvents() {
+    // --- Touch: swipe up opens the panel, horizontal swipes change photo ---
+    document.addEventListener('touchstart', function (event) {
+      var touch = event.touches[0];
+      touchStart = {x: touch.clientX, y: touch.clientY, at: Date.now()};
+    }, {passive: true});
+
+    document.addEventListener('touchend', function (event) {
+      if (!touchStart) return;
+
+      var touch = event.changedTouches[0];
+      var dx = touch.clientX - touchStart.x;
+      var dy = touch.clientY - touchStart.y;
+      var elapsed = Date.now() - touchStart.at;
+      touchStart = null;
+
+      if (elapsed > 900) return;               // a slow drag is not a swipe
+
+      var minY = Kiosk.get('MinYMovementSwipe', 80);
+      var maxY = Kiosk.get('MaxYMovementSwipe', 2000);
+      var maxX = Kiosk.get('MaxXMovementSwipe', 120);
+
+      // Swipe up -> details. (The old handler compared against an undefined
+      // MaxYMovementSwipe variable, so this threw on every single touch.)
+      if (-dy > minY && -dy < maxY && Math.abs(dx) < maxX) {
+        Kiosk.count('interactions');
+        Kiosk.togglePanel(true);
+        return;
+      }
+      // Swipe down -> close.
+      if (dy > minY && Math.abs(dx) < maxX && isPanelOpen()) {
+        Kiosk.togglePanel(false);
+        return;
+      }
+      // Horizontal -> step through photos, and hold briefly so the visitor
+      // can look at what they landed on.
+      if (Math.abs(dx) > 90 && Math.abs(dy) < 90) {
+        Kiosk.count('interactions');
+        Kiosk.pause('browsing', 20000);
+        if (dx < 0) Kiosk.next(); else Kiosk.previous();
+      }
+    }, {passive: true});
+
+    // Block pinch-zoom; a kiosk that gets zoomed cannot be un-zoomed by a visitor.
+    document.addEventListener('touchmove', function (event) {
+      if (event.touches.length > 1) event.preventDefault();
+    }, {passive: false});
+
+    // --- Pointer ---
+    if (el.caption) {
+      el.caption.addEventListener('click', function () {
+        Kiosk.count('interactions');
+        Kiosk.togglePanel(true);
+      });
+    }
+    if (el.infoClose) {
+      el.infoClose.addEventListener('click', function () { Kiosk.togglePanel(false); });
+    }
+
+    // A click outside the open panel closes it.
+    document.addEventListener('click', function (event) {
+      if (!isPanelOpen()) return;
+      if (el.infoPanel.contains(event.target)) return;
+      if (el.toolbar && el.toolbar.contains(event.target)) return;
+      if (el.caption && el.caption.contains(event.target)) return;
+      Kiosk.togglePanel(false);
+    });
+
+    // --- Editing state, so idle timers do not close the panel mid-sentence ---
+    [el.infoTitle, el.infoDescription].forEach(function (node) {
+      if (!node) return;
+      node.addEventListener('focus', function () { editing = true; });
+      node.addEventListener('blur',  function () { editing = false; resetIdleTimers(); });
+      node.addEventListener('input', function () { resetIdleTimers(); });
+      // Enter should commit a title, not insert a newline into it.
+      node.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && node === el.infoTitle) {
+          event.preventDefault();
+          node.blur();
+        }
+      });
+    });
+
+    // --- Keyboard ---
+    document.addEventListener('keydown', onKeyDown);
+
+    // --- Window ---
+    window.addEventListener('resize', debounce(function () {
+      applyRuntimeStyles();
+    }, 250));
+
+    window.addEventListener('beforeunload', function () {
+      Kiosk.flushLogs();
+      Kiosk.flushStats();
+    });
+
+    // Pause while hidden so a backgrounded tab is not burning through photos.
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) Kiosk.pause('hidden', 10 * 60 * 1000);
+      else Kiosk.resume('hidden');
+    });
+  }
+
+  function onKeyDown(event) {
+    // Never hijack keys while someone is typing in the panel.
+    if (editing) return;
+
+    Kiosk.count('interactions');
+
+    switch (event.key) {
+      case 'ArrowRight': case ' ': event.preventDefault(); Kiosk.next(); return;
+      case 'ArrowLeft':  event.preventDefault(); Kiosk.previous(); return;
+      case 'ArrowUp':    event.preventDefault(); Kiosk.togglePanel(true); return;
+      case 'ArrowDown':  event.preventDefault(); Kiosk.togglePanel(false); return;
+      case 'p': case 'P': Kiosk.togglePause('Paused'); return;
+      case 'r': case 'R': Kiosk.resync(); return;
+      case 'd': case 'D': Kiosk.toggleHud(); return;
+      case 'Escape':     Kiosk.togglePanel(false); return;
+    }
+
+    // Anything else falls through to the sheet-defined bindings.
+    (Kiosk.commands || []).forEach(function (binding) {
+      if (matchesBinding(binding.key, event)) Kiosk.run(binding.action);
+    });
+  }
+
+  /**
+   * Matches a key binding from the sheet. Accepts a plain key ("q"), a
+   * combination ("ctrl+alt+p"), or - for backwards compatibility - a legacy
+   * JavaScript condition, which is only evaluated if that is switched on.
+   */
+  function matchesBinding(spec, event) {
+    var text = String(spec || '').trim();
+    if (!text) return false;
+
+    if (/^[\w+]+$/.test(text)) {
+      var parts = text.toLowerCase().split('+');
+      var key = parts.pop();
+      var needCtrl = parts.indexOf('ctrl') !== -1;
+      var needAlt = parts.indexOf('alt') !== -1;
+      var needShift = parts.indexOf('shift') !== -1;
+
+      return event.key.toLowerCase() === key &&
+             event.ctrlKey === needCtrl &&
+             event.altKey === needAlt &&
+             event.shiftKey === needShift;
+    }
+
+    if (Kiosk.get('AllowLegacyEvalCommands', true)) {
+      try {
+        return (new Function('event', 'return (' + text + ');'))(event) === true;
+      } catch (err) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  function debounce(fn, wait) {
+    var handle = null;
+    return function () {
+      var args = arguments;
+      clearTimeout(handle);
+      handle = setTimeout(function () { fn.apply(null, args); }, wait);
+    };
+  }
+
+  /* =========================================================================
+   * Developer HUD
+   * ======================================================================*/
+
+  var hudVisible = false;
+  var hudTimer = null;
+
+  Kiosk.toggleHud = function () {
+    hudVisible = !hudVisible;
+    el.hud.hidden = !hudVisible;
+
+    clearInterval(hudTimer);
+    if (hudVisible) {
+      updateHud();
+      // Once a second. The old overlay redrew itself from inside
+      // requestAnimationFrame - 60 full text rebuilds and a synthetic
+      // 200,000-iteration CPU "probe" every second, forever, just to display
+      // a frame counter.
+      hudTimer = setInterval(updateHud, 1000);
+    }
+    return hudVisible;
+  };
+
+  function updateHud() {
+    if (!hudVisible || !el.hud) return;
+
+    var memory = performance.memory
+        ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + ' MB'
+        : 'n/a';
+
+    el.hud.textContent = [
+      'kiosk        ' + Kiosk.version,
+      'photo        ' + (Kiosk.playlistIndex() + 1) + ' / ' + Kiosk.playlistLength(),
+      'library      ' + (Kiosk.photos || []).length,
+      'paused       ' + (Kiosk.isPaused() ? Kiosk.pauseReason() : 'no'),
+      'preloaded    ' + Kiosk.preloadCount(),
+      'queue        ' + Kiosk.rpc.size(),
+      'online       ' + Kiosk.online,
+      'js heap      ' + memory,
+      'uptime       ' + formatUptime(Date.now() - startedAt)
+    ].join('\n');
+
+    var heapMB = performance.memory
+        ? performance.memory.usedJSHeapSize / 1048576 : 0;
+    el.hud.classList.toggle('is-warning', heapMB > 400);
+    el.hud.classList.toggle('is-critical', heapMB > 800);
+  }
+
+  function formatUptime(ms) {
+    var seconds = Math.floor(ms / 1000);
+    var hours = Math.floor(seconds / 3600);
+    var minutes = Math.floor((seconds % 3600) / 60);
+    return hours + 'h ' + minutes + 'm';
+  }
+
+  /* =========================================================================
+   * Runtime styling from config
+   * ======================================================================*/
+
+  function applyRuntimeStyles() {
+    var root = document.documentElement.style;
+    root.setProperty('--transition', Kiosk.get('TransitionMs', 1200) + 'ms');
+    root.setProperty('--toolbar-h',
+                     (window.innerWidth < 900 ? 72 : 88) + 'px');
+
+    var blur = Kiosk.get('BackdropBlurPx', 28);
+    var brightness = Kiosk.get('BackdropBrightness', 0.55);
+    document.querySelectorAll('.backdrop-img').forEach(function (node) {
+      node.style.filter = 'blur(' + blur + 'px) brightness(' + brightness + ')';
+    });
+  }
+
+  /* =========================================================================
+   * UI actions
+   * ======================================================================*/
+
+  Kiosk.action('openInfo',   function () { return Kiosk.togglePanel(true); });
+  Kiosk.action('closeInfo',  function () { return Kiosk.togglePanel(false); });
+  Kiosk.action('toggleInfo', function () { return Kiosk.togglePanel(); });
+  Kiosk.action('infoOpen',   function () { return isPanelOpen(); });
+  Kiosk.action('toggleHud',  function () { return Kiosk.toggleHud(); });
+  Kiosk.action('hudVisible', function () { return hudVisible; });
+  Kiosk.action('notify',     function (text) { Kiosk.toast(text); return true; });
+
+  /* =========================================================================
+   * Startup
+   * ======================================================================*/
+
+  var startedAt = Date.now();
+
+  /**
+   * The one entry point. Called at the bottom of Index.html.
+   *
+   * Ordering matters: everything that lets the kiosk paint something happens
+   * first, and the slow network work happens after. The old init() opened with
+   * `await wait(1)`, `await wait(15)`, `await wait(9)` and `await wait(60)` -
+   * more than a minute of hardcoded sleeping before it would show a photo.
+   */
+  Kiosk.start = function () {
+    cacheElements();
+    Kiosk.setStatus(Kiosk.t('boot_Starting'));
+
+    // Anything that could throw must not take the whole kiosk down with it.
+    window.addEventListener('error', function (event) {
+      Kiosk.count('errors');
+      Kiosk.log('error', 'Uncaught: ' + event.message + ' @' +
+                         event.filename + ':' + event.lineno);
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      Kiosk.count('errors');
+      Kiosk.log('error', 'Unhandled rejection: ' + event.reason);
+    });
+
+    Kiosk.identify();
+    applyRuntimeStyles();
+    enableEditing();
+    buildToolbar();
+    bindEvents();
+    Kiosk.keepAwake();
+
+    if (Kiosk.get('ShowDebugHud', false)) Kiosk.toggleHud();
+
+    // Greet a named kiosk.
+    if (Kiosk.deviceName) {
+      Kiosk.toast(Kiosk.t('welcome_Greeting') + ', ' + Kiosk.deviceName);
+    }
+
+    // --- Photos -----------------------------------------------------------
+    Kiosk.setStatus(Kiosk.t('sync_Checking'));
+
+    Kiosk.sync(false)
+      .then(function (count) {
+        if (!count) {
+          Kiosk.showCurtain(Kiosk.t('slideshow_Empty'));
+          // Keep trying: the folder may just not be shared yet.
+          setTimeout(function () { Kiosk.resync().then(startPlayback); }, 60000);
+          return;
+        }
+        startPlayback(count);
+      })
+      .catch(function (err) {
+        Kiosk.logError('start', err);
+        Kiosk.showCurtain(Kiosk.t('sync_Failed'));
+        setTimeout(function () { location.reload(); }, 120000);
+      });
+
+    // --- Background jobs --------------------------------------------------
+    Kiosk.every('flushLogs', 30, Kiosk.flushLogs);
+    Kiosk.every('flushStats', Kiosk.get('StatsIntervalSeconds', 900), Kiosk.flushStats);
+    Kiosk.every('banner', 1, Kiosk.updateBanner);
+
+    Kiosk.every('commands', Kiosk.get('CommandPollSeconds', 30), function () {
+      if (!Kiosk.rpc.available()) return;
+      Kiosk.rpc.call('ping', [Kiosk.deviceId]).then(function (commands) {
+        (commands || []).forEach(function (command) {
+          Kiosk.log('info', 'Remote command: ' + command);
+          Kiosk.run(command);
+        });
+      }).catch(function () { /* a missed poll is harmless */ });
+    });
+
+    // Re-check the library periodically; the server answers "unchanged"
+    // cheaply, so this costs almost nothing when nothing has changed.
+    Kiosk.every('resync', 1800, function () {
+      Kiosk.sync(false).then(function (count) {
+        if (count && count !== Kiosk.playlistLength()) Kiosk.buildPlaylist();
+      });
+    });
+
+    Kiosk.startClock();
+    Kiosk.scheduleDailyReload();
+    setTimeout(Kiosk.reportDevice, 5000);
+  };
+
+  function startPlayback(count) {
+    Kiosk.buildPlaylist();
+    Kiosk.play();
+    Kiosk.log('info', 'Kiosk ready with ' + count + ' photos in ' +
+                      (Date.now() - startedAt) + 'ms');
+  }
+
+})(Kiosk);
+</script>

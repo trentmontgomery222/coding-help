@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Allegany Archive Kiosk</title>
+  <?!= include('Styles'); ?>
+</head>
+<body>
+
+<!--
+  LAYER ORDER, back to front:
+    1. .backdrop   blurred, over-scaled copy of the photo, fills the screen
+    2. .stage      the photo itself, letterboxed inside the safe area
+    3. .caption    photo title, bottom-left
+    4. .info-panel slide-up details panel
+    5. .toolbar    bottom button bar
+    6. .toasts     transient notifications
+    7. .overlay    pause / loading states
+
+  Each of the two slideshow layers owns BOTH a backdrop and a stage image, so a
+  transition only ever animates opacity and transform on four elements. Nothing
+  in the transition path touches layout.
+-->
+
+<div id="app" class="app">
+
+  <!-- ---------- Slideshow layers (A/B, cross-faded) ---------- -->
+  <div class="backdrop" aria-hidden="true">
+    <img class="backdrop-img is-active" id="backdropA" alt="">
+    <img class="backdrop-img" id="backdropB" alt="">
+  </div>
+
+  <div class="stage" id="stage">
+    <img class="slide is-active" id="slideA" alt="" decoding="async">
+    <img class="slide" id="slideB" alt="" decoding="async">
+  </div>
+
+  <!-- ---------- Photo title (bottom-left, tap to open details) ---------- -->
+  <button class="caption" id="caption" type="button"
+          aria-label="Show photo details">
+    <span id="captionText">Loading photos…</span>
+  </button>
+
+  <!-- ---------- Standing description, shown when one exists ---------- -->
+  <div class="blurb" id="blurb" hidden></div>
+
+  <!-- ---------- Details panel (swipe up, or tap the title) ---------- -->
+  <section class="info-panel" id="infoPanel" aria-hidden="true">
+    <div class="info-grid">
+
+      <div class="info-main">
+        <h1 class="info-title" id="infoTitle"
+            data-field="displayName" spellcheck="false">Photo title</h1>
+        <p class="info-description" id="infoDescription"
+           data-field="description" spellcheck="false">No description yet.</p>
+        <p class="info-hint" id="infoHint">Tap the text to edit. Changes save automatically.</p>
+      </div>
+
+      <dl class="info-meta" id="infoMeta">
+        <div class="meta-row" data-meta="year">
+          <dt>Year</dt><dd id="metaYear">—</dd>
+        </div>
+        <div class="meta-row" data-meta="producer">
+          <dt>Producer</dt><dd id="metaProducer">—</dd>
+        </div>
+        <div class="meta-row" data-meta="license">
+          <dt>License</dt><dd id="metaLicense">—</dd>
+        </div>
+        <div class="meta-row" data-meta="camera">
+          <dt>Camera</dt><dd id="metaCamera">—</dd>
+        </div>
+        <div class="meta-row" data-meta="lens">
+          <dt>Lens</dt><dd id="metaLens">—</dd>
+        </div>
+        <div class="meta-row" data-meta="dateTaken">
+          <dt>Taken</dt><dd id="metaDate">—</dd>
+        </div>
+      </dl>
+
+      <div class="info-qr" id="infoQr">
+        <div class="qr-box" id="qrBox"></div>
+        <span class="qr-label" id="qrLabel">Scan to open</span>
+      </div>
+
+      <button class="info-close" id="infoClose" type="button"
+              aria-label="Close details">Close</button>
+
+    </div>
+  </section>
+
+  <!-- ---------- Bottom button bar (built from the settings sheet) ---------- -->
+  <nav class="toolbar" id="toolbar" aria-label="Slideshow controls"></nav>
+
+  <!-- ---------- Transient notifications ---------- -->
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- ---------- Pause / status banner ---------- -->
+  <div class="banner" id="banner" hidden></div>
+
+  <!-- ---------- Boot + error curtain ---------- -->
+  <div class="curtain" id="curtain">
+    <div class="curtain-inner">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="curtain-text" id="curtainText">Starting the archive…</p>
+    </div>
+  </div>
+
+  <!-- ---------- Developer HUD (hidden unless enabled) ---------- -->
+  <pre class="hud" id="hud" hidden></pre>
+
+</div>
+
+<!--
+  QR generation. Pinned to an exact version so a CDN "latest" change can never
+  break a kiosk that nobody is watching.
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<script>
+  /**
+   * Server data, inlined at render time by doGet(). This removes the entire
+   * first round trip: by the time this script runs, the config, language
+   * strings, key bindings and button bar are already here.
+   */
+  window.KIOSK_BOOT = <?!= bootData ?>;
+</script>
+
+<?!= include('Client_Core'); ?>
+<?!= include('Client_Slideshow'); ?>
+<?!= include('Client_UI'); ?>
+
+<script>
+  // Everything above only defines things. This is the single starting gun.
+  Kiosk.start();
+</script>
+
+</body>
+</html>
