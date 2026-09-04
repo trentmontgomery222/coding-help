@@ -253,6 +253,49 @@ function checkSetup() {
     notes.push('Web app URL: ' + getScriptURL());
   }
 
+  /* --- Intake pipeline --------------------------------------------------- */
+  if (cfg.UploadFolderId) {
+    var uploadMeta = Drive_getMeta_(cfg.UploadFolderId, 'id, name, trashed');
+    if (!uploadMeta) {
+      problems.push('The upload folder (' + cfg.UploadFolderId + ') cannot be ' +
+                    'read. Check UploadFolderId in the settings sheet.');
+    } else {
+      notes.push('Upload folder: OK ("' + uploadMeta.name + '")');
+      var waiting = Drive_listFolder_(cfg.UploadFolderId, false).length;
+      if (waiting) notes.push(waiting + ' file(s) waiting in the upload folder');
+    }
+  } else {
+    notes.push('Upload intake is off (no UploadFolderId set)');
+  }
+
+  if (cfg.IntakeEveryMinutes > 0) {
+    var hasTick = ScriptApp.getProjectTriggers().some(function (trigger) {
+      return trigger.getHandlerFunction() === 'tick';
+    });
+    if (hasTick) {
+      notes.push('Maintenance heartbeat: OK (tick every minute)');
+    } else {
+      problems.push('The tick() trigger is missing, so uploads will not be ' +
+                    'processed. Run installTriggers().');
+    }
+  }
+
+  /* --- Alerting ---------------------------------------------------------- */
+  var admins = Integrity_adminEmails_(cfg);
+  if (admins.length) {
+    notes.push('Alert emails go to: ' + admins.join(', '));
+  } else {
+    notes.push('No AdminEmails set - alerts will only appear in the logs.');
+  }
+
+  /* --- Critical resources ------------------------------------------------ */
+  var resources = verifyResources();
+  if (resources.missing.length) {
+    problems.push('Unreadable critical items: ' + resources.missing.join(', '));
+  } else {
+    notes.push('Critical Drive items: OK (' + resources.checked + ' checked)');
+  }
+
   var report = {ok: problems.length === 0, notes: notes, problems: problems};
   Log_info_('Setup check:\n' + JSON.stringify(report, null, 2));
   return report;

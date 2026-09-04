@@ -122,7 +122,12 @@ function Rpc_allowlist_() {
     setImageQuality:   setImageQuality,
     setImageClassImage: setImageClassImage,
     setImageTeamImage: setImageTeamImage,
-    setImageOverride:  setImageOverride
+    setImageSchoolImage: setImageSchoolImage,
+    setImageIndividualImage: setImageIndividualImage,
+    setImageOverride:  setImageOverride,
+    setImageDisplayName: setImageDisplayName,
+    startLogSession:   startLogSession,
+    processUploads:    processUploads
   };
 }
 
@@ -190,8 +195,11 @@ function repairImage(fileId) {
 /** Creates (and de-duplicates) every trigger the kiosk relies on. */
 function installTriggers() {
   var wanted = {
-    warmImageManifest: function () {
-      ScriptApp.newTrigger('warmImageManifest').timeBased().everyHours(6).create();
+    // One heartbeat drives every recurring maintenance job. Apps Script caps
+    // a project at 20 triggers, so a single minute trigger that dispatches
+    // internally scales better than one trigger per job.
+    tick: function () {
+      ScriptApp.newTrigger('tick').timeBased().everyMinutes(1).create();
     },
     nightlyMaintenance: function () {
       ScriptApp.newTrigger('nightlyMaintenance').timeBased()
@@ -211,12 +219,31 @@ function installTriggers() {
   return Object.keys(wanted);
 }
 
-/** Nightly: refresh config, rebuild the manifest, trim the log sheets. */
+/**
+ * Nightly deep maintenance. Everything here is either slow or destructive
+ * enough that it should not run in the minute heartbeat.
+ */
 function nightlyMaintenance() {
+  var report = {};
+
   Config_invalidate();
-  var count = warmImageManifest();
-  Log_info_('Nightly maintenance complete. ' + count + ' photos indexed.');
-  return count;
+  report.photos = Try_('warmImageManifest', warmImageManifest);
+  report.resources = Try_('verifyResources', verifyResources);
+  report.quarantine = Try_('quarantineBrokenMetadata', quarantineBrokenMetadata);
+  report.readMe = Try_('publishReadMe', publishReadMe);
+
+  Log_info_('Nightly maintenance:\n' + JSON.stringify(report, null, 2));
+  return report;
+}
+
+/** Runs a job, turning a thrown error into a logged result. */
+function Try_(name, fn) {
+  try {
+    return fn();
+  } catch (err) {
+    Log_error_('job:' + name, err);
+    return {error: String(err)};
+  }
 }
 
 /* ===========================================================================
@@ -250,4 +277,115 @@ function improvedGetDriveImageBatch(batchIndex, batchSize) {
 /** Old alternate-set fetch; still returns a JSON string as callers expect. */
 function getAlternateImages() {
   return JSON.stringify(getImageManifest({set: 'alternate', pageSize: 5000}).items || []);
+}
+
+/* ===========================================================================
+ * Maintenance heartbeat
+ *
+ * One trigger fires every minute and this decides what is due.
+ *
+ * The utilities script did the same job by testing whether the current minute
+ * appeared in a list - `[15,30,45,0,60].indexOf(now.getMinutes())`. That has
+ * two problems: Apps Script does not guarantee a trigger fires on the exact
+ * minute, so a run that slips by 60 seconds skips its whole slot until the
+ * next one comes round; and the schedule is fixed in code rather than
+ * configurable.
+ *
+ * Recording when each job last ran and comparing against an interval means a
+ * late tick still runs the work, and the intervals live in the settings sheet.
+ * =========================================================================*/
+
+/**
+ * The recurring jobs, in one table.
+ *
+ * Both tick() and resetTickSchedule() read this, so adding a job means
+ * touching a single place. Keeping two hand-maintained lists in sync is
+ * exactly the kind of thing that quietly rots.
+ *
+ * @return {!Array<{name:string, minutes:number, run:function()}>}
+ */
+function Tick_jobs_(cfg) {
+  return [
+    {name: 'intake',    minutes: cfg.IntakeEveryMinutes,        run: processUploads},
+    {name: 'integrity', minutes: cfg.IntegrityEveryMinutes,     run: verifyResources},
+    {name: 'protect',   minutes: cfg.ProtectSheetsEveryMinutes, run: protectConfigSheets},
+    {name: 'enhance',   minutes: cfg.EnhanceEveryMinutes,       run: processEnhancementQueue},
+    {name: 'manifest',  minutes: cfg.ManifestWarmEveryMinutes,  run: warmImageManifest}
+  ];
+}
+
+function tick() {
+  var cfg = Config_get();
+  var ran = [];
+
+  Tick_jobs_(cfg).forEach(function (job) {
+    if (Tick_due_(job.name, job.minutes, job.run)) ran.push(job.name);
+  });
+
+  if (ran.length) Log_info_('tick ran: ' + ran.join(', '));
+  return ran;
+}
+
+/**
+ * Runs `fn` if at least `everyMinutes` have passed since it last ran.
+ *
+ * The timestamp is written BEFORE the job runs. If a job dies part-way it
+ * therefore waits a full interval before trying again, instead of retrying
+ * every single minute and burning the daily execution quota.
+ *
+ * @param {string} name
+ * @param {number} everyMinutes 0 or blank disables the job.
+ * @param {function()} fn
+ * @return {boolean} Whether it ran.
+ */
+function Tick_due_(name, everyMinutes, fn) {
+  var interval = Number(everyMinutes);
+  if (!interval || interval <= 0) return false;
+
+  var props = PropertiesService.getScriptProperties();
+  var key = TICK_PREFIX_ + name;
+  var last = Number(props.getProperty(key) || 0);
+  var now = Date.now();
+
+  if (last && (now - last) < interval * 60 * 1000) return false;
+
+  props.setProperty(key, String(now));
+  try {
+    fn();
+  } catch (err) {
+    Log_error_('tick:' + name, err);
+  }
+  return true;
+}
+
+var TICK_PREFIX_ = 'TICK_LAST.';
+
+/**
+ * Clears every heartbeat timer so all jobs run on the next tick.
+ * Scans the stored properties rather than a fixed list, so a job added later
+ * is still cleared.
+ */
+function resetTickSchedule() {
+  var props = PropertiesService.getScriptProperties();
+  var all = props.getProperties();
+  var cleared = [];
+
+  Object.keys(all).forEach(function (key) {
+    if (key.indexOf(TICK_PREFIX_) === 0) {
+      props.deleteProperty(key);
+      cleared.push(key.substring(TICK_PREFIX_.length));
+    }
+  });
+  return cleared;
+}
+
+/**
+ * One-time setup, kept under its original name so existing notes still apply.
+ * Installs the triggers and reports anything that still needs attention.
+ */
+function SetupForYouRunMe() {
+  var triggers = installTriggers();
+  var check = checkSetup();
+  Log_info_('Setup complete. Triggers: ' + triggers.join(', '));
+  return {triggers: triggers, setup: check};
 }

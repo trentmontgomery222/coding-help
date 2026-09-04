@@ -54,6 +54,7 @@ function Meta_schema_() {
       WasConvertedToJPG: false,
       IsPictureOfYearbook: false,
       IsPictureFromYearbook: false,
+      UploadDate: null,              // when intake filed it into the archive
       Copyright: {
         License: 'All Rights Reserved',
         Producer: 'Allegany Archive Group',

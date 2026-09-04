@@ -112,6 +112,40 @@ function Config_defaults_() {
     AllowViewerEdits: true,
     WebsiteURLOnClick: '',
 
+    /* --- Intake pipeline ----------------------------------------------- */
+    UploadFolderId: '1Utxk3HjJqdaAQbU_EAgrhSnV7HPU1idP',
+    IntakeFallbackFolderId: '1kTxvtjehPyje2tdWe7cJWCCCyJi3WLj7',
+    UploadLogSheetId: '15_Zeu5mniIRzs9ON62tCFgFpYcS3fT3N2GNUfnwABjI',
+    AllowedUploadTypes: 'image/jpeg,image/png',
+    IntakeSettleSeconds: 60,            // wait this long before touching a file
+    CreateMissingYearFolders: true,
+    ReadExifOnUpload: false,            // slow; leave to the nightly backfill
+    EmailOnRejectedUpload: true,
+
+    /* --- Enhancement queue (optional) ---------------------------------- */
+    EnhanceInboxFolderId: '',
+    EnhanceOutputFolderId: '',
+    EnhanceArchiveFolderId: '',
+
+    /* --- Integrity ------------------------------------------------------ */
+    AdminEmails: '',                    // also reads ALL_ADMIN_EMAILS
+    EnableAlertEmails: true,
+    ProtectConfigSheets: true,
+    ReadMeFileId: '17XDLe11aLUJ8_dSDHXrR2JfB4miTACFl',
+    ReadMeText: '',
+
+    /* --- Maintenance schedule (minutes between runs; 0 disables) -------- */
+    IntakeEveryMinutes: 5,
+    IntegrityEveryMinutes: 60,
+    ProtectSheetsEveryMinutes: 720,
+    EnhanceEveryMinutes: 0,
+    ManifestWarmEveryMinutes: 360,
+
+    /* --- Logging -------------------------------------------------------- */
+    LogDestination: 'sheet',            // sheet | session
+    SessionLogFolderId: '1dx6WTpUqZgjq7BBSVLnwuNGRvte2_0DB',
+    SessionLogKeep: 25,
+
     /* --- Behaviour ---------------------------------------------------- */
     DailyRefreshHour: 23,               // 24h clock; page reloads itself
     WeeklyResyncDay: 'monday',
@@ -137,6 +171,18 @@ function Config_get() {
   var cfg = Config_defaults_();
   var rows = Config_readSheet_(SHEET_CONTROL_);
 
+  if (!rows.length) {
+    // The settings sheet is unreadable - deleted, renamed, or permissions
+    // changed. Boot from the last known-good snapshot rather than reverting
+    // to bare defaults and, say, playing the wrong folder.
+    var snapshot = Config_restoreBackup_();
+    if (snapshot) {
+      Cache_putJson_('cfg', snapshot, 60);   // short TTL: retry the sheet soon
+      return snapshot;
+    }
+    return cfg;
+  }
+
   for (var i = 1; i < rows.length; i++) {
     var key = String(rows[i][0] || '').trim();
     if (!key) continue;
@@ -144,6 +190,7 @@ function Config_get() {
   }
 
   Cache_putJson_('cfg', cfg, CONFIG_CACHE_SECONDS_);
+  Config_backup_(cfg);
   PropertiesService.getScriptProperties()
       .setProperty('LAST_CONFIG_UPDATE', new Date().toISOString());
   return cfg;
@@ -329,4 +376,89 @@ function Config_invalidate() {
 /** Installable onEdit target for the control spreadsheet. */
 function onSettingsEdit(e) {
   Config_invalidate();
+}
+
+/* ===========================================================================
+ * Disaster recovery
+ *
+ * The utilities script's `getConfigurationSpreadsheetWithFallbackCreation`
+ * mirrored every config row into Script Properties, then logged
+ * "FALL BACK NEEDED!!!! Recreation of files required!" and stopped - the
+ * recovery half was never written.
+ *
+ * These two functions finish the idea: the settings are snapshotted after
+ * every successful read, and if the spreadsheet is ever unreadable the kiosk
+ * boots from the snapshot instead of falling back to bare defaults.
+ * =========================================================================*/
+
+var CONFIG_BACKUP_KEY_ = 'CONFIG_BACKUP';
+var CONFIG_BACKUP_AT_  = 'CONFIG_BACKUP_AT';
+
+/** Stores the current settings so they survive the spreadsheet being lost. */
+function Config_backup_(cfg) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var text = JSON.stringify(cfg);
+    // A single property caps at 9KB; a config this size is well under it, but
+    // refuse rather than throw if someone adds something enormous.
+    if (text.length > 8500) {
+      Log_warn_('Config too large to back up (' + text.length + ' bytes)');
+      return false;
+    }
+    props.setProperty(CONFIG_BACKUP_KEY_, text);
+    props.setProperty(CONFIG_BACKUP_AT_, new Date().toISOString());
+    return true;
+  } catch (err) {
+    Log_warn_('Config_backup_ failed', err);
+    return false;
+  }
+}
+
+/** @return {?Object} The last known-good settings, or null. */
+function Config_restoreBackup_() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var saved = Json_parse_(props.getProperty(CONFIG_BACKUP_KEY_));
+    if (!saved) return null;
+    Log_warn_('Using the settings snapshot from ' +
+              props.getProperty(CONFIG_BACKUP_AT_));
+    return saved;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Reads any two-or-more column sheet into an object keyed by column A.
+ *
+ * Two columns give {key: value}; three or more give
+ * {key: {Header: value, ...}}. This is the shape
+ * `getConfigurationSpreadsheetWithFallbackCreation` returned, but read in one
+ * getValues() call instead of one per cell, and without skipping the last row
+ * (the original's loop condition was `r < getLastRow()`).
+ *
+ * @return {!Object}
+ */
+function Config_readKeyed(sheetName) {
+  var rows = Config_readSheet_(sheetName);
+  if (rows.length < 2) return {};
+
+  var headers = rows[0].map(function (h) { return String(h || '').trim(); });
+  var out = {};
+
+  for (var r = 1; r < rows.length; r++) {
+    var key = String(rows[r][0] || '').trim();
+    if (!key) continue;
+
+    if (headers.length <= 2) {
+      out[key] = Config_coerce_(rows[r][1]);
+    } else {
+      var record = {};
+      for (var c = 1; c < headers.length; c++) {
+        if (headers[c]) record[headers[c]] = Config_coerce_(rows[r][c]);
+      }
+      out[key] = record;
+    }
+  }
+  return out;
 }

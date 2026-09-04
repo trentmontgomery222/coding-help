@@ -250,3 +250,223 @@ function Drive_viewUrl_(fileId) {
 function Drive_downloadUrl_(fileId) {
   return 'https://drive.google.com/uc?export=download&id=' + fileId;
 }
+
+/* ===========================================================================
+ * Item helpers
+ *
+ * Ported from the Kiosk Utilities script's Drive v3 layer. Each one asks for
+ * only the fields it needs, which keeps a single Files.get() cheap.
+ * =========================================================================*/
+
+/** Generic metadata read. @return {?Object} null when unreadable. */
+function Drive_getMeta_(id, fields) {
+  try {
+    if (Drive_available_()) {
+      return Drive.Files.get(id, {fields: fields, supportsAllDrives: true});
+    }
+    // Legacy fallback covers only the fields DriveApp can answer.
+    var file = DriveApp.getFileById(id);
+    return {
+      id: file.getId(), name: file.getName(),
+      mimeType: file.getMimeType(), trashed: file.isTrashed(),
+      starred: file.isStarred(),
+      modifiedTime: file.getLastUpdated().toISOString(),
+      createdTime: file.getDateCreated().toISOString()
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+/** @return {string} Display name, or '' if unreadable. */
+function Drive_getName_(id) {
+  var meta = Drive_getMeta_(id, 'name');
+  return meta ? (meta.name || '') : '';
+}
+
+function Drive_setName_(id, name) {
+  if (Drive_available_()) {
+    Drive.Files.update({name: name}, id, null, {supportsAllDrives: true});
+  } else {
+    DriveApp.getFileById(id).setName(name);
+  }
+}
+
+function Drive_getMimeType_(id) {
+  var meta = Drive_getMeta_(id, 'mimeType');
+  return meta ? (meta.mimeType || '') : '';
+}
+
+/**
+ * Finds items by exact name.
+ *
+ * Replaces getFilesByName / getFoldersByName / getNameIterator from the
+ * utilities script with one function. The name is escaped, because a photo
+ * called `1955 Sr' Band` would otherwise break the query string.
+ *
+ * @param {string} name
+ * @param {{foldersOnly:(boolean|undefined), filesOnly:(boolean|undefined),
+ *          parentId:(string|undefined)}=} opts
+ * @return {!Array<{id:string, name:string, mimeType:string}>}
+ */
+function Drive_findByName_(name, opts) {
+  opts = opts || {};
+  var safeName = String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  var clauses = ["name = '" + safeName + "'", 'trashed = false'];
+
+  if (opts.foldersOnly) clauses.push("mimeType = '" + MIME_FOLDER_ + "'");
+  if (opts.filesOnly)   clauses.push("mimeType != '" + MIME_FOLDER_ + "'");
+  if (opts.parentId)    clauses.push("'" + opts.parentId + "' in parents");
+
+  if (!Drive_available_()) {
+    var out = [];
+    var iterator = opts.foldersOnly
+        ? DriveApp.getFoldersByName(name) : DriveApp.getFilesByName(name);
+    while (iterator.hasNext()) {
+      var item = iterator.next();
+      out.push({id: item.getId(), name: item.getName(),
+                mimeType: opts.foldersOnly ? MIME_FOLDER_ : item.getMimeType()});
+    }
+    return out;
+  }
+
+  var result = Drive.Files.list({
+    q: clauses.join(' and '),
+    fields: 'files(id, name, mimeType)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true
+  });
+  return result.files || [];
+}
+
+/** Immediate sub-folders of a folder. */
+function Drive_listSubFolders_(parentId) {
+  if (!Drive_available_()) {
+    var out = [];
+    var folders = DriveApp.getFolderById(parentId).getFolders();
+    while (folders.hasNext()) {
+      var folder = folders.next();
+      out.push({id: folder.getId(), name: folder.getName()});
+    }
+    return out;
+  }
+
+  var all = [];
+  var pageToken = null;
+  do {
+    var result = Drive.Files.list({
+      q: "'" + parentId + "' in parents and mimeType = '" + MIME_FOLDER_ +
+         "' and trashed = false",
+      fields: 'nextPageToken, files(id, name)',
+      pageSize: 1000,
+      pageToken: pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    });
+    all = all.concat(result.files || []);
+    pageToken = result.nextPageToken;
+  } while (pageToken);
+  return all;
+}
+
+/** @return {!Array<string>} Parent folder ids. */
+function Drive_getParentIds_(id) {
+  var meta = Drive_getMeta_(id, 'parents');
+  return (meta && meta.parents) ? meta.parents : [];
+}
+
+/** @return {string} First parent id, or '' when the item has none. */
+function Drive_getParentId_(id) {
+  var parents = Drive_getParentIds_(id);
+  return parents.length ? parents[0] : '';
+}
+
+/** Moves an item, detaching it from every previous parent. */
+function Drive_moveTo_(id, targetFolderId) {
+  if (!Drive_available_()) {
+    DriveApp.getFileById(id).moveTo(DriveApp.getFolderById(targetFolderId));
+    return true;
+  }
+  var previous = Drive_getParentIds_(id).join(',');
+  Drive.Files.update({}, id, null, {
+    addParents: targetFolderId,
+    removeParents: previous,
+    supportsAllDrives: true
+  });
+  return true;
+}
+
+function Drive_isTrashed_(id) {
+  var meta = Drive_getMeta_(id, 'trashed');
+  return meta ? meta.trashed === true : false;
+}
+
+function Drive_setTrashed_(id, trashed) {
+  if (Drive_available_()) {
+    Drive.Files.update({trashed: !!trashed}, id, null, {supportsAllDrives: true});
+  } else {
+    DriveApp.getFileById(id).setTrashed(!!trashed);
+  }
+}
+
+/** Starred items are treated as "keep me" by the log rotation. */
+function Drive_isStarred_(id) {
+  var meta = Drive_getMeta_(id, 'starred');
+  return meta ? meta.starred === true : false;
+}
+
+function Drive_setStarred_(id, starred) {
+  if (Drive_available_()) {
+    Drive.Files.update({starred: !!starred}, id, null, {supportsAllDrives: true});
+  } else {
+    DriveApp.getFileById(id).setStarred(!!starred);
+  }
+}
+
+/** @return {?Date} */
+function Drive_getModified_(id) {
+  var meta = Drive_getMeta_(id, 'modifiedTime');
+  return meta && meta.modifiedTime ? new Date(meta.modifiedTime) : null;
+}
+
+/** Grants edit access to a list of addresses, skipping blanks. */
+function Drive_addEditors_(id, emails) {
+  (emails || []).forEach(function (email) {
+    var address = String(email || '').trim();
+    if (!address || address.indexOf('@') === -1) return;
+    try {
+      if (Drive_available_()) {
+        Drive.Permissions.create(
+            {role: 'writer', type: 'user', emailAddress: address}, id,
+            {supportsAllDrives: true, sendNotificationEmail: false});
+      } else {
+        DriveApp.getFileById(id).addEditor(address);
+      }
+    } catch (err) {
+      // Already an editor, or the address is outside the domain's sharing
+      // rules. Neither is worth failing a maintenance pass over.
+      Log_warn_('Could not add editor ' + address + ' to ' + id, err);
+    }
+  });
+}
+
+/** Creates a plain-text file in a folder. @return {string} New file id. */
+function Drive_createTextFile_(folderId, name, text) {
+  if (!Drive_available_()) {
+    return DriveApp.getFolderById(folderId).createFile(name, String(text)).getId();
+  }
+  var blob = Utilities.newBlob(String(text), 'text/plain', name);
+  var created = Drive.Files.create({name: name, parents: [folderId]}, blob,
+                                   {supportsAllDrives: true});
+  return created.id;
+}
+
+/** Overwrites a file's contents. */
+function Drive_setTextContent_(id, text, mimeType) {
+  var blob = Utilities.newBlob(String(text), mimeType || 'text/plain');
+  if (Drive_available_()) {
+    Drive.Files.update({}, id, blob, {supportsAllDrives: true});
+  } else {
+    DriveApp.getFileById(id).setContent(String(text));
+  }
+}

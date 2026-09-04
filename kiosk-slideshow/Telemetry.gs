@@ -124,8 +124,22 @@ function listDevices() {
  * @return {{written:number}}
  */
 function logBatch(entries, sessionKey, deviceId) {
-  if (!Config_get().EnableLogs) return {written: 0};
+  var cfg = Config_get();
+  if (!cfg.EnableLogs) return {written: 0};
   if (!entries || !entries.length) return {written: 0};
+
+  // Optional per-session log spreadsheets (see SessionLog.gs). The sheet is
+  // created lazily on the session's first log line, so a kiosk that never
+  // logs anything never creates a file.
+  if (String(cfg.LogDestination).toLowerCase() === 'session') {
+    var spreadsheetId = Telemetry_sessionLogId_(sessionKey);
+    if (spreadsheetId) {
+      return {written: appendLogSession(spreadsheetId, entries),
+              destination: spreadsheetId};
+    }
+    // Creating it failed - fall through to the shared sheet rather than
+    // silently dropping the logs.
+  }
 
   try {
     var sheet = Telemetry_sheet_(
@@ -299,5 +313,40 @@ function reportDevice(info) {
   } catch (err) {
     Log_error_('reportDevice', err);
     return {ok: false};
+  }
+}
+
+/**
+ * Maps a session key to its log spreadsheet, creating one on first use.
+ * Cached for six hours, which comfortably outlives a kiosk session.
+ * @return {?string}
+ */
+function Telemetry_sessionLogId_(sessionKey) {
+  var key = String(sessionKey || '').trim();
+  if (!key) return null;
+
+  var cache = CacheService.getScriptCache();
+  var cacheKey = Cache_key_('sessionlog.' + key);
+
+  var existing = cache.get(cacheKey);
+  if (existing) return existing;
+
+  // Two log flushes can arrive at once on a busy boot; without the lock both
+  // would create a spreadsheet and one would be orphaned.
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+
+    existing = cache.get(cacheKey);
+    if (existing) return existing;
+
+    var created = startLogSession(key);
+    if (created) cache.put(cacheKey, created, 21600);
+    return created;
+  } catch (err) {
+    Log_error_('Telemetry_sessionLogId_', err);
+    return null;
+  } finally {
+    try { lock.releaseLock(); } catch (e) { /* never held */ }
   }
 }

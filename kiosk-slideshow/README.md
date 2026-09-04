@@ -21,6 +21,9 @@ a full day without being restarted.
 | `Exif.gs` | EXIF/TIFF reader for JPEG and TIFF |
 | `DriveAdapter.gs` | Every Drive read/write, in one place |
 | `Telemetry.gs` | Device registry, logs, stats, remote commands |
+| `Intake.gs` | Upload pipeline: files new photos into the archive |
+| `Integrity.gs` | Watches critical Drive items; protects the settings sheets |
+| `SessionLog.gs` | Optional per-session log spreadsheets |
 | `Maintenance.gs` | Run-by-hand curation jobs (`checkSetup`, `repairFolder`, `auditLibrary`, …) |
 | `Utils.gs` | Caching, logging, object merging |
 | `Index.html` | Page structure |
@@ -115,6 +118,79 @@ default. Booleans accept `TRUE`/`FALSE`.
 | `EnableLogs` | `TRUE` | Forward client logs to the sheet |
 | `ShowDebugHud` | `FALSE` | Show the developer overlay at boot |
 | `AllowLegacyEvalCommands` | `TRUE` | Run raw JS from the command sheets |
+
+---
+
+## Adding photos
+
+Drop a photo into the **Upload Your New Photos Here** folder. Within a few
+minutes `tick()` picks it up and:
+
+1. checks it is a JPEG or PNG (anything else is left alone and the uploader
+   gets one email about it),
+2. waits `IntakeSettleSeconds` so a half-finished upload is never moved,
+3. reads the year off the front of the file name — `2027 Homecoming.jpg` goes
+   to the `2027` folder, creating it if it does not exist,
+4. skips it if a photo of that name is already there,
+5. writes the metadata schema onto it,
+6. shares it so the browser can load it,
+7. logs a row to the upload log.
+
+Anything **not** named with a leading year goes to the review folder rather
+than being guessed at. Nothing is moved until its metadata has been written,
+so a failure leaves the photo in the upload folder to be retried instead of
+burying it in the archive with no description.
+
+### Intake settings
+| Key | Default | Meaning |
+|---|---|---|
+| `UploadFolderId` | — | Where people drop new photos |
+| `IntakeFallbackFolderId` | — | Review folder for un-year-named photos |
+| `UploadLogSheetId` | — | Spreadsheet that receives the intake log |
+| `AllowedUploadTypes` | `image/jpeg,image/png` | Accepted types |
+| `IntakeSettleSeconds` | `60` | Wait this long before touching a new file |
+| `CreateMissingYearFolders` | `TRUE` | Make a year folder when one is absent |
+| `ReadExifOnUpload` | `FALSE` | Slow; the nightly backfill handles it |
+| `EmailOnRejectedUpload` | `TRUE` | Tell the uploader about a bad file type |
+
+---
+
+## The maintenance heartbeat
+
+One trigger fires `tick()` every minute, and it decides what is due. Set any
+interval to `0` to switch that job off.
+
+| Key | Default | Job |
+|---|---|---|
+| `IntakeEveryMinutes` | `5` | Process the upload folder |
+| `IntegrityEveryMinutes` | `60` | Verify critical Drive items |
+| `ProtectSheetsEveryMinutes` | `720` | Re-apply settings-sheet protection |
+| `ManifestWarmEveryMinutes` | `360` | Rebuild the photo manifest cache |
+| `EnhanceEveryMinutes` | `0` | Enhancement queue (off by default) |
+
+`resetTickSchedule()` clears the timers so everything runs on the next tick.
+
+### Integrity watchdog
+`verifyResources()` checks each critical folder and file: if one is in the
+trash it is restored, if a workflow folder was renamed the name is put back,
+and if something is genuinely unreadable the admins get **one** email per hour
+(not one per minute). Set `AdminEmails` — the original `ALL_ADMIN_EMAILS` key
+is also read.
+
+The settings are snapshotted to Script Properties after every successful read,
+so if the spreadsheet is deleted the kiosk boots from the last known-good
+configuration instead of reverting to bare defaults.
+
+---
+
+## Logging
+
+`LogDestination` chooses where client logs land:
+
+- **`sheet`** (default) — one `Logs` tab. Easier to search, cheaper to write.
+- **`session`** — a fresh spreadsheet per kiosk boot, in `SessionLogFolderId`.
+  Star a log in Drive to keep it; unstarred logs are pruned oldest-first once
+  there are more than `SessionLogKeep` (default 25).
 
 ---
 
@@ -233,6 +309,37 @@ Measured over 300 transitions in Chromium: heap flat at 9.5MB, DOM flat at
   request instead of superseding the first.
 - **The screen flashed empty at boot**, because the loading curtain lifted
   before the first photo had decoded.
+- **Half the resource watchdog never ran.** Every entry was read with
+  `DriveApp.getFolderById()`, which throws for anything that is not a folder —
+  so the spreadsheets and scripts in the list always hit the catch block and
+  were never actually checked.
+- **One watched folder was invisible.** The registry object had the key
+  `"Configurations"` twice; in a JavaScript object literal the second wins, so
+  the first folder was silently dropped.
+- **Sheet protections stacked up.** `sheet.protect()` was called five times in
+  a row, and each call creates a *new* protection range — so every maintenance
+  pass added more.
+- **Alert emails had no rate limit**, on a job that runs every minute.
+- **The log rotation's sort was undefined.** Its comparator returned a boolean
+  (`a < b`) rather than a number, and the prune loop spliced the array it was
+  iterating with `forEach`, so it skipped entries and never reached the limit.
+- **A late tick skipped its whole slot.** Scheduling was
+  `[15,30,45,0,60].indexOf(now.getMinutes())`; Apps Script does not guarantee a
+  trigger fires on the exact minute, so a run that slipped by 60 seconds
+  dropped the work until the next slot came round.
+- **The uploader's description was always undefined** — `.descripion` was
+  misspelled at the call site.
+- **A photo could be filed into the wrong archive.** The destination lookup
+  searched all of Drive for a folder named e.g. `1962` and took the first hit,
+  without checking it was inside the archive.
+- **An un-year-named file searched for a folder called "NaN"**, because
+  `parseInt(name.split(' ')[0])` was used unguarded.
+- **Uploads were moved before their metadata was written**, so a failure left
+  a photo in the archive with no description at all.
+- **The "has the upload finished?" check was one second**, short enough to move
+  a file that was still streaming in.
+- **`getConfigurationSpreadsheetWithFallbackCreation` skipped its last row**
+  (`r < getLastRow()`) and read every cell individually.
 - **One year was hardcoded into the scoring.** `if (img.year == 2026) rawPower
   += 23456` pinned the rotation to a single year; that is now the optional
   `FeaturedYear` setting.
@@ -248,3 +355,26 @@ description up to schema. That idea is now `repairFolder()`.
 
 The old files are still in your Drive version history if you need to refer back
 to them.
+
+Two things from the utilities script were deliberately **not** ported:
+
+- **`h()`** — it stripped the description off every photo in the archive and
+  moved the lot into the upload folder. That is an unrecoverable wipe of all
+  curation work with no confirmation step, and `repairFolder()` covers the
+  legitimate "rebuild the metadata" use.
+- **The Drive-file key/value store** (`storeInDriveStorage`,
+  `retrieveFromDriveStorage`, `getImageDataFileSystem`) — `retrieveFromDriveStorage`
+  returned inside a `forEach`, which does not return from the enclosing
+  function, so it always answered `0`. CacheService and Script Properties do
+  the same job correctly.
+
+The `makeMultiVarReturn` / `codes` return-code convention was also dropped:
+`getCodeFromString` looped on `codes.length`, which is `undefined` for an
+object, so it always returned "Code 4". Functions now return named fields.
+
+The enhancement queue (`checkForNewImagesFromCleaner`) **is** ported as
+`processEnhancementQueue()`, but its enhancement step was already commented out
+in your version — what remained wrote the base64 *text* of the image into a new
+file, producing a text document rather than a picture. It is now an explicit
+`Intake_enhance_()` hook that passes photos through untouched until you wire a
+library into it, and it is off by default (`EnhanceEveryMinutes: 0`).
