@@ -238,7 +238,7 @@ class Notifications {
 		}
 
 		$lines[] = '';
-		$lines[] = __( 'View in admin:', 'acps-site-toolkit' ) . ' ' . admin_url( 'admin.php?page=acps-st-entries&entry=' . $entry_id );
+		$lines[] = __( 'View in admin:', 'acps-site-toolkit' ) . ' ' . admin_url( 'admin.php?page=acps-st&form_id=' . (int) $form->id . '&entry=' . $entry_id );
 
 		return implode( "\n", $lines );
 	}

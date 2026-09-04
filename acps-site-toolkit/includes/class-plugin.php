@@ -62,6 +62,7 @@ class Plugin {
 		Help::ensure_contact_form();
 		Help::ensure_media_request_form();
 		Error_Log::ensure_form();
+		Log::ensure_form();
 
 		// The floating button is now the contact form. If the label is still the
 		// old default, flip it to match (leaves any custom label alone).
@@ -206,6 +207,22 @@ class Plugin {
 		// Q&A / help widget — only when on.
 		if ( $qa_on ) {
 			wp_enqueue_script( 'acps-st-qa', ACPS_ST_URL . 'assets/js/qa.js', array(), ACPS_ST_VERSION, true );
+		}
+
+		// Programmatic logging API: expose window.acpsLog() on every page so a
+		// site author can log events from their own inline JS. Independent of
+		// analytics; the endpoint re-checks the setting.
+		if ( Settings::get( 'js_log_enabled' ) ) {
+			wp_enqueue_script( 'acps-st-log', ACPS_ST_URL . 'assets/js/log.js', array(), ACPS_ST_VERSION, true );
+			wp_localize_script(
+				'acps-st-log',
+				'ACPS_ST_LOG',
+				array(
+					'url'    => esc_url_raw( rest_url( ACPS_ST_REST_NAMESPACE . '/log' ) ),
+					'postId' => get_queried_object_id(),
+					'form'   => '', // default target = built-in Event log.
+				)
+			);
 		}
 
 		// Auto-log 404s: fire a diagnostic beacon on the 404 page. Independent of

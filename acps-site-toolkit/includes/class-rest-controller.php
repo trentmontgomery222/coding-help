@@ -73,6 +73,16 @@ class REST_Controller {
 				'permission_callback' => '__return_true',
 			)
 		);
+		// Programmatic logging from page JS (window.acpsLog). Public + rate-limited.
+		register_rest_route(
+			$ns,
+			'/log',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'js_log' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 
 		if ( ! Settings::get( 'analytics_enabled' ) ) {
 			return;
@@ -153,6 +163,24 @@ class REST_Controller {
 		$params = is_array( $params ) ? $params : $req->get_params();
 		$id     = Error_Log::record( $params );
 		return new \WP_REST_Response( array( 'ok' => (bool) $id ), 200 );
+	}
+
+	/**
+	 * POST /log — record a programmatic event from page JS (window.acpsLog).
+	 * Gated by the js_log_enabled setting; rate-limited inside Log.
+	 *
+	 * @param \WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function js_log( $req ) {
+		$this->no_cache();
+		if ( ! Settings::get( 'js_log_enabled' ) ) {
+			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'disabled' ), 200 );
+		}
+		$params = $req->get_json_params();
+		$params = is_array( $params ) ? $params : $req->get_params();
+		$id     = Log::record( $params );
+		return new \WP_REST_Response( array( 'ok' => (bool) $id, 'id' => (int) $id ), 200 );
 	}
 
 	/**

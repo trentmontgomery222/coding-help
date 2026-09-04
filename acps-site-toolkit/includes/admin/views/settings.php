@@ -262,6 +262,23 @@ $show_updates = isset( $_GET['acps_updates'] ); // phpcs:ignore WordPress.Securi
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'JavaScript event logging', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'js_log_enabled' ) ); ?>" value="1" <?php echo $checked( 'js_log_enabled' ); ?>> <?php esc_html_e( 'Expose window.acpsLog() so you can log events from your own page JavaScript', 'acps-site-toolkit' ); ?></label>
+						<p class="description"><?php esc_html_e( 'When on, a tiny script loads on every page and you can call acpsLog() from anywhere. Whatever object you pass becomes an entry under the “Event log (JS)” form; the server adds session/device context. Rate-limited per device.', 'acps-site-toolkit' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Examples:', 'acps-site-toolkit' ); ?></p>
+						<pre class="code" style="background:#f6f7f7;padding:.6rem;overflow:auto;max-width:48rem">acpsLog({ event: 'signup_click', plan: 'pro' });
+acpsLog({ step: 3, note: 'left checkout' });
+acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
+						<?php
+						$log_form = \ACPS\SiteToolkit\Log::ensure_form();
+						if ( $log_form ) :
+							?>
+							<p><a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-entries&form_id=' . (int) $log_form->id ) ); ?>" class="button"><?php esc_html_e( 'View the event log', 'acps-site-toolkit' ); ?></a></p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Manage forms', 'acps-site-toolkit' ); ?></th>
 					<td>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-forms' ) ); ?>" class="button"><?php esc_html_e( 'Open the form builder', 'acps-site-toolkit' ); ?></a>
