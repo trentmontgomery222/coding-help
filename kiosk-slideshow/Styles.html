@@ -112,18 +112,40 @@ html, body {
   inset: 0;
   bottom: var(--toolbar-h);
   z-index: var(--z-stage);
-  display: grid;
-  place-items: center;
   contain: strict;
 }
 
+/*
+ * Each layer fills the stage exactly; `object-fit` decides where the photo
+ * lands inside it.
+ *
+ * The obvious spelling - shrink-wrap the <img> with `max-width/max-height:
+ * 100%` and centre it - is what this used to do, and it silently dropped the
+ * height limit. Those percentages resolve against the element's containing
+ * block, and in a grid that meant an `auto` row track, which had already
+ * grown to the photo's own intrinsic height. `max-height: 100%` of "as tall
+ * as the photo" constrains nothing, so a 400x2400 scan rendered at 2400px and
+ * ran 1701px off the bottom of a 1366x768 screen. The width limit worked,
+ * which is why only tall photos looked broken.
+ *
+ * Filling the stage instead makes both percentages resolve against the stage's
+ * own definite size - it is absolutely positioned with all four edges pinned,
+ * so its size never depends on its contents - and there is no circularity left
+ * for a browser to resolve in our disfavour.
+ *
+ * `scale-down` rather than `contain` because `contain` would blow a small
+ * archival scan up to fill the frame, undoing the point of requesting `=s`
+ * sizes from Drive. `scale-down` is defined as the smaller of `none` and
+ * `contain`: shrink a photo that is too big, leave one that already fits at
+ * its own size.
+ */
 .slide {
-  grid-area: 1 / 1;                 /* both layers stack in the same cell */
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: scale-down;
+  object-position: center;
   opacity: 0;
   transform: translate3d(0, 0, 0);
   will-change: opacity, transform;
@@ -152,8 +174,8 @@ html, body {
  * Shrinking the photo with a transform needs a scale factor that happens to
  * suit one screen height - at 1366x768 a scale of 0.72 still left the photo
  * running 138px behind the panel. Moving the stage's bottom edge instead lets
- * `object-fit: contain` size the photo correctly at ANY viewport, with no
- * magic numbers to re-tune.
+ * `object-fit` re-size the photo correctly at ANY viewport, with no magic
+ * numbers to re-tune.
  *
  * This does animate layout, unlike the slide transition - but it runs once
  * when someone opens the panel, not sixty times a second, so it is the right

@@ -448,6 +448,16 @@ Measured over 300 transitions in Chromium: heap flat at 9.5MB, DOM flat at
   untouched.
 - **The blurred backdrop loaded the full-size photo** and blurred it across the
   whole screen during every transition. It now loads a 64px thumbnail.
+- **Tall photos ran off the bottom of the screen.** The stage centred each
+  photo in a CSS grid and capped it with `max-width/max-height: 100%`. The
+  width cap held; the height cap did nothing, because a percentage resolves
+  against the containing block and the `auto` grid row had already grown to
+  the photo's own height — `max-height: 100%` of "as tall as the photo" is not
+  a limit. A 400x2400 scan drew at 2400px and hung 1701px past a 768px screen,
+  so only its middle band was ever visible. Each layer now fills the stage and
+  `object-fit: scale-down` places the photo inside it: percentages resolve
+  against the stage's pinned size, and a photo smaller than the frame is still
+  left at its own size rather than blown up.
 - **Spacer rows collapsed the bar's spacing.** They were a flat 6px rather than
   a full slot, which slid the playback buttons off-centre.
 - **The 14 rows after the first `nameplate` were counted twice** — rendered as
