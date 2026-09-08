@@ -225,6 +225,23 @@ class Plugin {
 			);
 		}
 
+		// Device fingerprint (GPU/WebGL): probe once per device and attach a
+		// strong device hash + hardware profile to the visitor. Deferred to the
+		// footer; the probe only runs at idle and caches for 7 days.
+		if ( Settings::get( 'device_fp_enabled' ) ) {
+			wp_enqueue_script( 'acps-st-gpu-fp', ACPS_ST_URL . 'assets/js/acps-gpu-fingerprint.js', array(), ACPS_ST_VERSION, true );
+			wp_enqueue_script( 'acps-st-gpu-bench', ACPS_ST_URL . 'assets/js/acps-gpu-benchmark.js', array( 'acps-st-gpu-fp' ), ACPS_ST_VERSION, true );
+			wp_enqueue_script( 'acps-st-device', ACPS_ST_URL . 'assets/js/acps-device-report.js', array( 'acps-st-gpu-bench' ), ACPS_ST_VERSION, true );
+			wp_script_add_data( 'acps-st-gpu-fp', 'defer', true );
+			wp_script_add_data( 'acps-st-gpu-bench', 'defer', true );
+			wp_script_add_data( 'acps-st-device', 'defer', true );
+			wp_localize_script(
+				'acps-st-device',
+				'ACPS_ST_DEVICE',
+				array( 'url' => esc_url_raw( rest_url( ACPS_ST_REST_NAMESPACE . '/device' ) ) )
+			);
+		}
+
 		// Auto-log 404s: fire a diagnostic beacon on the 404 page. Independent of
 		// analytics. Config is static (safe to cache); per-visitor data is
 		// gathered client-side or on the uncached REST request.

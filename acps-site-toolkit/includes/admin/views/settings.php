@@ -631,6 +631,18 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 					</td>
 				</tr>
 			</table>
+
+			<h3><?php esc_html_e( 'Device fingerprint (GPU/WebGL)', 'acps-site-toolkit' ); ?></h3>
+			<p class="description" style="max-width:48rem"><?php esc_html_e( 'Adds a strong per-device hash (from how the visitor’s GPU renders a WebGL probe) plus a hardware profile, attached to each visitor. It survives cookie/cache clearing and is far harder to spoof than IP + browser. The probe runs once per device at idle and is cached for 7 days, so it costs almost nothing per page. Kept here (hidden) on purpose.', 'acps-site-toolkit' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Device fingerprinting', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'device_fp_enabled' ) ); ?>" value="1" <?php echo $checked( 'device_fp_enabled' ); ?>> <?php esc_html_e( 'On — collect a GPU/WebGL device hash and attach it to visitors', 'acps-site-toolkit' ); ?></label>
+						<p class="description"><?php esc_html_e( 'The hash and hardware details appear on each visitor’s page under Cayden Form Manager → Visitors. Consider your privacy policy before enabling.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+			</table>
 		</div>
 		<?php endif; // $show_updates ?>
 

@@ -229,6 +229,29 @@ class Visitors {
 	}
 
 	/**
+	 * Attach a GPU/WebGL device hash + hardware profile to a visitor. Ensures the
+	 * visitor row exists first. Stored only when the columns are present.
+	 *
+	 * @param string $uid  Visitor id.
+	 * @param string $hash 64-char sha256 device hash.
+	 * @param array  $info Capability profile (renderer, tier, score, cores, …).
+	 */
+	public static function set_device( $uid, $hash, $info = array() ) {
+		$uid  = self::sanitize( $uid );
+		$hash = is_string( $hash ) && preg_match( '/^[a-f0-9]{64}$/', $hash ) ? $hash : '';
+		if ( '' === $uid || '' === $hash || ! self::has_column( 'visitors', 'device_hash' ) ) {
+			return;
+		}
+		self::record( $uid ); // ensure the row exists.
+		global $wpdb;
+		$data = array( 'device_hash' => $hash );
+		if ( self::has_column( 'visitors', 'device_info' ) ) {
+			$data['device_info'] = is_array( $info ) && $info ? wp_json_encode( $info ) : null;
+		}
+		$wpdb->update( Schema::table( 'visitors' ), $data, array( 'uid' => $uid ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
 	 * Fetch a visitor row by uid.
 	 *
 	 * @param string $uid Visitor id.
@@ -275,17 +298,20 @@ class Visitors {
 		$where  = array( '1=1' );
 		$params = array();
 		if ( '' !== $args['search'] ) {
-			$like = '%' . $wpdb->esc_like( $args['search'] ) . '%';
+			$like    = '%' . $wpdb->esc_like( $args['search'] ) . '%';
+			$cols    = array( 'uid', 'name' );
 			if ( self::has_column( 'visitors', 'last_ip' ) ) {
-				$where[]  = '(uid LIKE %s OR name LIKE %s OR last_ip LIKE %s)';
-				$params[] = $like;
-				$params[] = $like;
-				$params[] = $like;
-			} else {
-				$where[]  = '(uid LIKE %s OR name LIKE %s)';
-				$params[] = $like;
-				$params[] = $like;
+				$cols[] = 'last_ip';
 			}
+			if ( self::has_column( 'visitors', 'device_hash' ) ) {
+				$cols[] = 'device_hash';
+			}
+			$clauses = array();
+			foreach ( $cols as $c ) {
+				$clauses[] = $c . ' LIKE %s';
+				$params[]  = $like;
+			}
+			$where[] = '(' . implode( ' OR ', $clauses ) . ')';
 		}
 		$where_sql = implode( ' AND ', $where );
 

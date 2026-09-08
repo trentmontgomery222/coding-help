@@ -69,6 +69,24 @@ if ( '' !== $view_uid ) {
 						<tr><th scope="row"><?php esc_html_e( 'Window size', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $latest && $latest['viewport'] ? $latest['viewport'] : '—' ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Entry page', 'acps-site-toolkit' ); ?></th><td><?php echo $latest && $latest['entry_url'] ? '<a href="' . esc_url( $latest['entry_url'] ) . '" target="_blank" rel="noopener">' . esc_html( $latest['entry_url'] ) . '</a>' : '—'; ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Came from (referrer)', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $latest && $latest['referrer'] ? $latest['referrer'] : '—' ); ?></td></tr>
+						<?php
+						if ( ! empty( $visitor->device_hash ) ) :
+							$dev = ! empty( $visitor->device_info ) ? json_decode( $visitor->device_info, true ) : array();
+							$dev = is_array( $dev ) ? $dev : array();
+							$scr = ! empty( $dev['screen'] ) && is_array( $dev['screen'] ) ? $dev['screen'] : array();
+							$devbits = array();
+							if ( ! empty( $dev['renderer'] ) ) { $devbits[] = $dev['renderer']; }
+							if ( ! empty( $dev['tier'] ) ) { $devbits[] = $dev['tier']; }
+							if ( isset( $dev['benchmarkScore'] ) && null !== $dev['benchmarkScore'] ) { $devbits[] = 'score ' . (int) $dev['benchmarkScore']; }
+							if ( ! empty( $dev['cpuCores'] ) ) { $devbits[] = (int) $dev['cpuCores'] . ' cores'; }
+							if ( ! empty( $dev['deviceMemoryGB'] ) ) { $devbits[] = (int) $dev['deviceMemoryGB'] . ' GB'; }
+							if ( $scr ) { $devbits[] = ( isset( $scr['width'] ) ? (int) $scr['width'] : '?' ) . '×' . ( isset( $scr['height'] ) ? (int) $scr['height'] : '?' ) . ( ! empty( $scr['dpr'] ) ? ' @' . floatval( $scr['dpr'] ) . 'x' : '' ); }
+							?>
+							<tr><th scope="row"><?php esc_html_e( 'Device hash (GPU)', 'acps-site-toolkit' ); ?></th><td><code><?php echo esc_html( $visitor->device_hash ); ?></code></td></tr>
+							<?php if ( $devbits ) : ?>
+								<tr><th scope="row"><?php esc_html_e( 'Device details', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( implode( ' · ', $devbits ) ); ?></td></tr>
+							<?php endif; ?>
+						<?php endif; ?>
 						<tr><th scope="row"><?php esc_html_e( 'First seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->first_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Last seen', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $visitor->last_seen ); ?></td></tr>
 						<tr><th scope="row"><?php esc_html_e( 'Total visits', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( number_format_i18n( Visitors::visit_count( $view_uid ) ) ); ?></td></tr>

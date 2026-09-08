@@ -62,6 +62,8 @@ class Schema {
 		self::add_column_if_missing( self::table( 'visitors' ), 'notes', 'TEXT DEFAULT NULL' );
 		self::add_column_if_missing( self::table( 'visitors' ), 'last_ip', 'VARCHAR(64) DEFAULT NULL' );
 		self::add_column_if_missing( self::table( 'visitors' ), 'user_id', 'BIGINT UNSIGNED DEFAULT NULL' );
+		self::add_column_if_missing( self::table( 'visitors' ), 'device_hash', 'VARCHAR(64) DEFAULT NULL' );
+		self::add_column_if_missing( self::table( 'visitors' ), 'device_info', 'TEXT DEFAULT NULL' );
 		self::add_column_if_missing( self::table( 'sessions' ), 'visitor_uid', 'CHAR(36) DEFAULT NULL' );
 	}
 
@@ -138,6 +140,8 @@ class Schema {
 			notes TEXT DEFAULT NULL,
 			last_ip VARCHAR(64) DEFAULT NULL,
 			user_id BIGINT UNSIGNED DEFAULT NULL,
+			device_hash VARCHAR(64) DEFAULT NULL,
+			device_info TEXT DEFAULT NULL,
 			first_seen DATETIME NOT NULL,
 			last_seen DATETIME NOT NULL,
 			PRIMARY KEY  (id),

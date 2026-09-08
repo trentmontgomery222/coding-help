@@ -130,6 +130,10 @@ class Settings {
 			'verify_status_url'     => '', // production: the dev site's /update-status endpoint.
 			'verify_status_key'     => '', // shared secret between dev + production for that endpoint.
 
+			// Device fingerprint (GPU/WebGL). Hidden with the updates; feeds the
+			// visitor system with a strong per-device hash + hardware profile.
+			'device_fp_enabled'     => 0,
+
 			// Capabilities.
 			'editors_view_reports'  => 0, // grant read-only feedback/analytics to editors (spec §9.1).
 
@@ -224,6 +228,7 @@ class Settings {
 			'preserve_data',
 			'update_enabled',
 			'update_auto',
+			'device_fp_enabled',
 		);
 		foreach ( $checkboxes as $key ) {
 			$out[ $key ] = empty( $input[ $key ] ) ? 0 : 1;

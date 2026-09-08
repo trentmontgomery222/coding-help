@@ -83,6 +83,16 @@ class REST_Controller {
 				'permission_callback' => '__return_true',
 			)
 		);
+		// Device fingerprint report (GPU/WebGL) → attached to the visitor. Public.
+		register_rest_route(
+			$ns,
+			'/device',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'device' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 
 		if ( ! Settings::get( 'analytics_enabled' ) ) {
 			return;
@@ -181,6 +191,53 @@ class REST_Controller {
 		$params = is_array( $params ) ? $params : $req->get_params();
 		$id     = Log::record( $params );
 		return new \WP_REST_Response( array( 'ok' => (bool) $id, 'id' => (int) $id ), 200 );
+	}
+
+	/**
+	 * POST /device — a GPU/WebGL device fingerprint report from the browser.
+	 * Attaches the device hash + hardware profile to the current visitor.
+	 * Gated by the device_fp_enabled setting; lightly rate-limited.
+	 *
+	 * @param \WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function device( $req ) {
+		$this->no_cache();
+		if ( ! Settings::get( 'device_fp_enabled' ) ) {
+			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'disabled' ), 200 );
+		}
+		$params = $req->get_json_params();
+		$params = is_array( $params ) ? $params : $req->get_params();
+
+		$hash = isset( $params['hash'] ) ? strtolower( (string) $params['hash'] ) : '';
+		if ( ! preg_match( '/^[a-f0-9]{64}$/', $hash ) ) {
+			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'bad_hash' ), 200 );
+		}
+
+		// Light per-device cap so the endpoint can't be spammed.
+		$fp  = md5( Session::anonymize_ip( Session::client_ip() ) . '|' . Session::user_agent_summary() );
+		$key = 'acps_st_dev_' . $fp;
+		if ( (int) get_transient( $key ) >= 60 ) {
+			return new \WP_REST_Response( array( 'ok' => false, 'reason' => 'rate' ), 200 );
+		}
+		set_transient( $key, (int) get_transient( $key ) + 1, HOUR_IN_SECONDS );
+
+		// Build the stored profile from capabilities (+ raw renderer info).
+		$info = array();
+		if ( isset( $params['capabilities'] ) && is_array( $params['capabilities'] ) ) {
+			$info = $params['capabilities'];
+		}
+		if ( isset( $params['rendererInfo'] ) && is_array( $params['rendererInfo'] ) && empty( $info['renderer'] ) ) {
+			$info['rendererInfo'] = $params['rendererInfo'];
+		}
+
+		// Tie to this visitor (the same server-side IP+UA fingerprint used
+		// everywhere else), creating the row if needed.
+		$uid = Visitors::fingerprint();
+		Visitors::record( $uid, Session::client_ip(), get_current_user_id() );
+		Visitors::set_device( $uid, $hash, $info );
+
+		return new \WP_REST_Response( array( 'ok' => true ), 200 );
 	}
 
 	/**

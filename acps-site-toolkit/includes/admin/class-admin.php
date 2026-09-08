@@ -166,9 +166,11 @@ class Admin {
 		// Analytics + Visitors appear per their toggles.
 		if ( Settings::get( 'analytics_enabled' ) ) {
 			add_submenu_page( self::SLUG, __( 'Analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, self::SLUG . '-analytics', array( $this, 'render_analytics' ) );
-			if ( Settings::get( 'track_visitors' ) ) {
-				add_submenu_page( self::SLUG, __( 'Visitors', 'acps-site-toolkit' ), __( 'Visitors', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-visitors', array( $this, 'render_visitors' ) );
-			}
+		}
+		// Visitors: shown when unique-user tracking is on, OR when device
+		// fingerprinting is on (so the device data it collects is viewable).
+		if ( ( Settings::get( 'analytics_enabled' ) && Settings::get( 'track_visitors' ) ) || Settings::get( 'device_fp_enabled' ) ) {
+			add_submenu_page( self::SLUG, __( 'Visitors', 'acps-site-toolkit' ), __( 'Visitors', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-visitors', array( $this, 'render_visitors' ) );
 		}
 		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
 		add_submenu_page( self::SLUG, __( 'Help Guide', 'acps-site-toolkit' ), __( 'Help Guide', 'acps-site-toolkit' ), $reports, self::SLUG . '-help', array( $this, 'render_help' ) );
