@@ -90,6 +90,41 @@
 		return v ? String( v ).split( '.' )[0] : '';
 	}
 
+	// Floating-point math fingerprint. Transcendental functions (sin/cos/exp/…)
+	// are NOT correctly-rounded by IEEE-754, so their last bits differ between
+	// JS engines / OS math libraries / CPU instruction sets. This is a strong
+	// *device-class* signal (engine + OS + CPU family). Note: it is deterministic
+	// per class — identical machines produce identical results, so it does not
+	// separate identical units (that's what the timing profile is for).
+	function mathFP() {
+		var M = Math;
+		var v = [
+			M.acos( 0.123124234234234 ),
+			M.acosh( 1e308 ),
+			M.asin( 0.123124234234234 ),
+			M.asinh( 1e300 ),
+			M.atan( 0.5 ),
+			M.atanh( 0.5 ),
+			M.cbrt( 100 ),
+			M.cos( 1e13 ),
+			M.cosh( 100 ),
+			M.exp( 1 ),
+			M.expm1( 1 ),
+			M.log( 1000 ),
+			M.log1p( 10 ),
+			M.sin( 1e13 ),
+			M.sinh( 1 ),
+			M.tan( -1e300 ),
+			M.tanh( 0.123 ),
+			M.pow( M.PI, -100 )
+		];
+		try {
+			return v.map( function ( x ) { return x.toString(); } ).join( ',' );
+		} catch ( e ) {
+			return '';
+		}
+	}
+
 	// Collect device stats (no permission prompts). Client Hints give accurate
 	// OS/browser/arch/model on Chromium; everything else has a universal path.
 	function collectDeviceStats() {
@@ -174,7 +209,8 @@
 			langs:  ( s.languages || [] ).join( ',' ),
 			tier:   ( profile && profile.tier ) || '',
 			maxTex: ( profile && profile.maxTextureSize ) || 0,
-			webgl2: !! ( profile && profile.webgl2 )
+			webgl2: !! ( profile && profile.webgl2 ),
+			mathfp: mathFP()
 		};
 	}
 

@@ -267,7 +267,7 @@ class REST_Controller {
 		// now the sole merge key.
 		$uid = Visitors::fingerprint();
 		Visitors::record( $uid, Session::client_ip(), get_current_user_id() );
-		$canonical = Visitors::merge_by_device( $uid, $hash );
+		$canonical = Visitors::merge_by_device( $uid, $hash, $timing );
 		Visitors::set_device( $canonical, $hash, $info );
 
 		return new \WP_REST_Response( array( 'ok' => true ), 200 );

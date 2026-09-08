@@ -251,19 +251,29 @@ class Visitors {
 		$wpdb->update( Schema::table( 'visitors' ), $data, array( 'uid' => $uid ) ); // phpcs:ignore WordPress.DB
 	}
 
+	/** Max mean per-component difference (normalised timing shares) below which
+	 *  two GPU timing profiles are treated as the same physical unit. Tunable. */
+	const TIMING_THRESHOLD = 0.03;
+
 	/**
-	 * Merge visitors that share a device fingerprint into ONE identity, and
-	 * return the canonical uid. The fingerprint is now a combined GPU + device
-	 * hash (GPU render + WebGL params + OS/browser/arch/model/screen/timezone/
-	 * languages/…), so an identical hash is a strong same-device signal — it is
-	 * the sole merge key. Same-hash visitors are folded into the earliest-seen
-	 * one; entries + sessions are repointed.
+	 * Merge visitors that share the combined device fingerprint into one
+	 * identity — but use the GPU timing profile to SPLIT apart identical units.
 	 *
-	 * @param string $uid  Current request's fingerprint uid.
-	 * @param string $hash 64-char combined device hash.
+	 * The hash is a combined GPU + device identity (render + WebGL params +
+	 * OS/browser/arch/model/screen/timezone/languages/FP-math). Identical
+	 * machines share all of that, so the hash alone would merge a fleet of
+	 * identical devices. To separate them we compare the coarse GPU timing
+	 * profile: a same-hash visitor is merged only when its timing shape is close
+	 * to this one (or when timing is unavailable on either side, since then we
+	 * can't tell them apart). Same-hash visitors with a clearly different timing
+	 * shape are kept as separate devices.
+	 *
+	 * @param string $uid    Current request's fingerprint uid.
+	 * @param string $hash   64-char combined device hash.
+	 * @param array  $timing Current GPU timing vector (may be empty).
 	 * @return string Canonical uid to attach data to.
 	 */
-	public static function merge_by_device( $uid, $hash ) {
+	public static function merge_by_device( $uid, $hash, $timing = array() ) {
 		$uid  = self::sanitize( $uid );
 		$hash = is_string( $hash ) && preg_match( '/^[a-f0-9]{64}$/', $hash ) ? $hash : '';
 		if ( '' === $uid || '' === $hash || ! self::has_column( 'visitors', 'device_hash' ) ) {
@@ -272,12 +282,33 @@ class Visitors {
 		global $wpdb;
 		$v = Schema::table( 'visitors' );
 
-		$others = $wpdb->get_col( $wpdb->prepare( "SELECT uid FROM {$v} WHERE device_hash = %s AND uid <> %s", $hash, $uid ) ); // phpcs:ignore WordPress.DB
+		$others = $wpdb->get_results( $wpdb->prepare( "SELECT uid, device_info FROM {$v} WHERE device_hash = %s AND uid <> %s", $hash, $uid ), ARRAY_A ); // phpcs:ignore WordPress.DB
 		if ( empty( $others ) ) {
 			return $uid; // First visitor with this fingerprint — nothing to merge.
 		}
 
-		$group        = array_merge( array( $uid ), $others );
+		// Group = this visitor + same-hash visitors that look like the same unit.
+		$group = array( $uid );
+		foreach ( $others as $row ) {
+			$ot = array();
+			if ( ! empty( $row['device_info'] ) ) {
+				$info = json_decode( $row['device_info'], true );
+				if ( is_array( $info ) && ! empty( $info['timing'] ) ) {
+					$ot = $info['timing'];
+				}
+			}
+			// Same unit when: we can't compare (timing missing either side), OR
+			// the two timing shapes are close. A clearly different shape => a
+			// different physical unit of the same model => keep separate.
+			if ( empty( $timing ) || empty( $ot ) || self::timing_close( $timing, $ot ) ) {
+				$group[] = $row['uid'];
+			}
+		}
+
+		if ( count( $group ) < 2 ) {
+			return $uid; // Same model as others, but a different unit — stay separate.
+		}
+
 		$placeholders = implode( ',', array_fill( 0, count( $group ), '%s' ) );
 		$canonical    = $wpdb->get_var( $wpdb->prepare( "SELECT uid FROM {$v} WHERE uid IN ($placeholders) ORDER BY first_seen ASC LIMIT 1", $group ) ); // phpcs:ignore WordPress.DB
 		if ( ! $canonical ) {
@@ -289,6 +320,34 @@ class Visitors {
 			}
 		}
 		return $canonical;
+	}
+
+	/**
+	 * Are two coarse GPU timing vectors close enough to be the same physical
+	 * unit? Compares the SHAPE (each component's share of the total) so overall
+	 * machine speed / thermal state doesn't dominate. Noisy by nature.
+	 *
+	 * @param array $a Vector A.
+	 * @param array $b Vector B.
+	 * @return bool
+	 */
+	private static function timing_close( $a, $b ) {
+		$a = array_values( array_map( 'floatval', (array) $a ) );
+		$b = array_values( array_map( 'floatval', (array) $b ) );
+		$n = count( $a );
+		if ( $n < 2 || $n !== count( $b ) ) {
+			return false;
+		}
+		$sa = array_sum( $a );
+		$sb = array_sum( $b );
+		if ( $sa <= 0 || $sb <= 0 ) {
+			return false;
+		}
+		$diff = 0.0;
+		for ( $i = 0; $i < $n; $i++ ) {
+			$diff += abs( ( $a[ $i ] / $sa ) - ( $b[ $i ] / $sb ) );
+		}
+		return ( $diff / $n ) < self::TIMING_THRESHOLD;
 	}
 
 	/**
