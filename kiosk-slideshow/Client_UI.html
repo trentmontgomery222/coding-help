@@ -103,10 +103,19 @@
     }
 
     el.banner.hidden = false;
-    el.banner.textContent = Kiosk.t('paused_Reason', {
-      reason: Kiosk.pauseReason() || 'paused',
-      seconds: Math.ceil(remaining / 1000)
-    });
+    el.banner.innerHTML = '';
+
+    // Assembled as nodes, not innerHTML: the reason can originate in a
+    // spreadsheet cell and must never be parsed as markup.
+    var reason = document.createElement('strong');
+    reason.textContent = Kiosk.pauseReason() || 'a pause';
+
+    var parts = Kiosk.t('paused_Reason',
+        {reason: '\u0000', seconds: Math.ceil(remaining / 1000)}).split('\u0000');
+    el.banner.appendChild(document.createTextNode(parts[0]));
+    el.banner.appendChild(reason);
+    if (parts.length > 1) el.banner.appendChild(document.createTextNode(parts[1]));
+
     el.banner.classList.add('is-visible');
   };
 
@@ -382,8 +391,11 @@
 
     items.forEach(function (item) {
       if (item.isNamePlate) {
-        // Only the first nameplate row becomes a plate.
-        if (hasNamePlate) { el.toolbar.appendChild(makeSpacer()); return; }
+        // The plate is already `nameplateRows x slot` wide, so the rows after
+        // the first must render NOTHING. Emitting a spacer for each of them
+        // counted those 14 slots twice, overflowed the bar, and squeezed the
+        // title down to nothing.
+        if (hasNamePlate) return;
         hasNamePlate = true;
 
         var plate = document.createElement('div');
@@ -394,19 +406,20 @@
         return;
       }
 
-      // Nothing to show and nothing to do: pure spacing.
-      if (!item.icon && !item.click) {
-        el.toolbar.appendChild(makeSpacer());
+      // A row with no icon draws nothing - the sheet's spacing rows carry
+      // placeholder actions like console.log("3"), and drawing those put a
+      // line of dots across the bar and squeezed the title slot to nothing.
+      //
+      // It still keeps its tap target when the action is real, which is how
+      // the original behaved: an image with no source, invisible but live.
+      if (!item.icon) {
+        el.toolbar.appendChild(
+            isDecorative(item.click) ? makeSpacer() : makeInvisibleButton(item));
         return;
       }
 
       el.toolbar.appendChild(makeButton(item));
     });
-
-    var endcap = document.createElement('span');
-    endcap.className = 'tool-endcap';
-    endcap.setAttribute('aria-hidden', 'true');
-    el.toolbar.appendChild(endcap);
 
     refreshToolbarStates();
   }
@@ -424,19 +437,40 @@
     var plateRows = items.filter(function (item) { return item.isNamePlate; }).length;
     var slots = Math.max(1, items.length);
 
-    // Bounded: a three-row sheet should not produce 400px icons, and an
-    // eighty-row one should not produce invisible ones. The original left this
-    // unbounded, so icons overflowed the fixed-height bar and were clipped.
     var barHeight = Math.max(64, Math.min(96, Math.round(window.innerHeight * 0.09)));
-    var iconSize = Math.round(window.innerWidth / slots) - 5;
-    iconSize = Math.max(28, Math.min(barHeight - 20, iconSize));
 
-    var plateWidth = Math.max(160, plateRows * (iconSize + 5));
+    // Every row in the sheet - button, spacer or nameplate - takes one slot of
+    // (icon + 5px), so `rows x slot` comes out to the screen width. That is
+    // what puts the playback buttons where the sheet author intended: the 15
+    // `nameplate` rows form a 15-slot-wide title and the empty rows either
+    // side are the gaps. Sizing spacers at a flat 6px collapsed all of that
+    // and slid the controls off centre.
+    var iconSize = Math.round(window.innerWidth / slots) - 5;
+    iconSize = Math.max(18, Math.min(barHeight - 20, iconSize));
+
+    var slot = iconSize + 5;
 
     el.toolbar.style.setProperty('--tool-icon', iconSize + 'px');
-    el.toolbar.style.setProperty('--plate-w', plateWidth + 'px');
+    el.toolbar.style.setProperty('--tool-slot', slot + 'px');
+    el.toolbar.style.setProperty('--plate-w', (plateRows * slot) + 'px');
     document.documentElement.style.setProperty('--toolbar-h', barHeight + 'px');
+  }
 
+  /**
+   * True for a row that exists only to take up space. The sheet marks those
+   * with an empty action or a leftover `console.log("12")`.
+   */
+  function isDecorative(action) {
+    var text = String(action || '').trim();
+    if (!text) return true;
+    return /^(console\.log\([^()]*\)\s*;?\s*)+$/.test(text);
+  }
+
+  /** A slot-sized tap target with nothing drawn in it. */
+  function makeInvisibleButton(item) {
+    var button = makeButton(item);
+    button.classList.add('is-blank');
+    return button;
   }
 
   /** A fixed sliver of space, as the old bar used between every button. */
@@ -473,11 +507,6 @@
       });
       icon.src = item.icon;
       button.appendChild(icon);
-    } else {
-      var text = document.createElement('span');
-      text.className = 'tool-fallback';
-      text.textContent = readableLabel(item.name) || '•';
-      button.appendChild(text);
     }
 
     button.addEventListener('click', function () {
@@ -792,7 +821,7 @@
       case 'ArrowLeft':  event.preventDefault(); Kiosk.previous(); return;
       case 'ArrowUp':    event.preventDefault(); Kiosk.togglePanel(true); return;
       case 'ArrowDown':  event.preventDefault(); Kiosk.togglePanel(false); return;
-      case 'p': case 'P': Kiosk.togglePause('Paused'); return;
+      case 'p': case 'P': Kiosk.togglePause('PauseBtn'); return;
       case 'r': case 'R': Kiosk.resync(); return;
       case 'd': case 'D': Kiosk.toggleHud(); return;
       case 'Escape':

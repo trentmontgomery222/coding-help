@@ -66,17 +66,46 @@
    * 8MB original - and never has to scale it down in the browser.
    * ======================================================================*/
 
-  /** Rounds the screen width up to a bucket so the CDN can cache the result. */
-  function targetWidth() {
+  /**
+   * Longest edge to ask the CDN for, rounded to a bucket so its cache is hit.
+   *
+   * This used to ask for `=w1920`, which forces the width to 1920 - so a 900px
+   * archival scan came back UPSCALED, and the browser then drew those invented
+   * pixels across the screen. That is what made the photos look soft and
+   * jagged along every edge.
+   *
+   * `=s<n>` bounds the LONGEST side instead: a smaller original is returned at
+   * its own size, untouched, and the page simply shows it smaller. Nothing is
+   * ever stretched beyond the detail that actually exists in the file.
+   */
+  function targetEdge() {
     var configured = Kiosk.get('ImageWidth', 0);
     if (configured > 0) return configured;
 
-    var needed = window.innerWidth * (window.devicePixelRatio || 1);
-    var buckets = [1280, 1600, 1920, 2560, 3840];
+    var stage = el.stage ? el.stage.getBoundingClientRect() : null;
+    var box = Math.max(stage ? stage.width : window.innerWidth,
+                       stage ? stage.height : window.innerHeight);
+    var needed = box * Math.min(2, window.devicePixelRatio || 1);
+
+    var buckets = [800, 1000, 1280, 1600, 2000, 2600];
     for (var i = 0; i < buckets.length; i++) {
       if (needed <= buckets[i]) return buckets[i];
     }
     return buckets[buckets.length - 1];
+  }
+
+  /**
+   * The blurred fill behind the photo.
+   *
+   * Deliberately tiny. It is blurred to the point of abstraction anyway, so
+   * there is nothing to gain from a full-resolution copy - and a great deal to
+   * lose: blurring a 2000px image across a whole screen is expensive enough to
+   * show up as stutter in the middle of a transition. A 64px thumbnail scaled
+   * up looks identical once blurred and costs almost nothing.
+   */
+  function backdropUrl(photo) {
+    if (photo.data) return '';        // inline mode has no cheap thumbnail
+    return 'https://lh3.googleusercontent.com/d/' + photo.id + '=w64';
   }
 
   /**
@@ -90,10 +119,10 @@
     }
     switch (attempt || 0) {
       case 0:  return 'https://lh3.googleusercontent.com/d/' + photo.id +
-                      '=w' + targetWidth();
+                      '=s' + targetEdge();
       case 1:  return 'https://lh3.googleusercontent.com/d/' + photo.id;
       default: return 'https://drive.google.com/thumbnail?id=' + photo.id +
-                      '&sz=w' + targetWidth();
+                      '&sz=s' + targetEdge();
     }
   }
 
@@ -447,7 +476,7 @@
    * Pausing is exclusive, so it also clears any incidental hold.
    */
   Kiosk.togglePause = function (reason, ms) {
-    var key = reason || 'Paused';
+    var key = reason || 'PauseBtn';
 
     if (pauses[key] && pauses[key] > Date.now()) {
       Kiosk.resume();                       // clear this and any other hold
@@ -577,7 +606,11 @@
     incoming.img.classList.add(enterFrom);
     incoming.img.src = url;
     incoming.img.alt = photo.displayName || photo.name || '';
-    incoming.blur.src = url;
+
+    // The backdrop gets a thumbnail, never the full photo.
+    var fill = backdropUrl(photo);
+    if (fill) incoming.blur.src = fill;
+    else incoming.blur.src = url;
 
     // 2. One forced reflow so the browser registers the start position.
     //    (Exactly one, before the animation - not on every frame, which is
@@ -710,10 +743,10 @@
   Kiosk.action('reload',   function () { location.reload(); return true; });
 
   Kiosk.action('pause',    function (seconds) {
-    return Kiosk.pause('Paused', (seconds || 300) * 1000, true);
+    return Kiosk.pause('PauseBtn', (seconds || 300) * 1000, true);
   });
   Kiosk.action('resume',      function () { return Kiosk.resume(); });
-  Kiosk.action('togglePause', function () { return Kiosk.togglePause('Paused'); });
+  Kiosk.action('togglePause', function () { return Kiosk.togglePause('PauseBtn'); });
   Kiosk.action('paused',      function () { return Kiosk.isPaused(); });
 
 })(Kiosk);

@@ -60,7 +60,7 @@
 
     get slidesPaused() { return Kiosk.isPaused(); },
     set slidesPaused(value) {
-      if (value) Kiosk.pause('Paused', 5 * 60 * 1000, true);
+      if (value) Kiosk.pause('PauseBtn', 5 * 60 * 1000, true);
       else Kiosk.resume();
     },
 
@@ -103,7 +103,7 @@
   W.controllerButtonFoward5 = function () { Kiosk.pause('browsing', 20000); return Kiosk.next(5); };
   W.controllerButtonBack    = function () { Kiosk.pause('browsing', 20000); return Kiosk.previous(1); };
   W.controllerButtonBack5   = function () { Kiosk.pause('browsing', 20000); return Kiosk.previous(5); };
-  W.controllerButtonPause   = function () { return Kiosk.togglePause('Paused'); };
+  W.controllerButtonPause   = function () { return Kiosk.togglePause('PauseBtn'); };
   W.controllerButtonUnpause = function () { return Kiosk.resume(); };
   W.controllerButtonList    = function () { return Kiosk.toggleBrowser(); };
 
@@ -113,11 +113,11 @@
 
   /** @param {number} seconds */
   W.PauseSlideshowFor = function (seconds) {
-    return Kiosk.pause('Paused', (Number(seconds) || 30) * 1000, true);
+    return Kiosk.pause('PauseBtn', (Number(seconds) || 30) * 1000, true);
   };
   W.PauseSlideshowMaxOf = W.PauseSlideshowFor;
   W.updateSlidesPaused = function (paused) {
-    return paused ? Kiosk.pause('Paused', 5 * 60 * 1000, true) : Kiosk.resume();
+    return paused ? Kiosk.pause('PauseBtn', 5 * 60 * 1000, true) : Kiosk.resume();
   };
 
   W.startSlideshow = function () { return Kiosk.play(); };
