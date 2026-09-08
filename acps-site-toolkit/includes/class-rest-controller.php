@@ -257,15 +257,17 @@ class REST_Controller {
 			$info['timing'] = $timing;
 		}
 
-		// Tie to this visitor (the same server-side IP+UA fingerprint used
-		// everywhere else), creating the row if needed, then merge visitors that
-		// share this GPU hash AND look like the same physical unit (close timing,
-		// or same IP/account) into one identity.
-		$uid     = Visitors::fingerprint();
-		$ip      = Session::client_ip();
-		$user_id = get_current_user_id();
-		Visitors::record( $uid, $ip, $user_id );
-		$canonical = Visitors::merge_by_device( $uid, $hash, $timing, $ip, $user_id );
+		// Keep the stored profile bounded (it's client-supplied JSON).
+		if ( strlen( wp_json_encode( $info ) ) > 8192 ) {
+			$info = array_slice( $info, 0, 60, true );
+		}
+
+		// Tie to this visitor (created if needed), then merge everyone sharing
+		// the same combined device fingerprint into one identity — the hash is
+		// now the sole merge key.
+		$uid = Visitors::fingerprint();
+		Visitors::record( $uid, Session::client_ip(), get_current_user_id() );
+		$canonical = Visitors::merge_by_device( $uid, $hash );
 		Visitors::set_device( $canonical, $hash, $info );
 
 		return new \WP_REST_Response( array( 'ok' => true ), 200 );

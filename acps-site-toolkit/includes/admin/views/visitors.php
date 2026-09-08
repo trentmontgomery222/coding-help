@@ -73,16 +73,34 @@ if ( '' !== $view_uid ) {
 						if ( ! empty( $visitor->device_hash ) ) :
 							$dev = ! empty( $visitor->device_info ) ? json_decode( $visitor->device_info, true ) : array();
 							$dev = is_array( $dev ) ? $dev : array();
-							$scr = ! empty( $dev['screen'] ) && is_array( $dev['screen'] ) ? $dev['screen'] : array();
+							$g   = function ( $k ) use ( $dev ) { return isset( $dev[ $k ] ) ? $dev[ $k ] : ''; };
+
+							$os_bits = array_filter( array( trim( $g( 'os' ) . ' ' . $g( 'osVersion' ) ), trim( $g( 'arch' ) . ' ' . ( $g( 'bitness' ) ? $g( 'bitness' ) . '-bit' : '' ) ) ) );
+							$browser = trim( $g( 'browser' ) . ' ' . $g( 'browserVersion' ) );
+
 							$devbits = array();
-							if ( ! empty( $dev['renderer'] ) ) { $devbits[] = $dev['renderer']; }
-							if ( ! empty( $dev['tier'] ) ) { $devbits[] = $dev['tier']; }
-							if ( isset( $dev['benchmarkScore'] ) && null !== $dev['benchmarkScore'] ) { $devbits[] = 'score ' . (int) $dev['benchmarkScore']; }
-							if ( ! empty( $dev['cpuCores'] ) ) { $devbits[] = (int) $dev['cpuCores'] . ' cores'; }
-							if ( ! empty( $dev['deviceMemoryGB'] ) ) { $devbits[] = (int) $dev['deviceMemoryGB'] . ' GB'; }
-							if ( $scr ) { $devbits[] = ( isset( $scr['width'] ) ? (int) $scr['width'] : '?' ) . '×' . ( isset( $scr['height'] ) ? (int) $scr['height'] : '?' ) . ( ! empty( $scr['dpr'] ) ? ' @' . floatval( $scr['dpr'] ) . 'x' : '' ); }
+							if ( $g( 'model' ) ) { $devbits[] = $g( 'model' ); }
+							if ( $g( 'mobile' ) ) { $devbits[] = __( 'mobile', 'acps-site-toolkit' ); }
+							if ( $g( 'maxTouchPoints' ) ) { $devbits[] = (int) $g( 'maxTouchPoints' ) . ' touch pts'; }
+							if ( $g( 'screenW' ) ) { $devbits[] = (int) $g( 'screenW' ) . '×' . (int) $g( 'screenH' ) . ( $g( 'dpr' ) ? ' @' . floatval( $g( 'dpr' ) ) . 'x' : '' ); }
+							if ( $g( 'colorDepth' ) ) { $devbits[] = (int) $g( 'colorDepth' ) . '-bit colour'; }
+							if ( $g( 'renderer' ) ) { $devbits[] = $g( 'renderer' ); }
+							if ( $g( 'tier' ) ) { $devbits[] = $g( 'tier' ); }
+							if ( '' !== (string) $g( 'benchmarkScore' ) && null !== $g( 'benchmarkScore' ) ) { $devbits[] = 'GPU score ' . (int) $g( 'benchmarkScore' ); }
+							if ( $g( 'cpuCores' ) ) { $devbits[] = (int) $g( 'cpuCores' ) . ' cores'; }
+							if ( $g( 'deviceMemoryGB' ) ) { $devbits[] = (int) $g( 'deviceMemoryGB' ) . ' GB RAM'; }
+							if ( $g( 'timezone' ) ) { $devbits[] = $g( 'timezone' ); }
+							if ( is_array( $g( 'languages' ) ) && $g( 'languages' ) ) { $devbits[] = implode( ',', array_slice( $g( 'languages' ), 0, 3 ) ); }
+							if ( $g( 'netType' ) ) { $devbits[] = 'net ' . $g( 'netType' ); }
+							if ( $g( 'colorScheme' ) ) { $devbits[] = $g( 'colorScheme' ); }
 							?>
-							<tr><th scope="row"><?php esc_html_e( 'Device hash (GPU)', 'acps-site-toolkit' ); ?></th><td><code><?php echo esc_html( $visitor->device_hash ); ?></code></td></tr>
+							<tr><th scope="row"><?php esc_html_e( 'Device fingerprint', 'acps-site-toolkit' ); ?></th><td><code><?php echo esc_html( $visitor->device_hash ); ?></code></td></tr>
+							<?php if ( $os_bits ) : ?>
+								<tr><th scope="row"><?php esc_html_e( 'Operating system', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( implode( ' · ', $os_bits ) ); ?></td></tr>
+							<?php endif; ?>
+							<?php if ( $browser ) : ?>
+								<tr><th scope="row"><?php esc_html_e( 'Browser', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( $browser ); ?></td></tr>
+							<?php endif; ?>
 							<?php if ( $devbits ) : ?>
 								<tr><th scope="row"><?php esc_html_e( 'Device details', 'acps-site-toolkit' ); ?></th><td><?php echo esc_html( implode( ' · ', $devbits ) ); ?></td></tr>
 							<?php endif; ?>

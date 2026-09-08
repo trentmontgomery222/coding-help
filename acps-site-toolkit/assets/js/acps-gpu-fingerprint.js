@@ -139,7 +139,12 @@
     return out;
   }
 
-  async function get() {
+  // `extra` (optional) is a plain object of STABLE device attributes (OS,
+  // browser, architecture, screen, timezone, …) folded into the hash so the
+  // resulting fingerprint is a combined GPU + device identity, not GPU-only.
+  // Only pass stable values here — anything that changes between visits would
+  // make the same device hash differently and break merging.
+  async function get(extra) {
     var canvas = document.createElement('canvas');
     canvas.width = canvas.height = CANVAS_SIZE;
 
@@ -150,7 +155,7 @@
     var params       = getStableParams(gl);
     var pixels       = renderProbe(gl, canvas);
 
-    var meta  = encode(JSON.stringify({ rendererInfo: rendererInfo, params: params }));
+    var meta  = encode(JSON.stringify({ rendererInfo: rendererInfo, params: params, extra: extra || null }));
     var hash  = await sha256Hex(concat(meta, pixels));
 
     return { supported: true, hash: hash, rendererInfo: rendererInfo };
