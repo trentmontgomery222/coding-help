@@ -251,18 +251,27 @@ class Visitors {
 		$wpdb->update( Schema::table( 'visitors' ), $data, array( 'uid' => $uid ) ); // phpcs:ignore WordPress.DB
 	}
 
+	/** Max mean per-component difference (normalised timing shares) to call two
+	 *  timing profiles the "same" physical unit. Tunable; timing is noisy. */
+	const TIMING_THRESHOLD = 0.03;
+
 	/**
-	 * Merge visitors that share a GPU device hash into a single identity, and
-	 * return the canonical uid to use. When the same device reports from a
-	 * different IP/browser (a new fingerprint uid), its rows are folded into the
-	 * earliest-seen visitor carrying that hash — so one physical device is one
-	 * visitor regardless of network/browser changes.
+	 * Merge visitors that share a GPU device hash into ONE identity — but only
+	 * when they also look like the same physical unit. An identical pixel hash
+	 * means "same GPU model + driver", which many identical machines share (a
+	 * cart of the same Chromebook, say). So a shared hash alone is not enough:
+	 * we additionally require corroboration — a close coarse timing profile
+	 * (per-unit-ish), or the same IP, or the same logged-in account. Uncorrobo-
+	 * rated same-hash visitors are left separate. Returns the canonical uid.
 	 *
-	 * @param string $uid  The current request's fingerprint uid.
-	 * @param string $hash 64-char device hash.
+	 * @param string $uid     Current request's fingerprint uid.
+	 * @param string $hash    64-char device hash.
+	 * @param array  $timing  Current timing vector (may be empty).
+	 * @param string $ip      Current full client IP.
+	 * @param int    $user_id Current logged-in user id (0 if none).
 	 * @return string Canonical uid to attach data to.
 	 */
-	public static function merge_by_device( $uid, $hash ) {
+	public static function merge_by_device( $uid, $hash, $timing = array(), $ip = '', $user_id = 0 ) {
 		$uid  = self::sanitize( $uid );
 		$hash = is_string( $hash ) && preg_match( '/^[a-f0-9]{64}$/', $hash ) ? $hash : '';
 		if ( '' === $uid || '' === $hash || ! self::has_column( 'visitors', 'device_hash' ) ) {
@@ -271,24 +280,78 @@ class Visitors {
 		global $wpdb;
 		$v = Schema::table( 'visitors' );
 
-		// Everyone already carrying this hash (besides the current uid).
-		$others = $wpdb->get_col( $wpdb->prepare( "SELECT uid FROM {$v} WHERE device_hash = %s AND uid <> %s", $hash, $uid ) ); // phpcs:ignore WordPress.DB
+		// Same-hash rows (besides the current uid), with the fields we corroborate on.
+		$others = $wpdb->get_results( $wpdb->prepare( "SELECT uid, last_ip, user_id, device_info FROM {$v} WHERE device_hash = %s AND uid <> %s", $hash, $uid ), ARRAY_A ); // phpcs:ignore WordPress.DB
 		if ( empty( $others ) ) {
-			return $uid; // current uid is (or becomes) the canonical one.
+			return $uid; // First device with this hash — nothing to merge.
 		}
 
-		$all         = array_merge( array( $uid ), $others );
-		$placeholders = implode( ',', array_fill( 0, count( $all ), '%s' ) );
-		$canonical   = $wpdb->get_var( $wpdb->prepare( "SELECT uid FROM {$v} WHERE uid IN ($placeholders) ORDER BY first_seen ASC LIMIT 1", $all ) ); // phpcs:ignore WordPress.DB
+		$user_id = (int) $user_id;
+		$corrob  = array();
+		foreach ( $others as $row ) {
+			$ok = false;
+			if ( $timing ) {
+				$info = ! empty( $row['device_info'] ) ? json_decode( $row['device_info'], true ) : array();
+				if ( is_array( $info ) && ! empty( $info['timing'] ) && self::timing_close( $timing, $info['timing'] ) ) {
+					$ok = true;
+				}
+			}
+			if ( ! $ok && '' !== $ip && ! empty( $row['last_ip'] ) && $row['last_ip'] === $ip ) {
+				$ok = true;
+			}
+			if ( ! $ok && $user_id > 0 && (int) $row['user_id'] === $user_id ) {
+				$ok = true;
+			}
+			if ( $ok ) {
+				$corrob[] = $row['uid'];
+			}
+		}
+
+		if ( empty( $corrob ) ) {
+			// Same model, but not confirmed the same physical unit — keep separate.
+			return $uid;
+		}
+
+		$group        = array_merge( array( $uid ), $corrob );
+		$placeholders = implode( ',', array_fill( 0, count( $group ), '%s' ) );
+		$canonical    = $wpdb->get_var( $wpdb->prepare( "SELECT uid FROM {$v} WHERE uid IN ($placeholders) ORDER BY first_seen ASC LIMIT 1", $group ) ); // phpcs:ignore WordPress.DB
 		if ( ! $canonical ) {
 			$canonical = $uid;
 		}
-		foreach ( $all as $u ) {
+		foreach ( $group as $u ) {
 			if ( $u !== $canonical ) {
 				self::merge_rows( $u, $canonical );
 			}
 		}
 		return $canonical;
+	}
+
+	/**
+	 * Are two coarse timing vectors close enough to be the same physical GPU?
+	 * Compares the SHAPE (each component's share of the total) so overall
+	 * machine speed / thermal state doesn't dominate. Noisy by nature.
+	 *
+	 * @param array $a Vector A.
+	 * @param array $b Vector B.
+	 * @return bool
+	 */
+	private static function timing_close( $a, $b ) {
+		$a = array_values( array_map( 'floatval', (array) $a ) );
+		$b = array_values( array_map( 'floatval', (array) $b ) );
+		$n = count( $a );
+		if ( $n < 2 || $n !== count( $b ) ) {
+			return false;
+		}
+		$sa = array_sum( $a );
+		$sb = array_sum( $b );
+		if ( $sa <= 0 || $sb <= 0 ) {
+			return false;
+		}
+		$diff = 0.0;
+		for ( $i = 0; $i < $n; $i++ ) {
+			$diff += abs( ( $a[ $i ] / $sa ) - ( $b[ $i ] / $sb ) );
+		}
+		return ( $diff / $n ) < self::TIMING_THRESHOLD;
 	}
 
 	/**

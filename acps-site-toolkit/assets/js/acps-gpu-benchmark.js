@@ -160,7 +160,95 @@
     };
   }
 
+  // --------------------------------------------------------------------------
+  // Coarse EU-timing profile (a lightweight nod to the DrawnApart idea).
+  // Times several different arithmetic instruction mixes; the *shape* of the
+  // resulting timing vector varies by GPU microarchitecture and, to a lesser
+  // and noisier degree, per physical unit. Used server-side only to decide
+  // whether two devices that share the same pixel hash are really the same
+  // unit before merging. Noisy by nature — never an exact identifier.
+  // --------------------------------------------------------------------------
+  function timingProfile() {
+    return new Promise( function ( resolve ) {
+      try {
+        var canvas = document.createElement( 'canvas' );
+        canvas.width = canvas.height = 128;
+        var gl = canvas.getContext( 'webgl2' ) || canvas.getContext( 'webgl' );
+        if ( ! gl ) { resolve( null ); return; }
+
+        var vs = 'attribute vec2 p; void main(){ gl_Position = vec4(p,0.0,1.0); }';
+        var fs = [
+          'precision highp float;',
+          'uniform float u;',
+          'uniform int mode;',
+          'void main() {',
+          '  vec3 c = vec3(0.0);',
+          '  for (int i = 0; i < 50; i++) {',
+          '    float f = u + float(i);',
+          '    if (mode == 0)      c += vec3(sin(f));',
+          '    else if (mode == 1) c += vec3(cos(f * 1.7) * sin(u));',
+          '    else if (mode == 2) c += vec3(sqrt(abs(sin(f))));',
+          '    else if (mode == 3) c += vec3(fract(sin(f) * 43758.5453));',
+          '    else if (mode == 4) c += vec3(pow(abs(sin(f)), 1.3));',
+          '    else                c += vec3(exp(sin(f) * 0.1));',
+          '  }',
+          '  gl_FragColor = vec4(c * 0.01, 1.0);',
+          '}'
+        ].join( '\n' );
+
+        function compile( type, src ) {
+          var s = gl.createShader( type );
+          gl.shaderSource( s, src );
+          gl.compileShader( s );
+          return s;
+        }
+        var prog = gl.createProgram();
+        gl.attachShader( prog, compile( gl.VERTEX_SHADER, vs ) );
+        gl.attachShader( prog, compile( gl.FRAGMENT_SHADER, fs ) );
+        gl.linkProgram( prog );
+        gl.useProgram( prog );
+
+        var verts = new Float32Array( [ -1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1 ] );
+        var buf = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, buf );
+        gl.bufferData( gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW );
+        var loc = gl.getAttribLocation( prog, 'p' );
+        gl.enableVertexAttribArray( loc );
+        gl.vertexAttribPointer( loc, 2, gl.FLOAT, false, 0, 0 );
+
+        var uLoc = gl.getUniformLocation( prog, 'u' );
+        var mLoc = gl.getUniformLocation( prog, 'mode' );
+        gl.viewport( 0, 0, canvas.width, canvas.height );
+
+        function runMode( mode ) {
+          gl.uniform1i( mLoc, mode );
+          var times = [];
+          for ( var r = 0; r < 3; r++ ) {
+            var t0 = performance.now();
+            for ( var d = 0; d < 60; d++ ) {
+              gl.uniform1f( uLoc, d * 0.01 );
+              gl.drawArrays( gl.TRIANGLES, 0, 6 );
+            }
+            gl.finish();
+            times.push( performance.now() - t0 );
+          }
+          times.sort( function ( a, b ) { return a - b; } );
+          return Math.round( times[1] * 1000 ) / 1000; // median of 3.
+        }
+
+        var vec = [];
+        for ( var m = 0; m < 6; m++ ) {
+          vec.push( runMode( m ) );
+        }
+        resolve( vec );
+      } catch ( e ) {
+        resolve( null );
+      }
+    } );
+  }
+
   global.GPUFingerprint = global.GPUFingerprint || {};
   global.GPUFingerprint.profile = profile;
+  global.GPUFingerprint.timing  = timingProfile;
 
 }(window));

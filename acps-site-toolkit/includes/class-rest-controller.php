@@ -242,12 +242,30 @@ class REST_Controller {
 			$info['rendererInfo'] = $params['rendererInfo'];
 		}
 
+		// Coarse GPU timing vector — a second signal used to tell apart devices
+		// that share the same pixel hash (identical model). Sanitize to a short
+		// numeric array and store it inside the profile.
+		$timing = array();
+		if ( isset( $params['timing'] ) && is_array( $params['timing'] ) ) {
+			foreach ( array_slice( $params['timing'], 0, 16 ) as $t ) {
+				if ( is_numeric( $t ) ) {
+					$timing[] = round( (float) $t, 3 );
+				}
+			}
+		}
+		if ( $timing ) {
+			$info['timing'] = $timing;
+		}
+
 		// Tie to this visitor (the same server-side IP+UA fingerprint used
-		// everywhere else), creating the row if needed, then merge any visitors
-		// that share this GPU device hash into one identity.
-		$uid = Visitors::fingerprint();
-		Visitors::record( $uid, Session::client_ip(), get_current_user_id() );
-		$canonical = Visitors::merge_by_device( $uid, $hash );
+		// everywhere else), creating the row if needed, then merge visitors that
+		// share this GPU hash AND look like the same physical unit (close timing,
+		// or same IP/account) into one identity.
+		$uid     = Visitors::fingerprint();
+		$ip      = Session::client_ip();
+		$user_id = get_current_user_id();
+		Visitors::record( $uid, $ip, $user_id );
+		$canonical = Visitors::merge_by_device( $uid, $hash, $timing, $ip, $user_id );
 		Visitors::set_device( $canonical, $hash, $info );
 
 		return new \WP_REST_Response( array( 'ok' => true ), 200 );

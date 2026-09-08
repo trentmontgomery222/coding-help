@@ -77,7 +77,8 @@
 			hash:         cached.hash,
 			rendererInfo: cached.rendererInfo,
 			capabilities: cached.capabilities,
-			gpuScore:     cached.gpuScore
+			gpuScore:     cached.gpuScore,
+			timing:       cached.timing || null
 		} );
 		return;
 	}
@@ -89,10 +90,12 @@
 		}
 		Promise.all( [
 			GPUFingerprint.get(),
-			GPUFingerprint.profile ? GPUFingerprint.profile() : Promise.resolve( { supported: false } )
+			GPUFingerprint.profile ? GPUFingerprint.profile() : Promise.resolve( { supported: false } ),
+			GPUFingerprint.timing ? GPUFingerprint.timing() : Promise.resolve( null )
 		] ).then( function ( results ) {
 			var fp      = results[0];
 			var profile = results[1];
+			var timing  = results[2];
 			if ( ! fp || ! fp.supported ) {
 				return;
 			}
@@ -100,7 +103,8 @@
 				hash:         fp.hash,
 				rendererInfo: fp.rendererInfo,
 				capabilities: ( profile && profile.supported ) ? profile : null,
-				gpuScore:     ( profile && profile.supported && profile.benchmarkScore !== null ) ? profile.benchmarkScore : null
+				gpuScore:     ( profile && profile.supported && profile.benchmarkScore !== null ) ? profile.benchmarkScore : null,
+				timing:       timing || null
 			};
 			try {
 				localStorage.setItem( CACHE_KEY, JSON.stringify(
