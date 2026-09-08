@@ -76,89 +76,72 @@ function Config_coerce_(value) {
  * =========================================================================*/
 
 /**
- * Defaults. Any key present in the spreadsheet overrides the value here, so
- * the kiosk still boots correctly against an empty or half-filled sheet.
+ * Defaults.
+ *
+ * The settings people actually change come from Settings.gs, so the sheet, the
+ * editor and this list cannot drift apart. The rest are internal knobs that do
+ * not belong in a spreadsheet.
  */
 function Config_defaults_() {
-  return {
-    /* --- Slideshow --------------------------------------------------- */
-    ImageDisplayTimeByDefault: 12,      // seconds per slide
-    ClassImageTimeMultiplier: 2,        // class photos linger longer
-    TransitionMs: 1200,                 // slide/cross-fade duration
-    ImageOrder: 'name',                 // name | year | shuffle | weighted
-    MinImagesPerYear: 7,                // weighted-selection floor
-    ImageSource: 'cdn',                 // cdn | inline
-    ImageWidth: 0,                      // 0 = auto from screen size
-    BackdropBlurPx: 28,
-    BackdropBrightness: 0.55,
+  var cfg = {};
 
-    /* --- Content ----------------------------------------------------- */
-    ImagesFolderId: '1Xo-4k1TSv4BWaedaBWpgHsaBLIdjvtq9',
-    AlternateFolderId: '1yWR1vwL2sJrzG5CMLUVmbx4F5pQd-AyN',
-    UseAlternateSet: false,             // play the alternate folder instead
-    FeaturedYear: 0,                    // 0 = no year is spotlighted
-    IncludeSubFolders: true,
-    MaxImageSizeMB: 25,
-    AllowTiffs: false,
-    ManifestPageSize: 400,
+  Settings_all_().forEach(function (setting) {
+    cfg[setting.key] = setting.value;
+  });
 
-    /* --- Interaction -------------------------------------------------- */
-    MinYMovementSwipe: 80,              // px before an upward swipe counts
-    MaxYMovementSwipe: 2000,
-    MaxXMovementSwipe: 120,             // horizontal slop allowed in a swipe
-    InfoPanelIdleCloseMs: 60000,
-    InfoPanelHardCloseMs: 120000,
-    MaxImageDisplayNameLength: 64,
-    AllowViewerEdits: true,
-    WebsiteURLOnClick: '',
+  /* Internal - not surfaced in the editor. */
+  cfg.ImageSource = 'cdn';            // cdn | inline
+  cfg.ImageWidth = 0;                 // 0 = size from the screen
+  cfg.ManifestPageSize = 400;
+  cfg.BackendFlushSeconds = 15;
+  cfg.StatsIntervalSeconds = 900;
+  cfg.InfoPanelHardCloseMs = 120000;
+  cfg.WeeklyResyncDay = 'monday';
+  cfg.WeeklyResyncHour = 19;
+  cfg.AllowedUploadTypes = 'image/jpeg,image/png';
+  cfg.ReadExifOnUpload = false;
+  cfg.EnhanceInboxFolderId = '';
+  cfg.EnhanceOutputFolderId = '';
+  cfg.EnhanceArchiveFolderId = '';
+  cfg.EnhanceEveryMinutes = 0;
+  cfg.ProtectConfigSheets = true;
+  cfg.SessionLogFolderId = '1dx6WTpUqZgjq7BBSVLnwuNGRvte2_0DB';
+  cfg.ReadMeFileId = '17XDLe11aLUJ8_dSDHXrR2JfB4miTACFl';
+  cfg.ReadMeText = '';
 
-    /* --- Intake pipeline ----------------------------------------------- */
-    UploadFolderId: '1Utxk3HjJqdaAQbU_EAgrhSnV7HPU1idP',
-    IntakeFallbackFolderId: '1kTxvtjehPyje2tdWe7cJWCCCyJi3WLj7',
-    UploadLogSheetId: '15_Zeu5mniIRzs9ON62tCFgFpYcS3fT3N2GNUfnwABjI',
-    AllowedUploadTypes: 'image/jpeg,image/png',
-    IntakeSettleSeconds: 60,            // wait this long before touching a file
-    CreateMissingYearFolders: true,
-    ReadExifOnUpload: false,            // slow; leave to the nightly backfill
-    EmailOnRejectedUpload: true,
+  return cfg;
+}
 
-    /* --- Enhancement queue (optional) ---------------------------------- */
-    EnhanceInboxFolderId: '',
-    EnhanceOutputFolderId: '',
-    EnhanceArchiveFolderId: '',
+/**
+ * Applies one row from the Control Values sheet, translating a key that has
+ * since been renamed or retired.
+ *
+ * Without this, a sheet that still says `BLUR_SLIDE_BLUR` or `MAX_IMAGE_SIZE_IN_MB`
+ * would be silently ignored and the kiosk would quietly run on defaults.
+ *
+ * @param {!Object} cfg  Mutated in place.
+ * @param {string} key
+ * @param {*} rawValue
+ */
+function Config_applyRow_(cfg, key, rawValue) {
+  var legacy = Settings_legacy_()[key];
 
-    /* --- Integrity ------------------------------------------------------ */
-    AdminEmails: '',                    // also reads ALL_ADMIN_EMAILS
-    EnableAlertEmails: true,
-    ProtectConfigSheets: true,
-    ReadMeFileId: '17XDLe11aLUJ8_dSDHXrR2JfB4miTACFl',
-    ReadMeText: '',
+  if (!legacy) {
+    cfg[key] = Config_coerce_(rawValue);
+    return;
+  }
 
-    /* --- Maintenance schedule (minutes between runs; 0 disables) -------- */
-    IntakeEveryMinutes: 5,
-    IntegrityEveryMinutes: 60,
-    ProtectSheetsEveryMinutes: 720,
-    EnhanceEveryMinutes: 0,
-    ManifestWarmEveryMinutes: 360,
+  if (!legacy.to) return;    // retired; the Help tab explains why
 
-    /* --- Logging -------------------------------------------------------- */
-    LogDestination: 'sheet',            // sheet | session
-    SessionLogFolderId: '1dx6WTpUqZgjq7BBSVLnwuNGRvte2_0DB',
-    SessionLogKeep: 25,
+  var value = legacy.parse
+      ? Settings_parseLegacy_(rawValue, legacy.parse)
+      : Config_coerce_(rawValue);
 
-    /* --- Behaviour ---------------------------------------------------- */
-    DailyRefreshHour: 23,               // 24h clock; page reloads itself
-    WeeklyResyncDay: 'monday',
-    WeeklyResyncHour: 19,
-    CommandPollSeconds: 30,
-    BackendFlushSeconds: 15,
-    StatsIntervalSeconds: 900,
-    EnableLogs: true,
-    EnableDeviceReporting: true,
-    AllowLegacyEvalCommands: true,      // run raw JS from the command sheets
-    DeveloperMode: false,
-    ShowDebugHud: false
-  };
+  // A renamed key never overwrites the new one, so a half-migrated sheet
+  // holding both `EnableBackendLogging` and `EnableLogs` uses the new value.
+  if (value !== '' && !(legacy.to in cfg.__fromSheet)) {
+    cfg[legacy.to] = value;
+  }
 }
 
 /**
@@ -183,11 +166,21 @@ function Config_get() {
     return cfg;
   }
 
+  // Tracks which keys the sheet set under their current name, so a legacy
+  // alias later in the sheet cannot overwrite them.
+  cfg.__fromSheet = {};
+
   for (var i = 1; i < rows.length; i++) {
     var key = String(rows[i][0] || '').trim();
     if (!key) continue;
-    cfg[key] = Config_coerce_(rows[i][1]);
+    if (!Settings_legacy_()[key]) cfg.__fromSheet[key] = true;
   }
+  for (var j = 1; j < rows.length; j++) {
+    var rowKey = String(rows[j][0] || '').trim();
+    if (!rowKey) continue;
+    Config_applyRow_(cfg, rowKey, rows[j][1]);
+  }
+  delete cfg.__fromSheet;
 
   Cache_putJson_('cfg', cfg, CONFIG_CACHE_SECONDS_);
   Config_backup_(cfg);

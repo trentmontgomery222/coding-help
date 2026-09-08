@@ -25,6 +25,10 @@ a full day without being restarted.
 | `Integrity.gs` | Watches critical Drive items; protects the settings sheets |
 | `SessionLog.gs` | Optional per-session log spreadsheets |
 | `Maintenance.gs` | Run-by-hand curation jobs (`checkSetup`, `repairFolder`, `auditLibrary`, …) |
+| `Settings.gs` | Every setting: name, type, default and explanation — one list |
+| `Setup.gs` | Builds the configuration spreadsheet, Help tab and validation |
+| `Editor.gs` | CardService settings editor, plus the Kiosk menu |
+| `Editor_Sidebar.html` | The same editor as a spreadsheet sidebar |
 | `Utils.gs` | Caching, logging, object merging |
 | `Index.html` | Page structure |
 | `Styles.html` | All CSS |
@@ -66,15 +70,49 @@ a full day without being restarted.
    link" for the browser to load them from Google's image CDN. Re-running is
    cheap — it skips files that are already shared.
 
-7. **Run `installTriggers()`** once, to schedule the manifest warm-up and
-   nightly maintenance.
+7. **Run `installTriggers()`** once, to schedule the heartbeat and nightly
+   maintenance.
+
+8. **Run `setupConfigurationSpreadsheet()`** once. It rebuilds the settings
+   spreadsheet: a Help tab, a grouped Control Values tab with an explanation
+   against every setting, drop-downs and tick boxes so nothing can be mistyped,
+   and a "Retired settings" tab listing anything that no longer does anything
+   and why. Your current values are read first and written back, and your
+   button, keyboard and language tabs are left alone.
+
+---
+
+## Editing the settings
+
+Three ways, in order of preference.
+
+**The Kiosk menu.** Reopen the spreadsheet and there is a `Kiosk` menu:
+*Edit settings…* opens a sidebar with a proper control for each setting and a
+description of what it does. It also carries *Check setup*, *Collect new
+photos*, *Rebuild photo index* and *Reload every display*. This works as soon
+as the script is saved — nothing to deploy.
+
+**The card editor.** The same editor as a Workspace add-on card. Install it
+with **Deploy → Test deployments → Install**, then open the spreadsheet and
+pick it from the side panel. It needs that install step; the menu does not.
+
+**By hand.** Edit column B on the Control Values tab. The drop-downs and tick
+boxes are there to stop typos, so prefer the editor.
+
+Both editors are generated from `Settings.gs`, so they can never offer
+different settings from each other or from the sheet.
 
 ---
 
 ## Settings (Control Values tab)
 
-Column A is the key, column B the value. Anything you leave out uses the
-default. Booleans accept `TRUE`/`FALSE`.
+Column A is the key, column B the value, column C explains it. Anything you
+leave out uses the default.
+
+Settings that were renamed are translated on read, including their old value
+formats — a sheet still saying `MAX_IMAGE_SIZE_IN_MB: 5MB` or
+`DAILY_IMAGE_REFRESH_TIME: 7PM` keeps working, and
+`setupConfigurationSpreadsheet()` migrates them properly.
 
 ### Slideshow
 | Key | Default | Meaning |
@@ -250,6 +288,21 @@ The list and search buttons (`makeObjectList()` / `search()`) open a searchable
 index of the library — filter by name or year, tap a photo to jump straight to
 it. Press `l` for the same thing.
 
+### The bottom bar, in detail
+
+Each row in **Bottom Menu Controls** is one slot along the bar, and every slot
+is the same width. That is what positions everything:
+
+- a row with an **image** is a button,
+- a row whose image column says **`nameplate`** is part of the photo title —
+  the number of those rows is how wide the title is, which is what pushes the
+  playback buttons into the middle (yours has 15),
+- a row left **blank** is a gap,
+- a row with an action but **no image** is an invisible tap target, as before.
+
+So to move the playback buttons right, add `nameplate` rows; to move them left,
+remove some; to space buttons apart, insert blank rows.
+
 ### Built-in keys
 `←` `→` step · `space` next · `↑` `↓` details panel · `p` pause · `r` resync ·
 `d` developer overlay · `l` browse · `Esc` close
@@ -388,6 +441,24 @@ Measured over 300 transitions in Chromium: heap flat at 9.5MB, DOM flat at
 - **A keyboard row containing `await` never ran.** The legacy fallback built a
   plain `Function`, where a top-level `await` is a SyntaxError; it now builds an
   async function.
+- **Photos were being upscaled.** The CDN request was `=w1920`, which forces
+  the width — a 900px scan came back stretched to 1920 and the browser drew
+  those invented pixels full-screen. That is the soft, jagged look. It now asks
+  for `=s<n>`, which bounds the longest side and returns a smaller original
+  untouched.
+- **The blurred backdrop loaded the full-size photo** and blurred it across the
+  whole screen during every transition. It now loads a 64px thumbnail.
+- **Spacer rows collapsed the bar's spacing.** They were a flat 6px rather than
+  a full slot, which slid the playback buttons off-centre.
+- **The 14 rows after the first `nameplate` were counted twice** — rendered as
+  spacers *and* included in the title width — overflowing the bar and squeezing
+  the title to 28px.
+- **Rows whose only action was `console.log("12")` drew as buttons**, putting a
+  line of dots across the middle of the bar.
+- **The pause banner read "Paused - Paused"** because the reason was itself
+  named `Paused`.
+- **A duplicate `Config` tab** held a byte-for-byte copy of Control Values, so
+  it was never clear which one the kiosk read. (It reads Control Values.)
 - **One year was hardcoded into the scoring.** `if (img.year == 2026) rawPower
   += 23456` pinned the rotation to a single year; that is now the optional
   `FeaturedYear` setting.

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  :root {
+    --ink:      #202124;
+    --muted:    #5f6368;
+    --line:     #dadce0;
+    --accent:   #1a73e8;
+    --surface:  #f8f9fa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 76px;
+    font: 14px/1.5 Roboto, Arial, sans-serif;
+    color: var(--ink);
+  }
+  h2 { margin: 0 0 4px; font-size: 15px; }
+  .intro { padding: 14px 16px; color: var(--muted); font-size: 13px;
+           border-bottom: 1px solid var(--line); }
+
+  details { border-bottom: 1px solid var(--line); }
+  summary {
+    padding: 12px 16px; cursor: pointer; font-weight: 500;
+    background: var(--surface); list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '▸ '; color: var(--muted); }
+  details[open] summary::before { content: '▾ '; }
+  summary .blurb { display: block; font-weight: 400; font-size: 12px;
+                   color: var(--muted); margin-top: 2px; }
+
+  .field { padding: 12px 16px 14px; border-top: 1px solid #eee; }
+  .field label { display: block; font-weight: 500; margin-bottom: 2px; }
+  .field .help { display: block; color: var(--muted); font-size: 12px;
+                 margin-bottom: 8px; }
+  .field input[type="text"], .field select {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--line);
+    border-radius: 4px; font: inherit;
+  }
+  .field input:focus, .field select:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .switch { display: flex; align-items: center; gap: 10px; }
+  .switch input { width: 18px; height: 18px; margin: 0; flex: 0 0 auto; }
+  .switch label { margin: 0; }
+
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; background: #fff;
+    border-top: 1px solid var(--line);
+  }
+  button {
+    padding: 9px 18px; border: 0; border-radius: 4px;
+    background: var(--accent); color: #fff; font: inherit; font-weight: 500;
+    cursor: pointer;
+  }
+  button:disabled { background: #9aa0a6; cursor: default; }
+  .status { font-size: 12px; color: var(--muted); }
+  .status.error { color: #d93025; }
+  .loading { padding: 24px 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="intro">
+  Each control below changes one setting on the photo display.
+  Saved changes reach the screens within about five minutes.
+</div>
+
+<div id="groups" class="loading">Loading settings…</div>
+
+<div class="bar">
+  <button id="save" disabled>Save</button>
+  <span id="status" class="status"></span>
+</div>
+
+<script>
+/**
+ * The sidebar renders the same schema the card editor does, so the two
+ * surfaces can never offer different settings.
+ */
+var SETTINGS = [];
+
+google.script.run
+    .withSuccessHandler(render)
+    .withFailureHandler(function (err) {
+      document.getElementById('groups').textContent =
+          'Could not load settings: ' + err.message;
+    })
+    .editorLoadSettings();
+
+function render(data) {
+  SETTINGS = data.settings;
+  var host = document.getElementById('groups');
+  host.className = '';
+  host.textContent = '';
+
+  data.groups.forEach(function (group, index) {
+    var mine = data.settings.filter(function (s) { return s.group === group.id; });
+    if (!mine.length) return;
+
+    var block = document.createElement('details');
+    if (index === 0) block.open = true;
+
+    var head = document.createElement('summary');
+    head.appendChild(document.createTextNode(group.name));
+    var blurb = document.createElement('span');
+    blurb.className = 'blurb';
+    blurb.textContent = group.blurb;
+    head.appendChild(blurb);
+    block.appendChild(head);
+
+    mine.forEach(function (setting) {
+      block.appendChild(field(setting, data.values[setting.key]));
+    });
+    host.appendChild(block);
+  });
+
+  document.getElementById('save').disabled = false;
+}
+
+/** One labelled control, with its explanation attached. */
+function field(setting, value) {
+  var wrap = document.createElement('div');
+  wrap.className = 'field';
+
+  var hint = setting.help + (setting.unit ? ' (' + setting.unit + ')' : '');
+
+  if (setting.type === 'boolean') {
+    var row = document.createElement('div');
+    row.className = 'switch';
+
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.id = 'f_' + setting.key;
+    box.dataset.key = setting.key;
+    box.checked = value === true || String(value) === 'true';
+
+    var label = document.createElement('label');
+    label.htmlFor = box.id;
+    label.textContent = setting.label;
+
+    row.appendChild(box);
+    row.appendChild(label);
+    wrap.appendChild(row);
+
+    var note = document.createElement('span');
+    note.className = 'help';
+    note.textContent = hint;
+    note.style.marginTop = '6px';
+    wrap.appendChild(note);
+    return wrap;
+  }
+
+  var caption = document.createElement('label');
+  caption.textContent = setting.label;
+  caption.htmlFor = 'f_' + setting.key;
+  wrap.appendChild(caption);
+
+  var help = document.createElement('span');
+  help.className = 'help';
+  help.textContent = hint;
+  wrap.appendChild(help);
+
+  var input;
+  if (setting.type === 'choice') {
+    input = document.createElement('select');
+    setting.choices.forEach(function (choice) {
+      var option = document.createElement('option');
+      option.value = choice;
+      option.textContent = choice;
+      if (String(value) === choice) option.selected = true;
+      input.appendChild(option);
+    });
+  } else {
+    input = document.createElement('input');
+    input.type = 'text';
+    input.value = (value === null || value === undefined) ? '' : String(value);
+    if (setting.type === 'folder' || setting.type === 'sheet') {
+      input.placeholder = 'Drive link or ID';
+    }
+  }
+  input.id = 'f_' + setting.key;
+  input.dataset.key = setting.key;
+  wrap.appendChild(input);
+  return wrap;
+}
+
+document.getElementById('save').addEventListener('click', function () {
+  var button = this;
+  var status = document.getElementById('status');
+
+  var updates = {};
+  SETTINGS.forEach(function (setting) {
+    var node = document.getElementById('f_' + setting.key);
+    if (!node) return;
+    updates[setting.key] =
+        setting.type === 'boolean' ? node.checked : node.value;
+  });
+
+  button.disabled = true;
+  status.className = 'status';
+  status.textContent = 'Saving…';
+
+  google.script.run
+      .withSuccessHandler(function (result) {
+        button.disabled = false;
+        status.textContent = result.written + ' settings saved.';
+      })
+      .withFailureHandler(function (err) {
+        button.disabled = false;
+        status.className = 'status error';
+        status.textContent = err.message;
+      })
+      .editorSaveSettings(updates);
+});
+</script>
+</body>
+</html>
