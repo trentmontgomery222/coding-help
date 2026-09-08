@@ -93,6 +93,17 @@ class REST_Controller {
 				'permission_callback' => '__return_true',
 			)
 		);
+		// Satellite export: a key-gated feed of device rows for an external
+		// "main" (the original Device Bridge plugin) to pull. Satellite-only.
+		register_rest_route(
+			$ns,
+			'/device-export',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'device_export' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 
 		if ( ! Settings::get( 'analytics_enabled' ) ) {
 			return;
@@ -232,12 +243,38 @@ class REST_Controller {
 		}
 
 		// Tie to this visitor (the same server-side IP+UA fingerprint used
-		// everywhere else), creating the row if needed.
+		// everywhere else), creating the row if needed, then merge any visitors
+		// that share this GPU device hash into one identity.
 		$uid = Visitors::fingerprint();
 		Visitors::record( $uid, Session::client_ip(), get_current_user_id() );
-		Visitors::set_device( $uid, $hash, $info );
+		$canonical = Visitors::merge_by_device( $uid, $hash );
+		Visitors::set_device( $canonical, $hash, $info );
 
 		return new \WP_REST_Response( array( 'ok' => true ), 200 );
+	}
+
+	/**
+	 * GET /device-export — the satellite feed. Returns { site, rows } of device
+	 * fingerprints for an external "main" install to pull. Key-gated with
+	 * hash_equals; this plugin is satellite-only (it never pulls).
+	 *
+	 * @param \WP_REST_Request $req Request.
+	 * @return \WP_REST_Response
+	 */
+	public function device_export( $req ) {
+		$this->no_cache();
+		$key      = trim( (string) Settings::get( 'device_export_key' ) );
+		$given    = (string) $req->get_param( 'key' );
+		if ( '' === $key || '' === $given || ! hash_equals( $key, $given ) ) {
+			return new \WP_REST_Response( array( 'ok' => false ), 403 );
+		}
+		if ( ! Settings::get( 'device_fp_enabled' ) ) {
+			return new \WP_REST_Response( array( 'site' => home_url(), 'rows' => array() ), 200 );
+		}
+		return new \WP_REST_Response(
+			array( 'site' => home_url(), 'rows' => Visitors::export_devices() ),
+			200
+		);
 	}
 
 	/**

@@ -133,6 +133,10 @@ class Settings {
 			// Device fingerprint (GPU/WebGL). Hidden with the updates; feeds the
 			// visitor system with a strong per-device hash + hardware profile.
 			'device_fp_enabled'     => 0,
+			// Satellite export: this plugin only ever acts as a SATELLITE — it
+			// exposes a key-gated export the external "main" (the original Device
+			// Bridge plugin) pulls from. There is no main/pull role here.
+			'device_export_key'     => '',
 
 			// Capabilities.
 			'editors_view_reports'  => 0, // grant read-only feedback/analytics to editors (spec §9.1).
@@ -292,6 +296,7 @@ class Settings {
 		}
 		$out['verify_status_url'] = isset( $input['verify_status_url'] ) ? esc_url_raw( trim( $input['verify_status_url'] ) ) : '';
 		$out['verify_status_key'] = isset( $input['verify_status_key'] ) ? sanitize_text_field( $input['verify_status_key'] ) : '';
+		$out['device_export_key'] = isset( $input['device_export_key'] ) ? sanitize_text_field( $input['device_export_key'] ) : '';
 
 		// Page ID lists.
 		foreach ( array( 'trigger_pages' ) as $key ) {

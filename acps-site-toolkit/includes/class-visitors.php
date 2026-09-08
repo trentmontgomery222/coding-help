@@ -252,6 +252,166 @@ class Visitors {
 	}
 
 	/**
+	 * Merge visitors that share a GPU device hash into a single identity, and
+	 * return the canonical uid to use. When the same device reports from a
+	 * different IP/browser (a new fingerprint uid), its rows are folded into the
+	 * earliest-seen visitor carrying that hash — so one physical device is one
+	 * visitor regardless of network/browser changes.
+	 *
+	 * @param string $uid  The current request's fingerprint uid.
+	 * @param string $hash 64-char device hash.
+	 * @return string Canonical uid to attach data to.
+	 */
+	public static function merge_by_device( $uid, $hash ) {
+		$uid  = self::sanitize( $uid );
+		$hash = is_string( $hash ) && preg_match( '/^[a-f0-9]{64}$/', $hash ) ? $hash : '';
+		if ( '' === $uid || '' === $hash || ! self::has_column( 'visitors', 'device_hash' ) ) {
+			return $uid;
+		}
+		global $wpdb;
+		$v = Schema::table( 'visitors' );
+
+		// Everyone already carrying this hash (besides the current uid).
+		$others = $wpdb->get_col( $wpdb->prepare( "SELECT uid FROM {$v} WHERE device_hash = %s AND uid <> %s", $hash, $uid ) ); // phpcs:ignore WordPress.DB
+		if ( empty( $others ) ) {
+			return $uid; // current uid is (or becomes) the canonical one.
+		}
+
+		$all         = array_merge( array( $uid ), $others );
+		$placeholders = implode( ',', array_fill( 0, count( $all ), '%s' ) );
+		$canonical   = $wpdb->get_var( $wpdb->prepare( "SELECT uid FROM {$v} WHERE uid IN ($placeholders) ORDER BY first_seen ASC LIMIT 1", $all ) ); // phpcs:ignore WordPress.DB
+		if ( ! $canonical ) {
+			$canonical = $uid;
+		}
+		foreach ( $all as $u ) {
+			if ( $u !== $canonical ) {
+				self::merge_rows( $u, $canonical );
+			}
+		}
+		return $canonical;
+	}
+
+	/**
+	 * Fold one visitor row into another: repoint its entries + sessions, backfill
+	 * any blank fields on the target, widen the seen-window, then delete the
+	 * source row.
+	 *
+	 * @param string $from Source uid (removed).
+	 * @param string $into Target uid (kept).
+	 */
+	private static function merge_rows( $from, $into ) {
+		global $wpdb;
+		$v  = Schema::table( 'visitors' );
+		$e  = Schema::table( 'entries' );
+		$se = Schema::table( 'sessions' );
+
+		if ( self::has_column_generic( $e, 'visitor_uid' ) ) {
+			$wpdb->update( $e, array( 'visitor_uid' => $into ), array( 'visitor_uid' => $from ) ); // phpcs:ignore WordPress.DB
+		}
+		if ( self::has_column( 'sessions', 'visitor_uid' ) ) {
+			$wpdb->update( $se, array( 'visitor_uid' => $into ), array( 'visitor_uid' => $from ) ); // phpcs:ignore WordPress.DB
+		}
+
+		$f = self::get( $from );
+		$t = self::get( $into );
+		if ( $f && $t ) {
+			$upd = array();
+			if ( empty( $t->name ) && ! empty( $f->name ) ) {
+				$upd['name'] = $f->name;
+			}
+			if ( empty( $t->notes ) && ! empty( $f->notes ) ) {
+				$upd['notes'] = $f->notes;
+			}
+			if ( isset( $t->user_id ) && empty( $t->user_id ) && ! empty( $f->user_id ) ) {
+				$upd['user_id'] = (int) $f->user_id;
+			}
+			if ( isset( $t->last_ip ) && empty( $t->last_ip ) && ! empty( $f->last_ip ) ) {
+				$upd['last_ip'] = $f->last_ip;
+			}
+			if ( isset( $t->device_info ) && empty( $t->device_info ) && ! empty( $f->device_info ) ) {
+				$upd['device_info'] = $f->device_info;
+			}
+			if ( ! empty( $f->first_seen ) && ( empty( $t->first_seen ) || $f->first_seen < $t->first_seen ) ) {
+				$upd['first_seen'] = $f->first_seen;
+			}
+			if ( ! empty( $f->last_seen ) && $f->last_seen > $t->last_seen ) {
+				$upd['last_seen'] = $f->last_seen;
+			}
+			if ( $upd ) {
+				$wpdb->update( $v, $upd, array( 'uid' => $into ) ); // phpcs:ignore WordPress.DB
+			}
+		}
+		$wpdb->delete( $v, array( 'uid' => $from ) ); // phpcs:ignore WordPress.DB
+	}
+
+	/**
+	 * Column check against a fully-qualified table name (for the entries table).
+	 *
+	 * @param string $table Full table name.
+	 * @param string $col   Column.
+	 * @return bool
+	 */
+	private static function has_column_generic( $table, $col ) {
+		static $cache = array();
+		if ( ! isset( $cache[ $table ] ) ) {
+			global $wpdb;
+			$found          = $wpdb->get_col( "SHOW COLUMNS FROM {$table}" ); // phpcs:ignore WordPress.DB
+			$cache[ $table ] = is_array( $found ) ? array_map( 'strtolower', $found ) : array();
+		}
+		return in_array( strtolower( $col ), $cache[ $table ], true );
+	}
+
+	/**
+	 * Rows for the satellite export: one per visitor that has a device hash,
+	 * mapped to the Device Bridge export shape so an external "main" install can
+	 * pull them.
+	 *
+	 * @return array[]
+	 */
+	public static function export_devices() {
+		if ( ! self::has_column( 'visitors', 'device_hash' ) ) {
+			return array();
+		}
+		global $wpdb;
+		$v  = Schema::table( 'visitors' );
+		$se = Schema::table( 'sessions' );
+
+		$visit_select = self::has_column( 'sessions', 'visitor_uid' )
+			? "( SELECT COUNT(*) FROM {$se} se WHERE se.visitor_uid = vv.uid )"
+			: '0';
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			"SELECT vv.uid, vv.name, vv.user_id, vv.device_hash, vv.device_info, vv.first_seen, vv.last_seen,
+			        {$visit_select} AS visit_count
+			 FROM {$v} vv
+			 WHERE vv.device_hash IS NOT NULL AND vv.device_hash <> ''",
+			ARRAY_A
+		);
+		$out = array();
+		foreach ( (array) $rows as $r ) {
+			$info = ! empty( $r['device_info'] ) ? json_decode( $r['device_info'], true ) : array();
+			$info = is_array( $info ) ? $info : array();
+			$rend = null;
+			if ( isset( $info['rendererInfo'] ) ) {
+				$rend = $info['rendererInfo'];
+			} elseif ( ! empty( $info['renderer'] ) ) {
+				$rend = array( 'renderer' => $info['renderer'], 'vendor' => isset( $info['vendor'] ) ? $info['vendor'] : '' );
+			}
+			$out[] = array(
+				'device_hash'   => $r['device_hash'],
+				'wp_user_id'    => ! empty( $r['user_id'] ) ? (int) $r['user_id'] : null,
+				'renderer_info' => $rend,
+				'capabilities'  => $info ? $info : null,
+				'gpu_score'     => isset( $info['benchmarkScore'] ) ? $info['benchmarkScore'] : null,
+				'first_seen'    => $r['first_seen'],
+				'last_seen'     => $r['last_seen'],
+				'visit_count'   => (int) $r['visit_count'],
+			);
+		}
+		return $out;
+	}
+
+	/**
 	 * Fetch a visitor row by uid.
 	 *
 	 * @param string $uid Visitor id.

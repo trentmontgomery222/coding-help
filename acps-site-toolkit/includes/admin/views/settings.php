@@ -639,7 +639,17 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 					<th scope="row"><?php esc_html_e( 'Device fingerprinting', 'acps-site-toolkit' ); ?></th>
 					<td>
 						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'device_fp_enabled' ) ); ?>" value="1" <?php echo $checked( 'device_fp_enabled' ); ?>> <?php esc_html_e( 'On — collect a GPU/WebGL device hash and attach it to visitors', 'acps-site-toolkit' ); ?></label>
-						<p class="description"><?php esc_html_e( 'The hash and hardware details appear on each visitor’s page under Cayden Form Manager → Visitors. Consider your privacy policy before enabling.', 'acps-site-toolkit' ); ?></p>
+						<p class="description"><?php esc_html_e( 'The hash and hardware details appear on each visitor’s page under Cayden Form Manager → Visitors. Visitors that share a device hash are automatically merged into one identity. Consider your privacy policy before enabling.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-device-export-key"><?php esc_html_e( 'Satellite export key', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="text" id="acps-device-export-key" name="<?php echo esc_attr( $name( 'device_export_key' ) ); ?>" value="<?php echo esc_attr( $s['device_export_key'] ); ?>" class="regular-text code">
+						<p class="description"><?php esc_html_e( 'This install is satellite-only: it publishes its device rows for your main site (the original Device Bridge plugin) to pull. Set a secret here, then paste the URL below into the main site’s “Satellite export URL” field. Leave blank to disable the export.', 'acps-site-toolkit' ); ?></p>
+						<?php if ( ! empty( $s['device_export_key'] ) ) : ?>
+							<p><input type="text" readonly class="large-text code" onclick="this.select();" value="<?php echo esc_url( rest_url( ACPS_ST_REST_NAMESPACE . '/device-export' ) . '?key=' . rawurlencode( $s['device_export_key'] ) ); ?>"></p>
+						<?php endif; ?>
 					</td>
 				</tr>
 			</table>
