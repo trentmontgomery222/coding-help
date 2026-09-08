@@ -106,8 +106,24 @@
     </div>
   </div>
 
-  <!-- ---------- Developer HUD (hidden unless enabled) ---------- -->
-  <pre class="hud" id="hud" hidden></pre>
+  <!-- ---------- Photo browser (the list / search buttons) ---------- -->
+  <section class="browser" id="browser" hidden aria-label="Browse photos">
+    <div class="browser-bar">
+      <input class="browser-search" id="browserSearch" type="search"
+             placeholder="Search by name or year" autocomplete="off">
+      <button class="browser-close" id="browserClose" type="button">Close</button>
+    </div>
+    <div class="browser-list" id="browserList"></div>
+  </section>
+
+  <!-- ---------- Controller strip (legacy sheet check-cases target this) -->
+  <div id="controller" class="controller" hidden></div>
+
+  <!--
+    Developer overlay. The id stays `usage` because the settings sheet tests
+    `document.getElementById("usage").style.display` directly.
+  -->
+  <pre class="hud" id="usage" hidden></pre>
 
 </div>
 
@@ -129,6 +145,7 @@
 <?!= include('Client_Core'); ?>
 <?!= include('Client_Slideshow'); ?>
 <?!= include('Client_UI'); ?>
+<?!= include('Client_Legacy'); ?>
 
 <script>
   // Everything above only defines things. This is the single starting gun.

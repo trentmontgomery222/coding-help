@@ -436,9 +436,24 @@
     return best;
   };
 
+  /**
+   * Toggles a deliberate pause.
+   *
+   * It keys off that specific reason rather than "is anything holding the
+   * slideshow", because stepping with the arrows leaves a short browse hold
+   * in place - and testing isPaused() meant the very next tap on Pause
+   * *resumed* instead of pausing, which reads as the button being broken.
+   *
+   * Pausing is exclusive, so it also clears any incidental hold.
+   */
   Kiosk.togglePause = function (reason, ms) {
-    if (Kiosk.isPaused()) { Kiosk.resume(); return false; }
-    Kiosk.pause(reason || 'Paused', ms || 5 * 60 * 1000, true);
+    var key = reason || 'Paused';
+
+    if (pauses[key] && pauses[key] > Date.now()) {
+      Kiosk.resume();                       // clear this and any other hold
+      return false;
+    }
+    Kiosk.pause(key, ms || 5 * 60 * 1000, true);
     return true;
   };
 
@@ -648,6 +663,32 @@
       Kiosk.toast(Kiosk.t('sync_Updated', {count: count}));
       return count;
     });
+  };
+
+  /**
+   * Jumps to a specific photo, wherever it sits in the playlist.
+   *
+   * Used by the browser overlay: the visitor picks a photo from the index,
+   * which is not necessarily in playlist order (weighted mode reorders, and
+   * the playlist can be a subset of the library).
+   *
+   * @param {!Object} photo
+   * @return {!Promise<boolean>}
+   */
+  Kiosk.showPhoto = function (photo) {
+    if (!photo) return Promise.resolve(false);
+
+    var position = playlist.indexOf(photo);
+
+    // Not in the current playlist - drop it in after the current photo so it
+    // can be shown without rebuilding the whole running order.
+    if (position === -1) {
+      position = Math.min(index + 1, playlist.length);
+      playlist.splice(position, 0, photo);
+    }
+
+    Kiosk.pause('browsing', 60000);
+    return goTo(position, 1);
   };
 
   /** Read-only accessors used by the UI layer and the HUD. */

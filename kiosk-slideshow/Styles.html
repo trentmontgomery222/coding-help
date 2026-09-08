@@ -377,8 +377,9 @@ html, body {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  /* Set by sizeToolbar() from the sheet's row count and the screen width. */
+  width: var(--tool-icon, 56px);
+  height: var(--tool-icon, 56px);
   padding: 6px;
   border: 0;
   border-radius: 12px;
@@ -400,16 +401,155 @@ html, body {
 
 /* The nameplate stretches to fill whatever space the buttons leave. */
 .tool-nameplate {
+  /* Width comes from how many "nameplate" rows the sheet has - that is what
+     positions the playback controls. It grows into half of any leftover
+     space and shrinks on a narrow screen. */
+  flex: 1 1 var(--plate-w, 240px);
+  min-width: 0;
+  padding: 0 12px;
+  font-family: var(--font);
+  font-size: clamp(16px, 1.9vw, 26px);
+  font-weight: 700;
+  line-height: var(--toolbar-h);
+  display: flex;
+  align-items: center;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* Thin spacer between toolbar buttons, as the original bar had. */
+.tool-spacer {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 1px;
+}
+
+/* Takes the other half of the leftover width, so the buttons in the middle of
+   the bar stay near the middle whatever the sheet contains. */
+.tool-endcap {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 1px;
+}
+
+/* ===========================================================================
+ * Photo browser
+ * =========================================================================*/
+
+.browser {
+  position: absolute;
+  inset: 0;
+  bottom: var(--toolbar-h);
+  z-index: var(--z-panel);
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 12, 18, 0.96);
+  backdrop-filter: blur(18px);
+}
+
+.browser-bar {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.browser-search {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 0 14px;
-  font-family: var(--font);
-  font-size: clamp(15px, 1.7vw, 22px);
-  font-weight: 700;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 16px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.browser-search:focus { outline: none; border-color: var(--accent); }
+.browser-search::placeholder { color: var(--ink-faint); }
+
+.browser-close {
+  flex: 0 0 auto;
+  padding: 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.browser-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 12px 20px;
+  /* Momentum scrolling on the touch screen. */
+  -webkit-overflow-scrolling: touch;
+}
+
+.browser-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.browser-row:nth-child(odd) { background: rgba(255, 255, 255, 0.03); }
+.browser-row:active { background: rgba(124, 184, 255, 0.22); }
+
+.browser-year {
+  flex: 0 0 auto;
+  width: 62px;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+
+.browser-name {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.browser-empty {
+  margin: 24px 14px;
+  color: var(--ink-faint);
+  font-size: 15px;
+  text-align: center;
+}
+
+/* ===========================================================================
+ * Controller strip
+ *
+ * Kept because the settings sheet tests for `#controller.active`. It has no
+ * content of its own; the playback buttons live in the toolbar.
+ * =========================================================================*/
+
+.controller {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--toolbar-h);
+  height: 0;
+  z-index: var(--z-toolbar);
+  background: rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  transition: height 300ms var(--transition-ease);
+}
+.controller.active { height: 6px; }
 
 /* ===========================================================================
  * Toasts

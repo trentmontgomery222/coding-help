@@ -1,0 +1,244 @@
+<script>
+/* ===========================================================================
+ * Client_Legacy.html
+ * ---------------------------------------------------------------------------
+ * Compatibility layer for the configuration spreadsheets.
+ *
+ * The Bottom Menu Controls, Settings Menu Controller and Keyboard Commandor
+ * sheets store raw JavaScript in their action columns - things like
+ * `controllerButtonFoward5()`, `PauseSlideshowFor(30)`, `pressButtonFor("z")`
+ * and `SLIDESTATES.currentImgData.id`. Those were globals in the old
+ * single-file kiosk. The rewrite replaced them with the Kiosk API, which is
+ * why every sheet-configured button silently stopped responding: the action
+ * registry found no match, the legacy eval path threw a ReferenceError, and
+ * the click was logged and dropped.
+ *
+ * This file puts those names back, as thin wrappers over the new engine, so
+ * the existing sheets keep working exactly as they did. Nothing here holds
+ * state of its own - every value reads through to the live engine.
+ *
+ * You can migrate a row to an action name (`next`, `pause(30)`) at any time;
+ * the two styles work side by side.
+ * =========================================================================*/
+
+(function (Kiosk) {
+  'use strict';
+
+  var W = window;
+
+  /* =========================================================================
+   * State objects the sheets read
+   * ======================================================================*/
+
+  /** The old slideshow state bag, backed by live engine values. */
+  W.SLIDESTATES = {
+    get currentImgData() {
+      var photo = Kiosk.currentPhoto || {};
+      return {
+        id: photo.id || null,
+        DisplayName: photo.displayName || photo.name || '',
+        Description: photo.description || '',
+        Year: photo.year || '',
+        Decade: photo.decade || '',
+        Camera: photo.camera || '',
+        Lens: photo.lens || '',
+        Producer: photo.producer || '',
+        Copyright: photo.license || '',
+        Resolution: photo.resolution || '',
+        Software: photo.software || '',
+        DateTaken: photo.dateTaken || '',
+        DownloadURL: photo.id
+            ? 'https://drive.google.com/file/d/' + photo.id + '/view?usp=sharing'
+            : null
+      };
+    },
+    get currentSlideIndex() { return Kiosk.playlistIndex(); },
+    set currentSlideIndex(value) { Kiosk.goTo(Number(value) || 0); },
+
+    get slideshowData() { return Kiosk.photos || []; },
+    set slideshowData(value) { /* the engine owns the playlist now */ },
+
+    get slidesPaused() { return Kiosk.isPaused(); },
+    set slidesPaused(value) {
+      if (value) Kiosk.pause('Paused', 5 * 60 * 1000, true);
+      else Kiosk.resume();
+    },
+
+    get slideVI() {
+      return {interval: Kiosk.get('ImageDisplayTimeByDefault', 12) * 1000};
+    },
+    showType: 3,
+    currentDirection: true
+  };
+
+  W.CFG = Kiosk.cfg;
+  W.LANG = Kiosk.lang;
+
+  W.INTERNAL = {
+    DevMode: false,
+    invisableOpacityLevel: '0.01',
+    localStorage_Plate: 'Local Storage:',
+    // The old settings menu read `.style.block` off these; keep them as real
+    // elements so those expressions evaluate instead of throwing.
+    privacyMenu: {style: {block: 'none', display: 'none'}},
+    aboutMenu: {style: {block: 'none', display: 'none'}}
+  };
+
+  W.settingsEnabled = false;
+  W.lowUsage = false;
+  W.debug = false;
+  W.notifications = true;
+  W.fullyOperational = true;
+  W.indexDBUsage = 0;
+  W.AreYouSureResetLog = [false, false, false, false];
+
+  Object.defineProperty(W, 'windowWidth', {get: function () { return window.innerWidth; }});
+  Object.defineProperty(W, 'windowHeight', {get: function () { return window.innerHeight; }});
+
+  /* =========================================================================
+   * Playback controls - what the arrow buttons in the sheet call
+   * ======================================================================*/
+
+  W.controllerButtonFoward  = function () { Kiosk.pause('browsing', 20000); return Kiosk.next(1); };
+  W.controllerButtonFoward5 = function () { Kiosk.pause('browsing', 20000); return Kiosk.next(5); };
+  W.controllerButtonBack    = function () { Kiosk.pause('browsing', 20000); return Kiosk.previous(1); };
+  W.controllerButtonBack5   = function () { Kiosk.pause('browsing', 20000); return Kiosk.previous(5); };
+  W.controllerButtonPause   = function () { return Kiosk.togglePause('Paused'); };
+  W.controllerButtonUnpause = function () { return Kiosk.resume(); };
+  W.controllerButtonList    = function () { return Kiosk.toggleBrowser(); };
+
+  // Deliberate: the sheet contains both spellings of "forward".
+  W.controllerButtonForward  = W.controllerButtonFoward;
+  W.controllerButtonForward5 = W.controllerButtonFoward5;
+
+  /** @param {number} seconds */
+  W.PauseSlideshowFor = function (seconds) {
+    return Kiosk.pause('Paused', (Number(seconds) || 30) * 1000, true);
+  };
+  W.PauseSlideshowMaxOf = W.PauseSlideshowFor;
+  W.updateSlidesPaused = function (paused) {
+    return paused ? Kiosk.pause('Paused', 5 * 60 * 1000, true) : Kiosk.resume();
+  };
+
+  W.startSlideshow = function () { return Kiosk.play(); };
+  W.reLoad = function () { location.reload(); };
+
+  /* =========================================================================
+   * Panels and overlays
+   * ======================================================================*/
+
+  W.toggleInfoPanel = function (show) { return Kiosk.togglePanel(show); };
+  W.enterImageInfoMode = function () { return Kiosk.togglePanel(true); };
+
+  /** The old debug/usage overlay. Its element id is still `usage`. */
+  W.toggleUsage = function () { return Kiosk.toggleHud(); };
+
+  /** Controller strip. Kept so the sheet's check-cases resolve. */
+  W.oepnControllerUI = function (show) {
+    var node = document.getElementById('controller');
+    if (!node) return false;
+    var open = show === undefined
+        ? !node.classList.contains('active') : !!show;
+    node.classList.toggle('active', open);
+    if (open) Kiosk.pause('controller', 5 * 60 * 1000);
+    else Kiosk.resume('controller');
+    return open;
+  };
+  W.openControllerUI = W.oepnControllerUI;
+
+  W.search = function () { return Kiosk.toggleBrowser(); };
+  W.makeObjectList = function () { return Kiosk.toggleBrowser(); };
+  W.openHelpMenu = function () { Kiosk.toast('Swipe up on a photo for details.'); };
+
+  W.LowUsageToggle = function () {
+    W.lowUsage = !W.lowUsage;
+    Kiosk.toast(W.lowUsage ? 'Low usage mode on' : 'Low usage mode off');
+    return W.lowUsage;
+  };
+
+  // Menus that were never finished in the original. They stay as friendly
+  // no-ops rather than throwing and killing the click handler.
+  W.LoginMenu       = function () { Kiosk.toast('Admin sign-in is not set up yet.'); };
+  W.OpenPrivacyMenu = function () { Kiosk.toast('No personal data is collected by this display.'); };
+  W.LearnMenu       = function () { Kiosk.toast('Allegany Archive Group'); };
+  W.Suggestion      = function () { Kiosk.toast('Thanks! Tell the front office your idea.'); };
+  W.sendNightPromise = function () { Kiosk.flushLogs(); Kiosk.flushStats(); };
+  W.SettingsMenu = W.OperationalMenu = W.OpenOptions = function () {};
+
+  /* =========================================================================
+   * Data and refresh
+   * ======================================================================*/
+
+  W.getAllImages = function () { return Promise.resolve(Kiosk.photos || []); };
+  W.getAllImagesWeighted = W.getAllImages;
+
+  W.importConfig = W.importLang = W.importThingy =
+  W.importKeyboardCommands = W.importMenuUi = function () {
+    // Configuration is delivered with the page now; a reload re-reads it.
+    return true;
+  };
+
+  W.recalulateWindowSize = function () { return true; };
+  W.updateIndexedDBSpace = function () {
+    Kiosk.db.quota().then(function (quota) {
+      if (quota) {
+        W.indexDBUsage = quota.usedMB;
+        Kiosk.toast('Storage: ' + quota.usedMB + ' MB used of ' + quota.quotaMB + ' MB');
+      }
+    });
+    return true;
+  };
+
+  W.syncImages = function () { return Kiosk.resync(); };
+
+  /** Clears the cached photo index and re-syncs. */
+  W.clearDB = function () {
+    return Kiosk.db.clear(Kiosk.STORE_PHOTOS)
+      .then(function () { return Kiosk.db.setState('revision.main', null); })
+      .then(function () {
+        Kiosk.toast('Local photo index cleared. Re-syncing…');
+        return Kiosk.resync();
+      })
+      .catch(function (err) { Kiosk.logError('clearDB', err); });
+  };
+
+  /* =========================================================================
+   * Input
+   * ======================================================================*/
+
+  /**
+   * Replays a key press through the real handler, so a sheet row that says
+   * `pressButtonFor("z")` behaves exactly as pressing z would.
+   */
+  W.pressButtonFor = function (key) {
+    var name = String(key || '');
+    // The sheets use "escape" where the DOM uses "Escape".
+    if (name.toLowerCase() === 'escape') name = 'Escape';
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: name, bubbles: true, cancelable: true
+    }));
+    return true;
+  };
+  W.clientEventCaller = function (eventName, params) {
+    if (eventName === 'handleKeyboard') W.pressButtonFor(params);
+  };
+
+  /* =========================================================================
+   * Logging helpers the sheets call
+   * ======================================================================*/
+
+  W.outputLog = function (key, value) { Kiosk.log('info', key + ': ' + value); };
+  W.handleReportingAndClientReporting = function (method, message, level) {
+    Kiosk.log('warn', method + ' [' + level + '] ' + message);
+  };
+  W.statstics = function () { Kiosk.flushStats(); };
+  W.wait = function (seconds) {
+    return new Promise(function (resolve) { setTimeout(resolve, seconds * 1000); });
+  };
+  W.waitAFewThenRun = function (seconds, code) {
+    setTimeout(function () { Kiosk.run(code); }, seconds * 1000);
+  };
+
+  Kiosk.log('info', 'Legacy compatibility layer active');
+})(Kiosk);
+</script>

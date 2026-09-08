@@ -30,7 +30,8 @@ a full day without being restarted.
 | `Styles.html` | All CSS |
 | `Client_Core.html` | Client state, server calls, storage, action registry |
 | `Client_Slideshow.html` | The slideshow engine |
-| `Client_UI.html` | Panels, toolbar, input, startup |
+| `Client_UI.html` | Panels, toolbar, browser, input, startup |
+| `Client_Legacy.html` | Compatibility shims for the spreadsheet's raw-JS actions |
 | `appsscript.json` | Manifest — scopes and the Drive advanced service |
 
 ---
@@ -216,9 +217,42 @@ as raw JavaScript while `AllowLegacyEvalCommands` is on. Turn it off once your
 sheets use action names — `eval` cannot be JIT-compiled, and the old code
 called it on every button on every slide.
 
+### Your existing sheets keep working
+
+The action columns in **Bottom Menu Controls**, **Settings Menu Controller**
+and **Keyboard Commandor** hold raw JavaScript against the old globals —
+`controllerButtonFoward5()`, `PauseSlideshowFor(30)`, `pressButtonFor("z")`,
+`SLIDESTATES.currentImgData.id`, `toggleUsage()`, and so on. Those names are
+restored by `Client_Legacy.html` as thin wrappers over the current engine, so
+every button in your sheet works unchanged. Nothing there holds state — the
+values read through to the live slideshow.
+
+Migrate a row to an action name whenever you like; both styles work side by
+side. Set `AllowLegacyEvalCommands` to `FALSE` once no rows need it.
+
+### The bottom bar
+
+The bar is laid out from the sheet exactly as before:
+
+- a row whose icon column says `nameplate` contributes to the **title slot** —
+  the number of those rows sets its width, which is what slides the playback
+  buttons left and right,
+- a row with an icon URL becomes an **icon button**,
+- a row with neither becomes a **spacer**.
+
+Icons are scaled so the row fits the screen. A row with no icon is never
+labelled with its own name: many rows are named with bare numbers, and printing
+those put `46 16 17 18 19` across the middle of the bar.
+
+### Browsing the archive
+
+The list and search buttons (`makeObjectList()` / `search()`) open a searchable
+index of the library — filter by name or year, tap a photo to jump straight to
+it. Press `l` for the same thing.
+
 ### Built-in keys
 `←` `→` step · `space` next · `↑` `↓` details panel · `p` pause · `r` resync ·
-`d` developer overlay · `Esc` close
+`d` developer overlay · `l` browse · `Esc` close
 
 ---
 
@@ -340,6 +374,20 @@ Measured over 300 transitions in Chromium: heap flat at 9.5MB, DOM flat at
   a file that was still streaming in.
 - **`getConfigurationSpreadsheetWithFallbackCreation` skipped its last row**
   (`r < getLastRow()`) and read every cell individually.
+- **Every sheet-configured button was dead.** The rewrite removed the globals
+  the action columns call, so the registry found no match, the fallback threw a
+  ReferenceError, and each click was logged and dropped. Restored by
+  `Client_Legacy.html`.
+- **The pause button resumed instead of pausing.** Stepping with the arrows
+  leaves a short browse hold in place, and `togglePause` tested "is anything
+  holding the slideshow" — so the very next tap on Pause released it. It now
+  toggles its own explicit pause and clears incidental holds.
+- **Spacer rows printed their names.** Rows named with bare numbers rendered as
+  visible text across the bar.
+- **The title appeared twice** — once floating above the bar and once inside it.
+- **A keyboard row containing `await` never ran.** The legacy fallback built a
+  plain `Function`, where a top-level `await` is a SyntaxError; it now builds an
+  async function.
 - **One year was hardcoded into the scoring.** `if (img.year == 2026) rawPower
   += 23456` pinned the rotation to a single year; that is now the optional
   `FeaturedYear` setting.

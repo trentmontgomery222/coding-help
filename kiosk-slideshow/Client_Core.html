@@ -226,6 +226,17 @@ var Kiosk = (function () {
     api.log('error', context + ' :: ' + detail);
   };
 
+  /**
+   * Something went wrong but the kiosk carries on - a misconfigured
+   * spreadsheet row, say. Visible in the browser console for diagnosis, but
+   * not an error, because it is not one.
+   */
+  api.warn = function (context, err) {
+    var detail = err && (err.message || err) || '';
+    console.warn(context, detail);
+    api.log('warn', context + (detail ? ' :: ' + detail : ''));
+  };
+
   /** Ships buffered log lines. Called on a timer and before unload. */
   api.flushLogs = function () {
     if (!logBuffer.length || !rpc.available()) return;
@@ -528,18 +539,35 @@ var Kiosk = (function () {
       return negate ? !result : result;
     }
 
-    // Legacy escape hatch: raw JavaScript straight from the settings sheet.
-    // Off by default; enable AllowLegacyEvalCommands while migrating.
+    // Legacy escape hatch: raw JavaScript straight from the settings sheet,
+    // calling the globals defined in Client_Legacy.html.
     if (api.get('AllowLegacyEvalCommands', true)) {
       try {
+        // Expression form first, so a check-case like `lowUsage == true`
+        // returns its value rather than undefined.
         var value = (new Function('Kiosk', 'return (' + text + ');'))(api);
         return negate ? !value : value;
       } catch (err) {
         try {
-          (new Function('Kiosk', text))(api);      // statement, not expression
+          // Statement form. Built as an async function because some rows in
+          // the keyboard sheet use `await`, which is a SyntaxError in a plain
+          // Function body and would otherwise drop the whole command.
+          var AsyncFunction = Object.getPrototypeOf(
+              async function () {}).constructor;
+          var run = new AsyncFunction('Kiosk', text);
+          var result = run(api);
+          if (result && typeof result.catch === 'function') {
+            result.catch(function (asyncErr) {
+              // An async row that references something missing rejects here
+              // rather than throwing synchronously; same cause, same handling.
+              api.warn('Action failed: ' + expression, asyncErr);
+            });
+          }
           return undefined;
         } catch (err2) {
-          api.log('warn', 'Unknown action: ' + expression);
+          // Almost always a spreadsheet row naming something that no longer
+          // exists. Worth surfacing, but it must not look like a crash.
+          api.warn('Toolbar/command action could not run: ' + expression, err2);
           return undefined;
         }
       }

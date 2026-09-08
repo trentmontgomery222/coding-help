@@ -18,8 +18,9 @@
   function cacheElements() {
     ['app', 'caption', 'captionText', 'blurb', 'infoPanel', 'infoTitle',
      'infoDescription', 'infoHint', 'infoClose', 'toolbar', 'toasts', 'banner',
-     'curtain', 'curtainText', 'hud', 'qrBox', 'qrLabel', 'metaYear',
-     'metaProducer', 'metaLicense', 'metaCamera', 'metaLens', 'metaDate']
+     'curtain', 'curtainText', 'usage', 'qrBox', 'qrLabel', 'metaYear',
+     'metaProducer', 'metaLicense', 'metaCamera', 'metaLens', 'metaDate',
+     'browser', 'browserList', 'browserSearch', 'browserClose']
       .forEach(function (id) { el[id] = document.getElementById(id); });
   }
 
@@ -82,9 +83,10 @@
 
     var remaining = Kiosk.pauseRemaining();
 
-    // While the panel is open the visitor already knows why nothing is moving;
-    // a countdown banner on top of it is just noise.
-    if (isPanelOpen()) remaining = 0;
+    // While the panel or the browser is open the visitor already knows why
+    // nothing is moving; a countdown banner on top of it is just noise, and it
+    // sits directly over the browser's search box.
+    if (isPanelOpen() || browserOpen) remaining = 0;
 
     if (remaining <= 0) {
       el.banner.classList.remove('is-visible');
@@ -121,6 +123,10 @@
 
     var nameplate = document.querySelector('.tool-nameplate');
     if (nameplate) nameplate.textContent = title;
+
+    // The bar already carries the title, so the floating caption above it
+    // would just be the same words twice.
+    if (el.caption) el.caption.hidden = hasNamePlate;
 
     // Standing description, bottom-right. Only shown when it is real text.
     var description = String(photo.description || '').trim();
@@ -342,13 +348,29 @@
    * ======================================================================*/
 
   var toolbarButtons = [];
+  var hasNamePlate = false;
 
-  /** Builds the button bar from the Bottom Menu Controls sheet. */
+  /**
+   * Builds the button bar from the Bottom Menu Controls sheet.
+   *
+   * Three kinds of row, matching how the original laid the bar out:
+   *   - icon "nameplate"  -> the photo title slot (only the first one is used;
+   *                          the extra nameplate rows existed purely to pad
+   *                          the old fixed-width plate and are now redundant,
+   *                          because the plate flexes)
+   *   - an icon URL       -> an icon button
+   *   - neither           -> a spacer
+   *
+   * A row with no icon is NEVER labelled with its own name. Many rows in the
+   * sheet are named with bare numbers, and printing those put "46 16 17 18 19"
+   * across the middle of the bar.
+   */
   function buildToolbar() {
     if (!el.toolbar) return;
 
     el.toolbar.innerHTML = '';
     toolbarButtons = [];
+    hasNamePlate = false;
 
     var items = Kiosk.menu || [];
     if (!items.length) {
@@ -356,56 +378,129 @@
       return;
     }
 
+    sizeToolbar(items);
+
     items.forEach(function (item) {
       if (item.isNamePlate) {
+        // Only the first nameplate row becomes a plate.
+        if (hasNamePlate) { el.toolbar.appendChild(makeSpacer()); return; }
+        hasNamePlate = true;
+
         var plate = document.createElement('div');
         plate.className = 'tool-nameplate';
         plate.id = 'nameplate';
-        plate.textContent = '';
         plate.addEventListener('click', function () { Kiosk.togglePanel(true); });
         el.toolbar.appendChild(plate);
         return;
       }
 
-      var button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'tool-btn';
-      button.id = item.id;
-      button.title = item.name;
-      button.setAttribute('aria-label', item.name);
-
-      if (item.icon) {
-        var icon = document.createElement('img');
-        icon.src = item.icon;
-        icon.alt = '';
-        // A missing icon leaves a usable text button instead of a blank square.
-        icon.addEventListener('error', function () {
-          button.innerHTML = '';
-          var fallback = document.createElement('span');
-          fallback.className = 'tool-fallback';
-          fallback.textContent = item.name;
-          button.appendChild(fallback);
-        });
-        button.appendChild(icon);
-      } else {
-        var label = document.createElement('span');
-        label.className = 'tool-fallback';
-        label.textContent = item.name;
-        button.appendChild(label);
+      // Nothing to show and nothing to do: pure spacing.
+      if (!item.icon && !item.click) {
+        el.toolbar.appendChild(makeSpacer());
+        return;
       }
 
-      button.addEventListener('click', function () {
-        Kiosk.count('interactions');
-        var isActive = item.check ? Kiosk.check(item.check) : false;
-        Kiosk.run(isActive ? item.activeClick : item.click);
-        refreshToolbarStates();
-      });
-
-      el.toolbar.appendChild(button);
-      toolbarButtons.push({config: item, button: button});
+      el.toolbar.appendChild(makeButton(item));
     });
 
+    var endcap = document.createElement('span');
+    endcap.className = 'tool-endcap';
+    endcap.setAttribute('aria-hidden', 'true');
+    el.toolbar.appendChild(endcap);
+
     refreshToolbarStates();
+  }
+
+  /**
+   * Sizes the bar the way the original did.
+   *
+   * Icons are scaled so the whole row fits the screen, and the title plate is
+   * given the width of however many "nameplate" rows the sheet contains. That
+   * is what positions the playback controls: adding or removing nameplate rows
+   * slides them left and right. Reproducing the arithmetic means the bar you
+   * already tuned in the spreadsheet comes out where you put it.
+   */
+  function sizeToolbar(items) {
+    var plateRows = items.filter(function (item) { return item.isNamePlate; }).length;
+    var slots = Math.max(1, items.length);
+
+    // Bounded: a three-row sheet should not produce 400px icons, and an
+    // eighty-row one should not produce invisible ones. The original left this
+    // unbounded, so icons overflowed the fixed-height bar and were clipped.
+    var barHeight = Math.max(64, Math.min(96, Math.round(window.innerHeight * 0.09)));
+    var iconSize = Math.round(window.innerWidth / slots) - 5;
+    iconSize = Math.max(28, Math.min(barHeight - 20, iconSize));
+
+    var plateWidth = Math.max(160, plateRows * (iconSize + 5));
+
+    el.toolbar.style.setProperty('--tool-icon', iconSize + 'px');
+    el.toolbar.style.setProperty('--plate-w', plateWidth + 'px');
+    document.documentElement.style.setProperty('--toolbar-h', barHeight + 'px');
+
+  }
+
+  /** A fixed sliver of space, as the old bar used between every button. */
+  function makeSpacer() {
+    var spacer = document.createElement('span');
+    spacer.className = 'tool-spacer';
+    spacer.setAttribute('aria-hidden', 'true');
+    return spacer;
+  }
+
+  /** One icon button wired to its sheet action. */
+  function makeButton(item) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tool-btn';
+    button.id = item.id;
+    button.title = item.name;
+    button.setAttribute('aria-label', item.name);
+
+    if (item.icon) {
+      var icon = document.createElement('img');
+      icon.alt = '';
+      icon.addEventListener('error', function () {
+        // Fall back to a readable label, but only when the name is actually a
+        // word. A numeric name means it was a spacer row all along.
+        icon.remove();
+        var label = readableLabel(item.name);
+        if (label) {
+          var span = document.createElement('span');
+          span.className = 'tool-fallback';
+          span.textContent = label;
+          button.appendChild(span);
+        }
+      });
+      icon.src = item.icon;
+      button.appendChild(icon);
+    } else {
+      var text = document.createElement('span');
+      text.className = 'tool-fallback';
+      text.textContent = readableLabel(item.name) || '•';
+      button.appendChild(text);
+    }
+
+    button.addEventListener('click', function () {
+      Kiosk.count('interactions');
+      var isActive = item.check ? Kiosk.check(item.check) : false;
+      var action = isActive ? item.activeClick : item.click;
+
+      if (!action) {
+        Kiosk.log('warn', 'Toolbar button "' + item.name + '" has no action set');
+        return;
+      }
+      Kiosk.run(action);
+      refreshToolbarStates();
+    });
+
+    toolbarButtons.push({config: item, button: button});
+    return button;
+  }
+
+  /** @return {string} The name if it reads as a label, else ''. */
+  function readableLabel(name) {
+    var text = String(name || '').trim();
+    return /[A-Za-z]/.test(text) ? text : '';
   }
 
   /** Used when the settings sheet has no rows yet, so the kiosk is still usable. */
@@ -458,6 +553,107 @@
                           : entry.config.icon;
       if (wanted && icon.getAttribute('src') !== wanted) icon.src = wanted;
     });
+  }
+
+  /* =========================================================================
+   * Photo browser
+   *
+   * What the sheet's list and search buttons open (`makeObjectList()` and
+   * `search()`). The original rendered an unfiltered dump of every record,
+   * including the base64 image data, into a floating panel. This is a plain
+   * searchable index that jumps the slideshow to whatever you pick.
+   * ======================================================================*/
+
+  var browserOpen = false;
+  var browserRows = [];
+
+  /** @param {boolean=} show */
+  Kiosk.toggleBrowser = function (show) {
+    if (!el.browser) return false;
+
+    var open = show === undefined ? !browserOpen : !!show;
+    if (open === browserOpen) return open;
+    browserOpen = open;
+
+    el.browser.hidden = !open;
+
+    if (open) {
+      Kiosk.togglePanel(false);
+      Kiosk.pause('browsing', 5 * 60 * 1000, true);
+      buildBrowserList('');
+      if (el.browserSearch) {
+        el.browserSearch.value = '';
+        el.browserSearch.focus();
+      }
+    } else {
+      Kiosk.resume('browsing');
+    }
+    return open;
+  };
+
+  /** Renders the (optionally filtered) photo list. */
+  function buildBrowserList(query) {
+    if (!el.browserList) return;
+
+    var needle = String(query || '').trim().toLowerCase();
+    var photos = Kiosk.photos || [];
+
+    var matches = needle
+        ? photos.filter(function (photo) {
+            return (photo.displayName || photo.name || '').toLowerCase().indexOf(needle) !== -1 ||
+                   String(photo.year || '').indexOf(needle) !== -1;
+          })
+        : photos;
+
+    // A kiosk list of two thousand rows helps nobody and costs a long paint.
+    browserRows = matches.slice(0, 300);
+
+    // One fragment, one insertion - not 300 separate reflows.
+    var fragment = document.createDocumentFragment();
+
+    if (!browserRows.length) {
+      var empty = document.createElement('p');
+      empty.className = 'browser-empty';
+      empty.textContent = photos.length
+          ? 'Nothing matches "' + query + '".'
+          : 'No photos loaded yet.';
+      fragment.appendChild(empty);
+    }
+
+    browserRows.forEach(function (photo) {
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'browser-row';
+
+      var year = document.createElement('span');
+      year.className = 'browser-year';
+      year.textContent = photo.year || '—';
+
+      var name = document.createElement('span');
+      name.className = 'browser-name';
+      name.textContent = photo.displayName || photo.name || '';
+
+      row.appendChild(year);
+      row.appendChild(name);
+      row.addEventListener('click', function () {
+        var position = (Kiosk.photos || []).indexOf(photo);
+        Kiosk.toggleBrowser(false);
+        // Jump by identity: the playlist order may differ from the index order.
+        Kiosk.showPhoto(photo, position);
+      });
+      fragment.appendChild(row);
+    });
+
+    el.browserList.innerHTML = '';
+    el.browserList.appendChild(fragment);
+
+    if (matches.length > browserRows.length) {
+      var more = document.createElement('p');
+      more.className = 'browser-empty';
+      more.textContent = 'Showing the first ' + browserRows.length + ' of ' +
+                         matches.length + '. Keep typing to narrow it down.';
+      el.browserList.appendChild(more);
+    }
   }
 
   /* =========================================================================
@@ -549,12 +745,28 @@
       });
     });
 
+    // --- Photo browser ---
+    if (el.browserSearch) {
+      el.browserSearch.addEventListener('input', debounce(function () {
+        buildBrowserList(el.browserSearch.value);
+      }, 180));
+      // Typing in the search box must not trigger the slideshow shortcuts.
+      el.browserSearch.addEventListener('focus', function () { editing = true; });
+      el.browserSearch.addEventListener('blur', function () { editing = false; });
+    }
+    if (el.browserClose) {
+      el.browserClose.addEventListener('click', function () {
+        Kiosk.toggleBrowser(false);
+      });
+    }
+
     // --- Keyboard ---
     document.addEventListener('keydown', onKeyDown);
 
     // --- Window ---
     window.addEventListener('resize', debounce(function () {
       applyRuntimeStyles();
+      if ((Kiosk.menu || []).length) sizeToolbar(Kiosk.menu);
     }, 250));
 
     window.addEventListener('beforeunload', function () {
@@ -583,7 +795,10 @@
       case 'p': case 'P': Kiosk.togglePause('Paused'); return;
       case 'r': case 'R': Kiosk.resync(); return;
       case 'd': case 'D': Kiosk.toggleHud(); return;
-      case 'Escape':     Kiosk.togglePanel(false); return;
+      case 'Escape':
+        if (browserOpen) { Kiosk.toggleBrowser(false); return; }
+        Kiosk.togglePanel(false); return;
+      case 'l': case 'L': Kiosk.toggleBrowser(); return;
     }
 
     // Anything else falls through to the sheet-defined bindings.
@@ -642,7 +857,7 @@
 
   Kiosk.toggleHud = function () {
     hudVisible = !hudVisible;
-    el.hud.hidden = !hudVisible;
+    el.usage.hidden = !hudVisible;
 
     clearInterval(hudTimer);
     if (hudVisible) {
@@ -657,13 +872,13 @@
   };
 
   function updateHud() {
-    if (!hudVisible || !el.hud) return;
+    if (!hudVisible || !el.usage) return;
 
     var memory = performance.memory
         ? (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + ' MB'
         : 'n/a';
 
-    el.hud.textContent = [
+    el.usage.textContent = [
       'kiosk        ' + Kiosk.version,
       'photo        ' + (Kiosk.playlistIndex() + 1) + ' / ' + Kiosk.playlistLength(),
       'library      ' + (Kiosk.photos || []).length,
@@ -677,8 +892,8 @@
 
     var heapMB = performance.memory
         ? performance.memory.usedJSHeapSize / 1048576 : 0;
-    el.hud.classList.toggle('is-warning', heapMB > 400);
-    el.hud.classList.toggle('is-critical', heapMB > 800);
+    el.usage.classList.toggle('is-warning', heapMB > 400);
+    el.usage.classList.toggle('is-critical', heapMB > 800);
   }
 
   function formatUptime(ms) {
@@ -695,8 +910,11 @@
   function applyRuntimeStyles() {
     var root = document.documentElement.style;
     root.setProperty('--transition', Kiosk.get('TransitionMs', 1200) + 'ms');
-    root.setProperty('--toolbar-h',
-                     (window.innerWidth < 900 ? 72 : 88) + 'px');
+    // Only set a default height when the sheet-driven bar has not sized
+    // itself; sizeToolbar() owns this value once a menu exists.
+    if (!(Kiosk.menu || []).length) {
+      root.setProperty('--toolbar-h', (window.innerWidth < 900 ? 72 : 88) + 'px');
+    }
 
     var blur = Kiosk.get('BackdropBlurPx', 28);
     var brightness = Kiosk.get('BackdropBrightness', 0.55);
@@ -716,6 +934,9 @@
   Kiosk.action('toggleHud',  function () { return Kiosk.toggleHud(); });
   Kiosk.action('hudVisible', function () { return hudVisible; });
   Kiosk.action('notify',     function (text) { Kiosk.toast(text); return true; });
+  Kiosk.action('browse',     function () { return Kiosk.toggleBrowser(); });
+  Kiosk.action('search',     function () { return Kiosk.toggleBrowser(true); });
+  Kiosk.action('browserOpen', function () { return browserOpen; });
 
   /* =========================================================================
    * Startup
