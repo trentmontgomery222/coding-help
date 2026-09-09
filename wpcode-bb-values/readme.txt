@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 3.0.0
+Stable tag: 4.0.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -26,9 +26,15 @@ This plugin finds that array, lists every setting in it, and lets a page
 editor override any of them from a Beaver Builder module - without touching
 the snippet and without affecting any other page.
 
-Drop the "WPCode Values" module on a page, put the snippet's shortcode tag in
-the Snippet tab, then pick settings from the dropdowns and type new values.
-Anything you do not pick keeps the value written in the snippet.
+Drop the "WPCode Values" module on a page and enter your snippet's ID - the
+number in [wpcode id="123"]. Every setting in that snippet appears in the
+module straight away, already filled in with the value the snippet uses.
+Change what you want for this page, leave the rest alone, and clear a box to
+let the snippet's own value through again.
+
+Settings written as true or false become a true/false dropdown, so they cannot
+be given a value the snippet will not understand. Lists of words stay as text,
+typed with commas between them.
 
 Nested settings use a dot (noSchoolEvent.badgeText). Word lists are typed with
 commas between them (schools closed, no school). Tools > WPCode Values lists
@@ -58,12 +64,18 @@ Tools > WPCode Values after editing a snippet. You can always type settings by
 hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
-= I need more than 12 settings on one module =
-
-Add a second module for the same snippet, or raise WPCODEBBV_SLOTS in the main
-plugin file.
-
 == Changelog ==
+
+= 4.0.0 =
+* The module no longer asks you to pick settings. Enter the snippet ID and
+  every setting in that snippet is listed automatically, pre-filled with the
+  value the snippet currently uses.
+* Settings whose value is true or false are detected and shown as a
+  true/false dropdown instead of a text box.
+* The snippet is identified by its WPCode ID now, and rendered as
+  [wpcode id="123"]. Pasting the whole shortcode works too.
+* Clearing a box removes that override, so the snippet's own value applies
+  again. A module nobody has edited renders exactly what the snippet does.
 
 = 3.0.0 =
 * The module now works with the "configurations" arrays snippets actually use.

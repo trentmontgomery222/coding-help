@@ -39,28 +39,76 @@ class WPCodeBBV_Module extends FLBuilderModule {
 	}
 
 	/**
-	 * The overrides this module instance should apply, as
-	 * path => value. Rows come first, then anything from the
-	 * "Extra settings" box, which wins on a clash.
+	 * The WPCode snippet ID this module renders.
+	 *
+	 * @return int Zero when nothing is set.
+	 */
+	public function get_snippet_id() {
+		$settings = is_object( $this->settings ) ? $this->settings : new stdClass();
+		$raw      = isset( $settings->wpcode_id ) ? (string) $settings->wpcode_id : '';
+
+		// Tolerate a pasted [wpcode id="123"] or a bare number.
+		if ( preg_match( '/(\d+)/', $raw, $match ) ) {
+			return (int) $match[1];
+		}
+
+		return 0;
+	}
+
+	/**
+	 * The shortcode this module runs.
+	 *
+	 * @return string Empty when no snippet ID is set.
+	 */
+	public function get_shortcode() {
+		$id = $this->get_snippet_id();
+
+		return $id > 0 ? '[wpcode id="' . $id . '"]' : '';
+	}
+
+	/**
+	 * The overrides to write into the snippet's configurations array, as
+	 * path => value.
+	 *
+	 * Every setting of the chosen snippet has a field, pre-filled with
+	 * the value the snippet itself uses, so normally all of them are
+	 * sent and the ones nobody touched simply write back what was
+	 * already there. Clearing a box removes that override, which lets
+	 * the snippet's own value through again.
 	 *
 	 * @return array<string, string>
 	 */
 	public function get_overrides() {
 		$overrides = array();
 		$settings  = is_object( $this->settings ) ? $this->settings : new stdClass();
-		$slots     = defined( 'WPCODEBBV_SLOTS' ) ? (int) WPCODEBBV_SLOTS : 12;
+		$id        = $this->get_snippet_id();
 
-		for ( $i = 1; $i <= $slots; $i++ ) {
-			$path_key  = 'setting_' . $i;
-			$value_key = 'value_' . $i;
+		if ( $id > 0 && function_exists( 'wpcodebbv_snippets' ) ) {
+			$snippets = array();
 
-			$path = isset( $settings->{$path_key} ) ? trim( (string) $settings->{$path_key} ) : '';
-
-			if ( '' === $path ) {
-				continue;
+			try {
+				$snippets = wpcodebbv_snippets();
+			} catch ( \Throwable $e ) {
+				$snippets = array();
 			}
 
-			$overrides[ $path ] = isset( $settings->{$value_key} ) ? (string) $settings->{$value_key} : '';
+			if ( isset( $snippets[ $id ]['settings'] ) && is_array( $snippets[ $id ]['settings'] ) ) {
+				foreach ( $snippets[ $id ]['settings'] as $path => $leaf ) {
+					$key = wpcodebbv_field_key( $id, $path );
+
+					if ( ! isset( $settings->{$key} ) ) {
+						continue;
+					}
+
+					$value = (string) $settings->{$key};
+
+					if ( '' === trim( $value ) ) {
+						continue; // Cleared - let the snippet's own value stand.
+					}
+
+					$overrides[ $path ] = $value;
+				}
+			}
 		}
 
 		if ( isset( $settings->custom_settings ) && function_exists( 'wpcodebbv_parse_lines' ) ) {
@@ -70,20 +118,5 @@ class WPCodeBBV_Module extends FLBuilderModule {
 		}
 
 		return $overrides;
-	}
-
-	/**
-	 * The shortcode this module runs.
-	 *
-	 * @return string Empty when no snippet tag is set.
-	 */
-	public function get_shortcode() {
-		$settings = is_object( $this->settings ) ? $this->settings : new stdClass();
-		$tag      = isset( $settings->snippet_tag ) ? trim( (string) $settings->snippet_tag ) : '';
-
-		// Tolerate someone pasting the whole shortcode, brackets and all.
-		$tag = preg_replace( '/[^a-zA-Z0-9_\-]/', '', $tag );
-
-		return '' === $tag ? '' : '[' . $tag . ']';
 	}
 }

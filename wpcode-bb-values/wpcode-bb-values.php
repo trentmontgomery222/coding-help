@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the "configurations" array out of your WPCode snippets and lets you pick and edit those settings from a Beaver Builder module, per page.
- * Version:           3.0.0
+ * Version:           4.0.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -50,7 +50,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '3.0.0' );
+define( 'WPCODEBBV_VERSION', '4.0.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -80,22 +80,24 @@ function wpcodebbv_log( $message ) {
 }
 
 /**
- * Reads the code of every published WPCode snippet and returns every
- * setting found in a "configurations" array in any of them, as
- * path => label.
+ * Scans every WPCode snippet and returns what was found, keyed by
+ * snippet ID:
+ *
+ *     7 => array(
+ *         'title'    => 'ACPS Calendar',
+ *         'settings' => array( 'noSchoolEvent.badgeText' => array( 'value' => 'No School', 'kind' => 'string' ), ... ),
+ *     )
  *
  * WPCode's storage is not a public API, so this looks in the snippet's
  * post content first and then at the meta keys WPCode has used, and
- * simply finds nothing if none of them pan out. Nothing here is
- * required for the plugin to work - it only populates the dropdowns.
+ * simply finds nothing if none of them pan out.
  *
- * The result is cached, and the cache is dropped whenever a snippet is
- * saved.
+ * Cached, and the cache is dropped whenever a snippet is saved.
  *
  * @param bool $force Skip the cache.
- * @return array<string, string>
+ * @return array<int, array{title:string, settings:array}>
  */
-function wpcodebbv_settings_index( $force = false ) {
+function wpcodebbv_snippets( $force = false ) {
 	if ( ! $force ) {
 		$cached = get_transient( WPCODEBBV_CACHE );
 
@@ -104,13 +106,12 @@ function wpcodebbv_settings_index( $force = false ) {
 		}
 	}
 
-	$index      = array();
-	$candidates = array();
+	$found = array();
 
 	if ( ! class_exists( 'WPCodeBBV_Scanner' ) || ! post_type_exists( 'wpcode' ) ) {
-		set_transient( WPCODEBBV_CACHE, $index, HOUR_IN_SECONDS );
+		set_transient( WPCODEBBV_CACHE, $found, HOUR_IN_SECONDS );
 
-		return $index;
+		return $found;
 	}
 
 	$snippets = get_posts(
@@ -156,62 +157,35 @@ function wpcodebbv_settings_index( $force = false ) {
 			continue;
 		}
 
-		$title = isset( $snippet->post_title ) && '' !== $snippet->post_title
-			? $snippet->post_title
-			: sprintf( '#%d', (int) $snippet->ID );
+		$settings = array();
 
 		foreach ( $arrays as $array ) {
 			foreach ( $array['settings'] as $path => $leaf ) {
-				$label = $path;
-
-				if ( '' !== (string) $leaf['value'] ) {
-					$short  = (string) $leaf['value'];
-					$short  = strlen( $short ) > 30 ? substr( $short, 0, 30 ) . '...' : $short;
-					$label .= '  (' . $short . ')';
+				// First array wins if two in one snippet share a path.
+				if ( ! isset( $settings[ $path ] ) ) {
+					$settings[ $path ] = array(
+						'value' => (string) $leaf['value'],
+						'kind'  => $leaf['kind'],
+					);
 				}
-
-				$candidates[ $path ][] = array(
-					'name'  => $array['name'],
-					'title' => $title,
-					'label' => $label,
-				);
 			}
 		}
-	}
 
-	// A path only needs to be qualified by its array's name when two
-	// snippets really do define the same one. With a single snippet -
-	// the normal case - the list stays short and readable.
-	foreach ( $candidates as $path => $sources ) {
-		if ( 1 === count( $sources ) ) {
-			$index[ $path ] = $sources[0]['label'];
+		if ( empty( $settings ) ) {
 			continue;
 		}
 
-		foreach ( $sources as $source ) {
-			$index[ $source['name'] . ':' . $path ] = $source['title'] . ' - ' . $source['label'];
-		}
+		$found[ (int) $snippet->ID ] = array(
+			'title'    => isset( $snippet->post_title ) && '' !== $snippet->post_title
+				? $snippet->post_title
+				: sprintf( '#%d', (int) $snippet->ID ),
+			'settings' => $settings,
+		);
 	}
 
-	// Shortest paths first, then alphabetically, so the plain
-	// "badgeText" style entries come before the scoped duplicates.
-	uksort(
-		$index,
-		function ( $a, $b ) {
-			$a_scoped = false !== strpos( $a, ':' );
-			$b_scoped = false !== strpos( $b, ':' );
+	set_transient( WPCODEBBV_CACHE, $found, DAY_IN_SECONDS );
 
-			if ( $a_scoped !== $b_scoped ) {
-				return $a_scoped ? 1 : -1;
-			}
-
-			return strcasecmp( $a, $b );
-		}
-	);
-
-	set_transient( WPCODEBBV_CACHE, $index, DAY_IN_SECONDS );
-
-	return $index;
+	return $found;
 }
 
 /**
@@ -224,94 +198,139 @@ add_action( 'save_post_wpcode', 'wpcodebbv_clear_index' );
 add_action( 'deleted_post', 'wpcodebbv_clear_index' );
 
 /**
+ * The Beaver Builder setting name for one snippet's setting. Derived,
+ * never stored, so the module can work back to the path at render time
+ * from the snippet ID alone.
+ *
+ * @param int    $snippet_id
+ * @param string $path
+ * @return string
+ */
+function wpcodebbv_field_key( $snippet_id, $path ) {
+	return 's' . (int) $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $path );
+}
+
+/**
+ * True when a snippet's value is being used as a yes/no flag. These are
+ * usually written as the strings 'true' and 'false' rather than real
+ * booleans, and either way they should be a dropdown rather than a text
+ * box someone can typo into.
+ *
+ * @param string $value
+ * @return bool
+ */
+function wpcodebbv_is_boolean( $value ) {
+	return in_array( strtolower( trim( (string) $value ) ), array( 'true', 'false' ), true );
+}
+
+/**
  * The module's field schema.
  *
- * The SHAPE of this is fixed: the same tabs, the same sections, the same
- * number of fields, in the same order, on every request. Only the option
- * list inside the "setting" dropdowns is read from the database, and an
- * options array is plain data - unlike a field 'type', which Beaver
- * Builder turns into a file it has to load.
+ * Every setting found in every snippet gets its own field, grouped into
+ * one section per snippet and pre-filled with the value the snippet
+ * currently uses. Nothing has to be picked from a list: open the module
+ * and the settings are already there.
  *
- * Every field type here ('text', 'select', 'textarea') is one Beaver
- * Builder's own modules use.
+ * Notes on the two things that have broken this plugin before:
+ *
+ *  - Field TYPES here are only 'text', 'select' and 'textarea'. Beaver
+ *    Builder turns a field's type into a file it loads while rendering
+ *    the settings form, so an invented type takes the whole form down.
+ *  - There is no 'toggle' anywhere. Beaver Builder's toggle expects a
+ *    list of field NAMES that exist elsewhere in the form; handing it
+ *    field definitions instead, as an earlier version of this plugin
+ *    did, leaves the form referring to fields that were never
+ *    registered.
  *
  * @return array
  */
 function wpcodebbv_form() {
-	$options = array( '' => __( '— not used —', 'wpcode-bb-values' ) );
+	$sections = array(
+		'snippet' => array(
+			'title'  => __( 'Snippet', 'wpcode-bb-values' ),
+			'fields' => array(
+				'wpcode_id' => array(
+					'type'    => 'text',
+					'label'   => __( 'WPCode snippet ID', 'wpcode-bb-values' ),
+					'default' => '',
+					'help'    => __( 'Just the number. WPCode shows it as [wpcode id="123"] on the snippet, and it is also the id= number in the address bar while editing that snippet.', 'wpcode-bb-values' ),
+				),
+			),
+		),
+	);
+
+	$snippets = array();
 
 	try {
-		foreach ( wpcodebbv_settings_index() as $path => $label ) {
-			$options[ $path ] = $label;
-		}
+		$snippets = wpcodebbv_snippets();
 	} catch ( \Throwable $e ) {
 		wpcodebbv_log( 'could not build the settings list: ' . $e->getMessage() );
 	}
 
-	$found_any = count( $options ) > 1;
+	foreach ( $snippets as $snippet_id => $snippet ) {
+		$fields = array();
 
-	$rows = array();
+		foreach ( $snippet['settings'] as $path => $leaf ) {
+			$key     = wpcodebbv_field_key( $snippet_id, $path );
+			$current = (string) $leaf['value'];
 
-	for ( $i = 1; $i <= WPCODEBBV_SLOTS; $i++ ) {
-		$rows[ 'setting_' . $i ] = array(
-			'type'    => 'select',
-			'label'   => sprintf(
-				/* translators: %d: row number */
-				__( 'Setting %d', 'wpcode-bb-values' ),
-				$i
+			if ( wpcodebbv_is_boolean( $current ) ) {
+				// A yes/no setting can only ever be true or false.
+				$fields[ $key ] = array(
+					'type'    => 'select',
+					'label'   => $path,
+					'default' => strtolower( trim( $current ) ),
+					'options' => array(
+						'true'  => __( 'true', 'wpcode-bb-values' ),
+						'false' => __( 'false', 'wpcode-bb-values' ),
+					),
+				);
+
+				continue;
+			}
+
+			$fields[ $key ] = array(
+				'type'    => 'text',
+				'label'   => $path,
+				'default' => $current,
+				'help'    => 'list' === $leaf['kind']
+					? __( 'A list - separate the entries with commas.', 'wpcode-bb-values' )
+					: '',
+			);
+		}
+
+		if ( empty( $fields ) ) {
+			continue;
+		}
+
+		$sections[ 'snippet_' . $snippet_id ] = array(
+			'title'  => sprintf(
+				/* translators: 1: snippet title, 2: snippet ID */
+				__( '%1$s (ID %2$d)', 'wpcode-bb-values' ),
+				$snippet['title'],
+				$snippet_id
 			),
-			'default' => '',
-			'options' => $options,
-			'help'    => 1 === $i
-				? __( 'Pick one of the settings found in your snippet\'s configurations array, then type the value you want for this page in the box below. The value in brackets is what the snippet uses by default.', 'wpcode-bb-values' )
-				: '',
-		);
-
-		$rows[ 'value_' . $i ] = array(
-			'type'    => 'text',
-			'label'   => sprintf(
-				/* translators: %d: row number */
-				__( 'Value %d', 'wpcode-bb-values' ),
-				$i
-			),
-			'default' => '',
+			'fields' => $fields,
 		);
 	}
+
+	$sections['advanced'] = array(
+		'title'  => __( 'Advanced', 'wpcode-bb-values' ),
+		'fields' => array(
+			'custom_settings' => array(
+				'type'    => 'textarea',
+				'rows'    => 6,
+				'label'   => __( 'Extra settings', 'wpcode-bb-values' ),
+				'default' => '',
+				'help'    => __( 'One per line, as path = value, for anything above that was not picked up. Example: noSchoolEvent.badgeText = No School. These win over the boxes above. Lines starting with # are ignored.', 'wpcode-bb-values' ),
+			),
+		),
+	);
 
 	return array(
 		'general' => array(
 			'title'    => __( 'WPCode Values', 'wpcode-bb-values' ),
-			'sections' => array(
-				'snippet'  => array(
-					'title'  => __( 'Snippet', 'wpcode-bb-values' ),
-					'fields' => array(
-						'snippet_tag' => array(
-							'type'    => 'text',
-							'label'   => __( 'Shortcode tag', 'wpcode-bb-values' ),
-							'default' => '',
-							'help'    => __( 'The tag WPCode gave your snippet, without the square brackets. For example: wpcode_snippet_123', 'wpcode-bb-values' ),
-						),
-					),
-				),
-				'settings' => array(
-					'title'  => $found_any
-						? __( 'Settings', 'wpcode-bb-values' )
-						: __( 'Settings (none found yet)', 'wpcode-bb-values' ),
-					'fields' => $rows,
-				),
-				'advanced' => array(
-					'title'  => __( 'Advanced', 'wpcode-bb-values' ),
-					'fields' => array(
-						'custom_settings' => array(
-							'type'    => 'textarea',
-							'rows'    => 6,
-							'label'   => __( 'Extra settings', 'wpcode-bb-values' ),
-							'default' => '',
-							'help'    => __( 'One per line, as path = value, for anything the dropdowns did not pick up. Example: noSchoolEvent.badgeText = No School. For a list of words, separate them with commas. Lines starting with # are ignored.', 'wpcode-bb-values' ),
-						),
-					),
-				),
-			),
+			'sections' => $sections,
 		),
 	);
 }
@@ -421,7 +440,7 @@ function wpcodebbv_help_page() {
 		wpcodebbv_clear_index();
 	}
 
-	$index = wpcodebbv_settings_index();
+	$snippets = wpcodebbv_snippets();
 	?>
 	<div class="wrap">
 		<h1><?php esc_html_e( 'WPCode Values for Beaver Builder', 'wpcode-bb-values' ); ?></h1>
@@ -447,37 +466,56 @@ function wpcodebbv_help_page() {
         searchForWords: ['schools closed']
     }}
 ];</pre>
-		<p><?php esc_html_e( 'This plugin reads that array and lists every setting in it. Drop the "WPCode Values" module on a page, put the snippet\'s shortcode tag in the Snippet tab, then pick the settings you want to change on this page and type new values. Everything you do not pick keeps the value written in the snippet.', 'wpcode-bb-values' ); ?></p>
+		<p><?php esc_html_e( 'Drop the "WPCode Values" module on a page and put your snippet\'s ID in it - that is the number in [wpcode id="123"]. Every setting in that snippet\'s configurations array then appears in the module, already filled in with the value the snippet uses. Change the ones you want for this page and leave the rest alone. Clear a box to let the snippet\'s own value through again.', 'wpcode-bb-values' ); ?></p>
+		<p><?php esc_html_e( 'Settings written as true or false become a true/false dropdown, so they cannot be given a value the snippet will not understand.', 'wpcode-bb-values' ); ?></p>
 		<p><?php esc_html_e( 'Nothing in your snippet needs to change. The values are edited in the script the snippet outputs, on the way to the browser, only on the page holding that module. A setting inside a nested block is written with a dot: noSchoolEvent.badgeText. A list of words is typed with commas between them.', 'wpcode-bb-values' ); ?></p>
 
 		<h2>
-			<?php esc_html_e( 'Settings found in your snippets', 'wpcode-bb-values' ); ?>
+			<?php esc_html_e( 'What was found in your snippets', 'wpcode-bb-values' ); ?>
 			<a href="<?php echo esc_url( add_query_arg( 'wpcodebbv_rescan', '1' ) ); ?>" class="button button-secondary"><?php esc_html_e( 'Rescan', 'wpcode-bb-values' ); ?></a>
 		</h2>
 
-		<?php if ( empty( $index ) ) : ?>
+		<?php if ( empty( $snippets ) ) : ?>
 			<p>
-				<?php esc_html_e( 'No configurations array was found in any snippet yet. The dropdowns in the module will be empty, but you can still type settings by hand in the module\'s Advanced tab, as "path = value" lines - those are applied to whatever the snippet prints, so they work either way.', 'wpcode-bb-values' ); ?>
+				<?php esc_html_e( 'No configurations array was found in any snippet yet, so the module will only show the Snippet and Advanced boxes. You can still set values by hand in the module\'s Advanced tab, as "path = value" lines - those are applied to whatever the snippet prints, so they work either way.', 'wpcode-bb-values' ); ?>
 			</p>
 		<?php else : ?>
-			<p><?php esc_html_e( 'These are the settings you can pick in the module. The value in brackets is the one written in the snippet.', 'wpcode-bb-values' ); ?></p>
-			<table class="widefat striped" style="max-width: 820px;">
-				<tbody>
-				<?php
-				foreach ( $index as $path => $label ) {
-					if ( false !== strpos( $path, ':' ) ) {
-						continue; // Skip the snippet-scoped duplicates.
-					}
-					?>
-					<tr>
-						<td style="width: 320px;"><code><?php echo esc_html( $path ); ?></code></td>
-						<td><?php echo esc_html( $label ); ?></td>
-					</tr>
-					<?php
-				}
-				?>
-				</tbody>
-			</table>
+			<?php foreach ( $snippets as $snippet_id => $snippet ) : ?>
+				<h3>
+					<?php echo esc_html( $snippet['title'] ); ?>
+					<code>[wpcode id="<?php echo (int) $snippet_id; ?>"]</code>
+					<span class="description">
+						<?php
+						printf(
+							/* translators: %d: number of settings */
+							esc_html( _n( '%d setting', '%d settings', count( $snippet['settings'] ), 'wpcode-bb-values' ) ),
+							count( $snippet['settings'] )
+						);
+						?>
+					</span>
+				</h3>
+				<table class="widefat striped" style="max-width: 820px; margin-bottom: 20px;">
+					<tbody>
+					<?php foreach ( $snippet['settings'] as $path => $leaf ) : ?>
+						<tr>
+							<td style="width: 320px;"><code><?php echo esc_html( $path ); ?></code></td>
+							<td style="width: 90px;">
+								<?php
+								if ( wpcodebbv_is_boolean( $leaf['value'] ) ) {
+									esc_html_e( 'true/false', 'wpcode-bb-values' );
+								} elseif ( 'list' === $leaf['kind'] ) {
+									esc_html_e( 'list', 'wpcode-bb-values' );
+								} else {
+									esc_html_e( 'text', 'wpcode-bb-values' );
+								}
+								?>
+							</td>
+							<td><?php echo esc_html( $leaf['value'] ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endforeach; ?>
 		<?php endif; ?>
 
 		<h2><?php esc_html_e( 'If the module is not listed in the editor', 'wpcode-bb-values' ); ?></h2>

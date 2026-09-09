@@ -34,7 +34,7 @@ try {
 		// Nothing configured yet. Say so while editing; show visitors nothing.
 		if ( class_exists( 'FLBuilderModel' ) && is_callable( array( 'FLBuilderModel', 'is_builder_active' ) ) && FLBuilderModel::is_builder_active() ) {
 			echo '<div class="wpcodebbv-placeholder">'
-				. esc_html__( 'WPCode Values: add your snippet\'s shortcode tag in this module\'s settings.', 'wpcode-bb-values' )
+				. esc_html__( 'WPCode Values: enter your WPCode snippet ID in this module\'s settings.', 'wpcode-bb-values' )
 				. '</div>';
 		}
 
