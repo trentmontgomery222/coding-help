@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the "configurations" array out of your WPCode snippets and puts every setting in it on a Beaver Builder module, so a page editor can change them per page.
- * Version:           5.1.0
+ * Version:           5.2.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -59,7 +59,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '5.1.0' );
+define( 'WPCODEBBV_VERSION', '5.2.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -953,6 +953,28 @@ function wpcodebbv_help_page() {
 				<h3><?php echo esc_html( $snippet['title'] ); ?></h3>
 				<textarea readonly="readonly" rows="18" class="widefat code" onclick="this.select();"><?php echo esc_textarea( $annotated ); ?></textarea>
 			<?php endforeach; ?>
+		<?php endif; ?>
+
+		<h2><?php esc_html_e( 'Reading the settings in your snippet', 'wpcode-bb-values' ); ?></h2>
+		<p><?php esc_html_e( 'The configurations array is a list of {key, value} pairs, which is awkward to read from directly. Paste this below the array and you get one object for looking settings up by name:', 'wpcode-bb-values' ); ?></p>
+		<pre>CONFIG.get('calendarID')                     // 'c_a13c7383...'
+CONFIG.get('noSchoolEvent.badgeText')        // 'No School'
+CONFIG.bool('noSchoolEvent.showBottomBadge') // true - a real boolean
+CONFIG.list('noSchoolEvent.searchForWords')  // ['schools closed']
+CONFIG.set('eventColor', 'crimson')          // updates the array too
+CONFIG.match('Schools Closed Friday')        // 'noSchoolEvent'</pre>
+		<p>
+			<strong><?php esc_html_e( 'Watch out for the on/off settings.', 'wpcode-bb-values' ); ?></strong>
+			<?php esc_html_e( 'They are the strings "true" and "false", not real booleans, so if (CONFIG.get(\'x\')) is true even when the setting says false, because "false" is a non-empty string. Use CONFIG.bool() for those.', 'wpcode-bb-values' ); ?>
+		</p>
+
+		<?php
+		$helper_file = WPCODEBBV_DIR . 'assets/configurations-helper.js';
+		$helper      = file_exists( $helper_file ) ? file_get_contents( $helper_file ) : '';
+
+		if ( '' !== $helper ) :
+			?>
+			<textarea readonly="readonly" rows="16" class="widefat code" onclick="this.select();"><?php echo esc_textarea( $helper ); ?></textarea>
 		<?php endif; ?>
 
 		<h2><?php esc_html_e( 'If the module is not listed in the editor', 'wpcode-bb-values' ); ?></h2>

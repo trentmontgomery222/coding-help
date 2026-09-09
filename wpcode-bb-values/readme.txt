@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 5.1.0
+Stable tag: 5.2.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -90,6 +90,23 @@ with a button to reset them.
 A site-wide value cannot reach a snippet placed by any other means, because
 the only output this plugin can touch is its own module's.
 
+= Reading the settings in your snippet =
+
+The configurations array is a list of {key, value} pairs, which is awkward to
+read from directly. Tools > WPCode Values has a helper to paste below the
+array, giving you one object to look settings up by name:
+
+    CONFIG.get('calendarID')                     // 'c_a13c7383...'
+    CONFIG.get('noSchoolEvent.badgeText')        // 'No School'
+    CONFIG.bool('noSchoolEvent.showBottomBadge') // true - a real boolean
+    CONFIG.list('noSchoolEvent.searchForWords')  // ['schools closed']
+    CONFIG.set('eventColor', 'crimson')          // updates the array too
+    CONFIG.match('Schools Closed Friday')        // 'noSchoolEvent'
+
+Watch the on/off settings: they are the strings "true" and "false", not real
+booleans, so if (CONFIG.get('x')) is true even when the setting says false,
+because "false" is a non-empty string. Use CONFIG.bool() for those.
+
 == Frequently Asked Questions ==
 
 = The module is not in the Beaver Builder editor =
@@ -105,6 +122,12 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 5.2.0 =
+* Added a CONFIG helper to paste below your configurations array, for reading
+  and setting values by key instead of walking the array by hand: get, set,
+  bool, list, num, has, keys, all, and match for the search-words lookup.
+  Tools > WPCode Values has it in a copy box.
 
 = 5.1.0 =
 * Site-wide settings are now declared by the snippet with a siteWide marker,
