@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 4.1.0
+Stable tag: 5.0.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -40,6 +40,9 @@ Settings that belong to a block - everything under noSchoolEvent, say - are
 grouped under that name and start collapsed, so the module opens as a short
 list of headings rather than one long column of boxes.
 
+The snippet ID sits on a second tab, "Setup", away from the values that get
+edited day to day.
+
 Every box has a help icon. Put a comment next to a setting in your snippet and
 that comment becomes its help text:
 
@@ -50,7 +53,23 @@ that comment becomes its help text:
 
 Without a comment, common names (colours, badges, search words, on/off flags)
 get a written description, and every box says what value the snippet itself
-uses.
+uses. Tools > WPCode Values prints your own array with a comment added to every
+setting, ready to paste back into WPCode - edit the wording first, since you
+know what these do better than the plugin does.
+
+= Per page, and site-wide =
+
+Values set on a module change that page only. Nothing this plugin does touches
+the snippet itself or any other page.
+
+For the few settings you want the same everywhere - a calendar ID, a watermark
+- Tools > WPCode Values has a "Site-wide value" column. Those apply on every
+page where this plugin's module runs that snippet. A module whose box was
+changed keeps its own value for that page; one that was left alone follows the
+site-wide value, so changing it later reaches the pages nobody has edited.
+
+A site-wide value cannot reach a snippet placed by any other means, because the
+only output this plugin can touch is its own module's.
 
 Nested settings use a dot (noSchoolEvent.badgeText). Word lists are typed with
 commas between them (schools closed, no school). Tools > WPCode Values lists
@@ -81,6 +100,16 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 5.0.0 =
+* The snippet ID moved to its own "Setup" tab, alongside the extra-settings
+  box, so it is not sitting next to the values that get edited regularly.
+* Added site-wide values under Tools > WPCode Values. A module that was left
+  alone follows the site-wide value; one whose box was changed keeps its own
+  value for that page.
+* Tools > WPCode Values now prints your configurations array with a comment
+  added to every setting that lacks one, ready to copy back into WPCode.
+* Help text now says whether a setting has a site-wide value, and what it is.
 
 = 4.1.0 =
 * Every setting now has a help icon. A comment written next to the setting in

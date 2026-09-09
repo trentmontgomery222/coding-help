@@ -85,28 +85,48 @@ class WPCodeBBV_Module extends FLBuilderModule {
 
 		if ( $id > 0 && function_exists( 'wpcodebbv_snippets' ) ) {
 			$snippets = array();
+			$globals  = array();
 
 			try {
 				$snippets = wpcodebbv_snippets();
+				$globals  = wpcodebbv_globals_for( $id );
 			} catch ( \Throwable $e ) {
 				$snippets = array();
+				$globals  = array();
 			}
 
 			if ( isset( $snippets[ $id ]['settings'] ) && is_array( $snippets[ $id ]['settings'] ) ) {
 				foreach ( $snippets[ $id ]['settings'] as $path => $leaf ) {
-					$key = wpcodebbv_field_key( $id, $path );
+					$key     = wpcodebbv_field_key( $id, $path );
+					$snippet = (string) $leaf['value'];
+					$stored  = isset( $settings->{$key} ) ? (string) $settings->{$key} : '';
 
-					if ( ! isset( $settings->{$key} ) ) {
-						continue;
+					/*
+					 * Precedence, narrowest wins:
+					 *
+					 *   1. what this module's box says, if it has been
+					 *      changed away from the snippet's own value
+					 *   2. the site-wide value, if one is set
+					 *   3. the value written in the snippet
+					 *
+					 * The box is pre-filled with the snippet's own value,
+					 * so "still equal to it" is what tells a page that was
+					 * never edited apart from one that was. That is what
+					 * lets a site-wide value keep reaching pages nobody
+					 * has touched, while a page that was edited keeps its
+					 * own value.
+					 */
+					if ( '' !== trim( $stored ) && $stored !== $snippet ) {
+						$value = $stored;
+					} elseif ( isset( $globals[ $path ] ) && '' !== (string) $globals[ $path ] ) {
+						$value = (string) $globals[ $path ];
+					} else {
+						continue; // Nothing to change - leave the snippet alone.
 					}
 
-					$value = (string) $settings->{$key};
-
-					if ( '' === trim( $value ) ) {
-						continue; // Cleared - let the snippet's own value stand.
+					if ( $value !== $snippet ) {
+						$overrides[ $path ] = $value;
 					}
-
-					$overrides[ $path ] = $value;
 				}
 			}
 		}
