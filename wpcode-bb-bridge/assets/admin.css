@@ -25,3 +25,16 @@
 	padding: 12px 16px;
 	overflow-x: auto;
 }
+
+.wpcodebb-code-textarea {
+	font-family: Consolas, Menlo, Monaco, "Courier New", monospace;
+	font-size: 12px;
+	line-height: 1.5;
+	tab-size: 2;
+	white-space: pre;
+	overflow-x: auto;
+}
+
+.wpcodebb-js-fields-table td {
+	vertical-align: middle;
+}

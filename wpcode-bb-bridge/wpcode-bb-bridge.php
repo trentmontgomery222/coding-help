@@ -180,6 +180,11 @@ function wpcodebb_bootstrap() {
 		return;
 	}
 
+	// The JS codec has no hooks of its own (just static helper methods),
+	// so it's required directly rather than "booted" - both the Config
+	// CPT admin screen and the BB module's render path need it.
+	wpcodebb_safe_require( 'includes/class-wpcodebb-js-codec.php' );
+
 	if ( wpcodebb_safe_require( 'includes/class-wpcodebb-config-cpt.php' ) ) {
 		wpcodebb_safe_boot( 'WPCodeBB_Config_CPT' );
 	}

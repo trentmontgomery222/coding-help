@@ -106,27 +106,8 @@ class WPCodeBB_BB_Module {
 
 			$config_options[ $config_id ] = isset( $config['title'] ) && '' !== $config['title'] ? $config['title'] : sprintf( '#%d', (int) $config_id );
 
-			$bb_fields = array();
-			$fields    = isset( $config['fields'] ) && is_array( $config['fields'] ) ? $config['fields'] : array();
-
-			foreach ( $fields as $field ) {
-				if ( ! is_array( $field ) || empty( $field['key'] ) ) {
-					continue;
-				}
-
-				$bb_field = $this->convert_field( $field );
-
-				if ( $bb_field ) {
-					$bb_fields[ $field['key'] ] = $bb_field;
-				}
-			}
-
-			if ( empty( $bb_fields ) ) {
-				$bb_fields['_no_fields_notice'] = array(
-					'type' => 'html',
-					'html' => '<p>' . esc_html__( 'This Configuration has no editable fields yet. Add some from Configurations > edit this Configuration.', 'wpcode-bb-bridge' ) . '</p>',
-				);
-			}
+			$is_js_array = isset( $config['source_type'] ) && 'js_array' === $config['source_type'];
+			$bb_fields   = $is_js_array ? $this->build_js_fields( $config ) : $this->build_shortcode_fields( $config );
 
 			$toggle[ $config_id ] = array(
 				'fields' => $bb_fields,
@@ -143,6 +124,136 @@ class WPCodeBB_BB_Module {
 				'help'    => __( 'Pick a saved Configuration, or choose "Custom" to type your own variables for this one instance without setting anything up in advance. This panel only ever appears here while editing the page - it is never shown on the live site.', 'wpcode-bb-bridge' ),
 			),
 		);
+	}
+
+	/**
+	 * Builds the BB fields for a shortcode-attributes-mode Configuration
+	 * from its manually-defined field schema.
+	 */
+	private function build_shortcode_fields( $config ) {
+		$bb_fields = array();
+		$fields    = isset( $config['fields'] ) && is_array( $config['fields'] ) ? $config['fields'] : array();
+
+		foreach ( $fields as $field ) {
+			if ( ! is_array( $field ) || empty( $field['key'] ) ) {
+				continue;
+			}
+
+			$bb_field = $this->convert_field( $field );
+
+			if ( $bb_field ) {
+				$bb_fields[ $field['key'] ] = $bb_field;
+			}
+		}
+
+		if ( empty( $bb_fields ) ) {
+			$bb_fields['_no_fields_notice'] = array(
+				'type' => 'html',
+				'html' => '<p>' . esc_html__( 'This Configuration has no editable fields yet. Add some from Configurations > edit this Configuration.', 'wpcode-bb-bridge' ) . '</p>',
+			);
+		}
+
+		return $bb_fields;
+	}
+
+	/**
+	 * Builds the BB fields for a JS-config-array-mode Configuration from
+	 * the leaf paths the admin chose to expose. Field keys are derived
+	 * from the dotted path via path_to_field_key() so a real "." never
+	 * ends up as a raw BB field key (that would risk PHP's top-level
+	 * dot-to-underscore quirk on form submission).
+	 */
+	private function build_js_fields( $config ) {
+		$bb_fields = array();
+		$fields    = isset( $config['js_fields'] ) && is_array( $config['js_fields'] ) ? $config['js_fields'] : array();
+
+		$defaults = array();
+
+		if ( class_exists( 'WPCodeBB_JS_Codec' ) && ! empty( $config['js_source'] ) ) {
+			try {
+				$parsed = WPCodeBB_JS_Codec::parse( $config['js_source'] );
+
+				if ( ! empty( $parsed['ok'] ) ) {
+					foreach ( WPCodeBB_JS_Codec::collect_leaves( $parsed['node'], 3 ) as $leaf ) {
+						$defaults[ $leaf['path'] ] = $leaf['value'];
+					}
+				}
+			} catch ( \Throwable $e ) {
+				wpcodebb_log_error( 'build_js_fields parse', $e );
+			}
+		}
+
+		foreach ( $fields as $field ) {
+			if ( ! is_array( $field ) || empty( $field['path'] ) ) {
+				continue;
+			}
+
+			$path    = $field['path'];
+			$bb_key  = self::path_to_field_key( $path );
+			$label   = ! empty( $field['label'] ) ? $field['label'] : $path;
+			$default = isset( $defaults[ $path ] ) ? $defaults[ $path ] : '';
+			$type    = isset( $field['type'] ) ? $field['type'] : 'text';
+
+			switch ( $type ) {
+				case 'color':
+					$bb_fields[ $bb_key ] = array(
+						'type'       => 'color',
+						'label'      => $label,
+						'default'    => ltrim( $default, '#' ),
+						'show_reset' => true,
+					);
+					break;
+
+				case 'checkbox':
+					$bb_fields[ $bb_key ] = array(
+						'type'    => 'select',
+						'label'   => $label,
+						'default' => ( 'true' === strtolower( trim( $default ) ) ) ? 'true' : 'false',
+						'options' => array(
+							'true'  => __( 'Yes', 'wpcode-bb-bridge' ),
+							'false' => __( 'No', 'wpcode-bb-bridge' ),
+						),
+					);
+					break;
+
+				case 'textarea_list':
+					$bb_fields[ $bb_key ] = array(
+						'type'    => 'textarea',
+						'label'   => $label,
+						'default' => $default,
+						'rows'    => 3,
+						'help'    => __( 'One value per line.', 'wpcode-bb-bridge' ),
+					);
+					break;
+
+				case 'text':
+				default:
+					$bb_fields[ $bb_key ] = array(
+						'type'    => 'text',
+						'label'   => $label,
+						'default' => $default,
+					);
+			}
+		}
+
+		if ( empty( $bb_fields ) ) {
+			$bb_fields['_no_js_fields_notice'] = array(
+				'type' => 'html',
+				'html' => '<p>' . esc_html__( 'No fields are exposed for this Configuration yet. Edit it, check some boxes under "Detected fields", then Update.', 'wpcode-bb-bridge' ) . '</p>',
+			);
+		}
+
+		return $bb_fields;
+	}
+
+	/**
+	 * Deterministically turns a dotted leaf path (e.g.
+	 * "noSchoolEvent.primaryColor") into a safe Beaver Builder field
+	 * key. Used identically when registering the field and when reading
+	 * it back at render time, so no reverse mapping is needed.
+	 */
+	public static function path_to_field_key( $path ) {
+		return 'jsf__' . preg_replace( '/[^A-Za-z0-9_]/', '_', (string) $path );
 	}
 
 	/**

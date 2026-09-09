@@ -31,6 +31,14 @@ This plugin closes that gap for Beaver Builder sites. It adds:
   `key = value` variables directly into a text-editor-style box inside
   the Beaver Builder panel. That box only ever appears while editing the
   page - never on the live site.
+* A **"JS Configuration Array" source type** for snippets that aren't PHP
+  shortcodes at all, but a plain JS settings array like
+  `var configurations = [{key:'eventColor', value:'blue'}, ...]`
+  (including nested objects, e.g. `{key:'noSchoolEvent', value:{primaryColor:'red', ...}}`).
+  Paste the array into a Configuration, pick which values (including
+  nested ones) to expose, and the Beaver Builder module outputs an
+  updated version of that array on the page with the edited values
+  merged in - everything else is left exactly as pasted.
 * At render time, the module calls your WPCode snippet's shortcode and
   passes the configured values in as shortcode attributes
   (`$atts['your_key']`), and also exposes them via

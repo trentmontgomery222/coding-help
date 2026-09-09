@@ -35,19 +35,18 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 	}
 
 	/**
-	 * Builds the final shortcode string for this module instance based
-	 * on its selected Configuration and the values the editor entered.
-	 * Fully defensive: bad/missing/corrupted data always falls back to
-	 * an empty result rather than a notice or error.
+	 * Builds this module instance's render data. Returns a discriminated
+	 * shape keyed by 'mode':
+	 *   array('mode' => null)                                      nothing to render
+	 *   array('mode' => 'shortcode', 'tag', 'atts', 'values')       shortcode-attributes Configurations and Custom mode
+	 *   array('mode' => 'js_array', 'varname', 'js')                JS-config-array Configurations
+	 * Fully defensive throughout: bad/missing/corrupted data always
+	 * falls back to array('mode' => null) rather than a notice or error.
 	 *
-	 * @return array{tag:string|null, atts:array, values:array}
+	 * @return array
 	 */
 	public function get_render_data() {
-		$empty = array(
-			'tag'    => null,
-			'atts'   => array(),
-			'values' => array(),
-		);
+		$empty = array( 'mode' => null );
 
 		$config_id = isset( $this->settings->wpcode_config ) ? $this->settings->wpcode_config : '';
 
@@ -73,7 +72,22 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 			return $empty;
 		}
 
-		$config = $configs[ $config_id ];
+		$config      = $configs[ $config_id ];
+		$source_type = isset( $config['source_type'] ) ? $config['source_type'] : 'shortcode';
+
+		if ( 'js_array' === $source_type ) {
+			return $this->get_js_array_render_data( $config, $empty );
+		}
+
+		return $this->get_shortcode_render_data( $config, $empty );
+	}
+
+	/**
+	 * Render data for a shortcode-attributes-mode Configuration.
+	 *
+	 * @return array
+	 */
+	private function get_shortcode_render_data( $config, $empty ) {
 		$tag    = isset( $config['shortcode_tag'] ) ? $config['shortcode_tag'] : '';
 		$fields = isset( $config['fields'] ) && is_array( $config['fields'] ) ? $config['fields'] : array();
 
@@ -98,8 +112,8 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 				$val = ( 'yes' === $val ) ? '1' : '0';
 			}
 
-			if ( 'color' === $type && $val && '#' !== substr( (string) $val, 0, 1 ) ) {
-				$val = '#' . $val;
+			if ( 'color' === $type ) {
+				$val = self::normalize_color_value( $val );
 			}
 
 			$atts[ $key ]   = $val;
@@ -107,9 +121,91 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 		}
 
 		return array(
+			'mode'   => 'shortcode',
 			'tag'    => $tag,
 			'atts'   => $atts,
 			'values' => $values,
+		);
+	}
+
+	/**
+	 * Render data for a JS-config-array-mode Configuration: re-parses
+	 * the stored source array, overlays whatever the editor changed at
+	 * each exposed leaf's path, and serializes the result back to JS.
+	 * Any failure anywhere in this (bad stored source, a leaf path that
+	 * no longer exists, a serialize error) yields the "nothing to
+	 * render" shape rather than breaking the page.
+	 *
+	 * @return array
+	 */
+	private function get_js_array_render_data( $config, $empty ) {
+		if ( ! class_exists( 'WPCodeBB_JS_Codec' ) ) {
+			return $empty;
+		}
+
+		$source = isset( $config['js_source'] ) ? $config['js_source'] : '';
+
+		if ( ! $source ) {
+			return $empty;
+		}
+
+		try {
+			$parsed = WPCodeBB_JS_Codec::parse( $source );
+		} catch ( \Throwable $e ) {
+			return $empty;
+		}
+
+		if ( empty( $parsed['ok'] ) ) {
+			return $empty;
+		}
+
+		$root   = $parsed['node'];
+		$fields = isset( $config['js_fields'] ) && is_array( $config['js_fields'] ) ? $config['js_fields'] : array();
+
+		foreach ( $fields as $field ) {
+			if ( ! is_array( $field ) || empty( $field['path'] ) || ! class_exists( 'WPCodeBB_BB_Module' ) ) {
+				continue;
+			}
+
+			$path   = $field['path'];
+			$bb_key = WPCodeBB_BB_Module::path_to_field_key( $path );
+
+			if ( ! isset( $this->settings->{$bb_key} ) ) {
+				continue;
+			}
+
+			$value = $this->settings->{$bb_key};
+			$type  = isset( $field['type'] ) ? $field['type'] : 'text';
+
+			if ( 'color' === $type ) {
+				$value = self::normalize_color_value( $value );
+			}
+
+			try {
+				WPCodeBB_JS_Codec::set_leaf( $root, $path, $value );
+			} catch ( \Throwable $e ) {
+				// Skip just this one leaf; keep applying the rest.
+				continue;
+			}
+		}
+
+		try {
+			$js = WPCodeBB_JS_Codec::serialize( $root );
+		} catch ( \Throwable $e ) {
+			return $empty;
+		}
+
+		$varname = isset( $config['js_varname'] ) && $config['js_varname'] ? $config['js_varname'] : 'configurations';
+		$varname = preg_replace( '/[^A-Za-z0-9_$]/', '', $varname );
+
+		if ( '' === $varname ) {
+			$varname = 'configurations';
+		}
+
+		return array(
+			'mode'    => 'js_array',
+			'varname' => $varname,
+			'js'      => $js,
 		);
 	}
 
@@ -121,7 +217,7 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 	 * (or no) variables rather than an error.
 	 *
 	 * @param array $empty The empty fallback shape to return on failure.
-	 * @return array{tag:string|null, atts:array, values:array}
+	 * @return array
 	 */
 	private function get_custom_render_data( $empty ) {
 		$tag = isset( $this->settings->custom_shortcode_tag ) ? trim( (string) $this->settings->custom_shortcode_tag ) : '';
@@ -140,6 +236,7 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 		}
 
 		return array(
+			'mode'   => 'shortcode',
 			'tag'    => $tag,
 			'atts'   => $atts,
 			'values' => $atts,
@@ -204,5 +301,27 @@ class WPCodeBB_Value_Module extends FLBuilderModule {
 		}
 
 		return $atts;
+	}
+
+	/**
+	 * Only prepends "#" when the value actually looks like a hex color
+	 * (all hex digits, 1-8 of them - covers BB's color-picker output,
+	 * which is always hex with no "#"). A CSS named color like "blue" or
+	 * "crimson" - common in hand-written config arrays like this
+	 * plugin's JS Configuration Array mode - is left completely alone,
+	 * since prepending "#" to it would produce invalid CSS.
+	 */
+	private static function normalize_color_value( $value ) {
+		$value = (string) $value;
+
+		if ( '' === $value || '#' === substr( $value, 0, 1 ) ) {
+			return $value;
+		}
+
+		if ( ctype_xdigit( $value ) && strlen( $value ) <= 8 ) {
+			return '#' . $value;
+		}
+
+		return $value;
 	}
 }

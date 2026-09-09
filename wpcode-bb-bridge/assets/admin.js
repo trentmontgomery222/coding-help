@@ -52,6 +52,26 @@
 		}
 	} );
 
+	function toggleSourceBoxes() {
+		var $radios = $( '.wpcodebb-source-radio:checked' );
+
+		if ( ! $radios.length ) {
+			return;
+		}
+
+		var type = $radios.val();
+
+		if ( 'js_array' === type ) {
+			$( '#wpcodebb_shortcode, #wpcodebb_fields' ).hide();
+			$( '#wpcodebb_js' ).show();
+		} else {
+			$( '#wpcodebb_shortcode, #wpcodebb_fields' ).show();
+			$( '#wpcodebb_js' ).hide();
+		}
+	}
+
+	$( document ).on( 'change', '.wpcodebb-source-radio', toggleSourceBoxes );
+
 	$( function () {
 		if ( $( '#wpcodebb-fields-body' ).children().length === 0 ) {
 			addRow();
@@ -62,6 +82,10 @@
 				handle: 'td:first-child',
 				axis: 'y',
 			} );
+		}
+
+		if ( $( '.wpcodebb-source-radio' ).length ) {
+			toggleSourceBoxes();
 		}
 	} );
 } )( jQuery );

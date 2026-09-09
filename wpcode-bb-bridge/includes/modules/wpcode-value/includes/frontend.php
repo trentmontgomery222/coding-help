@@ -25,11 +25,23 @@ if ( ! isset( $module ) || ! is_object( $module ) ) {
 
 try {
 	$data = $module->get_render_data();
+	$mode = isset( $data['mode'] ) ? $data['mode'] : null;
 
-	if ( empty( $data['tag'] ) ) {
+	if ( empty( $mode ) ) {
 		if ( class_exists( 'FLBuilderModel' ) && FLBuilderModel::is_builder_active() ) {
 			echo '<div class="wpcodebb-placeholder">' . esc_html__( 'WPCode Value: choose a Configuration in the module settings.', 'wpcode-bb-bridge' ) . '</div>';
 		}
+		return;
+	}
+
+	if ( 'js_array' === $mode ) {
+		$varname = isset( $data['varname'] ) ? (string) $data['varname'] : 'configurations';
+		$js      = isset( $data['js'] ) ? (string) $data['js'] : 'null';
+		// Defense in depth against breaking out of the <script> tag, even
+		// though our own serializer already escapes string content.
+		$js      = str_ireplace( '</script', '<\/script', $js );
+
+		echo '<script>var ' . $varname . ' = ' . $js . ";</script>\n";
 		return;
 	}
 

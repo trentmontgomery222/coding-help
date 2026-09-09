@@ -80,6 +80,29 @@ show_banner = yes
 # a line starting with # is a comment and is ignored</pre>
 			<p><?php esc_html_e( 'Each line becomes a shortcode attribute your snippet can read, exactly like the fields from a Configuration. This box only ever appears while you are editing the page in Beaver Builder - it is never shown on the live site, and never to regular visitors.', 'wpcode-bb-bridge' ); ?></p>
 
+			<h2><?php esc_html_e( 'Got a JS config array instead of PHP? Use "JS Configuration Array" mode', 'wpcode-bb-bridge' ); ?></h2>
+			<p><?php esc_html_e( 'Some snippets aren\'t PHP shortcodes at all - they\'re a plain JavaScript settings array right there in the snippet, like:', 'wpcode-bb-bridge' ); ?></p>
+			<pre>var configurations = [
+  { key: 'eventColor', value: 'blue' },
+  { key: 'noSchoolEvent', value: {
+      primaryColor: 'red',
+      badgeText: 'No School',
+      searchForWords: ['schools closed']
+  } },
+];</pre>
+			<p><?php esc_html_e( 'For this, create a Configuration, and under "Source Type" choose "JS Configuration Array" instead of "Shortcode Attributes". Then:', 'wpcode-bb-bridge' ); ?></p>
+			<ol style="padding-left: 20px;">
+				<li><?php esc_html_e( 'Set "Variable name" to match your snippet (e.g. "configurations").', 'wpcode-bb-bridge' ); ?></li>
+				<li><?php esc_html_e( 'Paste the whole array (the "var ... = [ ... ];" line is fine) into the box.', 'wpcode-bb-bridge' ); ?></li>
+				<li><?php esc_html_e( 'Click Update/Save Draft. A "Detected fields" table appears below, listing every value it found - including nested ones like noSchoolEvent.primaryColor.', 'wpcode-bb-bridge' ); ?></li>
+				<li><?php esc_html_e( 'Check the box next to each value you want editable, adjust its Label/Type if you like (Text, Color, Yes/No, or a List for things like searchForWords), and Update again.', 'wpcode-bb-bridge' ); ?></li>
+			</ol>
+			<p><?php esc_html_e( 'Now add the "WPCode Value" module in Beaver Builder and pick this Configuration - only the boxes you checked show up as editable fields. On the page, the module outputs an updated "var configurations = [...]" script with your edited values merged in; everything you didn\'t expose stays exactly as you pasted it.', 'wpcode-bb-bridge' ); ?></p>
+			<p class="description">
+				<strong><?php esc_html_e( 'Load order matters:', 'wpcode-bb-bridge' ); ?></strong>
+				<?php esc_html_e( 'this module must render before whatever script actually reads that variable runs. Place the module above where the calendar/script normally appears on the page, or make sure your WPCode snippet is set to load after the page content (e.g. in the footer) rather than in the header.', 'wpcode-bb-bridge' ); ?>
+			</p>
+
 			<h2><?php esc_html_e( 'Notes', 'wpcode-bb-bridge' ); ?></h2>
 			<ul style="list-style: disc; padding-left: 20px;">
 				<li><?php esc_html_e( 'Field/variable keys become shortcode attribute names, so keep them lowercase with underscores (e.g. button_text).', 'wpcode-bb-bridge' ); ?></li>
