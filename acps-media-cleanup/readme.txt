@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.14.2
+Stable tag: 1.14.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,13 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.14.3 =
+* The "Add Media File" upload screen now matches the native WordPress uploader
+  more closely: the "Choose folder" chooser sits above a full-width dashed drop
+  area ("Drop files to upload / or / Select Files") on the page background, with
+  the maximum upload size shown underneath — same layout you're used to, still
+  powered by the FileMedia uploader (HEIC conversion, progress, resume).
 
 = 1.14.2 =
 * Fixed: files were being reported as "used" with the location

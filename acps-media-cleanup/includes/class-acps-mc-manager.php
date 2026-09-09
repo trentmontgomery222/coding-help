@@ -355,19 +355,20 @@ class ACPS_MC_Manager {
 			     screen (drop zone, folder chooser, in-browser HEIC conversion,
 			     resumable per-file progress). Hidden unless we're in upload mode. -->
 			<div class="acps-mm-hero" id="acps-mm-hero">
+				<?php if ( $writable ) : ?>
+					<div class="acps-mm-hero-folderrow">
+						<label for="acps-mm-hero-folder-sel"><?php esc_html_e( 'Choose folder:', 'acps-media-cleanup' ); ?></label>
+						<select id="acps-mm-hero-folder-sel"><option value="unfiled"><?php esc_html_e( 'Uncategorized', 'acps-media-cleanup' ); ?></option></select>
+					</div>
+				<?php endif; ?>
 				<div class="acps-mm-hero-drop" id="acps-mm-hero-drop">
-					<span class="dashicons dashicons-upload acps-mm-hero-ico"></span>
-					<p class="acps-mm-hero-title"><?php esc_html_e( 'Drop files anywhere to upload', 'acps-media-cleanup' ); ?></p>
-					<p class="acps-mm-hero-or"><?php esc_html_e( 'or', 'acps-media-cleanup' ); ?></p>
-					<button type="button" class="button button-hero button-primary" id="acps-mm-hero-select"><?php esc_html_e( 'Select Files', 'acps-media-cleanup' ); ?></button>
-					<?php if ( $writable ) : ?>
-						<div class="acps-mm-hero-folder">
-							<label for="acps-mm-hero-folder-sel"><?php esc_html_e( 'Add to folder:', 'acps-media-cleanup' ); ?></label>
-							<select id="acps-mm-hero-folder-sel"><option value="unfiled"><?php esc_html_e( 'Uncategorized', 'acps-media-cleanup' ); ?></option></select>
-						</div>
-					<?php endif; ?>
-					<p class="acps-mm-hero-max"><?php printf( esc_html__( 'Maximum upload file size: %s.', 'acps-media-cleanup' ), esc_html( size_format( wp_max_upload_size() ) ) ); ?></p>
+					<div class="acps-mm-hero-inside">
+						<p class="acps-mm-hero-title"><?php esc_html_e( 'Drop files to upload', 'acps-media-cleanup' ); ?></p>
+						<p class="acps-mm-hero-or"><?php esc_html_e( 'or', 'acps-media-cleanup' ); ?></p>
+						<p class="acps-mm-hero-buttons"><button type="button" class="button button-hero" id="acps-mm-hero-select"><?php esc_html_e( 'Select Files', 'acps-media-cleanup' ); ?></button></p>
+					</div>
 				</div>
+				<p class="acps-mm-hero-max"><?php printf( esc_html__( 'Maximum upload file size: %s.', 'acps-media-cleanup' ), esc_html( size_format( wp_max_upload_size() ) ) ); ?></p>
 			</div>
 
 			<!-- Cleanup / scan bar -->
