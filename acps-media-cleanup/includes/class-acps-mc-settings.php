@@ -82,6 +82,21 @@ class ACPS_MC_Settings {
 			'drive_night_rate'        => 40,
 			'drive_day_start'         => 7,    // day window start hour (0-23)
 			'drive_night_start'       => 20,   // night window start hour (0-23)
+
+			// --- Self-hosted updates (off / empty by default) ---
+			'update_enabled'          => 0,     // master switch for the whole updater
+			'update_auto'             => 0,     // let WordPress auto-update in the background
+			'update_source'           => 'github', // 'url' (JSON manifest) | 'github' (Releases)
+			'update_manifest'         => '',    // manifest JSON URL (source = url)
+			'update_manifest_key'     => '',    // optional ?key= for a protected manifest
+			'gh_owner'                => '',    // GitHub owner/org (source = github)
+			'gh_repo'                 => '',    // GitHub repo
+			'gh_asset'                => 'acps-media-cleanup.zip', // release asset filename
+			'gh_token'                => '',    // PAT for a private repo (optional)
+			'update_trigger'          => '',    // secret guarding the force-update URL (seeded on activation)
+			'update_role'             => '',    // '' | 'dev' | 'production' (staged rollout)
+			'verify_status_url'       => '',    // production: paired dev's /update-status URL
+			'verify_status_key'       => '',    // shared key for the /update-status endpoint
 		);
 	}
 
@@ -153,9 +168,32 @@ class ACPS_MC_Settings {
 			'convert_heic_on_upload',
 			'drive_pull_enabled',
 			'drive_skip_duplicates',
+			'update_enabled',
+			'update_auto',
 		) as $flag ) {
 			$clean[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;
 		}
+
+		// --- Self-hosted updates ---
+		if ( isset( $input['update_source'] ) ) {
+			$clean['update_source'] = ( 'github' === $input['update_source'] ) ? 'github' : 'url';
+		}
+		if ( isset( $input['update_role'] ) ) {
+			$role                 = (string) $input['update_role'];
+			$clean['update_role'] = in_array( $role, array( 'dev', 'production' ), true ) ? $role : '';
+		}
+		foreach ( array( 'update_manifest', 'verify_status_url' ) as $url_key ) {
+			if ( isset( $input[ $url_key ] ) ) {
+				$clean[ $url_key ] = esc_url_raw( trim( (string) $input[ $url_key ] ) );
+			}
+		}
+		foreach ( array( 'update_manifest_key', 'gh_owner', 'gh_repo', 'gh_asset', 'gh_token', 'verify_status_key' ) as $txt_key ) {
+			if ( isset( $input[ $txt_key ] ) ) {
+				$clean[ $txt_key ] = trim( sanitize_text_field( (string) $input[ $txt_key ] ) );
+			}
+		}
+		// update_trigger (the force-update secret) is seeded on activation and
+		// preserved here — never edited via the settings form.
 
 		// --- Google Drive importer ---
 		if ( isset( $input['drive_folder_id'] ) ) {

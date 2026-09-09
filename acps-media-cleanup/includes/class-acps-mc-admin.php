@@ -554,6 +554,127 @@ class ACPS_MC_Admin {
 				<?php endif; ?>
 			</table>
 
+			<hr>
+			<h2><?php esc_html_e( 'Software updates', 'acps-media-cleanup' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Let this plugin update itself from a source you control (a GitHub release or a JSON manifest), showing "Update now" on the Plugins screen just like a wordpress.org plugin. A failed update is automatically crash-tested and rolled back, and a fatal error puts the plugin into a safe "paused" mode instead of taking the site down.', 'acps-media-cleanup' ); ?></p>
+			<?php
+			$upd_status = class_exists( 'ACPS_MC_Updater' ) ? ACPS_MC_Updater::peek_status() : array( 'checked' => false, 'remote' => false, 'has_update' => false );
+			$force_url  = class_exists( 'ACPS_MC_Updater' ) ? ACPS_MC_Updater::force_update_url() : '';
+			?>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Enable self-updates', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="update_enabled" value="1" <?php checked( $s['update_enabled'] ); ?>> <?php esc_html_e( 'Check the source below for new versions and offer them on the Plugins screen', 'acps-media-cleanup' ); ?></label>
+						<br>
+						<label><input type="checkbox" name="update_auto" value="1" <?php checked( $s['update_auto'] ); ?>> <?php esc_html_e( 'Also install updates automatically in the background (uses the same crash-test protection)', 'acps-media-cleanup' ); ?></label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Update source', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<label><input type="radio" name="update_source" value="github" <?php checked( $s['update_source'], 'github' ); ?>> <?php esc_html_e( 'GitHub Releases', 'acps-media-cleanup' ); ?></label><br>
+						<label><input type="radio" name="update_source" value="url" <?php checked( $s['update_source'], 'url' ); ?>> <?php esc_html_e( 'JSON manifest URL', 'acps-media-cleanup' ); ?></label>
+					</td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'GitHub Releases', 'acps-media-cleanup' ); ?></h3>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="gh_owner"><?php esc_html_e( 'Owner / repo', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<input type="text" id="gh_owner" name="gh_owner" value="<?php echo esc_attr( $s['gh_owner'] ); ?>" class="regular-text" placeholder="acps" style="width:14em;">
+						<span aria-hidden="true"> / </span>
+						<input type="text" id="gh_repo" name="gh_repo" value="<?php echo esc_attr( $s['gh_repo'] ); ?>" class="regular-text" placeholder="acps-media-cleanup" style="width:16em;">
+						<p class="description"><?php esc_html_e( 'The plugin reads the latest release: its tag is the version, and the named asset below is the zip that gets installed.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="gh_asset"><?php esc_html_e( 'Release asset filename', 'acps-media-cleanup' ); ?></label></th>
+					<td><input type="text" id="gh_asset" name="gh_asset" value="<?php echo esc_attr( $s['gh_asset'] ); ?>" class="regular-text code" placeholder="acps-media-cleanup.zip"></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="gh_token"><?php esc_html_e( 'Access token (private repos)', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<input type="password" id="gh_token" name="gh_token" value="<?php echo esc_attr( $s['gh_token'] ); ?>" class="regular-text code" autocomplete="new-password">
+						<p class="description"><?php esc_html_e( 'Leave blank for a public repo. For a private repo, paste a fine-grained personal access token with read access to the repository’s contents.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'JSON manifest', 'acps-media-cleanup' ); ?></h3>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="update_manifest"><?php esc_html_e( 'Manifest URL', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<input type="url" id="update_manifest" name="update_manifest" value="<?php echo esc_attr( $s['update_manifest'] ); ?>" class="regular-text code" style="width:32em;max-width:100%;" placeholder="https://example.org/acps-media-cleanup.json">
+						<p class="description"><?php esc_html_e( 'A JSON file returning at least { "version": "1.2.3", "download_url": "https://…/acps-media-cleanup.zip" }. Optional: homepage, changelog, requires_php, requires_wp.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="update_manifest_key"><?php esc_html_e( 'Manifest key (optional)', 'acps-media-cleanup' ); ?></label></th>
+					<td><input type="text" id="update_manifest_key" name="update_manifest_key" value="<?php echo esc_attr( $s['update_manifest_key'] ); ?>" class="regular-text code"><p class="description"><?php esc_html_e( 'If your manifest is protected, this is sent as ?key=… on the request.', 'acps-media-cleanup' ); ?></p></td>
+				</tr>
+			</table>
+
+			<h3><?php esc_html_e( 'Staged rollout (optional)', 'acps-media-cleanup' ); ?></h3>
+			<p class="description"><?php esc_html_e( 'Run two sites in a chain: a "dev" site installs and crash-tests a new version first, then publishes that it passed; a "production" site only offers/applies a version once its paired dev site has verified it.', 'acps-media-cleanup' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'This site’s role', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<label><input type="radio" name="update_role" value="" <?php checked( $s['update_role'], '' ); ?>> <?php esc_html_e( 'Standalone (no staging)', 'acps-media-cleanup' ); ?></label><br>
+						<label><input type="radio" name="update_role" value="dev" <?php checked( $s['update_role'], 'dev' ); ?>> <?php esc_html_e( 'Dev (verifies first)', 'acps-media-cleanup' ); ?></label><br>
+						<label><input type="radio" name="update_role" value="production" <?php checked( $s['update_role'], 'production' ); ?>> <?php esc_html_e( 'Production (waits for dev)', 'acps-media-cleanup' ); ?></label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="verify_status_url"><?php esc_html_e( 'Dev status URL (production only)', 'acps-media-cleanup' ); ?></label></th>
+					<td><input type="url" id="verify_status_url" name="verify_status_url" value="<?php echo esc_attr( $s['verify_status_url'] ); ?>" class="regular-text code" style="width:32em;max-width:100%;" placeholder="https://dev.example.org/wp-json/acps-mc/v1/update-status"></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="verify_status_key"><?php esc_html_e( 'Shared status key', 'acps-media-cleanup' ); ?></label></th>
+					<td>
+						<input type="text" id="verify_status_key" name="verify_status_key" value="<?php echo esc_attr( $s['verify_status_key'] ); ?>" class="regular-text code">
+						<p class="description"><?php esc_html_e( 'Set the SAME value on both the dev and production sites. Guards the /update-status endpoint.', 'acps-media-cleanup' ); ?></p>
+					</td>
+				</tr>
+			</table>
+
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Status', 'acps-media-cleanup' ); ?></th>
+					<td>
+						<p>
+							<?php
+							/* translators: %s: installed plugin version */
+							echo esc_html( sprintf( __( 'Installed version: %s', 'acps-media-cleanup' ), ACPS_MC_VERSION ) );
+							?>
+							<br>
+							<?php
+							if ( ! empty( $s['update_enabled'] ) && ! empty( $upd_status['checked'] ) && ! empty( $upd_status['remote']['version'] ) ) {
+								/* translators: %s: latest available version */
+								echo esc_html( sprintf( __( 'Latest from source: %s', 'acps-media-cleanup' ), $upd_status['remote']['version'] ) );
+								echo $upd_status['has_update'] ? ' — <strong>' . esc_html__( 'update available', 'acps-media-cleanup' ) . '</strong>' : ' — ' . esc_html__( 'up to date', 'acps-media-cleanup' );
+							} elseif ( ! empty( $s['update_enabled'] ) ) {
+								esc_html_e( 'No successful check yet (it runs when WordPress next checks for plugin updates).', 'acps-media-cleanup' );
+							} else {
+								esc_html_e( 'Self-updates are turned off.', 'acps-media-cleanup' );
+							}
+							?>
+						</p>
+						<?php if ( '' !== $force_url ) : ?>
+							<p class="description">
+								<?php esc_html_e( 'Secret force-update URL (check + install now, e.g. from a deploy hook or cron):', 'acps-media-cleanup' ); ?><br>
+								<input type="text" readonly onclick="this.select()" value="<?php echo esc_attr( $force_url ); ?>" class="large-text code">
+								<br><?php esc_html_e( 'Keep this URL secret — anyone with it can trigger an update check on this site.', 'acps-media-cleanup' ); ?>
+							</p>
+						<?php endif; ?>
+					</td>
+				</tr>
+			</table>
+
 			<?php submit_button( __( 'Save settings', 'acps-media-cleanup' ) ); ?>
 		</form>
 
@@ -585,6 +706,11 @@ class ACPS_MC_Admin {
 		// Reconcile the Google Drive pull schedule with its setting.
 		if ( class_exists( 'ACPS_MC_Drive' ) ) {
 			ACPS_MC_Drive::maybe_schedule();
+		}
+
+		// Drop any cached update lookup so a changed source/token takes effect now.
+		if ( class_exists( 'ACPS_MC_Updater' ) ) {
+			ACPS_MC_Updater::flush_cache();
 		}
 
 		wp_safe_redirect(

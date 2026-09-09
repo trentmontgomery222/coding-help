@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.14.3
+Stable tag: 1.15.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,25 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.15.0 =
+* New: self-hosted updates. The plugin can now update itself from a source you
+  control — a GitHub release or a JSON manifest — and show "Update now" on the
+  Plugins screen just like a wordpress.org plugin, with optional background
+  auto-updates. Turn it on under Media › Media Settings › Software updates.
+  - Safety first: after every update the new code is crash-tested with a fresh
+    request; a release that fatally errors is automatically deactivated and an
+    admin notice explains the rollback (a blocked loopback never disables a good
+    update).
+  - Fatal-error safe mode: if the plugin ever hits a fatal error in its own
+    files, it drops into a dormant "paused" mode and shows a "Resume plugin"
+    notice instead of white-screening the site. The rest of the site keeps
+    working.
+  - A secret force-update URL (shown in Settings) triggers an immediate
+    check + install from a deploy hook or cron.
+  - Optional staged rollout: a "dev" site verifies a version first, and a
+    "production" site only updates once its paired dev site reports success.
+  - Full setup notes are in UPDATE-SYSTEM.md inside the plugin.
 
 = 1.14.3 =
 * The "Add Media File" upload screen now matches the native WordPress uploader

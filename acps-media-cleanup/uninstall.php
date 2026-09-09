@@ -22,13 +22,19 @@ $options = array(
 	'acps_media_cleanup_activated',
 	'acps_mc_drive_status',
 	'acps_mc_drive_log',
+	// Self-hosted updater bookkeeping.
+	'acps_mc_verified',
+	'acps_mc_update_failed',
+	'acps_mc_safe_mode',
 );
 foreach ( $options as $opt ) {
 	delete_option( $opt );
 }
 
-// Cached Google Drive access token.
+// Cached Google Drive access token + updater lookups.
 delete_transient( 'acps_mc_drive_token' );
+delete_transient( 'acps_mc_update_remote' );
+delete_transient( 'acps_mc_devstatus' );
 
 foreach ( array( 'acps_mc_log', 'acps_mc_index' ) as $t ) {
 	$table = $wpdb->prefix . $t;
