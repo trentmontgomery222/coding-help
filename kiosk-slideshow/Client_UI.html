@@ -271,6 +271,11 @@
       Kiosk.resume('viewing');
       clearIdleTimers();
     }
+
+    // The stage takes 420ms to reach its new height (Styles.html). Track it so
+    // the photo stays sized to the area it actually has, rather than snapping
+    // once the panel has finished moving.
+    if (Kiosk.refitDuring) Kiosk.refitDuring(460);
     return shouldOpen;
   };
 
@@ -796,6 +801,7 @@
     window.addEventListener('resize', debounce(function () {
       applyRuntimeStyles();
       if ((Kiosk.menu || []).length) sizeToolbar(Kiosk.menu);
+      if (Kiosk.refitSlides) Kiosk.refitSlides();
     }, 250));
 
     window.addEventListener('beforeunload', function () {

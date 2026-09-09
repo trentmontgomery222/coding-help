@@ -37,6 +37,93 @@
   }
 
   /* =========================================================================
+   * Sizing
+   *
+   * The photo is measured and sized here rather than handed to `object-fit`,
+   * because the element box needs to BE the photo: the slide transition
+   * translates by a percentage of it, and `margin: auto` can only centre a box
+   * that has a real size.
+   *
+   * Height first - a photo is drawn the full height of the view area. If that
+   * would make it wider than the view area, the width is pinned instead and
+   * the height follows. Exactly one axis is ever set in pixels; the other stays
+   * `auto` so the browser derives it from the photo's own ratio, which is what
+   * keeps it undistorted with no `object-fit` involved.
+   * ======================================================================*/
+
+  /**
+   * The area a photo may occupy. Equal to window.innerWidth/innerHeight while
+   * nothing is open - the stage is pinned to all four edges of the window -
+   * and smaller while the details panel is up.
+   *
+   * @return {{w: number, h: number}}
+   */
+  function viewArea() {
+    var box = el.stage ? el.stage.getBoundingClientRect() : null;
+    return box && box.width && box.height
+      ? {w: Math.round(box.width), h: Math.round(box.height)}
+      : {w: window.innerWidth, h: window.innerHeight};
+  }
+
+  /**
+   * @param {HTMLImageElement} img
+   * @return {boolean} False if the photo has not loaded far enough to measure.
+   */
+  function fitSlide(img) {
+    if (!img || !img.naturalWidth || !img.naturalHeight) return false;
+
+    var view = viewArea();
+    // Width the photo would take if it were drawn at the full view height.
+    var widthAtFullHeight = img.naturalWidth * view.h / img.naturalHeight;
+
+    var width  = 'auto';
+    var height = view.h + 'px';
+    if (widthAtFullHeight > view.w) {       // too wide - pin the width instead
+      width  = view.w + 'px';
+      height = 'auto';
+    }
+
+    // Guarded so a resize or a panel animation does not dirty layout on every
+    // frame for a photo that is already the right size.
+    if (img.style.width !== width) img.style.width = width;
+    if (img.style.height !== height) img.style.height = height;
+    return true;
+  }
+
+  /**
+   * Sizes a layer now if it can, and again when the photo finishes loading.
+   * Both, because a preloaded photo is usually already decoded and measurable
+   * the moment its src is assigned - and if it is, sizing it before the
+   * transition starts keeps the animation from stepping mid-flight.
+   *
+   * @param {HTMLImageElement} img
+   */
+  function fitWhenReady(img) {
+    fitSlide(img);
+    img.onload = function () { fitSlide(img); };
+  }
+
+  /** Re-sizes both layers. Cheap, and a no-op when nothing has moved. */
+  Kiosk.refitSlides = function () {
+    for (var i = 0; i < layers.length; i++) fitSlide(layers[i].img);
+  };
+
+  /**
+   * Keeps the photo sized to the view area while the stage itself is animating
+   * to a new size, which is what opening or closing the details panel does.
+   * Layout containment on the stage keeps the cost to the one element.
+   *
+   * @param {number} ms How long the stage takes to settle.
+   */
+  Kiosk.refitDuring = function (ms) {
+    var until = Date.now() + (ms || 0);
+    (function step() {
+      Kiosk.refitSlides();
+      if (Date.now() < until) requestAnimationFrame(step);
+    })();
+  };
+
+  /* =========================================================================
    * State
    * ======================================================================*/
 
@@ -606,6 +693,7 @@
     incoming.img.classList.add(enterFrom);
     incoming.img.src = url;
     incoming.img.alt = photo.displayName || photo.name || '';
+    fitWhenReady(incoming.img);
 
     // The backdrop gets a thumbnail, never the full photo.
     var fill = backdropUrl(photo);

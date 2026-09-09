@@ -454,10 +454,7 @@ Measured over 300 transitions in Chromium: heap flat at 9.5MB, DOM flat at
   against the containing block and the `auto` grid row had already grown to
   the photo's own height — `max-height: 100%` of "as tall as the photo" is not
   a limit. A 400x2400 scan drew at 2400px and hung 1701px past a 768px screen,
-  so only its middle band was ever visible. Each layer now fills the stage and
-  `object-fit: scale-down` places the photo inside it: percentages resolve
-  against the stage's pinned size, and a photo smaller than the frame is still
-  left at its own size rather than blown up.
+  so only its middle band was ever visible. Sizing is now explicit; see below.
 - **Spacer rows collapsed the bar's spacing.** They were a flat 6px rather than
   a full slot, which slid the playback buttons off-centre.
 - **The 14 rows after the first `nameplate` were counted twice** — rendered as
@@ -472,6 +469,37 @@ Measured over 300 transitions in Chromium: heap flat at 9.5MB, DOM flat at
 - **One year was hardcoded into the scoring.** `if (img.year == 2026) rawPower
   += 23456` pinned the rotation to a single year; that is now the optional
   `FeaturedYear` setting.
+
+## How a photo is sized
+
+`fitSlide()` in `Client_Slideshow.html` measures the stage and sets **one**
+axis in pixels, leaving the other `auto`:
+
+- **Height first.** The photo is drawn the full height of the view area.
+- **Width instead**, when drawing at full height would make the photo wider
+  than the view area. The height then follows from the ratio.
+
+Because only one axis is ever set, the box always carries the photo's own
+aspect ratio, nothing is distorted, and `object-fit` is not set at all. The
+photo is centred by `inset: 0` plus `margin: auto` — for an absolutely
+positioned element with opposite edges pinned and a resolved size, the two
+auto margins resolve equal to each other, on both axes. That leaves
+`transform` free for the slide animation.
+
+The view area is the whole window (`window.innerWidth` x
+`window.innerHeight`) while nothing is open, so the bottom bar sits over the
+lower edge of the photo. It shrinks when the details panel opens, and
+`fitSlide()` re-runs for the 460ms the stage takes to settle, so the photo
+tracks the space it actually has rather than snapping at the end.
+
+Re-fitting is triggered on: every photo change, the window `resize` handler,
+and opening or closing the details panel. It is a no-op when the numbers have
+not changed.
+
+One consequence worth knowing: a scan smaller than the screen **is** enlarged,
+because the height is set to the view height regardless. `photoUrl()` still
+asks Drive for `=s<n>` rather than `=w<n>`, so the CDN never invents pixels —
+the browser does the enlarging from the largest real file available.
 
 ## What was deliberately left out
 

@@ -107,45 +107,43 @@ html, body {
  * Stage - the photo itself
  * =========================================================================*/
 
+/*
+ * The view area. Full window at rest, so the photo is sized against
+ * window.innerWidth x window.innerHeight and the bar sits over its lower
+ * edge. It shrinks only when the details panel opens, so the photo never
+ * ends up hidden behind the panel.
+ */
 .stage {
   position: absolute;
   inset: 0;
-  bottom: var(--toolbar-h);
   z-index: var(--z-stage);
   contain: strict;
 }
 
 /*
- * Each layer fills the stage exactly; `object-fit` decides where the photo
- * lands inside it.
+ * Sized in JavaScript, centred here.
  *
- * The obvious spelling - shrink-wrap the <img> with `max-width/max-height:
- * 100%` and centre it - is what this used to do, and it silently dropped the
- * height limit. Those percentages resolve against the element's containing
- * block, and in a grid that meant an `auto` row track, which had already
- * grown to the photo's own intrinsic height. `max-height: 100%` of "as tall
- * as the photo" constrains nothing, so a 400x2400 scan rendered at 2400px and
- * ran 1701px off the bottom of a 1366x768 screen. The width limit worked,
- * which is why only tall photos looked broken.
+ * `fitSlide()` sets exactly ONE axis in pixels and leaves the other `auto`,
+ * so the box always carries the photo's own aspect ratio and `object-fit`
+ * has nothing left to decide - which is why it is not set. Height first, to
+ * the full height of the view area; width instead when a wide photo would
+ * otherwise run past the edge.
  *
- * Filling the stage instead makes both percentages resolve against the stage's
- * own definite size - it is absolutely positioned with all four edges pinned,
- * so its size never depends on its contents - and there is no circularity left
- * for a browser to resolve in our disfavour.
+ * `inset: 0` with `margin: auto` is what centres it. For an absolutely
+ * positioned element with opposite edges pinned and a resolved size, the two
+ * auto margins are solved equal to each other - true on both axes, and it
+ * leaves `transform` free for the slide animation.
  *
- * `scale-down` rather than `contain` because `contain` would blow a small
- * archival scan up to fill the frame, undoing the point of requesting `=s`
- * sizes from Drive. `scale-down` is defined as the smaller of `none` and
- * `contain`: shrink a photo that is too big, leave one that already fits at
- * its own size.
+ * The max-* pair never binds once fitSlide has run (the branch it picks is
+ * the one that fits); they only bound the single frame between assigning a
+ * src and the size landing.
  */
 .slide {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: scale-down;
-  object-position: center;
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
   opacity: 0;
   transform: translate3d(0, 0, 0);
   will-change: opacity, transform;
@@ -173,9 +171,9 @@ html, body {
  *
  * Shrinking the photo with a transform needs a scale factor that happens to
  * suit one screen height - at 1366x768 a scale of 0.72 still left the photo
- * running 138px behind the panel. Moving the stage's bottom edge instead lets
- * `object-fit` re-size the photo correctly at ANY viewport, with no magic
- * numbers to re-tune.
+ * running 138px behind the panel. Moving the stage's bottom edge instead
+ * shrinks the view area itself, and fitSlide() re-measures against it, so the
+ * photo is correct at ANY viewport with no magic numbers to re-tune.
  *
  * This does animate layout, unlike the slide transition - but it runs once
  * when someone opens the panel, not sixty times a second, so it is the right
