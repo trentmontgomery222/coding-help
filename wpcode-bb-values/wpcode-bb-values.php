@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the "configurations" array out of your WPCode snippets and puts every setting in it on a Beaver Builder module, so a page editor can change them per page.
- * Version:           4.0.0
+ * Version:           4.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -59,7 +59,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '4.0.0' );
+define( 'WPCODEBBV_VERSION', '4.1.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -170,8 +170,9 @@ function wpcodebbv_snippets( $force = false ) {
 				// First array wins if two in one snippet share a path.
 				if ( ! isset( $settings[ $path ] ) ) {
 					$settings[ $path ] = array(
-						'value' => (string) $leaf['value'],
-						'kind'  => $leaf['kind'],
+						'value'   => (string) $leaf['value'],
+						'kind'    => $leaf['kind'],
+						'comment' => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
 					);
 				}
 			}
@@ -230,6 +231,88 @@ function wpcodebbv_is_boolean( $value ) {
 }
 
 /**
+ * The help text for one setting, shown behind the "?" icon next to its
+ * box in Beaver Builder.
+ *
+ * A comment written next to the setting in the snippet always wins -
+ * whoever wrote the snippet knows what it does. Failing that, the name
+ * itself says a good deal, so common ones get a real description rather
+ * than a restatement of the label. Either way the value the snippet
+ * ships with is quoted at the end, which is the thing an editor most
+ * often wants to know before changing it.
+ *
+ * @param string $path
+ * @param array  $leaf
+ * @return string
+ */
+function wpcodebbv_describe( $path, $leaf ) {
+	$comment = isset( $leaf['comment'] ) ? trim( (string) $leaf['comment'] ) : '';
+	$value   = (string) $leaf['value'];
+	$name    = strtolower( substr( $path, strrpos( $path, '.' ) === false ? 0 : strrpos( $path, '.' ) + 1 ) );
+	$is_list = isset( $leaf['kind'] ) && 'list' === $leaf['kind'];
+
+	if ( '' !== $comment ) {
+		// An author's comment rarely ends in a full stop, and it is
+		// followed here by more sentences.
+		$text = in_array( substr( $comment, -1 ), array( '.', '!', '?', ':' ), true )
+			? $comment
+			: $comment . '.';
+	} elseif ( 'searchforwords' === $name ) {
+		$text = __( 'Words to look for in an event\'s title. An event matching any of them is treated as this kind of event.', 'wpcode-bb-values' );
+	} elseif ( 'badgetext' === $name ) {
+		$text = __( 'The short label printed on the badge for these events.', 'wpcode-bb-values' );
+	} elseif ( 'primarycolor' === $name ) {
+		$text = __( 'The main colour for these events. A CSS colour name (red, royalblue) or a hex code (#a13c7f).', 'wpcode-bb-values' );
+	} elseif ( 'secondarycolor' === $name ) {
+		$text = __( 'The secondary colour for these events, used alongside the main one. A CSS colour name or a hex code.', 'wpcode-bb-values' );
+	} elseif ( false !== strpos( $name, 'color' ) || false !== strpos( $name, 'colour' ) ) {
+		$text = __( 'A CSS colour name (red, royalblue) or a hex code (#a13c7f).', 'wpcode-bb-values' );
+	} elseif ( 'background' === $name ) {
+		$text = __( 'The background for these events. "auto" lets the snippet work it out from the colours above.', 'wpcode-bb-values' );
+	} elseif ( in_array( $name, array( 'activated', 'active', 'enabled' ), true ) ) {
+		$text = __( 'Turns this whole rule on or off. Set it to false and these events are treated like any other.', 'wpcode-bb-values' );
+	} elseif ( 0 === strpos( $name, 'show' ) || 0 === strpos( $name, 'hide' ) || false !== strpos( $name, 'badge' ) ) {
+		$text = __( 'Turns this part of the display on or off.', 'wpcode-bb-values' );
+	} elseif ( false !== strpos( $name, 'combine' ) ) {
+		$text = __( 'Whether an event running over several days is drawn as one continuous block.', 'wpcode-bb-values' );
+	} elseif ( false !== strpos( $name, 'watermark' ) ) {
+		$text = __( 'Whether the small credit line is shown.', 'wpcode-bb-values' );
+	} elseif ( 'calendarid' === $name || ( false !== strpos( $name, 'calendar' ) && false !== strpos( $name, 'id' ) ) ) {
+		$text = __( 'Which calendar the events come from. This is the calendar ID from the calendar\'s own settings page.', 'wpcode-bb-values' );
+	} elseif ( 'id' === $name || false !== strpos( $name, 'id' ) ) {
+		$text = __( 'An identifier the snippet looks things up by. Change it only if you know what it points at.', 'wpcode-bb-values' );
+	} elseif ( false !== strpos( $name, 'name' ) || false !== strpos( $name, 'title' ) || false !== strpos( $name, 'label' ) ) {
+		$text = __( 'A name shown on screen.', 'wpcode-bb-values' );
+	} elseif ( false !== strpos( $name, 'text' ) ) {
+		$text = __( 'Text shown on screen.', 'wpcode-bb-values' );
+	} elseif ( false !== strpos( $name, 'url' ) || false !== strpos( $name, 'link' ) ) {
+		$text = __( 'A web address.', 'wpcode-bb-values' );
+	} else {
+		$text = sprintf(
+			/* translators: %s: the setting's name */
+			__( 'Sets "%s" in the snippet.', 'wpcode-bb-values' ),
+			$path
+		);
+	}
+
+	if ( $is_list ) {
+		$text .= ' ' . __( 'Separate several with commas.', 'wpcode-bb-values' );
+	}
+
+	if ( '' !== $value ) {
+		$text .= ' ' . sprintf(
+			/* translators: %s: the value written in the snippet */
+			__( 'The snippet\'s own value is "%s".', 'wpcode-bb-values' ),
+			$value
+		);
+	}
+
+	$text .= ' ' . __( 'Clear this box to go back to the snippet\'s value.', 'wpcode-bb-values' );
+
+	return $text;
+}
+
+/**
  * The module's field schema.
  *
  * Every setting found in every snippet gets its own field, grouped into
@@ -273,51 +356,82 @@ function wpcodebbv_form() {
 		wpcodebbv_log( 'could not build the settings list: ' . $e->getMessage() );
 	}
 
+	$many_snippets = count( $snippets ) > 1;
+
 	foreach ( $snippets as $snippet_id => $snippet ) {
-		$fields = array();
+		// Group by the top-level key, so everything belonging to
+		// noSchoolEvent sits together in its own panel rather than in one
+		// long list. Settings with no nesting share a "General" group.
+		$groups = array();
 
 		foreach ( $snippet['settings'] as $path => $leaf ) {
-			$key     = wpcodebbv_field_key( $snippet_id, $path );
-			$current = (string) $leaf['value'];
+			$dot   = strpos( $path, '.' );
+			$group = false === $dot ? '' : substr( $path, 0, $dot );
+			$label = false === $dot ? $path : substr( $path, $dot + 1 );
 
-			if ( wpcodebbv_is_boolean( $current ) ) {
-				// A yes/no setting can only ever be true or false.
-				$fields[ $key ] = array(
-					'type'    => 'select',
-					'label'   => $path,
-					'default' => strtolower( trim( $current ) ),
-					'options' => array(
-						'true'  => __( 'true', 'wpcode-bb-values' ),
-						'false' => __( 'false', 'wpcode-bb-values' ),
-					),
-				);
-
-				continue;
-			}
-
-			$fields[ $key ] = array(
-				'type'    => 'text',
-				'label'   => $path,
-				'default' => $current,
-				'help'    => 'list' === $leaf['kind']
-					? __( 'A list - separate the entries with commas.', 'wpcode-bb-values' )
-					: '',
+			$groups[ $group ][ $path ] = array(
+				'label' => $label,
+				'leaf'  => $leaf,
 			);
 		}
 
-		if ( empty( $fields ) ) {
-			continue;
-		}
+		foreach ( $groups as $group => $members ) {
+			$fields = array();
 
-		$sections[ 'snippet_' . $snippet_id ] = array(
-			'title'  => sprintf(
-				/* translators: 1: snippet title, 2: snippet ID */
-				__( '%1$s (ID %2$d)', 'wpcode-bb-values' ),
-				$snippet['title'],
-				$snippet_id
-			),
-			'fields' => $fields,
-		);
+			foreach ( $members as $path => $member ) {
+				$key     = wpcodebbv_field_key( $snippet_id, $path );
+				$leaf    = $member['leaf'];
+				$current = (string) $leaf['value'];
+				$help    = wpcodebbv_describe( $path, $leaf );
+
+				if ( wpcodebbv_is_boolean( $current ) ) {
+					// A yes/no setting can only ever be true or false.
+					$fields[ $key ] = array(
+						'type'    => 'select',
+						'label'   => $member['label'],
+						'default' => strtolower( trim( $current ) ),
+						'options' => array(
+							'true'  => __( 'true', 'wpcode-bb-values' ),
+							'false' => __( 'false', 'wpcode-bb-values' ),
+						),
+						'help'    => $help,
+					);
+
+					continue;
+				}
+
+				$fields[ $key ] = array(
+					'type'    => 'text',
+					'label'   => $member['label'],
+					'default' => $current,
+					'help'    => $help,
+				);
+			}
+
+			if ( empty( $fields ) ) {
+				continue;
+			}
+
+			$title = '' === $group
+				? __( 'General', 'wpcode-bb-values' )
+				: $group;
+
+			if ( $many_snippets ) {
+				$title = $snippet['title'] . ' - ' . $title;
+			}
+
+			$sections[ 's' . $snippet_id . '_' . ( '' === $group ? 'general' : preg_replace( '/[^A-Za-z0-9]/', '_', $group ) ) ] = array(
+				'title'  => $title,
+				'fields' => $fields,
+				// Groups start closed so the panel opens as a short list
+				// of headings rather than every setting at once. Beaver
+				// Builder versions that do not know this key just render
+				// the section open, which is only a cosmetic difference -
+				// unlike a field 'type', a section key is read or ignored,
+				// never turned into a file to load.
+				'collapsed' => '' !== $group,
+			);
+		}
 	}
 
 	$sections['advanced'] = array(
@@ -473,7 +587,8 @@ function wpcodebbv_help_page() {
     }}
 ];</pre>
 		<p><?php esc_html_e( 'Drop the "WPCode Values" module on a page and put your snippet\'s ID in it - that is the number in [wpcode id="123"]. Every setting in that snippet\'s configurations array then appears in the module, already filled in with the value the snippet uses. Change the ones you want for this page and leave the rest alone. Clear a box to let the snippet\'s own value through again.', 'wpcode-bb-values' ); ?></p>
-		<p><?php esc_html_e( 'Settings written as true or false become a true/false dropdown, so they cannot be given a value the snippet will not understand.', 'wpcode-bb-values' ); ?></p>
+		<p><?php esc_html_e( 'Settings written as true or false become a true/false dropdown, so they cannot be given a value the snippet will not understand. Settings that belong to a block - everything under noSchoolEvent, say - are grouped under that name and start collapsed, so the panel opens as a short list of headings.', 'wpcode-bb-values' ); ?></p>
+		<p><?php esc_html_e( 'Every box has a help icon. If you put a comment next to a setting in the snippet, that comment becomes its help text, so the person who wrote the snippet decides what the editor is told.', 'wpcode-bb-values' ); ?></p>
 		<p><?php esc_html_e( 'Nothing in your snippet needs to change. The values are edited in the script the snippet outputs, on the way to the browser, only on the page holding that module. A setting inside a nested block is written with a dot: noSchoolEvent.badgeText. A list of words is typed with commas between them.', 'wpcode-bb-values' ); ?></p>
 
 		<h2>
@@ -502,9 +617,24 @@ function wpcodebbv_help_page() {
 				</h3>
 				<table class="widefat striped" style="max-width: 820px; margin-bottom: 20px;">
 					<tbody>
-					<?php foreach ( $snippet['settings'] as $path => $leaf ) : ?>
+					<?php
+					$last_group = null;
+
+					foreach ( $snippet['settings'] as $path => $leaf ) :
+						$dot   = strpos( $path, '.' );
+						$group = false === $dot ? __( 'General', 'wpcode-bb-values' ) : substr( $path, 0, $dot );
+
+						if ( $group !== $last_group ) :
+							$last_group = $group;
+							?>
+							<tr>
+								<th colspan="3" style="text-align: left;"><?php echo esc_html( $group ); ?></th>
+							</tr>
+							<?php
+						endif;
+						?>
 						<tr>
-							<td style="width: 320px;"><code><?php echo esc_html( $path ); ?></code></td>
+							<td style="width: 260px;"><code><?php echo esc_html( false === $dot ? $path : substr( $path, $dot + 1 ) ); ?></code></td>
 							<td style="width: 90px;">
 								<?php
 								if ( wpcodebbv_is_boolean( $leaf['value'] ) ) {
@@ -516,7 +646,10 @@ function wpcodebbv_help_page() {
 								}
 								?>
 							</td>
-							<td><?php echo esc_html( $leaf['value'] ); ?></td>
+							<td>
+								<strong><?php echo esc_html( $leaf['value'] ); ?></strong><br />
+								<span class="description"><?php echo esc_html( wpcodebbv_describe( $path, $leaf ) ); ?></span>
+							</td>
 						</tr>
 					<?php endforeach; ?>
 					</tbody>

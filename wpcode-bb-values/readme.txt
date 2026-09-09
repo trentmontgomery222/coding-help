@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 4.0.0
+Stable tag: 4.1.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -36,6 +36,22 @@ Settings written as true or false become a true/false dropdown, so they cannot
 be given a value the snippet will not understand. Lists of words stay as text,
 typed with commas between them.
 
+Settings that belong to a block - everything under noSchoolEvent, say - are
+grouped under that name and start collapsed, so the module opens as a short
+list of headings rather than one long column of boxes.
+
+Every box has a help icon. Put a comment next to a setting in your snippet and
+that comment becomes its help text:
+
+    {key: 'noSchoolEvent', value: {
+        badgeText: 'No School',   // Shown on the badge when school is closed
+        searchForWords: ['schools closed']
+    }}
+
+Without a comment, common names (colours, badges, search words, on/off flags)
+get a written description, and every box says what value the snippet itself
+uses.
+
 Nested settings use a dot (noSchoolEvent.badgeText). Word lists are typed with
 commas between them (schools closed, no school). Tools > WPCode Values lists
 everything found in your snippets.
@@ -65,6 +81,14 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 4.1.0 =
+* Every setting now has a help icon. A comment written next to the setting in
+  the snippet is used as its help text; otherwise a description is worked out
+  from the setting's name. Either way the help says what value the snippet
+  itself uses and that clearing the box restores it.
+* Nested settings are grouped under their parent key in their own collapsible
+  panel, instead of one flat list. Settings with no nesting sit in "General".
 
 = 4.0.0 =
 * The module no longer asks you to pick settings. Enter the snippet ID and

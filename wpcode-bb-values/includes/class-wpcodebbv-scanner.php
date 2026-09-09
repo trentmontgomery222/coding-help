@@ -68,7 +68,7 @@ class WPCodeBBV_Scanner {
 				'name'     => $matches[1][ $index ][0],
 				'start'    => $node['start'],
 				'end'      => $node['end'],
-				'settings' => self::collect_settings( $node ),
+				'settings' => self::collect_settings( $node, $js ),
 			);
 		}
 
@@ -78,10 +78,12 @@ class WPCodeBBV_Scanner {
 	/**
 	 * Flattens one parsed array into path => leaf.
 	 *
-	 * @param array $array_node
+	 * @param array  $array_node
+	 * @param string $js Source, so each setting can pick up the comment
+	 *                   written beside it.
 	 * @return array<string, array>
 	 */
-	private static function collect_settings( $array_node ) {
+	private static function collect_settings( $array_node, $js = '' ) {
 		$settings = array();
 
 		foreach ( $array_node['items'] as $item ) {
@@ -104,23 +106,26 @@ class WPCodeBBV_Scanner {
 						continue; // Only one level of nesting is editable.
 					}
 
-					$settings[ $root . '.' . $prop_name ] = self::leaf( $prop_node );
+					$settings[ $root . '.' . $prop_name ] = self::leaf( $prop_node, $js );
 				}
 
 				continue;
 			}
 
-			$settings[ $root ] = self::leaf( $value );
+			$settings[ $root ] = self::leaf( $value, $js );
 		}
 
 		return $settings;
 	}
 
 	/**
-	 * @param array $node
-	 * @return array{value:string, kind:string, start:int, end:int}
+	 * @param array  $node
+	 * @param string $js
+	 * @return array{value:string, kind:string, start:int, end:int, comment:string}
 	 */
-	private static function leaf( $node ) {
+	private static function leaf( $node, $js = '' ) {
+		$comment = '' === $js ? '' : self::comment_for( $js, $node['start'], $node['end'] );
+
 		if ( 'list' === $node['kind'] ) {
 			$parts = array();
 
@@ -129,19 +134,73 @@ class WPCodeBBV_Scanner {
 			}
 
 			return array(
-				'value' => implode( ', ', $parts ),
-				'kind'  => 'list',
-				'start' => $node['start'],
-				'end'   => $node['end'],
+				'value'   => implode( ', ', $parts ),
+				'kind'    => 'list',
+				'start'   => $node['start'],
+				'end'     => $node['end'],
+				'comment' => $comment,
 			);
 		}
 
 		return array(
-			'value' => 'string' === $node['kind'] ? $node['text'] : $node['raw'],
-			'kind'  => $node['kind'],
-			'start' => $node['start'],
-			'end'   => $node['end'],
+			'value'   => 'string' === $node['kind'] ? $node['text'] : $node['raw'],
+			'kind'    => $node['kind'],
+			'start'   => $node['start'],
+			'end'     => $node['end'],
+			'comment' => $comment,
 		);
+	}
+
+	/**
+	 * Finds the comment a snippet author wrote for one setting: either
+	 * trailing it on the same line, or sitting on the line above it.
+	 * Whoever wrote the snippet knows what a setting does, so their own
+	 * words make far better help text than anything guessed from a name.
+	 *
+	 * @param string $js
+	 * @param int    $start Start of the value literal.
+	 * @param int    $end   End of the value literal.
+	 * @return string
+	 */
+	private static function comment_for( $js, $start, $end ) {
+		$length = strlen( $js );
+
+		// Same line, after the value: value: 'auto', // what this does
+		$line_end = strpos( $js, "\n", $end );
+		$line_end = false === $line_end ? $length : $line_end;
+		$trailing = substr( $js, $end, $line_end - $end );
+		$marker   = strpos( $trailing, '//' );
+
+		if ( false !== $marker ) {
+			$text = trim( substr( $trailing, $marker + 2 ) );
+
+			if ( '' !== $text ) {
+				return $text;
+			}
+		}
+
+		// The line above, when it is nothing but a comment.
+		$line_start = strrpos( substr( $js, 0, $start ), "\n" );
+
+		if ( false === $line_start ) {
+			return '';
+		}
+
+		$previous_start = strrpos( substr( $js, 0, $line_start ), "\n" );
+		$previous_start = false === $previous_start ? 0 : $previous_start + 1;
+		$previous       = trim( substr( $js, $previous_start, $line_start - $previous_start ) );
+
+		if ( 0 === strpos( $previous, '//' ) ) {
+			return trim( substr( $previous, 2 ) );
+		}
+
+		if ( 0 === strpos( $previous, '/*' ) ) {
+			$text = trim( $previous, "/* \t" );
+
+			return trim( str_replace( '*/', '', $text ) );
+		}
+
+		return '';
 	}
 
 	/**
