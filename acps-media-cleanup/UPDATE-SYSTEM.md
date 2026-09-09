@@ -13,16 +13,27 @@ class) plus a crash-safe bootstrap in the main plugin file.
 
 ## 1. Turn it on
 
-**Media → Media Settings → Software updates**
+The update settings live on a **hidden page with no menu link** — so they can’t
+be changed by accident. Reach it only by typing the URL:
+
+```
+/wp-admin/admin.php?page=acps-mc-updates
+```
+
+(You still need to be logged in with the `manage_options` capability.)
 
 1. Check **Enable self-updates**.
 2. (Optional) Check **install automatically in the background** for hands-off
    auto-updates. They use the same crash-test protection.
-3. Pick a source (below) and **Save settings**.
+3. Pick a source (below) and **Save update settings**.
 
 WordPress checks for plugin updates a few times a day; the new version then
 appears on **Plugins**. To check immediately, use the secret force-update URL
 (section 4) or just visit **Dashboard → Updates**.
+
+> There is intentionally **no menu entry anywhere** for this page. Bookmark the
+> URL above. Nothing about self-updates appears on the normal
+> **Media → Media Settings** screen.
 
 ---
 

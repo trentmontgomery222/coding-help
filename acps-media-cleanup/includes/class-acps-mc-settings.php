@@ -168,32 +168,13 @@ class ACPS_MC_Settings {
 			'convert_heic_on_upload',
 			'drive_pull_enabled',
 			'drive_skip_duplicates',
-			'update_enabled',
-			'update_auto',
 		) as $flag ) {
 			$clean[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;
 		}
-
-		// --- Self-hosted updates ---
-		if ( isset( $input['update_source'] ) ) {
-			$clean['update_source'] = ( 'github' === $input['update_source'] ) ? 'github' : 'url';
-		}
-		if ( isset( $input['update_role'] ) ) {
-			$role                 = (string) $input['update_role'];
-			$clean['update_role'] = in_array( $role, array( 'dev', 'production' ), true ) ? $role : '';
-		}
-		foreach ( array( 'update_manifest', 'verify_status_url' ) as $url_key ) {
-			if ( isset( $input[ $url_key ] ) ) {
-				$clean[ $url_key ] = esc_url_raw( trim( (string) $input[ $url_key ] ) );
-			}
-		}
-		foreach ( array( 'update_manifest_key', 'gh_owner', 'gh_repo', 'gh_asset', 'gh_token', 'verify_status_key' ) as $txt_key ) {
-			if ( isset( $input[ $txt_key ] ) ) {
-				$clean[ $txt_key ] = trim( sanitize_text_field( (string) $input[ $txt_key ] ) );
-			}
-		}
-		// update_trigger (the force-update secret) is seeded on activation and
-		// preserved here — never edited via the settings form.
+		// NOTE: the self-hosted update settings are intentionally NOT handled here.
+		// They live on a hidden page (admin.php?page=acps-mc-updates) with its own
+		// form, saved via sanitize_updates(), so the normal Settings screen can
+		// never accidentally change or disable the updater.
 
 		// --- Google Drive importer ---
 		if ( isset( $input['drive_folder_id'] ) ) {
@@ -247,6 +228,44 @@ class ACPS_MC_Settings {
 		}
 
 		// excluded_ids are managed via the results screen, not this form; keep as-is.
+
+		return $clean;
+	}
+
+	/**
+	 * Sanitise ONLY the self-hosted update settings, merged over the current
+	 * saved settings. Used by the hidden updates page so that (a) saving the
+	 * normal Settings screen never touches these, and (b) saving the updates
+	 * page never touches anything else. The force-update secret (update_trigger)
+	 * is always preserved.
+	 *
+	 * @param array $input Raw input (typically $_POST from the updates form).
+	 * @return array Full settings array ready to save.
+	 */
+	public static function sanitize_updates( $input ) {
+		$clean = self::all();
+
+		$clean['update_enabled'] = ! empty( $input['update_enabled'] ) ? 1 : 0;
+		$clean['update_auto']    = ! empty( $input['update_auto'] ) ? 1 : 0;
+
+		if ( isset( $input['update_source'] ) ) {
+			$clean['update_source'] = ( 'github' === $input['update_source'] ) ? 'github' : 'url';
+		}
+		if ( isset( $input['update_role'] ) ) {
+			$role                 = (string) $input['update_role'];
+			$clean['update_role'] = in_array( $role, array( 'dev', 'production' ), true ) ? $role : '';
+		}
+		foreach ( array( 'update_manifest', 'verify_status_url' ) as $url_key ) {
+			if ( isset( $input[ $url_key ] ) ) {
+				$clean[ $url_key ] = esc_url_raw( trim( (string) $input[ $url_key ] ) );
+			}
+		}
+		foreach ( array( 'update_manifest_key', 'gh_owner', 'gh_repo', 'gh_asset', 'gh_token', 'verify_status_key' ) as $txt_key ) {
+			if ( isset( $input[ $txt_key ] ) ) {
+				$clean[ $txt_key ] = trim( sanitize_text_field( (string) $input[ $txt_key ] ) );
+			}
+		}
+		// update_trigger stays as-is (seeded on activation, never edited by hand).
 
 		return $clean;
 	}

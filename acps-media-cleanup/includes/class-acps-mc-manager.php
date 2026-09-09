@@ -63,6 +63,21 @@ class ACPS_MC_Manager {
 				ACPS_MC_Admin::SETTINGS_SLUG,
 				array( $this->admin, 'render_settings_page' )
 			);
+
+			// Hidden self-hosted-updates page. Passing null as the parent slug
+			// registers the page (routable at wp-admin/admin.php?page=acps-mc-updates)
+			// WITHOUT adding any menu item anywhere — you have to know/type the URL.
+			// Access still requires the manage_options capability. This deliberately
+			// keeps the update configuration out of the menus so it can't be changed
+			// by accident.
+			add_submenu_page(
+				null,
+				__( 'FileMedia — Software updates', 'acps-media-cleanup' ),
+				'',
+				ACPS_MC_CAP,
+				ACPS_MC_Admin::UPDATES_SLUG,
+				array( $this->admin, 'render_updates_page' )
+			);
 		}
 	}
 

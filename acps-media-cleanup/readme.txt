@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.15.0
+Stable tag: 1.15.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -69,11 +69,18 @@ store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
 
+= 1.15.1 =
+* The self-hosted update settings now live on a hidden page with NO menu link
+  anywhere, so they can't be changed by accident. Reach it only by typing the
+  URL: /wp-admin/admin.php?page=acps-mc-updates (login still required). Nothing
+  about updates appears on the normal Media Settings screen, and saving Media
+  Settings can no longer affect the updater.
+
 = 1.15.0 =
 * New: self-hosted updates. The plugin can now update itself from a source you
   control — a GitHub release or a JSON manifest — and show "Update now" on the
   Plugins screen just like a wordpress.org plugin, with optional background
-  auto-updates. Turn it on under Media › Media Settings › Software updates.
+  auto-updates. Configured on a hidden page (see 1.15.1).
   - Safety first: after every update the new code is crash-tested with a fresh
     request; a release that fatally errors is automatically deactivated and an
     admin notice explains the rollback (a blocked loopback never disables a good
