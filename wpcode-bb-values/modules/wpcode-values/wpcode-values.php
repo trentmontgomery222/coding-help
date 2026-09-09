@@ -39,6 +39,80 @@ class WPCodeBBV_Module extends FLBuilderModule {
 	}
 
 	/**
+	 * Called by Beaver Builder when this module's settings are saved.
+	 *
+	 * This is where a siteWide setting becomes site-wide: whatever was
+	 * typed into its box is written to the shared store, so every module
+	 * running this snippet renders the new value. Everything else stays
+	 * on this module and is not touched here.
+	 *
+	 * @param object $settings The settings being saved.
+	 * @return object
+	 */
+	public function update( $settings ) {
+		try {
+			$id = 0;
+
+			if ( isset( $settings->wpcode_id ) && preg_match( '/(\\d+)/', (string) $settings->wpcode_id, $match ) ) {
+				$id = (int) $match[1];
+			}
+
+			if ( $id < 1 || ! function_exists( 'wpcodebbv_snippets' ) ) {
+				return $settings;
+			}
+
+			$snippets = wpcodebbv_snippets();
+
+			if ( ! isset( $snippets[ $id ]['settings'] ) || ! is_array( $snippets[ $id ]['settings'] ) ) {
+				return $settings;
+			}
+
+			$shared = wpcodebbv_globals_for( $id );
+
+			foreach ( $snippets[ $id ]['settings'] as $path => $leaf ) {
+				if ( empty( $leaf['global'] ) ) {
+					continue;
+				}
+
+				$key = wpcodebbv_field_key( $id, $path );
+
+				if ( ! isset( $settings->{$key} ) ) {
+					continue;
+				}
+
+				$typed   = trim( (string) $settings->{$key} );
+				$snippet = (string) $leaf['value'];
+
+				// What this setting is worth everywhere right now. The box
+				// was filled with exactly this when the panel opened, so
+				// anything else means somebody typed over it - and saving a
+				// module nobody touched leaves the shared value alone
+				// instead of reverting it to whatever this page last saw.
+				$current = isset( $shared[ $path ] ) && '' !== $shared[ $path ]
+					? (string) $shared[ $path ]
+					: $snippet;
+
+				if ( '' !== $typed && $typed !== $current ) {
+					// Typing the snippet's own value back in is how you
+					// clear a site-wide value, rather than pinning it.
+					wpcodebbv_set_global( $id, $path, $typed === $snippet ? '' : $typed );
+				}
+
+				// Site-wide settings are not kept on the module at all.
+				// The shared store is the only copy, so the box always
+				// opens showing what is actually in force everywhere.
+				unset( $settings->{$key} );
+			}
+		} catch ( \Throwable $e ) {
+			if ( function_exists( 'wpcodebbv_log' ) ) {
+				wpcodebbv_log( 'could not store site-wide values: ' . $e->getMessage() );
+			}
+		}
+
+		return $settings;
+	}
+
+	/**
 	 * The WPCode snippet ID this module renders.
 	 *
 	 * @return int Zero when nothing is set.
@@ -97,31 +171,22 @@ class WPCodeBBV_Module extends FLBuilderModule {
 
 			if ( isset( $snippets[ $id ]['settings'] ) && is_array( $snippets[ $id ]['settings'] ) ) {
 				foreach ( $snippets[ $id ]['settings'] as $path => $leaf ) {
-					$key     = wpcodebbv_field_key( $id, $path );
 					$snippet = (string) $leaf['value'];
-					$stored  = isset( $settings->{$key} ) ? (string) $settings->{$key} : '';
 
-					/*
-					 * Precedence, narrowest wins:
-					 *
-					 *   1. what this module's box says, if it has been
-					 *      changed away from the snippet's own value
-					 *   2. the site-wide value, if one is set
-					 *   3. the value written in the snippet
-					 *
-					 * The box is pre-filled with the snippet's own value,
-					 * so "still equal to it" is what tells a page that was
-					 * never edited apart from one that was. That is what
-					 * lets a site-wide value keep reaching pages nobody
-					 * has touched, while a page that was edited keeps its
-					 * own value.
-					 */
-					if ( '' !== trim( $stored ) && $stored !== $snippet ) {
-						$value = $stored;
-					} elseif ( isset( $globals[ $path ] ) && '' !== (string) $globals[ $path ] ) {
-						$value = (string) $globals[ $path ];
+					if ( ! empty( $leaf['global'] ) ) {
+						/*
+						 * Marked siteWide in the snippet. The shared value
+						 * is what counts, wherever it was last edited -
+						 * this module's own box is only how it gets
+						 * edited, never what decides the page.
+						 */
+						$value = isset( $globals[ $path ] ) ? (string) $globals[ $path ] : $snippet;
 					} else {
-						continue; // Nothing to change - leave the snippet alone.
+						$key    = wpcodebbv_field_key( $id, $path );
+						$stored = isset( $settings->{$key} ) ? (string) $settings->{$key} : '';
+
+						// Blank means "leave the snippet's value alone".
+						$value = '' === trim( $stored ) ? $snippet : $stored;
 					}
 
 					if ( $value !== $snippet ) {

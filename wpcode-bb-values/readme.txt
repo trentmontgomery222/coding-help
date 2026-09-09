@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 5.0.0
+Stable tag: 5.1.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -59,31 +59,36 @@ know what these do better than the plugin does.
 
 = Per page, and site-wide =
 
-Values set on a module change that page only. Nothing this plugin does touches
-the snippet itself or any other page.
+By default a value set on a module changes that page only.
 
-For the few settings you want the same everywhere - a calendar ID, a watermark
-- Tools > WPCode Values has a "Site-wide value" column. Those apply on every
-page where this plugin's module runs that snippet. A module whose box was
-changed keeps its own value for that page; one that was left alone follows the
-site-wide value, so changing it later reaches the pages nobody has edited.
+The snippet decides which settings are different, with a siteWide marker.
+A setting marked siteWide is edited on any module, in any page, and the value
+applies everywhere that snippet runs through this module:
 
-A site-wide value cannot reach a snippet placed by any other means, because the
-only output this plugin can touch is its own module's.
+    // one setting
+    {key: 'calendarID', siteWide: 'true', value: 'c_x'},
 
-Nested settings use a dot (noSchoolEvent.badgeText). Word lists are typed with
-commas between them (schools closed, no school). Tools > WPCode Values lists
-everything found in your snippets.
+    // a whole block - everything inside it is site-wide
+    {key: 'noSchoolEvent', siteWide: 'true', value: {
+        badgeText: 'No School',
+        primaryColor: 'red'
+    }},
 
-= How the values get in =
+    // or name the ones you want
+    {key: 'halfDayEvent', value: {
+        badgeText: 'Half Day',
+        primaryColor: 'orange',
+        siteWide: ['badgeText']
+    }}
 
-The values are literals inside the JavaScript your snippet prints, so they
-cannot be passed in as shortcode attributes. This plugin edits them in that
-output, on the way to the browser, only on the page holding the module. If the
-array cannot be found or read, the snippet's output is passed through exactly
-as written.
+Site-wide boxes are labelled "(site-wide)" in the module and always show the
+value in force everywhere, so you are editing the real thing rather than a
+copy. Typing the snippet's own value back in clears it again. Tools > WPCode
+Values lists which settings are site-wide and what each is currently set to,
+with a button to reset them.
 
-PHP snippets can also read the overrides from $GLOBALS['wpcode_bb_values'].
+A site-wide value cannot reach a snippet placed by any other means, because
+the only output this plugin can touch is its own module's.
 
 == Frequently Asked Questions ==
 
@@ -100,6 +105,17 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 5.1.0 =
+* Site-wide settings are now declared by the snippet with a siteWide marker,
+  rather than being chosen in wp-admin. Mark one setting, a whole block (every
+  setting inside it is then site-wide), or name individual settings with
+  siteWide: ['a', 'b'].
+* A site-wide setting is edited from any module on any page and applies
+  everywhere. Its box always shows the value currently in force, and typing
+  the snippet's own value back in clears it.
+* Tools > WPCode Values now reports which settings are site-wide and what they
+  are set to, with a reset button, instead of setting them there.
 
 = 5.0.0 =
 * The snippet ID moved to its own "Setup" tab, alongside the extra-settings

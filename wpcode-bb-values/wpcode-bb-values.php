@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the "configurations" array out of your WPCode snippets and puts every setting in it on a Beaver Builder module, so a page editor can change them per page.
- * Version:           5.0.0
+ * Version:           5.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -59,7 +59,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '5.0.0' );
+define( 'WPCODEBBV_VERSION', '5.1.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -199,6 +199,7 @@ function wpcodebbv_snippets( $force = false ) {
 						'value'   => (string) $leaf['value'],
 						'kind'    => $leaf['kind'],
 						'comment' => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
+						'global'  => ! empty( $leaf['global'] ),
 					);
 				}
 			}
@@ -257,12 +258,12 @@ function wpcodebbv_is_boolean( $value ) {
 }
 
 /**
- * Saves the site-wide values posted from Tools > WPCode Values.
- * Only settings that really exist in a snippet are stored, and a blank
- * box means "not set site-wide" rather than "set to empty".
+ * Handles the "reset site-wide values" button on Tools > WPCode Values.
+ * Nothing else is editable there: which settings are site-wide is
+ * decided by the snippet, and their values are set by editing a module.
  */
-function wpcodebbv_save_globals() {
-	if ( ! isset( $_POST['wpcodebbv_globals_nonce'] ) ) {
+function wpcodebbv_handle_reset() {
+	if ( ! isset( $_POST['wpcodebbv_reset'], $_POST['wpcodebbv_globals_nonce'] ) ) {
 		return;
 	}
 
@@ -274,48 +275,18 @@ function wpcodebbv_save_globals() {
 		return;
 	}
 
-	$posted  = isset( $_POST['wpcodebbv_global'] ) && is_array( $_POST['wpcodebbv_global'] )
-		? wp_unslash( $_POST['wpcodebbv_global'] )
-		: array();
-	$saved   = array();
-	$known   = wpcodebbv_snippets();
+	wpcodebbv_reset_globals( (int) $_POST['wpcodebbv_reset'] );
 
-	foreach ( $known as $snippet_id => $snippet ) {
-		if ( ! isset( $posted[ $snippet_id ] ) || ! is_array( $posted[ $snippet_id ] ) ) {
-			continue;
-		}
-
-		foreach ( $snippet['settings'] as $path => $leaf ) {
-			// The form posts paths with dots turned into underscores,
-			// because PHP mangles dots in field names.
-			$posted_key = str_replace( '.', '__', $path );
-
-			if ( ! isset( $posted[ $snippet_id ][ $posted_key ] ) ) {
-				continue;
-			}
-
-			$value = sanitize_text_field( $posted[ $snippet_id ][ $posted_key ] );
-
-			if ( '' === trim( $value ) ) {
-				continue; // Blank means "not set site-wide".
-			}
-
-			$saved[ (int) $snippet_id ][ $path ] = $value;
-		}
-	}
-
-	update_option( WPCODEBBV_OPTION, $saved );
-
-	add_settings_error( 'wpcodebbv', 'wpcodebbv_saved', __( 'Site-wide values saved.', 'wpcode-bb-values' ), 'updated' );
+	add_settings_error( 'wpcodebbv', 'wpcodebbv_reset', __( 'Site-wide values cleared. Those settings now use the values written in the snippet.', 'wpcode-bb-values' ), 'updated' );
 }
 
 /**
- * Site-wide values, as snippet ID => path => value.
+ * The stored site-wide values, as snippet ID => path => value.
  *
- * These are the "set it once for the whole site" settings - a calendar
- * ID, a watermark. They apply wherever this plugin's module renders
- * that snippet. They cannot reach a snippet placed by any other means,
- * because the only output this plugin can touch is its own module's.
+ * Which settings are site-wide is decided in the snippet, not here: a
+ * setting marked siteWide is edited on any module and the value is kept
+ * here, so every module running that snippet picks it up. Everything
+ * else stays on the module that was edited.
  *
  * @return array<int, array<string, string>>
  */
@@ -326,7 +297,7 @@ function wpcodebbv_globals() {
 }
 
 /**
- * Site-wide values for one snippet.
+ * Stored site-wide values for one snippet.
  *
  * @param int $snippet_id
  * @return array<string, string>
@@ -337,6 +308,47 @@ function wpcodebbv_globals_for( $snippet_id ) {
 	return isset( $all[ (int) $snippet_id ] ) && is_array( $all[ (int) $snippet_id ] )
 		? $all[ (int) $snippet_id ]
 		: array();
+}
+
+/**
+ * Records a new value for a site-wide setting. Called when a module is
+ * saved in the Beaver Builder editor, which is the only place these are
+ * edited - one module changes the value for every page.
+ *
+ * @param int    $snippet_id
+ * @param string $path
+ * @param string $value Pass '' to drop back to the snippet's own value.
+ */
+function wpcodebbv_set_global( $snippet_id, $path, $value ) {
+	$all        = wpcodebbv_globals();
+	$snippet_id = (int) $snippet_id;
+	$value      = (string) $value;
+
+	if ( '' === trim( $value ) ) {
+		unset( $all[ $snippet_id ][ $path ] );
+
+		if ( isset( $all[ $snippet_id ] ) && empty( $all[ $snippet_id ] ) ) {
+			unset( $all[ $snippet_id ] );
+		}
+	} else {
+		$all[ $snippet_id ][ $path ] = $value;
+	}
+
+	update_option( WPCODEBBV_OPTION, $all );
+}
+
+/**
+ * Clears every stored site-wide value for one snippet, so all of them
+ * fall back to what the snippet itself says.
+ *
+ * @param int $snippet_id
+ */
+function wpcodebbv_reset_globals( $snippet_id ) {
+	$all = wpcodebbv_globals();
+
+	unset( $all[ (int) $snippet_id ] );
+
+	update_option( WPCODEBBV_OPTION, $all );
 }
 
 /**
@@ -476,7 +488,7 @@ function wpcodebbv_describe_base( $path, $leaf ) {
  * @param string $global Global value for this setting, or ''.
  * @return string
  */
-function wpcodebbv_describe( $path, $leaf, $global = '' ) {
+function wpcodebbv_describe( $path, $leaf, $shared = '' ) {
 	$text  = wpcodebbv_describe_base( $path, $leaf );
 	$value = (string) $leaf['value'];
 
@@ -488,14 +500,18 @@ function wpcodebbv_describe( $path, $leaf, $global = '' ) {
 		);
 	}
 
-	if ( '' !== (string) $global ) {
-		$text .= ' ' . sprintf(
-			/* translators: %s: the site-wide value */
-			__( 'This setting is set site-wide to "%s" under Tools > WPCode Values; leave this box as it is to use that, or change it to override it for this page only.', 'wpcode-bb-values' ),
-			$global
-		);
+	if ( ! empty( $leaf['global'] ) ) {
+		$text .= ' ' . __( 'This one is marked siteWide in the snippet: changing it here changes it on every page that runs this snippet through this module, not just this one.', 'wpcode-bb-values' );
+
+		if ( '' !== (string) $shared && (string) $shared !== $value ) {
+			$text .= ' ' . sprintf(
+				/* translators: %s: the current site-wide value */
+				__( 'It is currently set site-wide to "%s". Put it back to the snippet\'s own value to clear that.', 'wpcode-bb-values' ),
+				$shared
+			);
+		}
 	} else {
-		$text .= ' ' . __( 'Change it to affect this page only. Leave it alone and the snippet\'s own value is used.', 'wpcode-bb-values' );
+		$text .= ' ' . __( 'Changing it affects this page only. Clear the box to go back to the snippet\'s value.', 'wpcode-bb-values' );
 	}
 
 	return $text;
@@ -558,16 +574,26 @@ function wpcodebbv_form() {
 			$fields = array();
 
 			foreach ( $members as $path => $member ) {
-				$key     = wpcodebbv_field_key( $snippet_id, $path );
-				$leaf    = $member['leaf'];
-				$current = (string) $leaf['value'];
-				$help    = wpcodebbv_describe( $path, $leaf, isset( $globals[ $path ] ) ? $globals[ $path ] : '' );
+				$key    = wpcodebbv_field_key( $snippet_id, $path );
+				$leaf   = $member['leaf'];
+				$shared = isset( $globals[ $path ] ) ? (string) $globals[ $path ] : '';
+				$help   = wpcodebbv_describe( $path, $leaf, $shared );
+
+				// A site-wide setting shows the value in force everywhere,
+				// so the box is editing the real thing rather than a copy.
+				$current = ! empty( $leaf['global'] ) && '' !== $shared
+					? $shared
+					: (string) $leaf['value'];
+
+				$label = empty( $leaf['global'] )
+					? $member['label']
+					: $member['label'] . ' ' . __( '(site-wide)', 'wpcode-bb-values' );
 
 				if ( wpcodebbv_is_boolean( $current ) ) {
 					// A yes/no setting can only ever be true or false.
 					$fields[ $key ] = array(
 						'type'    => 'select',
-						'label'   => $member['label'],
+						'label'   => $label,
 						'default' => strtolower( trim( $current ) ),
 						'options' => array(
 							'true'  => __( 'true', 'wpcode-bb-values' ),
@@ -581,7 +607,7 @@ function wpcodebbv_form() {
 
 				$fields[ $key ] = array(
 					'type'    => 'text',
-					'label'   => $member['label'],
+					'label'   => $label,
 					'default' => $current,
 					'help'    => $help,
 				);
@@ -770,7 +796,7 @@ function wpcodebbv_help_page() {
 	$bb     = class_exists( 'FLBuilder' );
 	$wpcode = post_type_exists( 'wpcode' );
 
-	wpcodebbv_save_globals();
+	wpcodebbv_handle_reset();
 
 	if ( isset( $_GET['wpcodebbv_rescan'] ) ) {
 		wpcodebbv_clear_index();
@@ -823,7 +849,16 @@ function wpcodebbv_help_page() {
 				<?php wp_nonce_field( 'wpcodebbv_globals', 'wpcodebbv_globals_nonce' ); ?>
 
 				<?php foreach ( $snippets as $snippet_id => $snippet ) : ?>
-					<?php $globals = wpcodebbv_globals_for( $snippet_id ); ?>
+					<?php
+					$globals   = wpcodebbv_globals_for( $snippet_id );
+					$wide_here = 0;
+
+					foreach ( $snippet['settings'] as $leaf ) {
+						if ( ! empty( $leaf['global'] ) ) {
+							$wide_here++;
+						}
+					}
+					?>
 
 					<h3>
 						<?php echo esc_html( $snippet['title'] ); ?>
@@ -831,9 +866,10 @@ function wpcodebbv_help_page() {
 						<span class="description">
 							<?php
 							printf(
-								/* translators: %d: number of settings */
-								esc_html( _n( '%d setting', '%d settings', count( $snippet['settings'] ), 'wpcode-bb-values' ) ),
-								count( $snippet['settings'] )
+								/* translators: 1: number of settings, 2: number marked siteWide */
+								esc_html__( '%1$d settings, %2$d marked siteWide', 'wpcode-bb-values' ),
+								count( $snippet['settings'] ),
+								$wide_here
 							);
 							?>
 						</span>
@@ -842,9 +878,10 @@ function wpcodebbv_help_page() {
 					<table class="widefat striped" style="max-width: 1000px; margin-bottom: 10px;">
 						<thead>
 							<tr>
-								<th style="width: 240px;"><?php esc_html_e( 'Setting', 'wpcode-bb-values' ); ?></th>
-								<th style="width: 200px;"><?php esc_html_e( 'In the snippet', 'wpcode-bb-values' ); ?></th>
-								<th style="width: 220px;"><?php esc_html_e( 'Site-wide value', 'wpcode-bb-values' ); ?></th>
+								<th style="width: 230px;"><?php esc_html_e( 'Setting', 'wpcode-bb-values' ); ?></th>
+								<th style="width: 90px;"><?php esc_html_e( 'Scope', 'wpcode-bb-values' ); ?></th>
+								<th style="width: 180px;"><?php esc_html_e( 'In the snippet', 'wpcode-bb-values' ); ?></th>
+								<th style="width: 180px;"><?php esc_html_e( 'Site-wide now', 'wpcode-bb-values' ); ?></th>
 								<th><?php esc_html_e( 'What it does', 'wpcode-bb-values' ); ?></th>
 							</tr>
 						</thead>
@@ -853,45 +890,52 @@ function wpcodebbv_help_page() {
 						$last_group = null;
 
 						foreach ( $snippet['settings'] as $path => $leaf ) :
-							$dot        = strpos( $path, '.' );
-							$group      = false === $dot ? __( 'General', 'wpcode-bb-values' ) : substr( $path, 0, $dot );
-							$field_name = 'wpcodebbv_global[' . (int) $snippet_id . '][' . str_replace( '.', '__', $path ) . ']';
-							$current    = isset( $globals[ $path ] ) ? $globals[ $path ] : '';
+							$dot   = strpos( $path, '.' );
+							$group = false === $dot ? __( 'General', 'wpcode-bb-values' ) : substr( $path, 0, $dot );
 
 							if ( $group !== $last_group ) :
 								$last_group = $group;
 								?>
-								<tr><th colspan="4" style="text-align: left;"><?php echo esc_html( $group ); ?></th></tr>
+								<tr><th colspan="5" style="text-align: left;"><?php echo esc_html( $group ); ?></th></tr>
 								<?php
 							endif;
 							?>
 							<tr>
 								<td><code><?php echo esc_html( false === $dot ? $path : substr( $path, $dot + 1 ) ); ?></code></td>
+								<td>
+									<?php if ( ! empty( $leaf['global'] ) ) : ?>
+										<strong><?php esc_html_e( 'site-wide', 'wpcode-bb-values' ); ?></strong>
+									<?php else : ?>
+										<?php esc_html_e( 'per page', 'wpcode-bb-values' ); ?>
+									<?php endif; ?>
+								</td>
 								<td><?php echo esc_html( $leaf['value'] ); ?></td>
 								<td>
-									<?php if ( wpcodebbv_is_boolean( $leaf['value'] ) ) : ?>
-										<select name="<?php echo esc_attr( $field_name ); ?>" class="widefat">
-											<option value=""><?php esc_html_e( '— not set —', 'wpcode-bb-values' ); ?></option>
-											<option value="true" <?php selected( $current, 'true' ); ?>>true</option>
-											<option value="false" <?php selected( $current, 'false' ); ?>>false</option>
-										</select>
-									<?php else : ?>
-										<input type="text" class="widefat" name="<?php echo esc_attr( $field_name ); ?>" value="<?php echo esc_attr( $current ); ?>" placeholder="<?php esc_attr_e( 'not set', 'wpcode-bb-values' ); ?>" />
-									<?php endif; ?>
+									<?php
+									if ( empty( $leaf['global'] ) ) {
+										echo '&mdash;';
+									} elseif ( isset( $globals[ $path ] ) && '' !== $globals[ $path ] ) {
+										echo '<strong>' . esc_html( $globals[ $path ] ) . '</strong>';
+									} else {
+										esc_html_e( 'same as the snippet', 'wpcode-bb-values' );
+									}
+									?>
 								</td>
 								<td><span class="description"><?php echo esc_html( wpcodebbv_describe_base( $path, $leaf ) ); ?></span></td>
 							</tr>
 						<?php endforeach; ?>
 						</tbody>
 					</table>
-				<?php endforeach; ?>
 
-				<p>
-					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save site-wide values', 'wpcode-bb-values' ); ?></button>
-					<span class="description">
-						<?php esc_html_e( 'A site-wide value applies on every page where this plugin\'s module runs that snippet. A module whose box was changed keeps its own value for that page; one that was left alone follows whatever is set here.', 'wpcode-bb-values' ); ?>
-					</span>
-				</p>
+					<?php if ( ! empty( $globals ) ) : ?>
+						<p>
+							<button type="submit" name="wpcodebbv_reset" value="<?php echo (int) $snippet_id; ?>" class="button">
+								<?php esc_html_e( 'Reset this snippet\'s site-wide values', 'wpcode-bb-values' ); ?>
+							</button>
+							<span class="description"><?php esc_html_e( 'Puts every site-wide setting back to the value written in the snippet.', 'wpcode-bb-values' ); ?></span>
+						</p>
+					<?php endif; ?>
+				<?php endforeach; ?>
 			</form>
 
 			<h2><?php esc_html_e( 'Comments to paste into your snippet', 'wpcode-bb-values' ); ?></h2>

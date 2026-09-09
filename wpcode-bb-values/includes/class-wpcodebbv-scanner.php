@@ -33,6 +33,9 @@ class WPCodeBBV_Scanner {
 	/** Variable names to look for: configurations, configurationsCalendar, configurations_2 ... */
 	const NAME_PATTERN = '/(?:var|let|const)?\s*(configurations[A-Za-z0-9_]*)\s*=\s*\[/';
 
+	/** The key a snippet uses to mark a setting as site-wide. */
+	const WIDE_KEY = 'siteWide';
+
 	/**
 	 * Finds every configurations array in $js.
 	 *
@@ -100,22 +103,82 @@ class WPCodeBBV_Scanner {
 			$root  = $key_node['text'];
 			$value = $item['props']['value'];
 
+			// A "siteWide" marker sitting beside key/value marks the whole
+			// entry: {key: 'calendarID', value: 'c_x', siteWide: 'true'}
+			$entry_wide = isset( $item['props'][ self::WIDE_KEY ] )
+				? self::truthy( $item['props'][ self::WIDE_KEY ] )
+				: false;
+
 			if ( 'object' === $value['kind'] ) {
+				// Inside a block it can mark the block, or name the
+				// individual settings:
+				//   siteWide: 'true'
+				//   siteWide: ['badgeText', 'primaryColor']
+				$block_wide = false;
+				$named_wide = array();
+
+				if ( isset( $value['props'][ self::WIDE_KEY ] ) ) {
+					$marker = $value['props'][ self::WIDE_KEY ];
+
+					if ( 'list' === $marker['kind'] ) {
+						foreach ( $marker['items'] as $named ) {
+							if ( 'string' === $named['kind'] ) {
+								$named_wide[] = $named['text'];
+							}
+						}
+					} else {
+						$block_wide = self::truthy( $marker );
+					}
+				}
+
 				foreach ( $value['props'] as $prop_name => $prop_node ) {
+					if ( self::WIDE_KEY === $prop_name ) {
+						continue; // The marker itself is not a setting.
+					}
+
 					if ( 'object' === $prop_node['kind'] ) {
 						continue; // Only one level of nesting is editable.
 					}
 
-					$settings[ $root . '.' . $prop_name ] = self::leaf( $prop_node, $js );
+					$leaf           = self::leaf( $prop_node, $js );
+					$leaf['global'] = $entry_wide || $block_wide || in_array( $prop_name, $named_wide, true );
+
+					$settings[ $root . '.' . $prop_name ] = $leaf;
 				}
 
 				continue;
 			}
 
-			$settings[ $root ] = self::leaf( $value, $js );
+			$leaf           = self::leaf( $value, $js );
+			$leaf['global'] = $entry_wide;
+
+			$settings[ $root ] = $leaf;
 		}
 
 		return $settings;
+	}
+
+	/**
+	 * Whether a parsed node reads as true. Snippets write these as the
+	 * string 'true' as often as the literal, so both count.
+	 *
+	 * @param array|null $node
+	 * @return bool
+	 */
+	private static function truthy( $node ) {
+		if ( ! is_array( $node ) ) {
+			return false;
+		}
+
+		if ( 'string' === $node['kind'] ) {
+			return 'true' === strtolower( trim( $node['text'] ) );
+		}
+
+		if ( 'raw' === $node['kind'] ) {
+			return 'true' === strtolower( trim( $node['raw'] ) );
+		}
+
+		return false;
 	}
 
 	/**
