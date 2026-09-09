@@ -4,27 +4,45 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 2.0.1
+Stable tag: 3.0.0
 License: GPLv2 or later
 
-Adds one Beaver Builder module where you type values in the editor and pass
-them to a WPCode snippet as shortcode attributes.
+Reads the "configurations" array out of your WPCode snippets and lets you
+pick and edit those settings from a Beaver Builder module, per page.
 
 == Description ==
 
-Set your WPCode snippet's Insertion method to Shortcode, then drop the
-"WPCode Values" module onto a page in Beaver Builder. Put the snippet's
-shortcode tag in the Snippet tab, and fill in up to eight name/value rows in
-the Values tab. Each row reaches your snippet as a shortcode attribute:
+Snippets often keep their settings in an array at the top:
 
-    $atts = shortcode_atts( array( 'headline' => '' ), $atts );
-    echo esc_html( $atts['headline'] );
+    var configurations = [
+        {key: 'eventColor', value: 'blue'},
+        {key: 'noSchoolEvent', value: {
+            badgeText: 'No School',
+            searchForWords: ['schools closed']
+        }}
+    ];
 
-The same values are also available as `$GLOBALS['wpcode_bb_values']`.
+This plugin finds that array, lists every setting in it, and lets a page
+editor override any of them from a Beaver Builder module - without touching
+the snippet and without affecting any other page.
 
-Values are stored on the individual module, so one snippet can be used on
-many pages with different values on each. Nothing is shown to visitors except
-what your snippet outputs.
+Drop the "WPCode Values" module on a page, put the snippet's shortcode tag in
+the Snippet tab, then pick settings from the dropdowns and type new values.
+Anything you do not pick keeps the value written in the snippet.
+
+Nested settings use a dot (noSchoolEvent.badgeText). Word lists are typed with
+commas between them (schools closed, no school). Tools > WPCode Values lists
+everything found in your snippets.
+
+= How the values get in =
+
+The values are literals inside the JavaScript your snippet prints, so they
+cannot be passed in as shortcode attributes. This plugin edits them in that
+output, on the way to the browser, only on the page holding the module. If the
+array cannot be found or read, the snippet's output is passed through exactly
+as written.
+
+PHP snippets can also read the overrides from $GLOBALS['wpcode_bb_values'].
 
 == Frequently Asked Questions ==
 
@@ -33,12 +51,32 @@ what your snippet outputs.
 Check Settings > Beaver Builder > Modules. If that list has ever been
 narrowed down, a newly installed module stays off until you tick it.
 
-= I need more than eight values =
+= The dropdowns are empty =
 
-Add a second module, or open an issue - the number of rows is a single
-constant (WPCODEBBV_SLOTS) in the main plugin file.
+The scan reads published and draft WPCode snippets. Use the Rescan button on
+Tools > WPCode Values after editing a snippet. You can always type settings by
+hand in the module's Advanced tab as "path = value" lines - those are applied
+to whatever the snippet prints, so they work even when the scan finds nothing.
+
+= I need more than 12 settings on one module =
+
+Add a second module for the same snippet, or raise WPCODEBBV_SLOTS in the main
+plugin file.
 
 == Changelog ==
+
+= 3.0.0 =
+* The module now works with the "configurations" arrays snippets actually use.
+  It scans your snippets, lists every setting it finds - including settings
+  nested one level down and lists of words - and lets you pick them from
+  dropdowns in the module and give them new values for that page.
+* Values are rewritten in place in the snippet's output. Only the values you
+  picked change; comments, formatting and every other line are untouched, and
+  output with no configurations array passes through unchanged.
+* Added Tools > WPCode Values, listing every setting found and the value the
+  snippet uses for it, with a Rescan button.
+* Added an Advanced box for typing "path = value" lines directly, for anything
+  the scan does not pick up.
 
 = 2.0.1 =
 * Removed the last key in the module's field schema that is not one Beaver

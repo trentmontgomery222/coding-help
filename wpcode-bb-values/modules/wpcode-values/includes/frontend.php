@@ -41,15 +41,13 @@ try {
 		return;
 	}
 
-	$data = $module->get_values();
+	$overrides = $module->get_overrides();
 
-	// Also expose the values as a global, for snippets that would rather
-	// read that than shortcode attributes. Whatever was there before is
-	// always put back, including when the snippet throws.
+	// Snippets that are PHP can read this instead.
 	$had_global      = isset( $GLOBALS['wpcode_bb_values'] );
 	$previous_global = $had_global ? $GLOBALS['wpcode_bb_values'] : null;
 
-	$GLOBALS['wpcode_bb_values'] = $data['values'];
+	$GLOBALS['wpcode_bb_values'] = $overrides;
 
 	$rendered = '';
 
@@ -66,6 +64,22 @@ try {
 			$GLOBALS['wpcode_bb_values'] = $previous_global;
 		} else {
 			unset( $GLOBALS['wpcode_bb_values'] );
+		}
+	}
+
+	// Rewrite the values inside the snippet's own "configurations"
+	// array. This is what actually makes a JavaScript snippet
+	// configurable per page: the values are literals in the script the
+	// snippet just printed, so they are edited there rather than passed
+	// in. If the array cannot be found or parsed, the output is returned
+	// exactly as the snippet produced it.
+	if ( ! empty( $overrides ) && class_exists( 'WPCodeBBV_Scanner' ) ) {
+		try {
+			$rendered = WPCodeBBV_Scanner::apply( $rendered, $overrides );
+		} catch ( \Throwable $e ) {
+			if ( function_exists( 'wpcodebbv_log' ) ) {
+				wpcodebbv_log( 'could not apply overrides: ' . $e->getMessage() );
+			}
 		}
 	}
 
