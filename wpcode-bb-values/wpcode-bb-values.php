@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
- * Description:       Reads the "configurations" array out of your WPCode snippets and lets you pick and edit those settings from a Beaver Builder module, per page.
+ * Description:       Reads the "configurations" array out of your WPCode snippets and puts every setting in it on a Beaver Builder module, so a page editor can change them per page.
  * Version:           4.0.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
@@ -12,28 +12,37 @@
  * ---------------------------------------------------------------------
  * DESIGN
  * ---------------------------------------------------------------------
- * This is a deliberate rewrite of an earlier version that built its
- * Beaver Builder fields at runtime and swapped them with BB's "toggle"
- * mechanism. That is the most fragile thing you can hand BB's settings
- * form, and it is not needed here.
+ * A WPCode snippet keeps its settings in a JavaScript array:
  *
- * Everything below is therefore as boring as possible:
+ *     var configurations = [ {key: 'eventColor', value: 'blue'}, ... ];
  *
- *  - The module's field schema is FIXED. Same fields, same order, every
- *    request, on every site. Nothing about it depends on the database.
- *  - Every field is 'text', and every key used in the schema below is
- *    one Beaver Builder's own modules use. Beaver Builder renders each
- *    field by loading a file named after its 'type', so an invented
- *    type does not degrade - the include fails, PHP prints a warning
- *    into the middle of the AJAX response, and Beaver Builder reports
- *    a plugin conflict the moment you open the module to edit it. An
- *    earlier version of this plugin did exactly that with a made-up
- *    'html' field type.
- *  - The plugin hooks exactly one thing: 'init', to register the
- *    module. It adds no filters to anything Beaver Builder owns.
- *  - The snippet's own output is buffered, so a stray notice from your
- *    snippet cannot land in the middle of a Beaver Builder AJAX
- *    response.
+ * Those values are literals in the script the snippet prints, so they
+ * cannot be passed in as shortcode attributes. This plugin reads that
+ * array, gives every setting in it a field on the Beaver Builder
+ * module, and writes the edited values back into the snippet's output
+ * on its way to the browser - only on the page holding that module.
+ *
+ * The field list therefore does depend on the database, but its SHAPE
+ * is held to what Beaver Builder can be relied on to render. Two rules,
+ * both learned the hard way:
+ *
+ *  - Field 'type' is only ever 'text', 'select' or 'textarea'. Beaver
+ *    Builder turns a field's type into a file it loads while rendering
+ *    the settings form, so an invented type does not degrade: the
+ *    include fails, PHP prints a warning into the middle of the AJAX
+ *    response, and Beaver Builder reports a plugin conflict the moment
+ *    you open the module to edit it. An earlier version of this plugin
+ *    did exactly that with a made-up 'html' field type.
+ *  - No 'toggle'. Beaver Builder's toggle takes a list of field NAMES
+ *    that exist elsewhere in the form; the same earlier version handed
+ *    it field definitions instead, leaving the form pointing at fields
+ *    that were never registered. One section per snippet needs none.
+ *
+ * The plugin hooks 'init' (register the module), 'admin_menu' (a
+ * read-only help screen) and two snippet-save hooks that only clear a
+ * cache. It filters nothing Beaver Builder owns. The snippet's own
+ * output is buffered, so a stray notice from a snippet cannot land in
+ * the middle of a Beaver Builder AJAX response either.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -53,9 +62,6 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 define( 'WPCODEBBV_VERSION', '4.0.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
-
-/** How many settings one module instance can override. */
-define( 'WPCODEBBV_SLOTS', 12 );
 
 /** Cache key for the scan of every snippet's configurations array. */
 define( 'WPCODEBBV_CACHE', 'wpcodebbv_settings_index' );
