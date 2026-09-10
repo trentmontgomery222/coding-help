@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Cayden  Staff Directory
  * Description:       Staff Directory system for the website
- * Version:           2.8.1
+ * Version:           2.9.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
