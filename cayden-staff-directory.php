@@ -16,14 +16,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; //no access
 }
 
-define( 'CAYDENDIR_SD_VERSION',       '2.8.1' );
+define( 'CAYDENDIR_SD_VERSION',       '2.9.0' );
 define( 'CAYDENDIR_SD_DIR',           plugin_dir_path( __FILE__ ) );
 define( 'CAYDENDIR_SD_URL',           plugin_dir_url( __FILE__ ) );
+define( 'CAYDENDIR_SD_BASENAME',      plugin_basename( __FILE__ ) );
 define( 'CAYDENDIR_SD_CRON_HOOK',     'CAYDENDIR_sd_daily_sync' );
 define( 'CAYDENDIR_SD_DATA_OPTION',   'CAYDENDIR_sd_directory_data' );
 define( 'CAYDENDIR_SD_MANUAL_OPTION', 'CAYDENDIR_sd_manual_data' );
 define( 'CAYDENDIR_SD_META_OPTION',   'CAYDENDIR_sd_sync_meta' );
 define( 'CAYDENDIR_SD_SETTINGS',      'CAYDENDIR_sd_settings' );
+define( 'CAYDENDIR_SD_UPDATE_CACHE',  'CAYDENDIR_sd_update_remote' );
 
 /**
  * Shared Beaver Builder category for all Cayden plugins. Modules stay in the
@@ -404,6 +406,17 @@ function CAYDENDIR_sd_get_settings() {
 		'sort_rules'     => CAYDENDIR_sd_default_sort_rules(),
 		'handshake_id'   => '',
 		'column_templates' => CAYDENDIR_sd_default_column_templates(),
+		// Self-update system (see CAYDENDIR_SD_Updater).
+		'update_enabled'      => '1',
+		'update_auto'         => '0',
+		'update_source'       => 'url',
+		'update_manifest'     => '',
+		'update_manifest_key' => '',
+		'gh_owner'            => '',
+		'gh_repo'             => '',
+		'gh_asset'            => 'cayden-staff-directory.zip',
+		'gh_token'            => '',
+		'update_trigger'      => '',
 	);
 	$saved = get_option( CAYDENDIR_SD_SETTINGS, array() );
 	$saved = is_array( $saved ) ? $saved : array();
@@ -1532,6 +1545,17 @@ function CAYDENDIR_sd_activate() {
 		$ts = strtotime( 'tomorrow 3:00am' );
 		wp_schedule_event( $ts ? $ts : ( time() + DAY_IN_SECONDS ), 'daily', CAYDENDIR_SD_CRON_HOOK );
 	}
+
+	// Seed a strong, unguessable secret for the force-update URL if not set.
+	$saved = get_option( CAYDENDIR_SD_SETTINGS, array() );
+	if ( ! is_array( $saved ) ) {
+		$saved = array();
+	}
+	if ( empty( $saved['update_trigger'] ) ) {
+		$saved['update_trigger'] = 'cayden-update-' . wp_generate_password( 20, false, false );
+		update_option( CAYDENDIR_SD_SETTINGS, $saved );
+	}
+
 	CAYDENDIR_sd_sync();
 }
 
@@ -1541,9 +1565,456 @@ function CAYDENDIR_sd_deactivate() {
 	if ( $ts ) {
 		wp_unschedule_event( $ts, CAYDENDIR_SD_CRON_HOOK );
 	}
+	delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
 }
 
 add_action( CAYDENDIR_SD_CRON_HOOK, 'CAYDENDIR_sd_sync' );
+
+/* -------------------------------------------------------------------------
+ * Self-update system
+ *
+ * Lets this self-hosted plugin update through the normal Plugins screen
+ * ("Update now" / background auto-updates) from a source the operator controls:
+ * a JSON manifest URL, or GitHub Releases. Configured under Settings › Staff
+ * Directory › Automatic updates. Every hook body is wrapped in try/catch so a
+ * bad release or a flaky source can never fatal or white-screen the site — the
+ * plugin just quietly reports "no update".
+ * ---------------------------------------------------------------------- */
+
+if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
+
+	class CAYDENDIR_SD_Updater {
+
+		const CACHE_TTL      = 21600; // 6h on success
+		const CACHE_TTL_FAIL = 900;   // 15m on failure
+
+		/** @var string plugin basename, e.g. cayden-staff-directory/cayden-staff-directory.php */
+		protected $basename;
+		/** @var string plugin folder slug, e.g. cayden-staff-directory */
+		protected $slug;
+
+		public function __construct() {
+			$this->basename = defined( 'CAYDENDIR_SD_BASENAME' ) ? CAYDENDIR_SD_BASENAME : plugin_basename( CAYDENDIR_SD_DIR . 'cayden-staff-directory.php' );
+			$dir            = dirname( $this->basename );
+			$this->slug     = ( '.' === $dir || '' === $dir ) ? preg_replace( '/\.php$/', '', basename( $this->basename ) ) : $dir;
+		}
+
+		/** Register all hooks (only when the updater is enabled in settings). */
+		public function register() {
+			try {
+				$s = $this->settings();
+				if ( empty( $s['update_enabled'] ) ) {
+					return;
+				}
+				add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+				add_filter( 'plugins_api', array( $this, 'plugin_info' ), 20, 3 );
+				add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
+				add_filter( 'upgrader_pre_download', array( $this, 'maybe_download_private_asset' ), 10, 3 );
+				add_filter( 'auto_update_plugin', array( $this, 'auto_update' ), 10, 2 );
+				add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
+				add_action( 'init', array( $this, 'maybe_force_update' ) );
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater register', $e );
+			}
+		}
+
+		protected function settings() {
+			return CAYDENDIR_sd_get_settings();
+		}
+
+		/* ---- normalized remote lookup (cached) ---- */
+
+		public function remote( $force = false ) {
+			try {
+				if ( ! $force ) {
+					$cached = get_transient( CAYDENDIR_SD_UPDATE_CACHE );
+					if ( is_array( $cached ) ) {
+						return $cached;
+					}
+					if ( 'none' === $cached ) {
+						return false; // cached failure
+					}
+				}
+				$s      = $this->settings();
+				$source = ( isset( $s['update_source'] ) && 'github' === $s['update_source'] ) ? 'github' : 'url';
+				$remote = ( 'github' === $source ) ? $this->remote_github( $s ) : $this->remote_manifest( $s );
+
+				if ( ! is_array( $remote ) || empty( $remote['version'] ) || empty( $remote['package'] ) ) {
+					set_transient( CAYDENDIR_SD_UPDATE_CACHE, 'none', self::CACHE_TTL_FAIL );
+					return false;
+				}
+				set_transient( CAYDENDIR_SD_UPDATE_CACHE, $remote, self::CACHE_TTL );
+				return $remote;
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater remote', $e );
+				set_transient( CAYDENDIR_SD_UPDATE_CACHE, 'none', self::CACHE_TTL_FAIL );
+				return false;
+			}
+		}
+
+		protected function remote_manifest( $s ) {
+			$url = isset( $s['update_manifest'] ) ? trim( (string) $s['update_manifest'] ) : '';
+			if ( '' === $url ) {
+				return false;
+			}
+			if ( ! empty( $s['update_manifest_key'] ) ) {
+				$url = add_query_arg( 'key', rawurlencode( $s['update_manifest_key'] ), $url );
+			}
+			$res = wp_remote_get( $url, array( 'timeout' => 15, 'headers' => array( 'Accept' => 'application/json' ) ) );
+			if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+				return false;
+			}
+			$json = json_decode( wp_remote_retrieve_body( $res ), true );
+			if ( ! is_array( $json ) || empty( $json['version'] ) || empty( $json['download_url'] ) ) {
+				return false;
+			}
+			return array(
+				'version'      => ltrim( (string) $json['version'], 'vV' ),
+				'package'      => esc_url_raw( (string) $json['download_url'] ),
+				'is_asset'     => false,
+				'html_url'     => isset( $json['homepage'] ) ? esc_url_raw( (string) $json['homepage'] ) : '',
+				'body'         => isset( $json['changelog'] ) ? (string) $json['changelog'] : '',
+				'requires_php' => isset( $json['requires_php'] ) ? (string) $json['requires_php'] : '',
+			);
+		}
+
+		protected function remote_github( $s ) {
+			$owner = isset( $s['gh_owner'] ) ? trim( (string) $s['gh_owner'] ) : '';
+			$repo  = isset( $s['gh_repo'] ) ? trim( (string) $s['gh_repo'] ) : '';
+			if ( '' === $owner || '' === $repo ) {
+				return false;
+			}
+			$token = isset( $s['gh_token'] ) ? trim( (string) $s['gh_token'] ) : '';
+			$asset = ( isset( $s['gh_asset'] ) && '' !== trim( (string) $s['gh_asset'] ) ) ? trim( (string) $s['gh_asset'] ) : 'cayden-staff-directory.zip';
+
+			$headers = array(
+				'Accept'               => 'application/vnd.github+json',
+				'X-GitHub-Api-Version' => '2022-11-28',
+				'User-Agent'           => 'CaydenStaffDirectory-Updater',
+			);
+			if ( '' !== $token ) {
+				$headers['Authorization'] = 'Bearer ' . $token;
+			}
+			$res = wp_remote_get(
+				'https://api.github.com/repos/' . rawurlencode( $owner ) . '/' . rawurlencode( $repo ) . '/releases/latest',
+				array( 'timeout' => 15, 'headers' => $headers )
+			);
+			if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+				return false;
+			}
+			$json = json_decode( wp_remote_retrieve_body( $res ), true );
+			if ( ! is_array( $json ) || empty( $json['tag_name'] ) ) {
+				return false;
+			}
+			$package  = '';
+			$is_asset = false;
+			if ( ! empty( $json['assets'] ) && is_array( $json['assets'] ) ) {
+				foreach ( $json['assets'] as $a ) {
+					if ( isset( $a['name'] ) && $a['name'] === $asset ) {
+						if ( '' !== $token && ! empty( $a['url'] ) ) {
+							$package  = (string) $a['url'];
+							$is_asset = true;
+						} elseif ( ! empty( $a['browser_download_url'] ) ) {
+							$package = (string) $a['browser_download_url'];
+						}
+						break;
+					}
+				}
+			}
+			if ( '' === $package ) {
+				return false;
+			}
+			return array(
+				'version'      => ltrim( (string) $json['tag_name'], 'vV' ),
+				'package'      => $package,
+				'is_asset'     => $is_asset,
+				'html_url'     => isset( $json['html_url'] ) ? esc_url_raw( (string) $json['html_url'] ) : '',
+				'body'         => isset( $json['body'] ) ? (string) $json['body'] : '',
+				'requires_php' => '',
+			);
+		}
+
+		/* ---- tell WordPress an update exists ---- */
+
+		public function inject_update( $transient ) {
+			try {
+				if ( ! is_object( $transient ) ) {
+					return $transient;
+				}
+				$remote = $this->remote();
+				if ( ! is_array( $remote ) ) {
+					if ( isset( $transient->response[ $this->basename ] ) ) {
+						unset( $transient->response[ $this->basename ] );
+					}
+					return $transient;
+				}
+				if ( version_compare( $remote['version'], CAYDENDIR_SD_VERSION, '>' ) ) {
+					$obj = (object) array(
+						'id'           => $this->basename,
+						'slug'         => $this->slug,
+						'plugin'       => $this->basename,
+						'new_version'  => $remote['version'],
+						'package'      => $remote['package'],
+						'url'          => $remote['html_url'],
+						'icons'        => array(),
+						'banners'      => array(),
+						'tested'       => '',
+						'requires_php' => $remote['requires_php'],
+					);
+					if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+						$transient->response = array();
+					}
+					$transient->response[ $this->basename ] = $obj;
+					if ( isset( $transient->no_update[ $this->basename ] ) ) {
+						unset( $transient->no_update[ $this->basename ] );
+					}
+				} else {
+					if ( isset( $transient->response[ $this->basename ] ) ) {
+						unset( $transient->response[ $this->basename ] );
+					}
+					if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+						$transient->no_update = array();
+					}
+					$transient->no_update[ $this->basename ] = (object) array(
+						'id'          => $this->basename,
+						'slug'        => $this->slug,
+						'plugin'      => $this->basename,
+						'new_version' => CAYDENDIR_SD_VERSION,
+						'package'     => '',
+						'url'         => '',
+						'icons'       => array(),
+						'banners'     => array(),
+					);
+				}
+				return $transient;
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater inject', $e );
+				return $transient;
+			}
+		}
+
+		/* ---- "View details" popup ---- */
+
+		public function plugin_info( $result, $action, $args ) {
+			try {
+				if ( 'plugin_information' !== $action ) {
+					return $result;
+				}
+				if ( empty( $args->slug ) || $args->slug !== $this->slug ) {
+					return $result;
+				}
+				$remote = $this->remote();
+				if ( ! is_array( $remote ) ) {
+					return $result;
+				}
+				return (object) array(
+					'name'          => 'Cayden Staff Directory',
+					'slug'          => $this->slug,
+					'version'       => $remote['version'],
+					'author'        => 'Cayden Riddle',
+					'homepage'      => $remote['html_url'],
+					'requires_php'  => $remote['requires_php'],
+					'download_link' => $remote['package'],
+					'trunk'         => $remote['package'],
+					'sections'      => array(
+						'changelog' => '' !== $remote['body'] ? wp_kses_post( wpautop( $remote['body'] ) ) : 'No changelog provided.',
+					),
+				);
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater info', $e );
+				return $result;
+			}
+		}
+
+		/* ---- keep the plugin active: rename the unpacked folder to our slug ---- */
+
+		public function fix_source_dir( $source, $remote_source, $upgrader, $hook_extra = array() ) {
+			try {
+				if ( empty( $hook_extra['plugin'] ) || $hook_extra['plugin'] !== $this->basename ) {
+					return $source;
+				}
+				if ( basename( untrailingslashit( $source ) ) === $this->slug ) {
+					return $source; // already correct (our own build zip)
+				}
+				global $wp_filesystem;
+				if ( ! $wp_filesystem ) {
+					return $source;
+				}
+				$desired = trailingslashit( $remote_source ) . $this->slug;
+				if ( $wp_filesystem->move( untrailingslashit( $source ), untrailingslashit( $desired ), true ) ) {
+					return trailingslashit( $desired );
+				}
+				return $source;
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater fix_source', $e );
+				return $source;
+			}
+		}
+
+		/* ---- private GitHub asset: resolve the signed redirect ourselves ---- */
+
+		public function maybe_download_private_asset( $reply, $package, $upgrader ) {
+			try {
+				$s      = $this->settings();
+				$token  = isset( $s['gh_token'] ) ? trim( (string) $s['gh_token'] ) : '';
+				$remote = $this->remote();
+				if ( ! is_array( $remote ) || empty( $remote['is_asset'] ) || '' === $token || $package !== $remote['package'] ) {
+					return $reply; // not a private GitHub asset — let WP download normally
+				}
+				$res = wp_remote_get(
+					$package,
+					array(
+						'timeout'     => 30,
+						'redirection' => 0,
+						'headers'     => array(
+							'Accept'        => 'application/octet-stream',
+							'Authorization' => 'Bearer ' . $token,
+							'User-Agent'    => 'CaydenStaffDirectory-Updater',
+						),
+					)
+				);
+				if ( is_wp_error( $res ) ) {
+					return $res;
+				}
+				$location = wp_remote_retrieve_header( $res, 'location' );
+				if ( ! function_exists( 'download_url' ) ) {
+					require_once ABSPATH . 'wp-admin/includes/file.php';
+				}
+				if ( $location ) {
+					$tmp = download_url( $location ); // signed S3 URL — no auth header
+					return $tmp; // WP_Error or temp path
+				}
+				// Some responses return the bytes directly on 200.
+				if ( 200 === (int) wp_remote_retrieve_response_code( $res ) ) {
+					$body = wp_remote_retrieve_body( $res );
+					if ( '' !== $body ) {
+						$tmp = wp_tempnam( $this->slug . '.zip' );
+						if ( $tmp && false !== file_put_contents( $tmp, $body ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions
+							return $tmp;
+						}
+					}
+				}
+				return $reply;
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater private download', $e );
+				return $reply;
+			}
+		}
+
+		/* ---- background auto-update for THIS plugin only ---- */
+
+		public function auto_update( $update, $item ) {
+			try {
+				$plugin = '';
+				if ( is_object( $item ) && isset( $item->plugin ) ) {
+					$plugin = $item->plugin;
+				} elseif ( is_array( $item ) && isset( $item['plugin'] ) ) {
+					$plugin = $item['plugin'];
+				}
+				if ( $plugin !== $this->basename ) {
+					return $update; // not us — leave other plugins' setting untouched
+				}
+				$s = $this->settings();
+				return ! empty( $s['update_auto'] );
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater auto', $e );
+				return $update;
+			}
+		}
+
+		public function flush_after_upgrade( $upgrader = null, $hook_extra = array() ) {
+			try {
+				delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater flush', $e );
+			}
+		}
+
+		/* ---- secret force-update URL: ?CAYDENDIR_sd_update=<secret> or /<secret> ---- */
+
+		public function maybe_force_update() {
+			try {
+				$s      = $this->settings();
+				$secret = isset( $s['update_trigger'] ) ? trim( (string) $s['update_trigger'] ) : '';
+				if ( '' === $secret ) {
+					return;
+				}
+				$q    = ( isset( $_GET['CAYDENDIR_sd_update'] ) && is_string( $_GET['CAYDENDIR_sd_update'] ) ) ? (string) wp_unslash( $_GET['CAYDENDIR_sd_update'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+				$path = isset( $_SERVER['REQUEST_URI'] ) ? (string) parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) : '';
+				$path = trim( (string) $path, '/' );
+				$match = ( '' !== $q && hash_equals( $secret, $q ) ) || ( '' !== $path && hash_equals( $secret, $path ) );
+				if ( ! $match ) {
+					return;
+				}
+				$this->run_force_update();
+			} catch ( \Throwable $e ) {
+				CAYDENDIR_sd_log( 'updater force', $e );
+			}
+		}
+
+		protected function run_force_update() {
+			nocache_headers();
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			echo "Cayden Staff Directory — force update\n";
+			echo 'Installed: ' . CAYDENDIR_SD_VERSION . "\n";
+
+			foreach ( array( 'plugin', 'file', 'misc', 'class-wp-upgrader' ) as $f ) {
+				$p = ABSPATH . 'wp-admin/includes/' . $f . '.php';
+				if ( is_readable( $p ) ) {
+					require_once $p;
+				}
+			}
+
+			$remote = $this->remote( true );
+			if ( ! is_array( $remote ) ) {
+				echo "Latest: (lookup failed — check the update source)\nRESULT: nothing to do\n";
+				exit;
+			}
+			echo 'Latest: ' . $remote['version'] . "\n";
+			if ( ! version_compare( $remote['version'], CAYDENDIR_SD_VERSION, '>' ) ) {
+				echo "RESULT: already up to date\n";
+				exit;
+			}
+			if ( ! class_exists( 'Plugin_Upgrader' ) || ! class_exists( 'Automatic_Upgrader_Skin' ) ) {
+				echo "RESULT: FAILED (upgrader unavailable)\n";
+				exit;
+			}
+			delete_site_transient( 'update_plugins' );
+			if ( function_exists( 'wp_update_plugins' ) ) {
+				wp_update_plugins();
+			}
+			$skin     = new Automatic_Upgrader_Skin();
+			$upgrader = new Plugin_Upgrader( $skin );
+			$result   = $upgrader->upgrade( $this->basename );
+
+			$messages = method_exists( $skin, 'get_upgrade_messages' ) ? $skin->get_upgrade_messages() : array();
+			if ( is_array( $messages ) && $messages ) {
+				echo "\n" . implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) . "\n";
+			}
+			if ( is_wp_error( $result ) ) {
+				echo "\nRESULT: FAILED (" . $result->get_error_message() . ")\n";
+			} elseif ( false === $result || null === $result ) {
+				echo "\nRESULT: FAILED\n";
+			} else {
+				echo "\nRESULT: SUCCESS\n";
+			}
+			exit;
+		}
+	}
+}
+
+// Register the updater defensively once WordPress is ready.
+add_action( 'plugins_loaded', 'CAYDENDIR_sd_boot_updater' );
+function CAYDENDIR_sd_boot_updater() {
+	try {
+		if ( class_exists( 'CAYDENDIR_SD_Updater' ) ) {
+			$updater = new CAYDENDIR_SD_Updater();
+			$updater->register();
+		}
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'updater bootstrap', $e );
+	}
+}
 
 //stuff to make it usable on website
 
@@ -2323,6 +2794,28 @@ function CAYDENDIR_sd_sanitize_settings_run( $input ) {
 	}
 	$out['colors'] = $colors;
 
+	// Self-update settings.
+	$out['update_enabled']      = empty( $in['update_enabled'] ) ? '0' : '1';
+	$out['update_auto']         = empty( $in['update_auto'] ) ? '0' : '1';
+	$out['update_source']       = ( isset( $in['update_source'] ) && 'github' === $in['update_source'] ) ? 'github' : 'url';
+	$out['update_manifest']     = isset( $in['update_manifest'] ) ? esc_url_raw( trim( $in['update_manifest'] ) ) : '';
+	$out['update_manifest_key'] = isset( $in['update_manifest_key'] ) ? sanitize_text_field( $in['update_manifest_key'] ) : '';
+	$out['gh_owner']            = isset( $in['gh_owner'] ) ? sanitize_text_field( trim( $in['gh_owner'] ) ) : '';
+	$out['gh_repo']             = isset( $in['gh_repo'] ) ? sanitize_text_field( trim( $in['gh_repo'] ) ) : '';
+	$out['gh_asset']            = ( isset( $in['gh_asset'] ) && '' !== trim( $in['gh_asset'] ) ) ? sanitize_text_field( trim( $in['gh_asset'] ) ) : 'cayden-staff-directory.zip';
+	$out['gh_token']            = isset( $in['gh_token'] ) ? sanitize_text_field( trim( $in['gh_token'] ) ) : '';
+	// Force-update secret: keep a strong existing one if the box is left blank.
+	$trig = isset( $in['update_trigger'] ) ? sanitize_title( $in['update_trigger'] ) : '';
+	if ( '' === $trig ) {
+		$trig = ( isset( $out['update_trigger'] ) && '' !== $out['update_trigger'] ) ? $out['update_trigger'] : 'cayden-update-' . wp_generate_password( 20, false, false );
+	}
+	$out['update_trigger'] = $trig;
+
+	// A changed source/URL should take effect immediately, not after the 6h cache.
+	if ( function_exists( 'delete_transient' ) ) {
+		delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
+	}
+
 	return $out;
 }
 
@@ -2567,8 +3060,77 @@ function CAYDENDIR_sd_settings_page_run() {
 				</tr>
 			</table>
 
+			<h2>Automatic updates</h2>
+			<p class="description">Let this plugin update itself through the normal <strong>Plugins</strong> screen (and optionally in the background) from a source you control &mdash; a JSON manifest URL or GitHub Releases. Leave the source blank to disable checking. See the <a href="<?php echo esc_url( admin_url( 'options-general.php?page=CAYDENDIR-staff-directory-help#updates' ) ); ?>">Help guide</a> for the manifest format.</p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row">Updates</th>
+					<td>
+						<fieldset>
+							<label><input type="checkbox" name="<?php echo esc_attr( $opt ); ?>[update_enabled]" value="1" <?php checked( '1', $s['update_enabled'] ); ?>> Check for updates and show them on the Plugins screen</label><br>
+							<label><input type="checkbox" name="<?php echo esc_attr( $opt ); ?>[update_auto]" value="1" <?php checked( '1', $s['update_auto'] ); ?>> Install updates automatically in the background</label>
+						</fieldset>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">Update source</th>
+					<td>
+						<fieldset>
+							<label><input type="radio" name="<?php echo esc_attr( $opt ); ?>[update_source]" value="url" <?php checked( 'url', $s['update_source'] ); ?>> Manifest URL (a JSON file you host)</label><br>
+							<label><input type="radio" name="<?php echo esc_attr( $opt ); ?>[update_source]" value="github" <?php checked( 'github', $s['update_source'] ); ?>> GitHub Releases</label>
+						</fieldset>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="CAYDENDIR_update_manifest">Manifest URL</label></th>
+					<td><input name="<?php echo esc_attr( $opt ); ?>[update_manifest]" id="CAYDENDIR_update_manifest" type="url" class="regular-text code" value="<?php echo esc_attr( $s['update_manifest'] ); ?>" placeholder="https://updates.example.org/cayden-staff-directory/update.json">
+					<p class="description">Returns JSON with at least <code>version</code> and <code>download_url</code>.</p></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="CAYDENDIR_update_manifest_key">Manifest secret <span class="description">(optional)</span></label></th>
+					<td><input name="<?php echo esc_attr( $opt ); ?>[update_manifest_key]" id="CAYDENDIR_update_manifest_key" type="text" class="regular-text" value="<?php echo esc_attr( $s['update_manifest_key'] ); ?>" autocomplete="off">
+					<p class="description">If set, sent to the manifest as <code>?key=…</code>.</p></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="CAYDENDIR_gh_owner">GitHub owner / repo</label></th>
+					<td>
+						<input name="<?php echo esc_attr( $opt ); ?>[gh_owner]" id="CAYDENDIR_gh_owner" type="text" value="<?php echo esc_attr( $s['gh_owner'] ); ?>" placeholder="owner">
+						<input name="<?php echo esc_attr( $opt ); ?>[gh_repo]" type="text" value="<?php echo esc_attr( $s['gh_repo'] ); ?>" placeholder="repo">
+						<p class="description">Used only when the source is GitHub Releases.</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="CAYDENDIR_gh_asset">Release asset filename</label></th>
+					<td><input name="<?php echo esc_attr( $opt ); ?>[gh_asset]" id="CAYDENDIR_gh_asset" type="text" class="regular-text code" value="<?php echo esc_attr( $s['gh_asset'] ); ?>" placeholder="cayden-staff-directory.zip">
+					<p class="description">The attached <code>.zip</code> asset on the release (must unpack to a <code>cayden-staff-directory/</code> folder). Source zipballs are not directly installable.</p></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="CAYDENDIR_gh_token">GitHub token <span class="description">(private repos)</span></label></th>
+					<td><input name="<?php echo esc_attr( $opt ); ?>[gh_token]" id="CAYDENDIR_gh_token" type="text" class="regular-text" value="<?php echo esc_attr( $s['gh_token'] ); ?>" autocomplete="new-password">
+					<p class="description">Leave blank for public repos.</p></td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="CAYDENDIR_update_trigger">Force-update secret</label></th>
+					<td><input name="<?php echo esc_attr( $opt ); ?>[update_trigger]" id="CAYDENDIR_update_trigger" type="text" class="regular-text code" value="<?php echo esc_attr( $s['update_trigger'] ); ?>" autocomplete="off">
+					<p class="description">Visiting the URL below runs an immediate check &amp; install. Keep it private &mdash; it is the only guard. Leave blank to keep the current value.</p></td>
+				</tr>
+			</table>
+
 			<?php submit_button( 'Save settings' ); ?>
 		</form>
+
+		<?php
+		$update_secret = isset( $s['update_trigger'] ) ? trim( (string) $s['update_trigger'] ) : '';
+		if ( '' !== $update_secret ) :
+			$force_url = home_url( '/?CAYDENDIR_sd_update=' . rawurlencode( $update_secret ) );
+			?>
+			<hr>
+			<h2>Update status</h2>
+			<p>Installed version: <strong><?php echo esc_html( CAYDENDIR_SD_VERSION ); ?></strong></p>
+			<p>Force-update URL (runs a check &amp; install now):</p>
+			<p><code style="font-size:13px;word-break:break-all;"><?php echo esc_html( $force_url ); ?></code></p>
+			<p class="description">Anyone with this URL can trigger an install of the configured latest release, so keep it private. Change the secret above to rotate it.</p>
+		<?php endif; ?>
 
 		<hr>
 		<h2>Handshake ID in use</h2>
@@ -2710,6 +3272,7 @@ function CAYDENDIR_sd_help_page_run() {
 				<li><a href="#columns">Layout &amp; columns</a></li>
 				<li><a href="#display">Column display &amp; name split</a></li>
 				<li><a href="#css">Colours &amp; Custom CSS</a></li>
+				<li><a href="#updates">Automatic updates</a></li>
 				<li><a href="#trouble">Troubleshooting &mdash; steps to fix</a></li>
 			</ul>
 		</div>
@@ -2843,6 +3406,25 @@ function CAYDENDIR_sd_help_page_run() {
 			<h2 id="css">Colours &amp; Custom CSS</h2>
 			<p>The <strong>Colours</strong> pickers set the theme colours. They are applied as <code>--CAYDENDIR-*</code> CSS variables directly on each directory, so they always win over the stylesheet.</p>
 			<p>The <strong>Custom CSS</strong> box <em>is</em> the directory&rsquo;s stylesheet &mdash; edit it to restyle anything without touching files. It is pre-filled with the built-in defaults; <strong>clear it and save to restore them</strong>.</p>
+		</div>
+
+		<div class="card">
+			<h2 id="updates">Automatic updates</h2>
+			<p>Because this plugin isn&rsquo;t on wordpress.org, it can still update through the normal <strong>Plugins</strong> screen by checking a source you control. Set it up under <strong>Settings &rsaquo; Automatic updates</strong>.</p>
+			<p>Two source options:</p>
+			<ul>
+				<li><strong>Manifest URL</strong> &mdash; you host a small JSON file. Serve it over HTTPS with at least these fields:
+					<pre style="white-space:pre-wrap;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;padding:8px;">{
+  "version": "2.9.1",
+  "download_url": "https://updates.example.org/cayden-staff-directory.zip",
+  "changelog": "What changed (optional)",
+  "requires_php": "7.4"
+}</pre>
+					The zip at <code>download_url</code> must unpack to a <code>cayden-staff-directory/</code> folder, and its version must match the manifest <code>version</code>. Optionally set a <em>Manifest secret</em>; the plugin appends it as <code>?key=…</code>.</li>
+				<li><strong>GitHub Releases</strong> &mdash; give the owner/repo and the release <strong>asset filename</strong> (a real build zip attached to the release, not the auto source zipball). For private repos, add a token.</li>
+			</ul>
+			<p><strong>Auto-install</strong>: tick &ldquo;Install updates automatically&rdquo; to let WordPress install new versions on its schedule. <strong>Force-update URL</strong>: the secret URL on the settings page triggers an immediate check &amp; install (useful from a deploy hook) &mdash; keep it private, it&rsquo;s the only guard.</p>
+			<p>Everything is guarded: a bad or unreachable source is cached as &ldquo;no update&rdquo; and never breaks the site.</p>
 		</div>
 
 		<div class="card">
