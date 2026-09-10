@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
- * Description:       Reads the "configurations" array out of your WPCode snippets and puts every setting in it on a Beaver Builder module, so a page editor can change them per page.
+ * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
  * Version:           6.0.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
@@ -21,6 +21,11 @@
  * array, gives every setting in it a field on the Beaver Builder
  * module, and writes the edited values back into the snippet's output
  * on its way to the browser - only on the page holding that module.
+ *
+ * A snippet may hold several such arrays (configurations,
+ * configurationsFooter, ...), each grouped separately, and any
+ * assignment carrying a "// Configurable" comment is editable too,
+ * wherever it sits in the file.
  *
  * The field list therefore does depend on the database, but its SHAPE
  * is held to what Beaver Builder can be relied on to render. Two rules,
