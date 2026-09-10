@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 6.0.0
+Stable tag: 6.1.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -114,9 +114,41 @@ comment makes any assignment editable, wherever it is in the snippet:
     var debugMode = 'false';     // Configurable - turn console logging on
     var timezone = 'America/New_York';   // Configurable
 
-The assignment has to start its line. Anything after "Configurable" (past a
-colon or dash) becomes the setting's help text, and siteWide works exactly as
-it does in an array. These appear in the module under "Marked variables".
+The assignment has to start its line, and the comment has to be on that same
+line. Anything after "Configurable" (past a colon or dash) becomes the
+setting's help text, and siteWide works exactly as it does in an array. These
+appear in the module under "Marked variables".
+
+This works in CSS too - //, # and /* */ all count as the marker:
+
+    :root{
+      --accent: #1A73E8;   /* Configurable siteWide: brand colour */
+      --font-body: "Google Sans", Roboto, sans-serif;  /* Configurable */
+    }
+
+The comment marks where the value ends, so a colour, a size or a font stack
+with its own commas and quotes is kept exactly as written. Prefer custom
+properties over plain declarations: a plain "background:" appears all over a
+stylesheet and only the first one marked wins.
+
+= PHP snippets =
+
+WPCode RUNS a PHP snippet rather than printing it, so its source never
+reaches the browser and there is nothing to rewrite on the way out. A PHP
+snippet asks for its values instead:
+
+    $api_key   = wpcodebbv_cfg( 'api_key', 'AIza-DEFAULT' );   // Configurable siteWide
+    $debug     = wpcodebbv_cfg( 'debug', false );              // Configurable
+    $max_items = wpcodebbv_cfg( 'max_items', 25 );             // Configurable
+    $roles     = wpcodebbv_cfg( 'roles', array( 'editor' ) );  // Configurable
+
+The default you write is what the module shows and what applies until someone
+changes it. You get back the same TYPE you passed as the default - a boolean
+default returns a boolean, a number a number, an array an array - so the
+snippet never has to think about the editor typing text.
+
+With no module supplying values, wpcodebbv_cfg() returns the default, so a
+snippet written this way still works anywhere else on the site.
 
 = Reading the settings in your snippet =
 
@@ -150,6 +182,18 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 6.1.0 =
+* The Configurable marker now works in CSS and PHP snippets, not just
+  JavaScript. //, # and /* */ all count as the marker, and the value in front
+  of it is kept exactly as written - a colour, a size, a font stack, an
+  array(), a PHP constant.
+* Added wpcodebbv_cfg( name, default ) for PHP snippets. WPCode executes a PHP
+  snippet rather than printing it, so there is no output to rewrite; the
+  snippet reads its values at runtime instead, and gets back the same type as
+  the default it passed.
+* Marked names may now contain $ and -, so $variables and --css-properties
+  work, in the module and in the Extra settings box.
 
 = 6.0.0 =
 * A snippet can hold several configurations arrays now. Each gets its own

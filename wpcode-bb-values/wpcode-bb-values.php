@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           6.0.0
+ * Version:           6.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -64,7 +64,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '6.0.0' );
+define( 'WPCODEBBV_VERSION', '6.1.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -125,6 +125,72 @@ function wpcodebbv_snippet_code( $snippet ) {
 	}
 
 	return '';
+}
+
+/**
+ * Reads a configurable value from inside a PHP snippet.
+ *
+ * A PHP snippet is EXECUTED by WPCode, so its source never appears in
+ * the output and there is nothing for this plugin to rewrite on the way
+ * to the browser - the trick that works for JavaScript and CSS simply
+ * does not apply. A PHP snippet therefore asks for its values instead:
+ *
+ *     $api_key = wpcodebbv_cfg( 'api_key', 'AIza-DEFAULT' );  // Configurable
+ *
+ * The default written here is what the module shows and what applies
+ * when nothing has been changed; the module supplies anything the page
+ * editor overrode. Outside this plugin's module - a snippet placed by
+ * shortcode somewhere else - there is no override and the default is
+ * returned, so the same snippet keeps working anywhere.
+ *
+ * The value is returned in the SHAPE of the default: a boolean default
+ * gets a boolean back, a number a number, an array an array. Values
+ * arrive from the editor as text, and a snippet should not have to
+ * think about that.
+ *
+ * @param string $name    The name used in the module.
+ * @param mixed  $default The value to use when nothing overrides it.
+ * @return mixed
+ */
+function wpcodebbv_cfg( $name, $default = '' ) {
+	$values = isset( $GLOBALS['wpcode_bb_values'] ) && is_array( $GLOBALS['wpcode_bb_values'] )
+		? $GLOBALS['wpcode_bb_values']
+		: array();
+
+	if ( ! isset( $values[ $name ] ) ) {
+		return $default;
+	}
+
+	$raw = (string) $values[ $name ];
+
+	if ( is_bool( $default ) ) {
+		return in_array( strtolower( trim( $raw ) ), array( 'true', '1', 'yes', 'on' ), true );
+	}
+
+	if ( is_int( $default ) ) {
+		return (int) $raw;
+	}
+
+	if ( is_float( $default ) ) {
+		return (float) $raw;
+	}
+
+	if ( is_array( $default ) ) {
+		if ( '' === trim( $raw ) ) {
+			return array();
+		}
+
+		return array_values(
+			array_filter(
+				array_map( 'trim', explode( ',', $raw ) ),
+				function ( $part ) {
+					return '' !== $part;
+				}
+			)
+		);
+	}
+
+	return $raw;
 }
 
 /**
@@ -292,7 +358,17 @@ add_action( 'deleted_post', 'wpcodebbv_clear_index' );
  * @return string
  */
 function wpcodebbv_field_key( $snippet_id, $path ) {
-	return 's' . (int) $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $path );
+	$safe = preg_replace( '/[^A-Za-z0-9]/', '_', $path );
+
+	// Array paths only ever use these characters, so they keep the plain
+	// key they have always had. Marked names can contain $ and -, which
+	// both flatten to "_" and could collide ($_x and --x both become
+	// __x), so those get a short digest of the real path appended.
+	if ( ! preg_match( '/^[A-Za-z0-9._:]+$/', $path ) ) {
+		$safe .= '_' . substr( md5( $path ), 0, 6 );
+	}
+
+	return 's' . (int) $snippet_id . '_' . $safe;
 }
 
 /**
@@ -770,9 +846,10 @@ function wpcodebbv_parse_lines( $text ) {
 
 		$path = trim( substr( $line, 0, $split ) );
 
-		// A path is a setting name, optionally scoped and dotted -
-		// "badgeText", "noSchoolEvent.badgeText", "configurations:x.y".
-		if ( ! preg_match( '/^[A-Za-z0-9_:.\-]+$/', $path ) ) {
+		// A path is a setting name, optionally scoped and dotted:
+		// "badgeText", "noSchoolEvent.badgeText", "configurations:x.y",
+		// and for marked settings "$api_key" or "--accent".
+		if ( ! preg_match( '/^[A-Za-z0-9_:.$\-]+$/', $path ) ) {
 			continue;
 		}
 
@@ -994,6 +1071,27 @@ function wpcodebbv_help_page() {
 				<textarea readonly="readonly" rows="18" class="widefat code" onclick="this.select();"><?php echo esc_textarea( $annotated ); ?></textarea>
 			<?php endforeach; ?>
 		<?php endif; ?>
+
+		<h2><?php esc_html_e( 'PHP and CSS snippets', 'wpcode-bb-values' ); ?></h2>
+		<p><?php esc_html_e( 'A "Configurable" comment works in any snippet, not just JavaScript. Put it after an assignment and that value becomes editable in the module:', 'wpcode-bb-values' ); ?></p>
+		<pre>/* CSS */
+:root{
+  --accent: #1A73E8;          /* Configurable siteWide: brand colour */
+  --radius: 8px;              /* Configurable: corner rounding */
+  --font-body: "Google Sans", Roboto, sans-serif;  /* Configurable: body font */
+}</pre>
+		<p><?php esc_html_e( 'The comment marks where the value ends, so whatever is in front of it is kept exactly as written - a colour, a size, a font stack with its own commas and quotes. Anything without the comment is left alone.', 'wpcode-bb-values' ); ?></p>
+
+		<p><strong><?php esc_html_e( 'PHP is different, and needs one extra thing.', 'wpcode-bb-values' ); ?></strong>
+			<?php esc_html_e( 'WPCode runs a PHP snippet rather than printing it, so its source never reaches the browser and there is nothing to rewrite on the way out. A PHP snippet asks for its values instead:', 'wpcode-bb-values' ); ?></p>
+		<pre>&lt;?php
+$api_key   = wpcodebbv_cfg( 'api_key', 'AIza-DEFAULT' );   // Configurable siteWide: the API key
+$debug     = wpcodebbv_cfg( 'debug', false );              // Configurable - turn logging on
+$max_items = wpcodebbv_cfg( 'max_items', 25 );             // Configurable: how many to show
+$roles     = wpcodebbv_cfg( 'roles', array( 'editor' ) );  // Configurable: who sees the panel</pre>
+		<p><?php esc_html_e( 'The default you write is what the module shows and what applies until someone changes it. You get back the same TYPE you passed as the default - a boolean default returns a boolean, a number a number, an array an array - so the snippet never has to think about the fact that the editor types text.', 'wpcode-bb-values' ); ?></p>
+		<p><?php esc_html_e( 'A PHP snippet written this way still works anywhere else on the site: with no module supplying values, wpcodebbv_cfg() simply returns the default.', 'wpcode-bb-values' ); ?></p>
+		<p><?php esc_html_e( 'One caution for CSS: a plain property like "background" is used all over a stylesheet, and only the first one marked wins. Mark custom properties (--accent, --radius) rather than plain declarations wherever you can - they are unique by nature and are the thing worth exposing anyway.', 'wpcode-bb-values' ); ?></p>
 
 		<h2><?php esc_html_e( 'Reading the settings in your snippet', 'wpcode-bb-values' ); ?></h2>
 		<p><?php esc_html_e( 'The configurations array is a list of {key, value} pairs, which is awkward to read from directly. Paste this below the array and you get one object for looking settings up by name:', 'wpcode-bb-values' ); ?></p>

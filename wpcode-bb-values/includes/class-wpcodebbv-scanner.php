@@ -79,17 +79,24 @@ class WPCodeBBV_Scanner {
 	}
 
 	/**
-	 * Finds settings marked with a "Configurable" comment, anywhere in
-	 * the snippet - not just inside a configurations array:
+	 * Finds settings marked with a "Configurable" comment, in any
+	 * language a WPCode snippet can be written in:
 	 *
-	 *     var calendarId = 'c_x';   // Configurable: which calendar to read
-	 *     var debug = 'false';      // Configurable siteWide
-	 *         color: 'red',         // Configurable - the headline colour
+	 *   JS    var calendarId = 'c_x';        // Configurable: the calendar
+	 *   PHP   $api_key = 'AIza-x';           // Configurable siteWide
+	 *   PHP   define( 'CACHE_TTL', 3600 );   # Configurable - seconds
+	 *   CSS   --accent: #1A73E8;             /* Configurable: brand colour *\/
+	 *   CSS   font-family: "Google Sans", Roboto, sans-serif; /* Configurable *\/
 	 *
-	 * The assignment has to be the first thing on its line, which keeps
-	 * this predictable rather than clever. Anything after "Configurable"
-	 * (past a colon or dash) becomes the setting's help text, and the
-	 * word siteWide marks it site-wide, exactly as in an array.
+	 * The trick that makes one reader work for all of them: the comment
+	 * marks where the value ENDS. Everything between the "=" or ":" and
+	 * the comment is the value, whatever the language thinks of it. So
+	 * there is no language to detect and no CSS/PHP/JS parser to get
+	 * wrong - a font stack with commas and quotes in it survives exactly
+	 * as written, and so does array( 'a', 'b' ) or #1A73E8.
+	 *
+	 * The assignment has to start its line, and the comment has to be on
+	 * that same line. Both keep this predictable rather than clever.
 	 *
 	 * @param string $js
 	 * @return array<string, array>
@@ -112,21 +119,18 @@ class WPCodeBBV_Scanner {
 			$line_start = $offset;
 			$offset    += strlen( $line ) + 1; // +1 for the newline we split on.
 
-			$comment_at = strpos( $line, '//' );
-
-			if ( false === $comment_at ) {
+			// Any of //, # or /* - but only when "Configurable" follows,
+			// which is also what stops a CSS colour like #1A73E8 from
+			// being mistaken for the start of a comment.
+			if ( ! preg_match( '/(\/\/|#|\/\*)[ \t]*Configurable\b[ \t]*(.*)$/i', $line, $m, PREG_OFFSET_CAPTURE ) ) {
 				continue;
 			}
 
-			$comment = trim( substr( $line, $comment_at + 2 ) );
-
-			if ( 0 !== stripos( $comment, 'configurable' ) ) {
-				continue;
-			}
-
-			// "Configurable siteWide: help text" -> flag + help text.
-			$rest = trim( substr( $comment, strlen( 'configurable' ) ) );
-			$wide = false;
+			$comment_at = $m[0][1];
+			$rest       = rtrim( $m[2][0] );
+			$rest       = preg_replace( '/\*\/\s*$/', '', $rest ); // Drop a closing */.
+			$rest       = trim( $rest );
+			$wide       = false;
 
 			if ( 0 === stripos( $rest, 'sitewide' ) ) {
 				$wide = true;
@@ -134,27 +138,83 @@ class WPCodeBBV_Scanner {
 			}
 
 			$help = trim( $rest, " \t:-–—" );
-
-			// The assignment has to start the line: "var x =", "x:", "x =".
 			$code = substr( $line, 0, $comment_at );
 
-			if ( ! preg_match( '/^\s*(?:var|let|const)?\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*[:=]\s*/', $code, $match ) ) {
+			$name        = '';
+			$value_start = 0;
+			$closes      = false; // define( ... ) needs its ")" trimmed back off.
+
+			// define( 'NAME', value ) - the usual way a PHP snippet
+			// declares something worth exposing.
+			if ( preg_match( '/^\s*(?:@?define)\s*\(\s*[\x27"]([A-Za-z_][A-Za-z0-9_]*)[\x27"]\s*,\s*/', $code, $d ) ) {
+				$name        = $d[1];
+				$value_start = strlen( $d[0] );
+				$closes      = true;
+			} elseif ( preg_match( '/^\s*(?:var|let|const|public|private|protected|static)?\s*(\$?[A-Za-z_\-][A-Za-z0-9_\-]*)\s*[:=]\s*/', $code, $a ) ) {
+				$name        = $a[1];
+				$value_start = strlen( $a[0] );
+			} else {
 				continue;
 			}
 
-			$name = $match[1];
-
-			if ( self::WIDE_KEY === $name || isset( $settings[ $name ] ) ) {
+			if ( '' === $name || self::WIDE_KEY === $name || isset( $settings[ $name ] ) ) {
 				continue;
 			}
 
-			$node = self::parse_value( $js, $line_start + strlen( $match[0] ) );
+			$raw = substr( $code, $value_start );
 
-			if ( ! $node ) {
+			// Trim back the punctuation that ends a statement rather than
+			// belonging to the value: ");" for define, then ";" or ",".
+			$trimmed = rtrim( $raw );
+
+			if ( $closes ) {
+				$trimmed = rtrim( $trimmed );
+				$trimmed = preg_replace( '/\)\s*;?\s*$/', '', $trimmed );
+			}
+
+			$trimmed = rtrim( $trimmed );
+			$trimmed = preg_replace( '/[;,]\s*$/', '', $trimmed );
+			$trimmed = rtrim( $trimmed );
+
+			if ( '' === $trimmed ) {
 				continue;
 			}
 
-			$leaf            = self::leaf( $node, '' );
+			$leading = strlen( $raw ) - strlen( ltrim( $raw ) );
+			$literal = ltrim( $trimmed );
+
+			if ( '' === $literal ) {
+				continue;
+			}
+
+			$literal_at = $line_start + $value_start + $leading;
+
+			// wpcodebbv_cfg( 'name', <default> ) - how a PHP snippet asks
+			// for a value, since its source is executed rather than
+			// printed and cannot be rewritten on the way out. The name
+			// comes from the first argument and the editable value is the
+			// default in the second.
+			if ( preg_match( '/^wpcodebbv_cfg\s*\(\s*[\x27"]([^\x27"]+)[\x27"]\s*,\s*/i', $literal, $c ) ) {
+				$inner = rtrim( substr( $literal, strlen( $c[0] ) ) );
+				$inner = preg_replace( '/\)\s*$/', '', $inner );
+				$inner = rtrim( $inner );
+
+				if ( '' === $inner ) {
+					continue;
+				}
+
+				$name        = $c[1];
+				$literal_at += strlen( $c[0] );
+				$literal     = $inner;
+
+				if ( isset( $settings[ $name ] ) ) {
+					continue;
+				}
+			}
+
+			$leaf            = self::classify_literal( $literal );
+			$leaf['start']   = $literal_at;
+			$leaf['end']     = $leaf['start'] + strlen( $literal );
 			$leaf['comment'] = $help;
 			$leaf['global']  = $wide;
 			$leaf['marked']  = true;
@@ -163,6 +223,120 @@ class WPCodeBBV_Scanner {
 		}
 
 		return $settings;
+	}
+
+	/**
+	 * Works out what one marked value is, from the literal text alone.
+	 *
+	 * A quoted string is unwrapped so the editor sees the text rather
+	 * than the quotes. A bracketed or array() list becomes a comma
+	 * separated list. Everything else - a colour, a number, a font
+	 * stack, true/false, a PHP constant - is left exactly as written and
+	 * written back the same way.
+	 *
+	 * @param string $literal
+	 * @return array{value:string, kind:string, wrap:string, quote:string}
+	 */
+	private static function classify_literal( $literal ) {
+		$first = substr( $literal, 0, 1 );
+		$last  = substr( $literal, -1 );
+
+		if ( strlen( $literal ) >= 2 && $first === $last && ( "'" === $first || '"' === $first || '`' === $first ) ) {
+			$inner = substr( $literal, 1, -1 );
+
+			return array(
+				'value' => str_replace( array( '\\' . $first, '\\\\' ), array( $first, '\\' ), $inner ),
+				'kind'  => 'string',
+				'wrap'  => 'string',
+				'quote' => $first,
+			);
+		}
+
+		$inner = null;
+		$wrap  = '';
+
+		if ( '[' === $first && ']' === $last ) {
+			$inner = substr( $literal, 1, -1 );
+			$wrap  = 'brackets';
+		} elseif ( preg_match( '/^array\s*\((.*)\)$/is', $literal, $m ) ) {
+			$inner = $m[1];
+			$wrap  = 'array';
+		}
+
+		if ( null !== $inner ) {
+			$parts = array();
+
+			foreach ( explode( ',', $inner ) as $part ) {
+				$part = trim( $part );
+
+				if ( '' === $part ) {
+					continue;
+				}
+
+				$pf = substr( $part, 0, 1 );
+				$pl = substr( $part, -1 );
+
+				if ( strlen( $part ) >= 2 && $pf === $pl && ( "'" === $pf || '"' === $pf ) ) {
+					$part = substr( $part, 1, -1 );
+				}
+
+				$parts[] = $part;
+			}
+
+			return array(
+				'value' => implode( ', ', $parts ),
+				'kind'  => 'list',
+				'wrap'  => $wrap,
+				'quote' => "'",
+			);
+		}
+
+		return array(
+			'value' => $literal,
+			'kind'  => 'raw',
+			'wrap'  => 'raw',
+			'quote' => '',
+		);
+	}
+
+	/**
+	 * Writes a marked value back in the shape it was found in.
+	 *
+	 * @param string $value
+	 * @param array  $leaf
+	 * @return string
+	 */
+	private static function marker_literal( $value, $leaf ) {
+		$wrap  = isset( $leaf['wrap'] ) ? $leaf['wrap'] : 'raw';
+		$quote = isset( $leaf['quote'] ) && '' !== $leaf['quote'] ? $leaf['quote'] : "'";
+
+		if ( 'string' === $wrap ) {
+			$escaped = str_replace( array( '\\', $quote ), array( '\\\\', '\\' . $quote ), $value );
+			$escaped = str_replace( array( "\r\n", "\r", "\n" ), '\\n', $escaped );
+
+			return $quote . $escaped . $quote;
+		}
+
+		if ( 'brackets' === $wrap || 'array' === $wrap ) {
+			$parts = array();
+
+			foreach ( explode( ',', $value ) as $part ) {
+				$part = trim( $part );
+
+				if ( '' !== $part ) {
+					$parts[] = $quote . str_replace( $quote, '\\' . $quote, $part ) . $quote;
+				}
+			}
+
+			$inner = implode( ', ', $parts );
+
+			return 'array' === $wrap ? 'array( ' . $inner . ' )' : '[' . $inner . ']';
+		}
+
+		// Raw: a colour, a number, true/false, a font stack. Written back
+		// exactly as typed, which is the only thing that works across CSS,
+		// PHP and JS at once.
+		return trim( $value );
 	}
 
 	/**
@@ -379,7 +553,7 @@ class WPCodeBBV_Scanner {
 			$edits[] = array(
 				'start'   => $leaf['start'],
 				'end'     => $leaf['end'],
-				'literal' => self::to_literal( (string) $overrides[ $name ], $leaf['kind'] ),
+				'literal' => self::marker_literal( (string) $overrides[ $name ], $leaf ),
 			);
 		}
 
