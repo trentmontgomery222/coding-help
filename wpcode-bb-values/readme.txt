@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 6.3.0
+Stable tag: 7.0.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -180,6 +180,32 @@ Watch the on/off settings: they are the strings "true" and "false", not real
 booleans, so if (CONFIG.get('x')) is true even when the setting says false,
 because "false" is a non-empty string. Use CONFIG.bool() for those.
 
+= Updates =
+
+This plugin does not live on wordpress.org, so it checks a source you control -
+a JSON manifest URL or GitHub releases - and then shows "Update now" on the
+Plugins screen like any other plugin, with optional auto-update.
+
+The settings are deliberately out of the way: Tools > WPCode Values with
+?wpcodebbv_updates=1 on the URL.
+
+What protects the site:
+
+* After an update installs, the plugin loads itself in a fresh request and
+  looks for a marker. A real 5xx deactivates the plugin and records the
+  failure; an inconclusive result (a host that blocks a site calling itself)
+  leaves it enabled, so a blocked loopback never disables a good update.
+* A fatal error inside this plugin's own files arms safe mode. The next
+  request loads only a notice with a "Resume plugin" button instead of the
+  plugin's code, so a bad release cannot white-screen the site.
+* A secret URL forces an immediate check and install, for a deploy hook or
+  cron.
+* A dev site can be made to update first and publish "I verified version X";
+  production then only offers that version once dev has passed.
+
+UPDATE-SYSTEM.md, included in the plugin folder, documents the whole thing and
+how to port it to another plugin.
+
 == Frequently Asked Questions ==
 
 = The module is not in the Beaver Builder editor =
@@ -195,6 +221,15 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.0.0 =
+* Added the update system ported from the ACPS Site Toolkit: update checks
+  against a manifest URL or GitHub releases, "Update now" on the Plugins
+  screen, optional auto-update, a crash test after installing that rolls back
+  a release which fails to load, fatal-error safe mode with a Resume button, a
+  secret force-update URL, and the optional dev-then-production rollout.
+* Update settings live at Tools > WPCode Values with ?wpcodebbv_updates=1.
+* Deleting the plugin now cleans up everything it stored.
 
 = 6.3.0 =
 * Fixed PHP values not taking effect. wpcodebbv_cfg() only read values while

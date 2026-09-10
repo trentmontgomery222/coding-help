@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           6.3.0
+ * Version:           7.0.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '6.3.0' );
+define( 'WPCODEBBV_VERSION', '7.0.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -76,13 +76,183 @@ define( 'WPCODEBBV_CACHE', 'wpcodebbv_settings_index' );
 /** Option holding the site-wide values. */
 define( 'WPCODEBBV_OPTION', 'wpcodebbv_global_values' );
 
-$wpcodebbv_scanner = WPCODEBBV_DIR . 'includes/class-wpcodebbv-scanner.php';
+/* ---------------------------------------------------------------------
+ * Update system (ported from the ACPS Site Toolkit updater; see
+ * UPDATE-SYSTEM.md for how the pieces fit together).
+ * ------------------------------------------------------------------ */
 
-if ( file_exists( $wpcodebbv_scanner ) ) {
-	require_once $wpcodebbv_scanner;
+define( 'WPCODEBBV_FILE', __FILE__ );
+define( 'WPCODEBBV_BASENAME', plugin_basename( __FILE__ ) );
+define( 'WPCODEBBV_REST_NAMESPACE', 'wpcode-bb-values/v1' );
+define( 'WPCODEBBV_OPT_SETTINGS', 'wpcodebbv_settings' );
+
+/** Option holding "safe mode" state after a fatal was caught in our own code. */
+define( 'WPCODEBBV_SAFE_MODE_OPT', 'wpcodebbv_safe_mode' );
+
+foreach ( array( 'class-wpcodebbv-scanner.php', 'class-wpcodebbv-settings.php', 'class-wpcodebbv-updater.php' ) as $wpcodebbv_include ) {
+	$wpcodebbv_path = WPCODEBBV_DIR . 'includes/' . $wpcodebbv_include;
+
+	if ( file_exists( $wpcodebbv_path ) ) {
+		require_once $wpcodebbv_path;
+	}
 }
 
-unset( $wpcodebbv_scanner );
+unset( $wpcodebbv_include, $wpcodebbv_path );
+
+/* ---------------------------------------------------------------------
+ * Bootstrap with crash protection.
+ *
+ * A fatal inside this plugin arms safe mode, and the NEXT request loads
+ * only a notice with a Resume button instead of the plugin's code - so a
+ * bad update cannot white-screen the site. This matters more than usual
+ * here because the plugin can now update itself.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Is the plugin currently held dormant after a caught fatal?
+ *
+ * @return bool
+ */
+function wpcodebbv_is_safe_mode() {
+	$state = get_option( WPCODEBBV_SAFE_MODE_OPT );
+
+	return is_array( $state ) && ! empty( $state['time'] );
+}
+
+/**
+ * Records a caught fatal and arms safe mode for the next request.
+ *
+ * @param string $message
+ * @param string $file
+ * @param int    $line
+ */
+function wpcodebbv_arm_safe_mode( $message, $file = '', $line = 0 ) {
+	update_option(
+		WPCODEBBV_SAFE_MODE_OPT,
+		array(
+			'msg'  => (string) $message,
+			'file' => (string) $file,
+			'line' => (int) $line,
+			'time' => time(),
+		),
+		true
+	);
+
+	wpcodebbv_log( 'fatal caught - entering safe mode: ' . $message . ' in ' . $file . ':' . $line );
+}
+
+/**
+ * Shutdown guard. If the request is ending on a fatal that started in
+ * THIS plugin's files, arm safe mode so the next request stays up. It
+ * cannot rescue the current request - PHP is already ending - but it
+ * stops a crash loop. Fatals from anywhere else are left alone.
+ */
+function wpcodebbv_shutdown_guard() {
+	$error = error_get_last();
+
+	if ( ! $error || empty( $error['type'] ) ) {
+		return;
+	}
+
+	if ( ! in_array( $error['type'], array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR ), true ) ) {
+		return;
+	}
+
+	if ( empty( $error['file'] ) || 0 !== strpos( $error['file'], WPCODEBBV_DIR ) ) {
+		return; // Not ours.
+	}
+
+	wpcodebbv_arm_safe_mode( $error['message'], $error['file'], $error['line'] );
+}
+
+/**
+ * The notice shown while dormant, with the control that resumes.
+ */
+function wpcodebbv_safe_mode_notice() {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
+	$state   = get_option( WPCODEBBV_SAFE_MODE_OPT );
+	$message = is_array( $state ) && ! empty( $state['msg'] ) ? $state['msg'] : '';
+	$url     = wp_nonce_url( admin_url( 'admin-post.php?action=wpcodebbv_resume' ), 'wpcodebbv_resume' );
+	?>
+	<div class="notice notice-error">
+		<p>
+			<strong><?php esc_html_e( 'WPCode Values for Beaver Builder is paused (safe mode).', 'wpcode-bb-values' ); ?></strong>
+			<?php esc_html_e( 'A fatal error was caught in the plugin, so it stopped loading to keep the site online. The rest of the site is unaffected.', 'wpcode-bb-values' ); ?>
+		</p>
+		<?php if ( '' !== $message ) : ?>
+			<p><code><?php echo esc_html( $message ); ?></code></p>
+		<?php endif; ?>
+		<p>
+			<a href="<?php echo esc_url( $url ); ?>" class="button button-primary"><?php esc_html_e( 'Resume plugin', 'wpcode-bb-values' ); ?></a>
+			<?php esc_html_e( 'Use this once the problem is fixed - after a corrected update, say.', 'wpcode-bb-values' ); ?>
+		</p>
+	</div>
+	<?php
+}
+
+/**
+ * Clears safe mode.
+ */
+function wpcodebbv_resume_from_safe_mode() {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		wp_die( esc_html__( 'You do not have permission to do this.', 'wpcode-bb-values' ), 403 );
+	}
+
+	check_admin_referer( 'wpcodebbv_resume' );
+	delete_option( WPCODEBBV_SAFE_MODE_OPT );
+	wp_safe_redirect( wp_get_referer() ? wp_get_referer() : admin_url() );
+	exit;
+}
+
+/**
+ * Boots the update system. The plugin's own features register on their
+ * own hooks below and are deliberately NOT gated on this - safe mode is
+ * about not compounding a fatal, and the updater is the part that can
+ * introduce one.
+ */
+function wpcodebbv_boot() {
+	// Resuming has to work even while dormant.
+	add_action( 'admin_post_wpcodebbv_resume', 'wpcodebbv_resume_from_safe_mode' );
+
+	if ( wpcodebbv_is_safe_mode() ) {
+		if ( is_admin() ) {
+			add_action( 'admin_notices', 'wpcodebbv_safe_mode_notice' );
+		}
+
+		return; // Stay dormant - keep the site up.
+	}
+
+	register_shutdown_function( 'wpcodebbv_shutdown_guard' );
+
+	try {
+		if ( class_exists( 'WPCodeBBV_Updater' ) && class_exists( 'WPCodeBBV_Settings' ) ) {
+			$updater = new WPCodeBBV_Updater();
+			$updater->register();
+
+			add_action( 'update_option_' . WPCODEBBV_OPT_SETTINGS, array( 'WPCodeBBV_Updater', 'flush_cache' ) );
+		}
+	} catch ( \Throwable $e ) {
+		wpcodebbv_arm_safe_mode( $e->getMessage(), $e->getFile(), $e->getLine() );
+	}
+}
+add_action( 'plugins_loaded', 'wpcodebbv_boot' );
+
+/**
+ * Activation: seed the update secret and clear any rollback flag left by
+ * a previous failed update.
+ */
+function wpcodebbv_activate() {
+	if ( class_exists( 'WPCodeBBV_Settings' ) ) {
+		WPCodeBBV_Settings::seed_trigger();
+	}
+
+	delete_option( 'wpcodebbv_update_failed' );
+	delete_option( WPCODEBBV_SAFE_MODE_OPT );
+}
+register_activation_hook( __FILE__, 'wpcodebbv_activate' );
 
 /**
  * Writes to the PHP error log, prefixed so it is easy to grep for.
@@ -1025,11 +1195,139 @@ function wpcodebbv_help_menu() {
 }
 add_action( 'admin_menu', 'wpcodebbv_help_menu' );
 
+/**
+ * Saves the Updates form. Hidden behind ?wpcodebbv_updates=1 on the
+ * help screen, since this is deployment plumbing rather than something
+ * a page editor should meet.
+ */
+function wpcodebbv_handle_update_settings() {
+	if ( ! isset( $_POST['wpcodebbv_updates_nonce'] ) ) {
+		return;
+	}
+
+	if ( ! wp_verify_nonce( sanitize_key( wp_unslash( $_POST['wpcodebbv_updates_nonce'] ) ), 'wpcodebbv_updates' ) ) {
+		return;
+	}
+
+	if ( ! current_user_can( 'manage_options' ) || ! class_exists( 'WPCodeBBV_Settings' ) ) {
+		return;
+	}
+
+	$posted = isset( $_POST['wpcodebbv_settings'] ) && is_array( $_POST['wpcodebbv_settings'] )
+		? wp_unslash( $_POST['wpcodebbv_settings'] )
+		: array();
+
+	// Unticked checkboxes do not post at all.
+	foreach ( array( 'update_enabled', 'update_auto' ) as $flag ) {
+		if ( ! isset( $posted[ $flag ] ) ) {
+			$posted[ $flag ] = 0;
+		}
+	}
+
+	WPCodeBBV_Settings::save( $posted );
+
+	add_settings_error( 'wpcodebbv', 'wpcodebbv_updates_saved', __( 'Update settings saved.', 'wpcode-bb-values' ), 'updated' );
+}
+
+/**
+ * The Updates panel. Only rendered when ?wpcodebbv_updates=1 is on the
+ * URL, so the help screen stays about snippets for everyone else.
+ */
+function wpcodebbv_render_update_settings() {
+	if ( empty( $_GET['wpcodebbv_updates'] ) || ! current_user_can( 'manage_options' ) || ! class_exists( 'WPCodeBBV_Settings' ) ) {
+		return;
+	}
+
+	$s       = WPCodeBBV_Settings::all();
+	$trigger = trim( (string) $s['update_trigger'] );
+	?>
+	<hr />
+	<h2><?php esc_html_e( 'Updates', 'wpcode-bb-values' ); ?></h2>
+	<p class="description">
+		<?php esc_html_e( 'This plugin does not live on wordpress.org, so it checks a source you control and then shows "Update now" on the Plugins screen like any other plugin. A release that fails its load test after installing is rolled back rather than left broken.', 'wpcode-bb-values' ); ?>
+	</p>
+
+	<form method="post">
+		<?php wp_nonce_field( 'wpcodebbv_updates', 'wpcodebbv_updates_nonce' ); ?>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Updates', 'wpcode-bb-values' ); ?></th>
+				<td>
+					<label><input type="checkbox" name="wpcodebbv_settings[update_enabled]" value="1" <?php checked( $s['update_enabled'], 1 ); ?> /> <?php esc_html_e( 'Check for updates', 'wpcode-bb-values' ); ?></label><br />
+					<label><input type="checkbox" name="wpcodebbv_settings[update_auto]" value="1" <?php checked( $s['update_auto'], 1 ); ?> /> <?php esc_html_e( 'Install them automatically', 'wpcode-bb-values' ); ?></label>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="wpcodebbv_source"><?php esc_html_e( 'Source', 'wpcode-bb-values' ); ?></label></th>
+				<td>
+					<select id="wpcodebbv_source" name="wpcodebbv_settings[update_source]">
+						<option value="url" <?php selected( $s['update_source'], 'url' ); ?>><?php esc_html_e( 'Manifest URL', 'wpcode-bb-values' ); ?></option>
+						<option value="github" <?php selected( $s['update_source'], 'github' ); ?>><?php esc_html_e( 'GitHub releases', 'wpcode-bb-values' ); ?></option>
+					</select>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="wpcodebbv_manifest"><?php esc_html_e( 'Manifest URL', 'wpcode-bb-values' ); ?></label></th>
+				<td>
+					<input type="url" class="regular-text" id="wpcodebbv_manifest" name="wpcodebbv_settings[update_manifest]" value="<?php echo esc_attr( $s['update_manifest'] ); ?>" />
+					<p class="description"><?php esc_html_e( 'JSON returning at least { "version": "1.2.3", "download_url": "https://…/wpcode-bb-values.zip" }.', 'wpcode-bb-values' ); ?></p>
+					<input type="text" class="regular-text" name="wpcodebbv_settings[update_manifest_key]" value="<?php echo esc_attr( $s['update_manifest_key'] ); ?>" placeholder="<?php esc_attr_e( 'Optional key sent with the request', 'wpcode-bb-values' ); ?>" />
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'GitHub', 'wpcode-bb-values' ); ?></th>
+				<td>
+					<input type="text" name="wpcodebbv_settings[gh_owner]" value="<?php echo esc_attr( $s['gh_owner'] ); ?>" placeholder="<?php esc_attr_e( 'owner', 'wpcode-bb-values' ); ?>" />
+					<input type="text" name="wpcodebbv_settings[gh_repo]" value="<?php echo esc_attr( $s['gh_repo'] ); ?>" placeholder="<?php esc_attr_e( 'repo', 'wpcode-bb-values' ); ?>" />
+					<input type="text" name="wpcodebbv_settings[gh_asset]" value="<?php echo esc_attr( $s['gh_asset'] ); ?>" placeholder="<?php esc_attr_e( 'asset.zip', 'wpcode-bb-values' ); ?>" />
+					<br />
+					<input type="password" class="regular-text" name="wpcodebbv_settings[gh_token]" value="<?php echo esc_attr( $s['gh_token'] ); ?>" placeholder="<?php esc_attr_e( 'Token (private repos only)', 'wpcode-bb-values' ); ?>" autocomplete="new-password" />
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="wpcodebbv_role"><?php esc_html_e( 'Rollout role', 'wpcode-bb-values' ); ?></label></th>
+				<td>
+					<select id="wpcodebbv_role" name="wpcodebbv_settings[update_role]">
+						<option value="standalone" <?php selected( $s['update_role'], 'standalone' ); ?>><?php esc_html_e( 'Standalone - update as soon as a release appears', 'wpcode-bb-values' ); ?></option>
+						<option value="dev" <?php selected( $s['update_role'], 'dev' ); ?>><?php esc_html_e( 'Dev / staging - update first and publish the result', 'wpcode-bb-values' ); ?></option>
+						<option value="production" <?php selected( $s['update_role'], 'production' ); ?>><?php esc_html_e( 'Production - wait until dev has verified the release', 'wpcode-bb-values' ); ?></option>
+					</select>
+					<p class="description">
+						<?php esc_html_e( 'On dev, set a status key and give production the status URL below. Production then only offers a version once dev has installed it and passed its own load test.', 'wpcode-bb-values' ); ?>
+					</p>
+					<input type="url" class="regular-text" name="wpcodebbv_settings[verify_status_url]" value="<?php echo esc_attr( $s['verify_status_url'] ); ?>" placeholder="<?php esc_attr_e( 'Dev status URL (production only)', 'wpcode-bb-values' ); ?>" />
+					<input type="text" name="wpcodebbv_settings[verify_status_key]" value="<?php echo esc_attr( $s['verify_status_key'] ); ?>" placeholder="<?php esc_attr_e( 'Shared status key', 'wpcode-bb-values' ); ?>" />
+					<p class="description">
+						<?php esc_html_e( 'This site publishes its own status at:', 'wpcode-bb-values' ); ?>
+						<code><?php echo esc_html( rest_url( WPCODEBBV_REST_NAMESPACE . '/update-status' ) ); ?></code>
+					</p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Force an update', 'wpcode-bb-values' ); ?></th>
+				<td>
+					<?php if ( '' !== $trigger ) : ?>
+						<code><?php echo esc_html( add_query_arg( 'wpcodebbv_update', $trigger, home_url( '/' ) ) ); ?></code>
+						<p class="description">
+							<?php esc_html_e( 'Requesting this URL checks and installs immediately - useful from a deploy hook or cron. It is guarded only by the secret in it, so treat it as a password.', 'wpcode-bb-values' ); ?>
+						</p>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'No secret yet. Deactivate and reactivate the plugin to generate one.', 'wpcode-bb-values' ); ?></p>
+					<?php endif; ?>
+				</td>
+			</tr>
+		</table>
+		<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Save update settings', 'wpcode-bb-values' ); ?></button></p>
+	</form>
+	<?php
+}
+
 function wpcodebbv_help_page() {
 	$bb     = class_exists( 'FLBuilder' );
 	$wpcode = post_type_exists( 'wpcode' );
 
 	wpcodebbv_handle_reset();
+	wpcodebbv_handle_update_settings();
 
 	if ( isset( $_GET['wpcodebbv_rescan'] ) ) {
 		wpcodebbv_clear_index();
@@ -1246,6 +1544,8 @@ CONFIG.match('Schools Closed Friday')        // 'noSchoolEvent'</pre>
 			?>
 			<textarea readonly="readonly" rows="16" class="widefat code" onclick="this.select();"><?php echo esc_textarea( $helper ); ?></textarea>
 		<?php endif; ?>
+
+		<?php wpcodebbv_render_update_settings(); ?>
 
 		<h2><?php esc_html_e( 'If the module is not listed in the editor', 'wpcode-bb-values' ); ?></h2>
 		<p><?php esc_html_e( 'Check Settings > Beaver Builder > Modules. If that list has ever been narrowed down, a newly installed module stays off until you tick it.', 'wpcode-bb-values' ); ?></p>
