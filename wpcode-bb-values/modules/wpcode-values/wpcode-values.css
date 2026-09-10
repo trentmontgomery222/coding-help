@@ -6,3 +6,41 @@
 	font-size: 13px;
 	background: #f6f7f7;
 }
+
+/* The editing-only note. Never rendered for visitors - see
+   wpcodebbv_is_editing() - so this styling is only ever seen inside the
+   Beaver Builder editor. */
+.fl-node-<?php echo $id; ?> .wpcodebbv-editor-note {
+	display: block;
+	margin: 0 0 10px;
+	padding: 8px 12px;
+	border: 1px dashed #c3c4c7;
+	border-left: 3px solid #1a73e8;
+	border-radius: 4px;
+	background: #f6f7f7;
+	color: #50575e;
+	font-size: 12px;
+	line-height: 1.5;
+	font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.fl-node-<?php echo $id; ?> .wpcodebbv-editor-note-tag {
+	display: inline-block;
+	margin-right: 6px;
+	padding: 1px 6px;
+	border-radius: 3px;
+	background: #1a73e8;
+	color: #fff;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: .4px;
+	vertical-align: 1px;
+}
+
+.fl-node-<?php echo $id; ?> .wpcodebbv-editor-note-only {
+	display: block;
+	margin-top: 3px;
+	color: #787c82;
+	font-style: italic;
+}

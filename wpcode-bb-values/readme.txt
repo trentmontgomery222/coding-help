@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.0.0
+Stable tag: 7.1.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -180,6 +180,17 @@ Watch the on/off settings: they are the strings "true" and "false", not real
 booleans, so if (CONFIG.get('x')) is true even when the setting says false,
 because "false" is a non-empty string. Use CONFIG.bool() for those.
 
+= While you are editing =
+
+Inside the Beaver Builder editor each module shows a small note saying which
+snippet it runs, how many settings it has, how many you have changed on this
+page, and how many are site-wide. On a page holding several of these it is the
+difference between a row of identical blocks and knowing which is which.
+
+Nobody else ever sees it. It needs the Beaver Builder editor to be open AND a
+logged-in user who can edit posts - so it is absent on the live page, absent in
+Beaver Builder's own preview, and absent for visitors.
+
 = Updates =
 
 This plugin does not live on wordpress.org, so it checks a source you control -
@@ -221,6 +232,14 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.1.0 =
+* Each module now identifies itself in the Beaver Builder editor: which snippet
+  it runs, how many settings, how many changed on this page, how many are
+  site-wide or PHP. Shown only inside the editor to a logged-in user who can
+  edit posts - never on the live page, never to visitors.
+* A module with no snippet chosen says so in the editor instead of rendering
+  nothing.
 
 = 7.0.0 =
 * Added the update system ported from the ACPS Site Toolkit: update checks

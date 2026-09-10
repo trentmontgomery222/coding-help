@@ -30,11 +30,16 @@ if ( ! isset( $module ) || ! is_object( $module ) || ! method_exists( $module, '
 try {
 	$shortcode = $module->get_shortcode();
 
+	// Everything editorial below is gated on this. It is false on the
+	// live page and in Beaver Builder's own preview, and false for anyone
+	// not logged in and able to edit - so a visitor never sees any of it.
+	$editing = function_exists( 'wpcodebbv_is_editing' ) && wpcodebbv_is_editing();
+
 	if ( '' === $shortcode ) {
 		// Nothing configured yet. Say so while editing; show visitors nothing.
-		if ( class_exists( 'FLBuilderModel' ) && is_callable( array( 'FLBuilderModel', 'is_builder_active' ) ) && FLBuilderModel::is_builder_active() ) {
+		if ( $editing ) {
 			echo '<div class="wpcodebbv-placeholder">'
-				. esc_html__( 'WPCode Values: enter your WPCode snippet ID in this module\'s settings.', 'wpcode-bb-values' )
+				. esc_html__( 'WPCode Values: pick your snippet on the Setup tab of this module\'s settings.', 'wpcode-bb-values' )
 				. '</div>';
 		}
 
@@ -81,6 +86,13 @@ try {
 				wpcodebbv_log( 'could not apply overrides: ' . $e->getMessage() );
 			}
 		}
+	}
+
+	// A note naming the snippet this module runs and what has been
+	// changed on it, so a page full of these is readable while editing.
+	// Printed only for the editor, never on the live page.
+	if ( $editing && function_exists( 'wpcodebbv_editor_note' ) ) {
+		echo wpcodebbv_editor_note( $module->get_snippet_id(), $overrides ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built and escaped in wpcodebbv_editor_note().
 	}
 
 	echo $rendered;

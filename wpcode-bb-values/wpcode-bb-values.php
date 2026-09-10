@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.0.0
+ * Version:           7.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.0.0' );
+define( 'WPCODEBBV_VERSION', '7.1.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -297,6 +297,120 @@ function wpcodebbv_snippet_code( $snippet ) {
 	}
 
 	return '';
+}
+
+/**
+ * True only inside the Beaver Builder editor, for someone allowed to
+ * edit pages.
+ *
+ * Both halves matter. is_builder_active() is false on the live page and
+ * in Beaver Builder's own preview, so a visitor never reaches this; the
+ * capability check means that even if some other code left the builder
+ * flag set, a logged-out visitor still sees nothing. The note this
+ * gates is editorial chatter about snippet IDs and settings - useful to
+ * whoever is building the page, noise or worse to everybody else.
+ *
+ * @return bool
+ */
+function wpcodebbv_is_editing() {
+	if ( ! class_exists( 'FLBuilderModel' ) || ! is_callable( array( 'FLBuilderModel', 'is_builder_active' ) ) ) {
+		return false;
+	}
+
+	if ( ! FLBuilderModel::is_builder_active() ) {
+		return false;
+	}
+
+	return is_user_logged_in() && current_user_can( 'edit_posts' );
+}
+
+/**
+ * The note shown above the snippet while the page is being edited:
+ * which snippet this module runs and what has been changed on it.
+ *
+ * @param int   $snippet_id
+ * @param array $overrides  What this module is about to apply.
+ * @return string HTML, or '' when there is nothing to say.
+ */
+function wpcodebbv_editor_note( $snippet_id, $overrides = array() ) {
+	$snippet_id = (int) $snippet_id;
+	$snippets   = array();
+
+	try {
+		$snippets = wpcodebbv_snippets();
+	} catch ( \Throwable $e ) {
+		$snippets = array();
+	}
+
+	$known = isset( $snippets[ $snippet_id ] ) ? $snippets[ $snippet_id ] : null;
+	$title = $known ? $known['title'] : '';
+
+	$lines = array();
+
+	if ( $known ) {
+		$total     = count( $known['settings'] );
+		$site_wide = 0;
+		$php       = 0;
+
+		foreach ( $known['settings'] as $leaf ) {
+			if ( ! empty( $leaf['php'] ) ) {
+				$php++;
+			} elseif ( ! empty( $leaf['global'] ) ) {
+				$site_wide++;
+			}
+		}
+
+		$changed = count( (array) $overrides );
+
+		$lines[] = sprintf(
+			/* translators: 1: number of settings, 2: number changed here */
+			_n( '%1$d setting, %2$d changed here.', '%1$d settings, %2$d changed here.', $total, 'wpcode-bb-values' ),
+			$total,
+			$changed
+		);
+
+		if ( $site_wide ) {
+			$lines[] = sprintf(
+				/* translators: %d: number of settings */
+				_n( '%d is marked siteWide - changing it changes every page.', '%d are marked siteWide - changing them changes every page.', $site_wide, 'wpcode-bb-values' ),
+				$site_wide
+			);
+		}
+
+		if ( $php ) {
+			$lines[] = sprintf(
+				/* translators: %d: number of settings */
+				_n( '%d is a PHP value, which is always site-wide.', '%d are PHP values, which are always site-wide.', $php, 'wpcode-bb-values' ),
+				$php
+			);
+		}
+
+		$lines[] = __( 'Edit them on this module\'s Settings tab.', 'wpcode-bb-values' );
+	} else {
+		$lines[] = __( 'This snippet\'s settings could not be read, so the Settings tab is empty. Use Extra settings on the Setup tab, as "path = value" lines.', 'wpcode-bb-values' );
+	}
+
+	$heading = $title
+		? sprintf(
+			/* translators: 1: snippet title, 2: snippet ID */
+			__( '%1$s - [wpcode id="%2$d"]', 'wpcode-bb-values' ),
+			$title,
+			$snippet_id
+		)
+		: sprintf(
+			/* translators: %d: snippet ID */
+			__( '[wpcode id="%d"]', 'wpcode-bb-values' ),
+			$snippet_id
+		);
+
+	return '<div class="wpcodebbv-editor-note">'
+		. '<span class="wpcodebbv-editor-note-tag">' . esc_html__( 'WPCode Values', 'wpcode-bb-values' ) . '</span> '
+		. '<strong>' . esc_html( $heading ) . '</strong> '
+		. esc_html( implode( ' ', $lines ) ) . ' '
+		. '<span class="wpcodebbv-editor-note-only">'
+		. esc_html__( 'Only you see this, while editing. Visitors get just the snippet.', 'wpcode-bb-values' )
+		. '</span>'
+		. '</div>';
 }
 
 /**
