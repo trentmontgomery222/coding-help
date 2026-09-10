@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.1.0
+Stable tag: 7.2.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -194,8 +194,14 @@ Beaver Builder's own preview, and absent for visitors.
 = Updates =
 
 This plugin does not live on wordpress.org, so it checks a source you control -
-a JSON manifest URL or GitHub releases - and then shows "Update now" on the
-Plugins screen like any other plugin, with optional auto-update.
+a JSON manifest URL or GitHub releases.
+
+It does NOT appear on the Plugins screen's update list and does not
+auto-update. New versions are installed by requesting the secret force-update
+URL, from a deploy hook, cron, or by pasting it in a browser. If you ever want
+the ordinary "Update now" row back, one line turns it on:
+
+    add_filter( 'wpcodebbv_offer_updates_in_admin', '__return_true' );
 
 The settings are deliberately out of the way: Tools > WPCode Values with
 ?wpcodebbv_updates=1 on the URL.
@@ -232,6 +238,14 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.2.0 =
+* This plugin no longer appears on the Plugins screen's update list and no
+  longer auto-updates. The three hooks that produced that are off unless
+  something opts back in with the wpcodebbv_offer_updates_in_admin filter.
+* Everything else about updates is unchanged: the force-update URL installs a
+  new version on demand, the crash test still rolls back a release that will
+  not load, and safe mode still catches a fatal.
 
 = 7.1.0 =
 * Each module now identifies itself in the Beaver Builder editor: which snippet

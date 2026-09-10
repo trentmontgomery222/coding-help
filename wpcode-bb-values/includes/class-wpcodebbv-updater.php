@@ -57,10 +57,31 @@ class WPCodeBBV_Updater {
 			return;
 		}
 
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
-		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
+		/*
+		 * These three are the ONLY things that put this plugin on the
+		 * Plugins screen's update UI: the injected "Update now" row, its
+		 * "View details" popup, and the auto-update decision. They are
+		 * off by default because that nagging is not wanted here.
+		 *
+		 * Everything else in this class still works with them off - the
+		 * force-update URL installs on demand, the post-update crash test
+		 * still rolls back a release that will not load, and safe mode
+		 * still catches a fatal.
+		 *
+		 * To put the Plugins-screen offer back, one line in a snippet or
+		 * theme functions.php:
+		 *
+		 *     add_filter( 'wpcodebbv_offer_updates_in_admin', '__return_true' );
+		 */
+		if ( apply_filters( 'wpcodebbv_offer_updates_in_admin', false ) ) {
+			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+			add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
+			add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
+		}
+
+		// Needed by the force-update path too (a private download has to be
+		// resolved however the install was started), so it is not gated.
 		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
-		add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
 		// Rename the extracted package folder back to our plugin slug, so an
 		// update whose zip unpacks to a different folder name (typical of GitHub
 		// release zips) installs over the SAME directory instead of a new one —

@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.1.0
+ * Version:           7.2.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.1.0' );
+define( 'WPCODEBBV_VERSION', '7.2.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -1369,6 +1369,11 @@ function wpcodebbv_render_update_settings() {
 				<td>
 					<label><input type="checkbox" name="wpcodebbv_settings[update_enabled]" value="1" <?php checked( $s['update_enabled'], 1 ); ?> /> <?php esc_html_e( 'Check for updates', 'wpcode-bb-values' ); ?></label><br />
 					<label><input type="checkbox" name="wpcodebbv_settings[update_auto]" value="1" <?php checked( $s['update_auto'], 1 ); ?> /> <?php esc_html_e( 'Install them automatically', 'wpcode-bb-values' ); ?></label>
+					<p class="description">
+						<?php esc_html_e( 'This plugin does not appear on the Plugins screen\'s update list, and does not auto-update, unless something turns that back on:', 'wpcode-bb-values' ); ?>
+						<code>add_filter( 'wpcodebbv_offer_updates_in_admin', '__return_true' );</code>
+						<?php esc_html_e( 'Until then the force-update URL below is how a new version gets installed - and the crash test still rolls back a release that will not load.', 'wpcode-bb-values' ); ?>
+					</p>
 				</td>
 			</tr>
 			<tr>
