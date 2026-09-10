@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.2.0
+Stable tag: 7.3.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -191,6 +191,28 @@ Nobody else ever sees it. It needs the Beaver Builder editor to be open AND a
 logged-in user who can edit posts - so it is absent on the live page, absent in
 Beaver Builder's own preview, and absent for visitors.
 
+= If part of the plugin breaks =
+
+Every file this plugin owns can be deleted or corrupted without taking the site
+down. A damaged file costs the feature in it, an admin notice says which file
+and why, and everything else - including the rest of the site - carries on.
+
+Two files are the exception, and cannot be otherwise: PHP compiles a file
+before running any of it, so an entry point cannot catch a parse error in
+itself.
+
+* wpcode-bb-values.php - the plugin's main file. It is deliberately small (the
+  loader, the crash guards, and wpcodebbv_cfg) with the features in
+  includes/functions-core.php, so there is very little in it to break. If it
+  does, WordPress's own recovery mode handles it, and an update that lands a
+  broken one is caught by the post-update crash test and rolled back.
+* modules/wpcode-values/includes/frontend.php - Beaver Builder includes this
+  directly. It is a stable ~30-line stub that loads frontend-render.php inside
+  try/catch, so the render code that actually gets edited is protected.
+
+A fatal anywhere in the plugin also arms safe mode: the next request loads only
+a notice with a "Resume plugin" button, so a crash cannot repeat.
+
 = Updates =
 
 This plugin does not live on wordpress.org, so it checks a source you control -
@@ -238,6 +260,17 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.3.0 =
+* Every file can now be deleted or corrupted without taking the site down.
+  Includes are loaded through a guard that catches a parse error as well as a
+  missing file, every hook this plugin registers runs inside a net, and what
+  failed is reported in an admin notice.
+* The features moved to includes/functions-core.php, leaving the main plugin
+  file as a small loader - because a plugin's main file is the one thing PHP
+  compiles before any of its own code can run.
+* The module's render template is now loaded from a small stable stub, so a
+  problem in the render code cannot break the pages using the module.
 
 = 7.2.0 =
 * This plugin no longer appears on the Plugins screen's update list and no
