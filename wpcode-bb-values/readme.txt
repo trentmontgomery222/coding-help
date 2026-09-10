@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.3.0
+Stable tag: 7.4.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -60,11 +60,18 @@ know what these do better than the plugin does.
 
 = Per page, and site-wide =
 
-By default a value set on a module changes that page only.
+A module has three tabs.
 
-The snippet decides which settings are different, with a siteWide marker.
-A setting marked siteWide is edited on any module, in any page, and the value
-applies everywhere that snippet runs through this module:
+**This page** - every setting, filled in with the value in force. Change one and
+it applies to this page alone, whatever else is going on.
+
+**Site-wide** - the settings the snippet marked siteWide, plus PHP values.
+Change one here and it changes on every page that runs this snippet. This tab
+only exists when the snippet has such settings.
+
+**Setup** - which snippet the module runs, the Extra settings box, and Reset.
+
+The snippet decides which settings can be site-wide, with a siteWide marker:
 
     // one setting
     {key: 'calendarID', siteWide: 'true', value: 'c_x'},
@@ -78,90 +85,29 @@ applies everywhere that snippet runs through this module:
     // or name the ones you want
     {key: 'halfDayEvent', value: {
         badgeText: 'Half Day',
-        primaryColor: 'orange',
         siteWide: ['badgeText']
     }}
 
-Site-wide boxes are labelled "(site-wide)" in the module and always show the
-value in force everywhere, so you are editing the real thing rather than a
-copy. Typing the snippet's own value back in clears it again. Tools > WPCode
-Values lists which settings are site-wide and what each is currently set to,
-with a button to reset them.
+A site-wide setting still appears on the "This page" tab, so one page can
+override the site-wide value for itself while every other page keeps following
+it. Which is the point: set the badge text once for the whole site, then say
+something different on the one page that needs to.
 
-A site-wide value cannot reach a snippet placed by any other means, because
-the only output this plugin can touch is its own module's.
+Values are read narrowest-first: this page's box, then the site-wide value,
+then the value written in the snippet.
 
-= More than one set of settings =
+PHP values are site-wide only. Their value is read at runtime wherever the
+snippet runs, including where no module is involved, so a per-page value could
+not be honoured there and is not offered.
 
-A page can hold as many modules as you like. Each one points at its own
-snippet and keeps its own values, and nothing one module does reaches another.
+= Resetting =
 
-A single snippet can also hold more than one configurations array - name them
-configurations, configurationsFooter, configurationsSidebar and so on. Each
-array gets its own group in the module, so two arrays using the same key stay
-separately editable.
+To reset one setting, put its box back to the value it had when you opened it.
 
-One thing to watch when two modules on the same page run different snippets:
-if both snippets declare a variable with the same name at the top level, the
-second one loaded wins in the browser, whatever this plugin does. Give each
-snippet's array (and its CONFIG helper) a distinct name.
-
-= Marking a variable Configurable =
-
-Settings do not have to live in a configurations array. A "Configurable"
-comment makes any assignment editable, wherever it is in the snippet:
-
-    var apiKey = 'AIza-x';       // Configurable siteWide: the API key
-    var debugMode = 'false';     // Configurable - turn console logging on
-    var timezone = 'America/New_York';   // Configurable
-
-The assignment has to start its line, and the comment has to be on that same
-line. Anything after "Configurable" (past a colon or dash) becomes the
-setting's help text, and siteWide works exactly as it does in an array. These
-appear in the module under "Marked variables".
-
-This works in CSS too - //, # and /* */ all count as the marker:
-
-    :root{
-      --accent: #1A73E8;   /* Configurable siteWide: brand colour */
-      --font-body: "Google Sans", Roboto, sans-serif;  /* Configurable */
-    }
-
-The comment marks where the value ends, so a colour, a size or a font stack
-with its own commas and quotes is kept exactly as written. Prefer custom
-properties over plain declarations: a plain "background:" appears all over a
-stylesheet and only the first one marked wins.
-
-= PHP snippets =
-
-WPCode RUNS a PHP snippet rather than printing it, so its source never
-reaches the browser and there is nothing to rewrite on the way out. A PHP
-snippet asks for its values instead:
-
-    $api_key   = wpcodebbv_cfg( 'api_key', 'AIza-DEFAULT' );   // Configurable siteWide
-    $debug     = wpcodebbv_cfg( 'debug', false );              // Configurable
-    $max_items = wpcodebbv_cfg( 'max_items', 25 );             // Configurable
-    $roles     = wpcodebbv_cfg( 'roles', array( 'editor' ) );  // Configurable
-
-The default you write is what the module shows and what applies until someone
-changes it. You get back the same TYPE you passed as the default - a boolean
-default returns a boolean, a number a number, an array an array - so the
-snippet never has to think about the editor typing text.
-
-PHP values are ALWAYS site-wide. There is no per-page option for them, and no
-need to write siteWide: a PHP snippet usually runs in more than one place - a
-WPCode auto-insert, a shortcode in a template - and a per-page value would
-apply on the one page and silently not apply anywhere else it runs. Changing a
-PHP value changes it everywhere the snippet runs, module or no module.
-
-Only JavaScript and CSS values are per-page by default, with siteWide to opt
-one of them into applying everywhere.
-
-A plain PHP assignment marked Configurable - $var = 'x'; or define( ... ) - is
-listed on Tools > WPCode Values but NOT offered in the module, because nothing
-could make it work: WPCode executes a PHP snippet, so its source never reaches
-the output there is to rewrite. That screen shows the wpcodebbv_cfg() line to
-replace it with.
+To reset more than one, use Reset on the Setup tab: clear this page's changes,
+clear this snippet's site-wide values, or both. It takes effect when you save
+and then goes back to "Leave everything as it is". Tools > WPCode Values also
+has a button to clear a snippet's site-wide values.
 
 = Reading the settings in your snippet =
 
@@ -260,6 +206,18 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.4.0 =
+* A page can now override a site-wide value for itself. Site-wide settings
+  appear on both tabs: change one on "Site-wide" and it changes everywhere;
+  change it on "This page" and only that page differs, while every other page
+  keeps following the site-wide value.
+* Added Reset on the Setup tab - clear this page's changes, this snippet's
+  site-wide values, or both. Resetting one setting is still just putting its
+  box back to what it said when you opened it.
+* The module's settings are now split into "This page", "Site-wide" and
+  "Setup" tabs, so nothing changes the whole site by accident, and each group
+  heading shows how many settings it holds.
 
 = 7.3.0 =
 * Every file can now be deleted or corrupted without taking the site down.

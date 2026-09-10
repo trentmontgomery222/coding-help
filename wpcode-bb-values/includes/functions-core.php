@@ -119,29 +119,21 @@ function wpcodebbv_editor_note( $snippet_id, $overrides = array() ) {
 		$changed = count( (array) $overrides );
 
 		$lines[] = sprintf(
-			/* translators: 1: number of settings, 2: number changed here */
-			_n( '%1$d setting, %2$d changed here.', '%1$d settings, %2$d changed here.', $total, 'wpcode-bb-values' ),
+			/* translators: 1: number of settings, 2: number differing from the snippet */
+			_n( '%1$d setting, %2$d changed.', '%1$d settings, %2$d changed.', $total, 'wpcode-bb-values' ),
 			$total,
 			$changed
 		);
 
-		if ( $site_wide ) {
+		if ( $site_wide || $php ) {
 			$lines[] = sprintf(
 				/* translators: %d: number of settings */
-				_n( '%d is marked siteWide - changing it changes every page.', '%d are marked siteWide - changing them changes every page.', $site_wide, 'wpcode-bb-values' ),
-				$site_wide
+				_n( '%d of them is site-wide.', '%d of them are site-wide.', $site_wide + $php, 'wpcode-bb-values' ),
+				$site_wide + $php
 			);
 		}
 
-		if ( $php ) {
-			$lines[] = sprintf(
-				/* translators: %d: number of settings */
-				_n( '%d is a PHP value, which is always site-wide.', '%d are PHP values, which are always site-wide.', $php, 'wpcode-bb-values' ),
-				$php
-			);
-		}
-
-		$lines[] = __( 'Edit them on this module\'s Settings tab.', 'wpcode-bb-values' );
+		$lines[] = __( 'This page\'s values are on the "This page" tab; the ones that reach every page are on "Site-wide".', 'wpcode-bb-values' );
 	} else {
 		$lines[] = __( 'This snippet\'s settings could not be read, so the Settings tab is empty. Use Extra settings on the Setup tab, as "path = value" lines.', 'wpcode-bb-values' );
 	}
@@ -641,6 +633,40 @@ function wpcodebbv_describe( $path, $leaf, $shared = '' ) {
 }
 
 /**
+ * One setting's control. A value that reads as true/false can only ever
+ * be true or false, so it gets a dropdown; everything else is text.
+ *
+ * @param string $label
+ * @param string $default
+ * @param array  $leaf
+ * @param string $help
+ * @return array
+ */
+function wpcodebbv_value_field( $label, $default, $leaf, $help ) {
+	$label = empty( $leaf['php'] ) ? $label : $label . ' ' . __( '(PHP)', 'wpcode-bb-values' );
+
+	if ( wpcodebbv_is_boolean( $default ) ) {
+		return array(
+			'type'    => 'select',
+			'label'   => $label,
+			'default' => strtolower( trim( $default ) ),
+			'options' => array(
+				'true'  => __( 'true', 'wpcode-bb-values' ),
+				'false' => __( 'false', 'wpcode-bb-values' ),
+			),
+			'help'    => $help,
+		);
+	}
+
+	return array(
+		'type'    => 'text',
+		'label'   => $label,
+		'default' => $default,
+		'help'    => $help,
+	);
+}
+
+/**
  * The module's field schema.
  *
  * Every setting found in every snippet gets its own field, grouped into
@@ -704,77 +730,100 @@ function wpcodebbv_form() {
 		}
 
 		foreach ( $groups as $group => $members ) {
-			$fields = array();
+			$page_fields = array();
+			$wide_fields = array();
 
 			foreach ( $members as $path => $member ) {
 				$key    = wpcodebbv_field_key( $snippet_id, $path );
 				$leaf   = $member['leaf'];
 				$shared = isset( $globals[ $path ] ) ? (string) $globals[ $path ] : '';
-				$help   = wpcodebbv_describe( $path, $leaf, $shared );
+				$snippet_value = (string) $leaf['value'];
 
-				// A site-wide setting shows the value in force everywhere,
-				// so the box is editing the real thing rather than a copy.
-				$current = ! empty( $leaf['global'] ) && '' !== $shared
-					? $shared
-					: (string) $leaf['value'];
+				// What this setting is worth right now, before this page
+				// says anything about it.
+				$effective = '' !== $shared ? $shared : $snippet_value;
 
-				if ( ! empty( $leaf['php'] ) ) {
-					$label = $member['label'] . ' ' . __( '(PHP, site-wide)', 'wpcode-bb-values' );
-				} elseif ( ! empty( $leaf['global'] ) ) {
-					$label = $member['label'] . ' ' . __( '(site-wide)', 'wpcode-bb-values' );
-				} else {
-					$label = $member['label'];
-				}
-
-				if ( wpcodebbv_is_boolean( $current ) ) {
-					// A yes/no setting can only ever be true or false.
-					$fields[ $key ] = array(
-						'type'    => 'select',
-						'label'   => $label,
-						'default' => strtolower( trim( $current ) ),
-						'options' => array(
-							'true'  => __( 'true', 'wpcode-bb-values' ),
-							'false' => __( 'false', 'wpcode-bb-values' ),
-						),
-						'help'    => $help,
+				/*
+				 * Three layers, and which controls a setting gets depends
+				 * on where it can meaningfully live:
+				 *
+				 *  - an ordinary setting: one box, on this page.
+				 *  - a siteWide setting: a box on the Site-wide tab that
+				 *    changes it everywhere, AND a box on this tab that
+				 *    overrides it for this page alone.
+				 *  - a PHP setting: site-wide only. Its value is read at
+				 *    runtime wherever the snippet runs, including where no
+				 *    module is involved, so a per-page value could not be
+				 *    honoured there and is not offered.
+				 */
+				if ( empty( $leaf['php'] ) ) {
+					$page_fields[ $key ] = wpcodebbv_value_field(
+						$member['label'],
+						$effective,
+						$leaf,
+						empty( $leaf['global'] )
+							? wpcodebbv_describe( $path, $leaf, $shared )
+							: wpcodebbv_describe( $path, $leaf, $shared ) . ' ' . __( 'This box overrides it for this page only. Put it back to the value shown when you opened it to follow the site-wide value again.', 'wpcode-bb-values' )
 					);
-
-					continue;
 				}
 
-				$fields[ $key ] = array(
-					'type'    => 'text',
-					'label'   => $label,
-					'default' => $current,
-					'help'    => $help,
-				);
-			}
-
-			if ( empty( $fields ) ) {
-				continue;
+				if ( ! empty( $leaf['global'] ) || ! empty( $leaf['php'] ) ) {
+					$wide_fields[ $key . '__wide' ] = wpcodebbv_value_field(
+						$member['label'],
+						$effective,
+						$leaf,
+						sprintf(
+							/* translators: %s: the value written in the snippet */
+							__( 'Changing this changes it on every page. Set it back to the snippet\'s own value ("%s") to clear it.', 'wpcode-bb-values' ),
+							$snippet_value
+						)
+					);
+				}
 			}
 
 			$title = $many_snippets ? $snippet['title'] . ' - ' . $group : $group;
 
-			$section_slug = 's' . $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $group );
+			// The count belongs in the heading: the groups are collapsed,
+			// so it is the only clue to what is inside before opening one.
+			$counted = $title . ' (' . count( $members ) . ')';
 
-			$owned[ $snippet_id ]['sections'][] = $section_slug;
+			if ( $page_fields ) {
+				$slug = 's' . $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $group );
 
-			foreach ( array_keys( $fields ) as $field_name ) {
-				$owned[ $snippet_id ]['fields'][] = $field_name;
+				$owned[ $snippet_id ]['sections'][] = $slug;
+
+				foreach ( array_keys( $page_fields ) as $field_name ) {
+					$owned[ $snippet_id ]['fields'][] = $field_name;
+				}
+
+				$sections[ $slug ] = array(
+					'title'  => $counted,
+					'fields' => $page_fields,
+					// Groups start closed so the panel opens as a short list
+					// of headings rather than every setting at once. Beaver
+					// Builder versions that do not know this key just render
+					// the section open, which is only a cosmetic difference -
+					// unlike a field 'type', a section key is read or ignored,
+					// never turned into a file to load.
+					'collapsed' => __( 'General', 'wpcode-bb-values' ) !== $group,
+				);
 			}
 
-			$sections[ $section_slug ] = array(
-				'title'  => $title,
-				'fields' => $fields,
-				// Groups start closed so the panel opens as a short list
-				// of headings rather than every setting at once. Beaver
-				// Builder versions that do not know this key just render
-				// the section open, which is only a cosmetic difference -
-				// unlike a field 'type', a section key is read or ignored,
-				// never turned into a file to load.
-				'collapsed' => __( 'General', 'wpcode-bb-values' ) !== $group,
-			);
+			if ( $wide_fields ) {
+				$slug = 'w' . $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $group );
+
+				$owned[ $snippet_id ]['sections'][] = $slug;
+
+				foreach ( array_keys( $wide_fields ) as $field_name ) {
+					$owned[ $snippet_id ]['fields'][] = $field_name;
+				}
+
+				$wide_sections[ $slug ] = array(
+					'title'     => $title . ' (' . count( $wide_fields ) . ')',
+					'fields'    => $wide_fields,
+					'collapsed' => true,
+				);
+			}
 		}
 	}
 
@@ -817,11 +866,23 @@ function wpcodebbv_form() {
 		);
 	}
 
-	return array(
+	$tabs = array(
 		'general' => array(
-			'title'    => __( 'Settings', 'wpcode-bb-values' ),
+			'title'    => __( 'This page', 'wpcode-bb-values' ),
 			'sections' => $sections,
 		),
+	);
+
+	// A tab of its own for the values that reach beyond this page, so
+	// nobody changes the whole site while meaning to change one page.
+	if ( $wide_sections ) {
+		$tabs['sitewide'] = array(
+			'title'    => __( 'Site-wide', 'wpcode-bb-values' ),
+			'sections' => $wide_sections,
+		);
+	}
+
+	$tabs += array(
 		// A second tab, so the snippet this module points at is not
 		// sitting under the cursor next to the values people edit every
 		// day. Deliberately NOT keyed 'advanced': Beaver Builder adds a
@@ -874,9 +935,28 @@ function wpcodebbv_form() {
 						),
 					),
 				),
+				'reset'    => array(
+					'title'  => __( 'Reset', 'wpcode-bb-values' ),
+					'fields' => array(
+						'reset_action' => array(
+							'type'    => 'select',
+							'label'   => __( 'Reset values', 'wpcode-bb-values' ),
+							'default' => '',
+							'options' => array(
+								''      => __( 'Leave everything as it is', 'wpcode-bb-values' ),
+								'page'  => __( 'Clear this page\'s changes', 'wpcode-bb-values' ),
+								'wide'  => __( 'Clear this snippet\'s site-wide values', 'wpcode-bb-values' ),
+								'both'  => __( 'Clear both', 'wpcode-bb-values' ),
+							),
+							'help'    => __( 'Takes effect when you save, then goes back to "Leave everything as it is". Clearing this page returns every setting to whatever the site-wide value or the snippet says; clearing site-wide returns those to the snippet, on every page. To reset one setting rather than all of them, put its box back to the value it had when you opened it.', 'wpcode-bb-values' ),
+						),
+					),
+				),
 			),
 		),
 	);
+
+	return $tabs;
 }
 
 /**

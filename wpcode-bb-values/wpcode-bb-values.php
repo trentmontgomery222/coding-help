@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.3.0
+ * Version:           7.4.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.3.0' );
+define( 'WPCODEBBV_VERSION', '7.4.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 

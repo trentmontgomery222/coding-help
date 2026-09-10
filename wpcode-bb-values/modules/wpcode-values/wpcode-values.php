@@ -70,45 +70,66 @@ class WPCodeBBV_Module extends FLBuilderModule {
 				return $settings;
 			}
 
-			$shared = wpcodebbv_globals_for( $id );
+			$reset = isset( $settings->reset_action ) ? (string) $settings->reset_action : '';
+
+			// Asked for on the Setup tab, applied here, then forgotten -
+			// so it reads as a one-off action rather than a mode the
+			// module is stuck in.
+			if ( 'wide' === $reset || 'both' === $reset ) {
+				wpcodebbv_reset_globals( $id );
+			}
+
+			$settings->reset_action = '';
+			$shared                 = wpcodebbv_globals_for( $id );
 
 			foreach ( $snippets[ $id ]['settings'] as $path => $leaf ) {
-				if ( empty( $leaf['global'] ) ) {
-					continue;
-				}
+				$key      = wpcodebbv_field_key( $id, $path );
+				$wide_key = $key . '__wide';
+				$snippet  = (string) $leaf['value'];
+				$is_wide  = ! empty( $leaf['global'] ) || ! empty( $leaf['php'] );
 
-				$key = wpcodebbv_field_key( $id, $path );
-
-				if ( ! isset( $settings->{$key} ) ) {
-					continue;
-				}
-
-				$typed   = trim( (string) $settings->{$key} );
-				$snippet = (string) $leaf['value'];
-
-				// What this setting is worth everywhere right now. The box
-				// was filled with exactly this when the panel opened, so
-				// anything else means somebody typed over it - and saving a
-				// module nobody touched leaves the shared value alone
-				// instead of reverting it to whatever this page last saw.
+				// The value in force everywhere before this save.
 				$current = isset( $shared[ $path ] ) && '' !== $shared[ $path ]
 					? (string) $shared[ $path ]
 					: $snippet;
 
-				if ( '' !== $typed && $typed !== $current ) {
-					// Typing the snippet's own value back in is how you
-					// clear a site-wide value, rather than pinning it.
-					wpcodebbv_set_global( $id, $path, $typed === $snippet ? '' : $typed );
+				if ( $is_wide && isset( $settings->{$wide_key} ) ) {
+					$typed = trim( (string) $settings->{$wide_key} );
+
+					// The box opened showing what is in force, so anything
+					// else means somebody typed over it. Saving a module
+					// nobody touched therefore leaves the shared value
+					// alone rather than reverting it to what this page
+					// last saw.
+					if ( 'wide' !== $reset && 'both' !== $reset && '' !== $typed && $typed !== $current ) {
+						wpcodebbv_set_global( $id, $path, $typed === $snippet ? '' : $typed );
+					}
+
+					// Never kept on the module: the shared store is the
+					// only copy, so the box always opens showing what is
+					// actually in force.
+					unset( $settings->{$wide_key} );
 				}
 
-				// Site-wide settings are not kept on the module at all.
-				// The shared store is the only copy, so the box always
-				// opens showing what is actually in force everywhere.
-				unset( $settings->{$key} );
+				if ( empty( $leaf['php'] ) && isset( $settings->{$key} ) ) {
+					$typed = trim( (string) $settings->{$key} );
+
+					// Re-read, since a site-wide edit above may have just
+					// changed what this page is inheriting.
+					$live = wpcodebbv_globals_for( $id );
+					$now  = isset( $live[ $path ] ) && '' !== $live[ $path ] ? (string) $live[ $path ] : $snippet;
+
+					if ( 'page' === $reset || 'both' === $reset || '' === $typed || $typed === $now ) {
+						// Nothing to override: drop the copy so this page
+						// follows the site-wide value or the snippet, and
+						// keeps following it as those change.
+						unset( $settings->{$key} );
+					}
+				}
 			}
 		} catch ( \Throwable $e ) {
 			if ( function_exists( 'wpcodebbv_log' ) ) {
-				wpcodebbv_log( 'could not store site-wide values: ' . $e->getMessage() );
+				wpcodebbv_log( 'could not store values: ' . $e->getMessage() );
 			}
 		}
 
@@ -180,21 +201,21 @@ class WPCodeBBV_Module extends FLBuilderModule {
 			if ( isset( $snippets[ $id ]['settings'] ) && is_array( $snippets[ $id ]['settings'] ) ) {
 				foreach ( $snippets[ $id ]['settings'] as $path => $leaf ) {
 					$snippet = (string) $leaf['value'];
+					$shared  = isset( $globals[ $path ] ) ? (string) $globals[ $path ] : '';
 
-					if ( ! empty( $leaf['global'] ) ) {
-						/*
-						 * Marked siteWide in the snippet. The shared value
-						 * is what counts, wherever it was last edited -
-						 * this module's own box is only how it gets
-						 * edited, never what decides the page.
-						 */
-						$value = isset( $globals[ $path ] ) ? (string) $globals[ $path ] : $snippet;
-					} else {
-						$key    = wpcodebbv_field_key( $id, $path );
-						$stored = isset( $settings->{$key} ) ? (string) $settings->{$key} : '';
+					// What this setting is worth before this page speaks.
+					$value = '' !== $shared ? $shared : $snippet;
 
-						// Blank means "leave the snippet's value alone".
-						$value = '' === trim( $stored ) ? $snippet : $stored;
+					// A PHP value is read at runtime wherever the snippet
+					// runs, including where no module is involved, so it
+					// has no per-page layer to consult.
+					if ( empty( $leaf['php'] ) ) {
+						$key  = wpcodebbv_field_key( $id, $path );
+						$page = isset( $settings->{$key} ) ? trim( (string) $settings->{$key} ) : '';
+
+						if ( '' !== $page ) {
+							$value = $page;
+						}
 					}
 
 					if ( $value !== $snippet ) {
