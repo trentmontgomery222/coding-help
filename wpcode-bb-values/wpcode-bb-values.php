@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           6.1.0
+ * Version:           6.2.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -38,10 +38,12 @@
  *    response, and Beaver Builder reports a plugin conflict the moment
  *    you open the module to edit it. An earlier version of this plugin
  *    did exactly that with a made-up 'html' field type.
- *  - No 'toggle'. Beaver Builder's toggle takes a list of field NAMES
- *    that exist elsewhere in the form; the same earlier version handed
- *    it field definitions instead, leaving the form pointing at fields
- *    that were never registered. One section per snippet needs none.
+ *  - 'toggle' is used in exactly one place - the snippet picker, to hide
+ *    every other snippet's settings - and it takes lists of NAMES that
+ *    exist elsewhere in this same form: section slugs and field names,
+ *    as strings. An earlier version handed it field DEFINITIONS
+ *    instead, leaving the form pointing at fields that were never
+ *    registered. That is the shape to keep in mind before touching it.
  *
  * The plugin hooks 'init' (register the module), 'admin_menu' (a
  * read-only help screen) and two snippet-save hooks that only clear a
@@ -64,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '6.1.0' );
+define( 'WPCODEBBV_VERSION', '6.2.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -678,6 +680,10 @@ function wpcodebbv_form() {
 
 	$many_snippets = count( $snippets ) > 1;
 
+	// Which sections and fields belong to which snippet, so the module
+	// can show only the one it is actually running.
+	$owned = array();
+
 	foreach ( $snippets as $snippet_id => $snippet ) {
 		$globals = wpcodebbv_globals_for( $snippet_id );
 
@@ -742,7 +748,15 @@ function wpcodebbv_form() {
 
 			$title = $many_snippets ? $snippet['title'] . ' - ' . $group : $group;
 
-			$sections[ 's' . $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $group ) ] = array(
+			$section_slug = 's' . $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $group );
+
+			$owned[ $snippet_id ]['sections'][] = $section_slug;
+
+			foreach ( array_keys( $fields ) as $field_name ) {
+				$owned[ $snippet_id ]['fields'][] = $field_name;
+			}
+
+			$sections[ $section_slug ] = array(
 				'title'  => $title,
 				'fields' => $fields,
 				// Groups start closed so the panel opens as a short list
@@ -754,6 +768,29 @@ function wpcodebbv_form() {
 				'collapsed' => __( 'General', 'wpcode-bb-values' ) !== $group,
 			);
 		}
+	}
+
+	// The snippet picker, and the toggle that hides every other
+	// snippet's settings behind it.
+	$snippet_options = array( '' => __( '— select a snippet —', 'wpcode-bb-values' ) );
+	$toggle          = array( '' => array( 'sections' => array(), 'fields' => array() ) );
+
+	foreach ( $snippets as $snippet_id => $snippet ) {
+		if ( empty( $owned[ $snippet_id ] ) ) {
+			continue;
+		}
+
+		$snippet_options[ $snippet_id ] = sprintf(
+			/* translators: 1: snippet title, 2: snippet ID */
+			__( '%1$s (ID %2$d)', 'wpcode-bb-values' ),
+			$snippet['title'],
+			$snippet_id
+		);
+
+		$toggle[ $snippet_id ] = array(
+			'sections' => $owned[ $snippet_id ]['sections'],
+			'fields'   => $owned[ $snippet_id ]['fields'],
+		);
 	}
 
 	if ( empty( $sections ) ) {
@@ -788,10 +825,32 @@ function wpcodebbv_form() {
 					'title'  => __( 'Snippet', 'wpcode-bb-values' ),
 					'fields' => array(
 						'wpcode_id' => array(
-							'type'    => 'text',
-							'label'   => __( 'WPCode snippet ID', 'wpcode-bb-values' ),
+							'type'    => 'select',
+							'label'   => __( 'WPCode snippet', 'wpcode-bb-values' ),
 							'default' => '',
-							'help'    => __( 'Just the number. WPCode shows it as [wpcode id="123"] on the snippet, and it is the id= number in the address bar while editing that snippet. Changing this swaps which snippet the module runs, so it lives here rather than beside the values.', 'wpcode-bb-values' ),
+							'options' => $snippet_options,
+							/*
+							 * This is what keeps a module showing only its
+							 * own snippet's settings. Beaver Builder's
+							 * toggle takes lists of NAMES that exist
+							 * elsewhere in this same form - section slugs
+							 * and field names, as strings. An early version
+							 * of this plugin handed it field definitions
+							 * instead and left the form pointing at fields
+							 * that were never registered, which is the
+							 * mistake this comment exists to prevent
+							 * repeating. Sections and fields are both
+							 * listed so that hiding still works if only
+							 * one of the two is honoured.
+							 */
+							'toggle'  => $toggle,
+							'help'    => __( 'Pick the snippet this module runs. Only that snippet\'s settings appear on the Settings tab. Changing this swaps which snippet the module runs, which is why it lives here rather than beside the values.', 'wpcode-bb-values' ),
+						),
+						'wpcode_id_manual' => array(
+							'type'    => 'text',
+							'label'   => __( 'Snippet ID (if not listed)', 'wpcode-bb-values' ),
+							'default' => '',
+							'help'    => __( 'Only needed when a snippet is missing from the list above - the number in [wpcode id="123"]. The module will run it, but its settings cannot be listed, so use the Extra settings box below.', 'wpcode-bb-values' ),
 						),
 					),
 				),

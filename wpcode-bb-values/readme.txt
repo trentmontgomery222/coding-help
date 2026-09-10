@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 6.1.0
+Stable tag: 6.2.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -26,9 +26,10 @@ This plugin finds that array, lists every setting in it, and lets a page
 editor override any of them from a Beaver Builder module - without touching
 the snippet and without affecting any other page.
 
-Drop the "WPCode Values" module on a page and enter your snippet's ID - the
-number in [wpcode id="123"]. Every setting in that snippet appears in the
-module straight away, already filled in with the value the snippet uses.
+Drop the "WPCode Values" module on a page and pick your snippet from the list
+on the Setup tab. Every setting in THAT snippet appears on the Settings tab,
+already filled in with the value the snippet uses - and nothing from any other
+snippet does.
 Change what you want for this page, leave the rest alone, and clear a box to
 let the snippet's own value through again.
 
@@ -182,6 +183,13 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 6.2.0 =
+* A module now shows only the settings of the snippet it is running. Every
+  other snippet's settings are hidden rather than listed alongside them.
+* The snippet is chosen from a list on the Setup tab instead of typed. A box
+  for typing an ID by hand is still there for a snippet the list cannot show;
+  the module runs it, but its settings have to go in Extra settings.
 
 = 6.1.0 =
 * The Configurable marker now works in CSS and PHP snippets, not just

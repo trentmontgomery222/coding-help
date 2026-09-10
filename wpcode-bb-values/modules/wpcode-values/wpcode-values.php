@@ -53,8 +53,11 @@ class WPCodeBBV_Module extends FLBuilderModule {
 		try {
 			$id = 0;
 
-			if ( isset( $settings->wpcode_id ) && preg_match( '/(\\d+)/', (string) $settings->wpcode_id, $match ) ) {
-				$id = (int) $match[1];
+			foreach ( array( 'wpcode_id_manual', 'wpcode_id' ) as $key ) {
+				if ( isset( $settings->{$key} ) && preg_match( '/(\\d+)/', (string) $settings->{$key}, $match ) ) {
+					$id = (int) $match[1];
+					break;
+				}
 			}
 
 			if ( $id < 1 || ! function_exists( 'wpcodebbv_snippets' ) ) {
@@ -119,11 +122,16 @@ class WPCodeBBV_Module extends FLBuilderModule {
 	 */
 	public function get_snippet_id() {
 		$settings = is_object( $this->settings ) ? $this->settings : new stdClass();
-		$raw      = isset( $settings->wpcode_id ) ? (string) $settings->wpcode_id : '';
 
-		// Tolerate a pasted [wpcode id="123"] or a bare number.
-		if ( preg_match( '/(\d+)/', $raw, $match ) ) {
-			return (int) $match[1];
+		// The typed-in box wins when it is filled, since it is only ever
+		// filled for a snippet the picker could not list.
+		foreach ( array( 'wpcode_id_manual', 'wpcode_id' ) as $key ) {
+			$raw = isset( $settings->{$key} ) ? trim( (string) $settings->{$key} ) : '';
+
+			// Tolerate a pasted [wpcode id="123"] or a bare number.
+			if ( '' !== $raw && preg_match( '/(\d+)/', $raw, $match ) ) {
+				return (int) $match[1];
+			}
 		}
 
 		return 0;
