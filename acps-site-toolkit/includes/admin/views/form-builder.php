@@ -85,17 +85,55 @@ $settings['style'] = wp_parse_args( $settings['style'], array( 'accent' => '', '
 					'file'        => 'paperclip', 'scale' => 'chart-bar', 'rating' => 'star-filled',
 					'page_picker' => 'admin-page', 'section' => 'minus', 'heading' => 'heading', 'hidden' => 'hidden',
 				);
+
+				// Group the palette so it's quick to scan. Any type not listed in a
+				// group falls into "Other" so new field types still appear.
+				$type_groups = array(
+					__( 'Text', 'acps-site-toolkit' )          => array( 'short_text', 'long_text', 'email', 'number' ),
+					__( 'Choices', 'acps-site-toolkit' )       => array( 'dropdown', 'radio', 'checkbox', 'chips', 'scale', 'rating' ),
+					__( 'Date & time', 'acps-site-toolkit' )   => array( 'date', 'time' ),
+					__( 'Upload', 'acps-site-toolkit' )        => array( 'file' ),
+					__( 'Layout', 'acps-site-toolkit' )        => array( 'heading', 'section' ),
+					__( 'Advanced', 'acps-site-toolkit' )      => array( 'page_picker', 'hidden' ),
+				);
+				$grouped = array();
+				foreach ( $type_groups as $group_label => $slugs ) {
+					foreach ( $slugs as $slug ) {
+						if ( isset( $types[ $slug ] ) ) {
+							$grouped[ $group_label ][ $slug ] = $types[ $slug ];
+						}
+					}
+				}
+				// Sweep up anything not placed above.
+				$placed = array();
+				foreach ( $type_groups as $slugs ) {
+					$placed = array_merge( $placed, $slugs );
+				}
+				foreach ( $types as $slug => $meta ) {
+					if ( ! in_array( $slug, $placed, true ) ) {
+						$grouped[ __( 'Other', 'acps-site-toolkit' ) ][ $slug ] = $meta;
+					}
+				}
+
+				$render_type_button = function ( $slug, $meta ) use ( $type_icons ) {
+					?>
+					<li>
+						<button type="button" class="button acps-add-field" data-type="<?php echo esc_attr( $slug ); ?>">
+							<span class="dashicons dashicons-<?php echo esc_attr( isset( $type_icons[ $slug ] ) ? $type_icons[ $slug ] : 'plus-alt2' ); ?>" aria-hidden="true"></span>
+							<span><?php echo esc_html( $meta['label'] ); ?></span>
+						</button>
+					</li>
+					<?php
+				};
 				?>
-				<ul class="acps-type-list">
-					<?php foreach ( $types as $slug => $meta ) : ?>
-						<li>
-							<button type="button" class="button acps-add-field" data-type="<?php echo esc_attr( $slug ); ?>">
-								<span class="dashicons dashicons-<?php echo esc_attr( isset( $type_icons[ $slug ] ) ? $type_icons[ $slug ] : 'plus-alt2' ); ?>" aria-hidden="true"></span>
-								<span><?php echo esc_html( $meta['label'] ); ?></span>
-							</button>
-						</li>
-					<?php endforeach; ?>
-				</ul>
+				<?php foreach ( $grouped as $group_label => $group_types ) : ?>
+					<p class="acps-type-group-label"><?php echo esc_html( $group_label ); ?></p>
+					<ul class="acps-type-list">
+						<?php foreach ( $group_types as $slug => $meta ) : ?>
+							<?php $render_type_button( $slug, $meta ); ?>
+						<?php endforeach; ?>
+					</ul>
+				<?php endforeach; ?>
 			</section>
 
 			<!-- Center: canvas. -->

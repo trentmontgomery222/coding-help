@@ -146,7 +146,7 @@
 		if ( ! this.fields.length ) {
 			var empty = document.createElement( 'li' );
 			empty.className = 'acps-canvas-empty';
-			empty.textContent = 'No fields yet. Add one from the left.';
+			empty.textContent = 'No fields yet — pick a field type on the left to start building your form.';
 			this.canvas.appendChild( empty );
 			return;
 		}
