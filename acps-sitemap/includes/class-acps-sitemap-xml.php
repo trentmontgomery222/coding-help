@@ -380,9 +380,9 @@ class ACPS_Sitemap_XML {
 			)
 		);
 
-		$urls      = array();
-		$is_page   = ( 'page' === $post_type );
-		$front_id  = (int) get_option( 'page_on_front' );
+		$urls     = array();
+		$is_page  = ( 'page' === $post_type );
+		$front_id = (int) get_option( 'page_on_front' );
 
 		foreach ( $query->posts as $post ) {
 			// The front page is represented by the home URL in the "extra" sitemap.

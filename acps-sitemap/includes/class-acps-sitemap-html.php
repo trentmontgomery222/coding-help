@@ -87,10 +87,10 @@ class ACPS_Sitemap_HTML {
 		if ( is_post_type_hierarchical( $post_type ) ) {
 			$items = wp_list_pages(
 				array(
-					'post_type' => $post_type,
-					'exclude'   => implode( ',', $exclude ),
-					'title_li'  => '',
-					'echo'      => 0,
+					'post_type'   => $post_type,
+					'exclude'     => implode( ',', $exclude ),
+					'title_li'    => '',
+					'echo'        => 0,
 					'sort_column' => 'menu_order, post_title',
 				)
 			);

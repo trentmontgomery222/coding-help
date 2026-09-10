@@ -27,6 +27,9 @@ class ACPS_Sitemap {
 	/** @var ACPS_Sitemap_HTML */
 	public $html;
 
+	/** @var ACPS_Sitemap_Updater */
+	public $updater;
+
 	/** @var ACPS_Sitemap_Admin|null */
 	public $admin = null;
 
@@ -48,12 +51,18 @@ class ACPS_Sitemap {
 	private function __construct() {
 		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-xml.php';
 		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-html.php';
+		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-updater.php';
 
-		$this->xml  = new ACPS_Sitemap_XML();
-		$this->html = new ACPS_Sitemap_HTML();
+		$this->xml     = new ACPS_Sitemap_XML();
+		$this->html    = new ACPS_Sitemap_HTML();
+		$this->updater = new ACPS_Sitemap_Updater();
 
 		$this->xml->hooks();
 		$this->html->hooks();
+		$this->updater->register();
+
+		// Recheck the update source immediately after settings change.
+		add_action( 'update_option_' . self::OPTION, array( 'ACPS_Sitemap_Updater', 'flush_cache' ) );
 
 		if ( is_admin() ) {
 			require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-admin.php';
@@ -95,6 +104,7 @@ class ACPS_Sitemap {
 	 */
 	public static function defaults() {
 		return array(
+			// Sitemap generation.
 			'enable_xml'           => 1,
 			'post_types'           => array( 'post', 'page' ),
 			'taxonomies'           => array(),
@@ -102,6 +112,21 @@ class ACPS_Sitemap {
 			'disable_core_sitemap' => 1,
 			'add_to_robots'        => 1,
 			'max_per_sitemap'      => 1000,
+
+			// Self-hosted updates (see UPDATE-SYSTEM.md).
+			'update_enabled'       => 1,
+			'update_auto'          => 0,
+			'update_source'        => 'github', // 'url' | 'github'.
+			'update_manifest'      => '',
+			'update_manifest_key'  => '',
+			'gh_owner'             => '',
+			'gh_repo'              => '',
+			'gh_asset'             => 'acps-sitemap.zip',
+			'gh_token'             => '',
+			'update_trigger'       => '', // Force-update secret; seeded on activation.
+			'update_role'          => 'standalone', // 'standalone' | 'dev' | 'production'.
+			'verify_status_url'    => '',
+			'verify_status_key'    => '',
 		);
 	}
 
@@ -168,8 +193,8 @@ class ACPS_Sitemap {
 	 * Activation handler.
 	 *
 	 * Refuses network-wide activation (this is a single-site plugin), seeds
-	 * default settings, and flushes rewrite rules so pretty sitemap URLs work
-	 * immediately.
+	 * default settings and the force-update secret, and flushes rewrite rules
+	 * so pretty sitemap URLs work immediately.
 	 *
 	 * @param bool $network_wide Whether the plugin was network-activated.
 	 */
@@ -186,13 +211,26 @@ class ACPS_Sitemap {
 			);
 		}
 
-		if ( false === get_option( self::OPTION, false ) ) {
-			add_option( self::OPTION, self::defaults() );
+		$settings = get_option( self::OPTION );
+		if ( ! is_array( $settings ) ) {
+			$settings = self::defaults();
 		}
+
+		// Seed a strong random secret for the force-update / self-test URL.
+		if ( empty( $settings['update_trigger'] ) ) {
+			$settings['update_trigger'] = sanitize_title( wp_generate_password( 24, false, false ) );
+		}
+
+		update_option( self::OPTION, wp_parse_args( $settings, self::defaults() ) );
+
+		// A clean activation clears any leftover rollback / safe-mode flags.
+		delete_option( 'acps_sitemap_update_failed' );
+		delete_option( ACPS_SITEMAP_SAFE_MODE_OPT );
 
 		self::bust_cache();
 
 		// Register the rewrite rules for this request, then persist them.
+		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-xml.php';
 		ACPS_Sitemap_XML::add_rewrite_rules();
 		flush_rewrite_rules();
 	}
