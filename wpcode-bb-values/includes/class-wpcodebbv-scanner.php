@@ -79,6 +79,93 @@ class WPCodeBBV_Scanner {
 	}
 
 	/**
+	 * Finds settings marked with a "Configurable" comment, anywhere in
+	 * the snippet - not just inside a configurations array:
+	 *
+	 *     var calendarId = 'c_x';   // Configurable: which calendar to read
+	 *     var debug = 'false';      // Configurable siteWide
+	 *         color: 'red',         // Configurable - the headline colour
+	 *
+	 * The assignment has to be the first thing on its line, which keeps
+	 * this predictable rather than clever. Anything after "Configurable"
+	 * (past a colon or dash) becomes the setting's help text, and the
+	 * word siteWide marks it site-wide, exactly as in an array.
+	 *
+	 * @param string $js
+	 * @return array<string, array>
+	 */
+	public static function scan_markers( $js ) {
+		$settings = array();
+
+		if ( ! is_string( $js ) || '' === $js || false === stripos( $js, 'configurable' ) ) {
+			return $settings;
+		}
+
+		$lines  = preg_split( '/\n/', $js );
+		$offset = 0;
+
+		if ( ! is_array( $lines ) ) {
+			return $settings;
+		}
+
+		foreach ( $lines as $line ) {
+			$line_start = $offset;
+			$offset    += strlen( $line ) + 1; // +1 for the newline we split on.
+
+			$comment_at = strpos( $line, '//' );
+
+			if ( false === $comment_at ) {
+				continue;
+			}
+
+			$comment = trim( substr( $line, $comment_at + 2 ) );
+
+			if ( 0 !== stripos( $comment, 'configurable' ) ) {
+				continue;
+			}
+
+			// "Configurable siteWide: help text" -> flag + help text.
+			$rest = trim( substr( $comment, strlen( 'configurable' ) ) );
+			$wide = false;
+
+			if ( 0 === stripos( $rest, 'sitewide' ) ) {
+				$wide = true;
+				$rest = trim( substr( $rest, strlen( 'sitewide' ) ) );
+			}
+
+			$help = trim( $rest, " \t:-–—" );
+
+			// The assignment has to start the line: "var x =", "x:", "x =".
+			$code = substr( $line, 0, $comment_at );
+
+			if ( ! preg_match( '/^\s*(?:var|let|const)?\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*[:=]\s*/', $code, $match ) ) {
+				continue;
+			}
+
+			$name = $match[1];
+
+			if ( self::WIDE_KEY === $name || isset( $settings[ $name ] ) ) {
+				continue;
+			}
+
+			$node = self::parse_value( $js, $line_start + strlen( $match[0] ) );
+
+			if ( ! $node ) {
+				continue;
+			}
+
+			$leaf            = self::leaf( $node, '' );
+			$leaf['comment'] = $help;
+			$leaf['global']  = $wide;
+			$leaf['marked']  = true;
+
+			$settings[ $name ] = $leaf;
+		}
+
+		return $settings;
+	}
+
+	/**
 	 * Flattens one parsed array into path => leaf.
 	 *
 	 * @param array  $array_node
@@ -283,6 +370,18 @@ class WPCodeBBV_Scanner {
 		}
 
 		$edits = array();
+
+		foreach ( self::scan_markers( $js ) as $name => $leaf ) {
+			if ( ! array_key_exists( $name, $overrides ) ) {
+				continue;
+			}
+
+			$edits[] = array(
+				'start'   => $leaf['start'],
+				'end'     => $leaf['end'],
+				'literal' => self::to_literal( (string) $overrides[ $name ], $leaf['kind'] ),
+			);
+		}
 
 		foreach ( self::scan( $js ) as $array ) {
 			foreach ( $array['settings'] as $path => $leaf ) {

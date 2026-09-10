@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the "configurations" array out of your WPCode snippets and puts every setting in it on a Beaver Builder module, so a page editor can change them per page.
- * Version:           5.2.0
+ * Version:           6.0.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -59,7 +59,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '5.2.0' );
+define( 'WPCODEBBV_VERSION', '6.0.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -191,18 +191,64 @@ function wpcodebbv_snippets( $force = false ) {
 
 		$settings = array();
 
+		// A snippet may hold more than one configurations array, and may
+		// also mark settings with a "Configurable" comment anywhere else
+		// in the file. Both end up here, kept apart so two arrays that
+		// happen to use the same key stay separately editable.
+		$many_arrays = count( $arrays ) > 1;
+
 		foreach ( $arrays as $array ) {
 			foreach ( $array['settings'] as $path => $leaf ) {
-				// First array wins if two in one snippet share a path.
-				if ( ! isset( $settings[ $path ] ) ) {
-					$settings[ $path ] = array(
-						'value'   => (string) $leaf['value'],
-						'kind'    => $leaf['kind'],
-						'comment' => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
-						'global'  => ! empty( $leaf['global'] ),
-					);
+				$dot   = strpos( $path, '.' );
+				$block = false === $dot ? '' : substr( $path, 0, $dot );
+				$label = false === $dot ? $path : substr( $path, $dot + 1 );
+
+				// Scoping a path by its array's name is what makes two
+				// arrays in one snippet addressable; the scanner accepts
+				// that "name:path" form when applying overrides.
+				$key = $many_arrays ? $array['name'] . ':' . $path : $path;
+
+				if ( isset( $settings[ $key ] ) ) {
+					continue;
 				}
+
+				$group = '' === $block ? __( 'General', 'wpcode-bb-values' ) : $block;
+
+				if ( $many_arrays ) {
+					$group = $array['name'] . ' - ' . $group;
+				}
+
+				$settings[ $key ] = array(
+					'value'   => (string) $leaf['value'],
+					'kind'    => $leaf['kind'],
+					'comment' => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
+					'global'  => ! empty( $leaf['global'] ),
+					'group'   => $group,
+					'label'   => $label,
+				);
 			}
+		}
+
+		try {
+			$marked = WPCodeBBV_Scanner::scan_markers( $code );
+		} catch ( \Throwable $e ) {
+			wpcodebbv_log( 'could not read Configurable markers in snippet ' . (int) $snippet->ID . ': ' . $e->getMessage() );
+			$marked = array();
+		}
+
+		foreach ( $marked as $name => $leaf ) {
+			if ( isset( $settings[ $name ] ) ) {
+				continue; // An array setting of the same name already won.
+			}
+
+			$settings[ $name ] = array(
+				'value'   => (string) $leaf['value'],
+				'kind'    => $leaf['kind'],
+				'comment' => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
+				'global'  => ! empty( $leaf['global'] ),
+				'group'   => __( 'Marked variables', 'wpcode-bb-values' ),
+				'label'   => $name,
+			);
 		}
 
 		if ( empty( $settings ) ) {
@@ -554,18 +600,14 @@ function wpcodebbv_form() {
 	foreach ( $snippets as $snippet_id => $snippet ) {
 		$globals = wpcodebbv_globals_for( $snippet_id );
 
-		// Group by the top-level key, so everything belonging to
-		// noSchoolEvent sits together in its own panel rather than in one
-		// long list. Settings with no nesting share a "General" group.
+		// Each setting already knows which group it belongs in - a block
+		// like noSchoolEvent, an array name when a snippet holds more
+		// than one, or "Marked variables" for // Configurable ones.
 		$groups = array();
 
 		foreach ( $snippet['settings'] as $path => $leaf ) {
-			$dot   = strpos( $path, '.' );
-			$group = false === $dot ? '' : substr( $path, 0, $dot );
-			$label = false === $dot ? $path : substr( $path, $dot + 1 );
-
-			$groups[ $group ][ $path ] = array(
-				'label' => $label,
+			$groups[ $leaf['group'] ][ $path ] = array(
+				'label' => $leaf['label'],
 				'leaf'  => $leaf,
 			);
 		}
@@ -617,15 +659,9 @@ function wpcodebbv_form() {
 				continue;
 			}
 
-			$title = '' === $group
-				? __( 'General', 'wpcode-bb-values' )
-				: $group;
+			$title = $many_snippets ? $snippet['title'] . ' - ' . $group : $group;
 
-			if ( $many_snippets ) {
-				$title = $snippet['title'] . ' - ' . $title;
-			}
-
-			$sections[ 's' . $snippet_id . '_' . ( '' === $group ? 'general' : preg_replace( '/[^A-Za-z0-9]/', '_', $group ) ) ] = array(
+			$sections[ 's' . $snippet_id . '_' . preg_replace( '/[^A-Za-z0-9]/', '_', $group ) ] = array(
 				'title'  => $title,
 				'fields' => $fields,
 				// Groups start closed so the panel opens as a short list
@@ -634,7 +670,7 @@ function wpcodebbv_form() {
 				// the section open, which is only a cosmetic difference -
 				// unlike a field 'type', a section key is read or ignored,
 				// never turned into a file to load.
-				'collapsed' => '' !== $group,
+				'collapsed' => __( 'General', 'wpcode-bb-values' ) !== $group,
 			);
 		}
 	}
@@ -890,8 +926,7 @@ function wpcodebbv_help_page() {
 						$last_group = null;
 
 						foreach ( $snippet['settings'] as $path => $leaf ) :
-							$dot   = strpos( $path, '.' );
-							$group = false === $dot ? __( 'General', 'wpcode-bb-values' ) : substr( $path, 0, $dot );
+							$group = $leaf['group'];
 
 							if ( $group !== $last_group ) :
 								$last_group = $group;
@@ -901,7 +936,7 @@ function wpcodebbv_help_page() {
 							endif;
 							?>
 							<tr>
-								<td><code><?php echo esc_html( false === $dot ? $path : substr( $path, $dot + 1 ) ); ?></code></td>
+								<td><code><?php echo esc_html( $leaf['label'] ); ?></code></td>
 								<td>
 									<?php if ( ! empty( $leaf['global'] ) ) : ?>
 										<strong><?php esc_html_e( 'site-wide', 'wpcode-bb-values' ); ?></strong>

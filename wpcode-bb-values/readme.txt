@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 5.2.0
+Stable tag: 6.0.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -90,6 +90,34 @@ with a button to reset them.
 A site-wide value cannot reach a snippet placed by any other means, because
 the only output this plugin can touch is its own module's.
 
+= More than one set of settings =
+
+A page can hold as many modules as you like. Each one points at its own
+snippet and keeps its own values, and nothing one module does reaches another.
+
+A single snippet can also hold more than one configurations array - name them
+configurations, configurationsFooter, configurationsSidebar and so on. Each
+array gets its own group in the module, so two arrays using the same key stay
+separately editable.
+
+One thing to watch when two modules on the same page run different snippets:
+if both snippets declare a variable with the same name at the top level, the
+second one loaded wins in the browser, whatever this plugin does. Give each
+snippet's array (and its CONFIG helper) a distinct name.
+
+= Marking a variable Configurable =
+
+Settings do not have to live in a configurations array. A "Configurable"
+comment makes any assignment editable, wherever it is in the snippet:
+
+    var apiKey = 'AIza-x';       // Configurable siteWide: the API key
+    var debugMode = 'false';     // Configurable - turn console logging on
+    var timezone = 'America/New_York';   // Configurable
+
+The assignment has to start its line. Anything after "Configurable" (past a
+colon or dash) becomes the setting's help text, and siteWide works exactly as
+it does in an array. These appear in the module under "Marked variables".
+
 = Reading the settings in your snippet =
 
 The configurations array is a list of {key, value} pairs, which is awkward to
@@ -122,6 +150,16 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 6.0.0 =
+* A snippet can hold several configurations arrays now. Each gets its own
+  group in the module, so two arrays that use the same key stay separately
+  editable.
+* Added the "Configurable" comment marker: any assignment followed by
+  // Configurable becomes an editable setting, wherever it sits in the
+  snippet. Text after the word becomes its help, and siteWide works there too.
+* Grouping is decided when a snippet is scanned rather than in the module, so
+  blocks, array names and marked variables all group consistently.
 
 = 5.2.0 =
 * Added a CONFIG helper to paste below your configurations array, for reading
