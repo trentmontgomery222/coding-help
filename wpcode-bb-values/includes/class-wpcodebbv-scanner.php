@@ -143,6 +143,7 @@ class WPCodeBBV_Scanner {
 			$name        = '';
 			$value_start = 0;
 			$closes      = false; // define( ... ) needs its ")" trimmed back off.
+			$is_cfg      = false;
 
 			// define( 'NAME', value ) - the usual way a PHP snippet
 			// declares something worth exposing.
@@ -206,6 +207,16 @@ class WPCodeBBV_Scanner {
 				$name        = $c[1];
 				$literal_at += strlen( $c[0] );
 				$literal     = $inner;
+				$is_cfg      = true;
+
+				// A PHP value is always site-wide. It is read at runtime
+				// from the stored value rather than rewritten into output,
+				// which is the only way it can reach a snippet that also
+				// runs somewhere other than this plugin's module - a
+				// WPCode auto-insert, a shortcode in a template. A
+				// per-page value would apply on the one page and silently
+				// not apply everywhere else the snippet runs.
+				$wide = true;
 
 				if ( isset( $settings[ $name ] ) ) {
 					continue;
@@ -218,6 +229,14 @@ class WPCodeBBV_Scanner {
 			$leaf['comment'] = $help;
 			$leaf['global']  = $wide;
 			$leaf['marked']  = true;
+			$leaf['php']     = $is_cfg;
+
+			// A $variable or a define() that is NOT wrapped in
+			// wpcodebbv_cfg() is PHP that cannot be changed from here at
+			// all: WPCode executes a PHP snippet, so its source never
+			// reaches the output there is to rewrite. Flagged rather than
+			// offered, so nobody edits a box that quietly does nothing.
+			$leaf['php_static'] = ! $is_cfg && ( '$' === substr( $name, 0, 1 ) || $closes );
 
 			$settings[ $name ] = $leaf;
 		}

@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 6.2.0
+Stable tag: 6.3.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -148,8 +148,20 @@ changes it. You get back the same TYPE you passed as the default - a boolean
 default returns a boolean, a number a number, an array an array - so the
 snippet never has to think about the editor typing text.
 
-With no module supplying values, wpcodebbv_cfg() returns the default, so a
-snippet written this way still works anywhere else on the site.
+PHP values are ALWAYS site-wide. There is no per-page option for them, and no
+need to write siteWide: a PHP snippet usually runs in more than one place - a
+WPCode auto-insert, a shortcode in a template - and a per-page value would
+apply on the one page and silently not apply anywhere else it runs. Changing a
+PHP value changes it everywhere the snippet runs, module or no module.
+
+Only JavaScript and CSS values are per-page by default, with siteWide to opt
+one of them into applying everywhere.
+
+A plain PHP assignment marked Configurable - $var = 'x'; or define( ... ) - is
+listed on Tools > WPCode Values but NOT offered in the module, because nothing
+could make it work: WPCode executes a PHP snippet, so its source never reaches
+the output there is to rewrite. That screen shows the wpcodebbv_cfg() line to
+replace it with.
 
 = Reading the settings in your snippet =
 
@@ -183,6 +195,18 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 6.3.0 =
+* Fixed PHP values not taking effect. wpcodebbv_cfg() only read values while
+  this plugin's module was rendering, so a snippet that also ran anywhere else
+  - a WPCode auto-insert, a shortcode in a template - got its default back.
+  It now reads the stored value, so a PHP value applies wherever the snippet
+  runs.
+* PHP values are always site-wide, with no per-page option and no need to
+  write siteWide. Only JavaScript and CSS values are per-page by default.
+* A plain PHP assignment or define() marked Configurable is no longer offered
+  in the module, since nothing could make it work. Tools > WPCode Values lists
+  it as "not editable" and shows the wpcodebbv_cfg() line to replace it with.
 
 = 6.2.0 =
 * A module now shows only the settings of the snippet it is running. Every

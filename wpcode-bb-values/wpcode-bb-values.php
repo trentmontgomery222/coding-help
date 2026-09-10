@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           6.2.0
+ * Version:           6.3.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '6.2.0' );
+define( 'WPCODEBBV_VERSION', '6.3.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -155,15 +155,37 @@ function wpcodebbv_snippet_code( $snippet ) {
  * @return mixed
  */
 function wpcodebbv_cfg( $name, $default = '' ) {
-	$values = isset( $GLOBALS['wpcode_bb_values'] ) && is_array( $GLOBALS['wpcode_bb_values'] )
-		? $GLOBALS['wpcode_bb_values']
-		: array();
+	$raw = null;
 
-	if ( ! isset( $values[ $name ] ) ) {
-		return $default;
+	// The module sets this while it renders, and it is snippet-specific,
+	// so it wins when present.
+	if ( isset( $GLOBALS['wpcode_bb_values'][ $name ] ) ) {
+		$raw = (string) $GLOBALS['wpcode_bb_values'][ $name ];
+	} elseif ( function_exists( 'wpcodebbv_globals' ) ) {
+		// Otherwise read the stored value. PHP values are always
+		// site-wide, and this is what makes that mean something: a PHP
+		// snippet gets its configured value wherever it runs, including
+		// where this plugin's module is nowhere in sight - a WPCode
+		// auto-insert, a shortcode in a template, another page entirely.
+		//
+		// This runs INSIDE somebody's snippet, so it must never be the
+		// thing that breaks their page: anything unexpected here falls
+		// through to the default rather than throwing.
+		try {
+			foreach ( wpcodebbv_globals() as $snippet_values ) {
+				if ( is_array( $snippet_values ) && isset( $snippet_values[ $name ] ) ) {
+					$raw = (string) $snippet_values[ $name ];
+					break;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			$raw = null;
+		}
 	}
 
-	$raw = (string) $values[ $name ];
+	if ( null === $raw ) {
+		return $default;
+	}
 
 	if ( is_bool( $default ) ) {
 		return in_array( strtolower( trim( $raw ) ), array( 'true', '1', 'yes', 'on' ), true );
@@ -292,12 +314,14 @@ function wpcodebbv_snippets( $force = false ) {
 				}
 
 				$settings[ $key ] = array(
-					'value'   => (string) $leaf['value'],
-					'kind'    => $leaf['kind'],
-					'comment' => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
-					'global'  => ! empty( $leaf['global'] ),
-					'group'   => $group,
-					'label'   => $label,
+					'value'      => (string) $leaf['value'],
+					'kind'       => $leaf['kind'],
+					'comment'    => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
+					'global'     => ! empty( $leaf['global'] ),
+					'group'      => $group,
+					'label'      => $label,
+					'php'        => false,
+					'php_static' => false,
 				);
 			}
 		}
@@ -315,12 +339,16 @@ function wpcodebbv_snippets( $force = false ) {
 			}
 
 			$settings[ $name ] = array(
-				'value'   => (string) $leaf['value'],
-				'kind'    => $leaf['kind'],
-				'comment' => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
-				'global'  => ! empty( $leaf['global'] ),
-				'group'   => __( 'Marked variables', 'wpcode-bb-values' ),
-				'label'   => $name,
+				'value'      => (string) $leaf['value'],
+				'kind'       => $leaf['kind'],
+				'comment'    => isset( $leaf['comment'] ) ? (string) $leaf['comment'] : '',
+				'global'     => ! empty( $leaf['global'] ),
+				'group'      => empty( $leaf['php'] )
+					? __( 'Marked variables', 'wpcode-bb-values' )
+					: __( 'PHP values (site-wide)', 'wpcode-bb-values' ),
+				'label'      => $name,
+				'php'        => ! empty( $leaf['php'] ),
+				'php_static' => ! empty( $leaf['php_static'] ),
 			);
 		}
 
@@ -629,6 +657,20 @@ function wpcodebbv_describe( $path, $leaf, $shared = '' ) {
 		);
 	}
 
+	if ( ! empty( $leaf['php'] ) ) {
+		$text .= ' ' . __( 'This is a PHP value, so it is always site-wide: changing it here changes it everywhere the snippet runs, including where this module is not involved at all.', 'wpcode-bb-values' );
+
+		if ( '' !== (string) $shared && (string) $shared !== $value ) {
+			$text .= ' ' . sprintf(
+				/* translators: %s: the current site-wide value */
+				__( 'It is currently set to "%s". Put it back to the snippet\'s own value to clear that.', 'wpcode-bb-values' ),
+				$shared
+			);
+		}
+
+		return $text;
+	}
+
 	if ( ! empty( $leaf['global'] ) ) {
 		$text .= ' ' . __( 'This one is marked siteWide in the snippet: changing it here changes it on every page that runs this snippet through this module, not just this one.', 'wpcode-bb-values' );
 
@@ -693,6 +735,16 @@ function wpcodebbv_form() {
 		$groups = array();
 
 		foreach ( $snippet['settings'] as $path => $leaf ) {
+			// A plain PHP $variable or define() is discovered so it can be
+			// reported, but it cannot be changed from here - WPCode
+			// executes a PHP snippet, so there is no printed source to
+			// rewrite. Offering a box for it would be a box that quietly
+			// does nothing. Tools > WPCode Values lists these and says
+			// what to change them to.
+			if ( ! empty( $leaf['php_static'] ) ) {
+				continue;
+			}
+
 			$groups[ $leaf['group'] ][ $path ] = array(
 				'label' => $leaf['label'],
 				'leaf'  => $leaf,
@@ -714,9 +766,13 @@ function wpcodebbv_form() {
 					? $shared
 					: (string) $leaf['value'];
 
-				$label = empty( $leaf['global'] )
-					? $member['label']
-					: $member['label'] . ' ' . __( '(site-wide)', 'wpcode-bb-values' );
+				if ( ! empty( $leaf['php'] ) ) {
+					$label = $member['label'] . ' ' . __( '(PHP, site-wide)', 'wpcode-bb-values' );
+				} elseif ( ! empty( $leaf['global'] ) ) {
+					$label = $member['label'] . ' ' . __( '(site-wide)', 'wpcode-bb-values' );
+				} else {
+					$label = $member['label'];
+				}
 
 				if ( wpcodebbv_is_boolean( $current ) ) {
 					// A yes/no setting can only ever be true or false.
@@ -1079,7 +1135,11 @@ function wpcodebbv_help_page() {
 							<tr>
 								<td><code><?php echo esc_html( $leaf['label'] ); ?></code></td>
 								<td>
-									<?php if ( ! empty( $leaf['global'] ) ) : ?>
+									<?php if ( ! empty( $leaf['php_static'] ) ) : ?>
+										<strong style="color:#b26200;"><?php esc_html_e( 'not editable', 'wpcode-bb-values' ); ?></strong>
+									<?php elseif ( ! empty( $leaf['php'] ) ) : ?>
+										<strong><?php esc_html_e( 'PHP, site-wide', 'wpcode-bb-values' ); ?></strong>
+									<?php elseif ( ! empty( $leaf['global'] ) ) : ?>
 										<strong><?php esc_html_e( 'site-wide', 'wpcode-bb-values' ); ?></strong>
 									<?php else : ?>
 										<?php esc_html_e( 'per page', 'wpcode-bb-values' ); ?>
@@ -1097,7 +1157,20 @@ function wpcodebbv_help_page() {
 									}
 									?>
 								</td>
-								<td><span class="description"><?php echo esc_html( wpcodebbv_describe_base( $path, $leaf ) ); ?></span></td>
+								<td>
+									<span class="description"><?php echo esc_html( wpcodebbv_describe_base( $path, $leaf ) ); ?></span>
+									<?php if ( ! empty( $leaf['php_static'] ) ) : ?>
+										<br /><span class="description" style="color:#b26200;">
+											<?php
+											printf(
+												/* translators: %s: the suggested code */
+												esc_html__( 'This one cannot be changed from a module: WPCode runs a PHP snippet rather than printing it, so there is no output to rewrite. To make it editable, wrap the value: %s', 'wpcode-bb-values' ),
+												'<code>' . esc_html( $leaf['label'] . " = wpcodebbv_cfg( '" . ltrim( $leaf['label'], '$' ) . "', " . ( 'string' === $leaf['kind'] ? "'" . $leaf['value'] . "'" : $leaf['value'] ) . ' );' ) . '</code>'
+											);
+											?>
+										</span>
+									<?php endif; ?>
+								</td>
 							</tr>
 						<?php endforeach; ?>
 						</tbody>
