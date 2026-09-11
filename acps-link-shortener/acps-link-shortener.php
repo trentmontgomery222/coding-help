@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Link Shortener
  * Plugin URI:        https://caydenriddle.com/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.14.0
+ * Version:           1.15.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.14.0' );
+define( 'ACPS_LS_VERSION', '1.15.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -72,6 +72,12 @@ define( 'ACPS_LS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_LS_OPT_DB_VERSION', 'acps_ls_db_version' );
 define( 'ACPS_LS_OPT_SETTINGS', 'acps_ls_settings' );
 define( 'ACPS_LS_OPT_SETUP_TOKENS', 'acps_ls_setup_tokens' );
+
+// REST namespace (used by the updater's staged-rollout status endpoint).
+define( 'ACPS_LS_REST_NAMESPACE', 'acps-ls/v1' );
+
+// Option holding "safe mode" state after a fatal is caught in our own code.
+define( 'ACPS_LS_SAFE_MODE_OPT', 'acps_ls_safe_mode' );
 
 // WP-Cron hook + interval for the two-way Google Sheet sync.
 define( 'ACPS_LS_CRON_HOOK', 'acps_ls_sheet_sync' );
@@ -574,10 +580,117 @@ register_deactivation_hook( __FILE__, 'acps_ls_deactivate' );
  * an unexpected environment) it is logged and swallowed so the plugin can never
  * take the site down. WordPress continues to load normally.
  */
+/**
+ * Is the plugin currently held in safe mode (dormant after a caught fatal)?
+ *
+ * @return bool
+ */
+function acps_ls_is_safe_mode() {
+	$s = get_option( ACPS_LS_SAFE_MODE_OPT );
+	return is_array( $s ) && ! empty( $s['time'] );
+}
+
+/**
+ * Record a caught fatal and arm safe mode so the NEXT request keeps the site up
+ * by not loading the plugin's functional code.
+ *
+ * @param string $msg  Error message.
+ * @param string $file File.
+ * @param int    $line Line.
+ */
+function acps_ls_arm_safe_mode( $msg, $file = '', $line = 0 ) {
+	update_option(
+		ACPS_LS_SAFE_MODE_OPT,
+		array(
+			'msg'  => (string) $msg,
+			'file' => (string) $file,
+			'line' => (int) $line,
+			'time' => time(),
+		),
+		true
+	);
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[Cayden Link Shortener] Fatal caught — entering safe mode: ' . $msg . ' in ' . $file . ':' . $line );
+	}
+}
+
+/**
+ * Shutdown guard: if the request is ending on a fatal that originated inside
+ * this plugin's files, arm safe mode so subsequent requests stay up. It can't
+ * rescue the current request, but it stops a crash loop.
+ */
+function acps_ls_shutdown_guard() {
+	$e = error_get_last();
+	if ( ! $e || empty( $e['type'] ) ) {
+		return;
+	}
+	$fatal = array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR );
+	if ( ! in_array( $e['type'], $fatal, true ) ) {
+		return;
+	}
+	if ( empty( $e['file'] ) || 0 !== strpos( $e['file'], ACPS_LS_PATH ) ) {
+		return; // Not our file — leave it alone.
+	}
+	acps_ls_arm_safe_mode( $e['message'], $e['file'], $e['line'] );
+}
+
+/**
+ * Admin notice + "Resume plugin" control shown while dormant in safe mode.
+ */
+function acps_ls_safe_mode_notice() {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	$s   = get_option( ACPS_LS_SAFE_MODE_OPT );
+	$msg = is_array( $s ) && ! empty( $s['msg'] ) ? $s['msg'] : '';
+	$url = wp_nonce_url( admin_url( 'admin-post.php?action=acps_ls_resume' ), 'acps_ls_resume' );
+	echo '<div class="notice notice-error"><p><strong>'
+		. esc_html__( 'Cayden Link Shortener is paused (safe mode).', 'acps-link-shortener' )
+		. '</strong> '
+		. esc_html__( 'A fatal error was caught in the plugin, so it stopped loading to keep the site online. The rest of the site is unaffected.', 'acps-link-shortener' )
+		. '</p>'
+		. ( $msg ? '<p><code>' . esc_html( $msg ) . '</code></p>' : '' )
+		. '<p><a href="' . esc_url( $url ) . '" class="button button-primary">'
+		. esc_html__( 'Resume plugin', 'acps-link-shortener' )
+		. '</a> '
+		. esc_html__( 'Use this once the problem is fixed (e.g. after an update).', 'acps-link-shortener' )
+		. '</p></div>';
+}
+
+/**
+ * Clear safe mode (admin action).
+ */
+function acps_ls_resume_from_safe_mode() {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		wp_die( esc_html__( 'You do not have permission to do this.', 'acps-link-shortener' ), 403 );
+	}
+	check_admin_referer( 'acps_ls_resume' );
+	delete_option( ACPS_LS_SAFE_MODE_OPT );
+	wp_safe_redirect( wp_get_referer() ? wp_get_referer() : admin_url() );
+	exit;
+}
+
 function acps_ls_bootstrap() {
 	if ( empty( $GLOBALS['acps_ls_loaded'] ) ) {
 		return; // A required file was missing; stay out of the way.
 	}
+
+	// Always allow resuming, even while dormant.
+	add_action( 'admin_post_acps_ls_resume', 'acps_ls_resume_from_safe_mode' );
+
+	// Held dormant after a caught fatal: load only the resume notice, keep the
+	// site up, and stay out of everything else until an admin resumes.
+	if ( acps_ls_is_safe_mode() ) {
+		if ( is_admin() ) {
+			add_action( 'admin_notices', 'acps_ls_safe_mode_notice' );
+		}
+		return;
+	}
+
+	// Catch a fatal later in the request so following requests fall into safe
+	// mode instead of crashing repeatedly.
+	register_shutdown_function( 'acps_ls_shutdown_guard' );
 
 	try {
 		// Run migrations if the stored DB version is behind the code.
@@ -614,7 +727,10 @@ function acps_ls_bootstrap() {
 			}
 		}
 	} catch ( Throwable $e ) {
+		// A throwable during boot (hook registration, migration, etc.): arm safe
+		// mode so the next request stays up instead of crashing again.
 		acps_ls_log_error( 'bootstrap', $e );
+		acps_ls_arm_safe_mode( $e->getMessage(), $e->getFile(), $e->getLine() );
 	}
 }
 add_action( 'plugins_loaded', 'acps_ls_bootstrap' );

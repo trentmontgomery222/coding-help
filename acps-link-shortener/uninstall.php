@@ -31,5 +31,12 @@ delete_option( 'acps_ls_db_version' );
 delete_option( 'acps_ls_settings' );
 delete_option( 'acps_ls_last_sync' );
 
+// Self-updater state.
+delete_option( 'acps_ls_safe_mode' );
+delete_option( 'acps_ls_update_failed' );
+delete_option( 'acps_ls_verified' );
+delete_transient( 'acps_ls_update_remote' );
+delete_transient( 'acps_ls_devstatus' );
+
 // Clear any scheduled sync.
 wp_clear_scheduled_hook( 'acps_ls_sheet_sync' );

@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.14.0
+Stable tag: 1.15.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,28 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.15.0 =
+* Update system hardened (ported from the Cayden Site Toolkit updater):
+  - Stays active across an update: the unpacked package folder is renamed back
+    to the plugin slug (`upgrader_source_selection`), so an update whose zip
+    unpacks to a different folder name still overwrites the same directory
+    instead of installing a disabled copy alongside it.
+  - Post-update crash test: right after the plugin updates, a fresh loopback
+    request loads the NEW code and checks for a secret-guarded marker. A 5xx
+    (fatal on load) rolls the release back — the plugin is deactivated to keep
+    the site up and an admin notice explains why. A blocked/slow loopback is
+    treated as inconclusive and never disables a healthy update.
+  - Fatal-error safe mode: if a fatal is ever caught in the plugin's own files,
+    it arms "safe mode" and the next request loads only a small "Resume plugin"
+    admin notice, so a bad build can't white-screen the whole site. Resume with
+    one click once it's fixed.
+  - Optional staged rollout (two sites): mark one install "dev" and one
+    "production" with a shared key; production only offers/installs a version
+    after the dev site has confirmed that version loaded cleanly. Dev publishes
+    its verified version at /wp-json/acps-ls/v1/update-status (key-guarded).
+* Uninstall now also clears the updater's options/transients when full teardown
+  is enabled.
 
 = 1.14.0 =
 * Self-updating: the plugin can now update itself from a source you control, so

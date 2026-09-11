@@ -77,6 +77,10 @@ class ACPS_LS_Updater {
 			'asset'       => isset( $s['gh_asset'] ) && '' !== $s['gh_asset'] ? (string) $s['gh_asset'] : 'acps-link-shortener.zip',
 			'token'       => isset( $s['gh_token'] ) ? (string) $s['gh_token'] : '',
 			'trigger'     => isset( $s['update_trigger'] ) && '' !== $s['update_trigger'] ? (string) $s['update_trigger'] : 'protcol_U999_update',
+			// Optional staged rollout (two-site dev -> production gating).
+			'role'         => ( isset( $s['update_role'] ) && 'production' === $s['update_role'] ) ? 'production' : 'standalone',
+			'verify_url'   => isset( $s['verify_status_url'] ) ? (string) $s['verify_status_url'] : '',
+			'verify_key'   => isset( $s['verify_status_key'] ) ? (string) $s['verify_status_key'] : '',
 		);
 
 		/**
@@ -101,11 +105,27 @@ class ACPS_LS_Updater {
 			add_filter( 'upgrader_pre_download', array( $this, 'maybe_prefetch_private' ), 10, 3 );
 			add_filter( 'auto_update_plugin', array( $this, 'auto_update_flag' ), 10, 2 );
 
+			// Rename the unpacked package folder back to our slug so an update whose
+			// zip unpacks to a differently-named folder (e.g. a GitHub source zip)
+			// still installs over the SAME directory and the plugin stays active.
+			add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
+
 			// Secret force-update URL (front end + admin).
 			add_action( 'init', array( $this, 'maybe_handle_trigger' ) );
+			// Early marker used by the post-update crash test.
+			add_action( 'init', array( $this, 'maybe_handle_selftest' ), 1 );
 
-			// Clear the cache when someone hits "Check for updates".
-			add_action( 'upgrader_process_complete', array( $this, 'flush_cache' ) );
+			// After any upgrade: clear the cache; after OUR upgrade: crash-test the
+			// new code and roll back if it fails to load.
+			add_action( 'upgrader_process_complete', array( $this, 'flush_cache' ), 10, 0 );
+			add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
+
+			// Tell admins if a recent update was rolled back.
+			add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+
+			// Staged rollout: publish this install's verified version for a paired
+			// production site to read before it updates.
+			add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
 		} catch ( Throwable $e ) {
 			acps_ls_log_error( 'updater register', $e );
 		}
@@ -306,8 +326,9 @@ class ACPS_LS_Updater {
 				return $transient;
 			}
 
-			if ( version_compare( $remote['version'], ACPS_LS_VERSION, '<=' ) ) {
-				// Up to date — make sure we're not stuck in the "response" list.
+			// Up to date, or a production install whose paired dev site has not yet
+			// verified this version — make sure we're not stuck offering it.
+			if ( version_compare( $remote['version'], ACPS_LS_VERSION, '<=' ) || ! $this->rollout_allows( $remote['version'] ) ) {
 				if ( isset( $transient->response[ ACPS_LS_BASENAME ] ) ) {
 					unset( $transient->response[ ACPS_LS_BASENAME ] );
 				}
@@ -389,6 +410,10 @@ class ACPS_LS_Updater {
 	public function auto_update_flag( $update, $item ) {
 		try {
 			if ( isset( $item->plugin ) && ACPS_LS_BASENAME === $item->plugin ) {
+				$version = ! empty( $item->new_version ) ? (string) $item->new_version : '';
+				if ( '' !== $version && ! $this->rollout_allows( $version ) ) {
+					return false;
+				}
 				return ! empty( $this->cfg['auto'] );
 			}
 		} catch ( Throwable $e ) {
@@ -571,10 +596,284 @@ class ACPS_LS_Updater {
 		}
 	}
 
+	/* --------------------------------------------------------------------- */
+	/* Keep the plugin active + healthy across an update                      */
+	/* --------------------------------------------------------------------- */
+
 	/**
-	 * Drop the cached remote lookup.
+	 * Rename the unpacked update folder to our plugin slug so the update
+	 * overwrites the SAME directory (and the plugin stays active), no matter
+	 * what the zip's top-level folder was called.
+	 *
+	 * @param string $source        Path to the unpacked package.
+	 * @param string $remote_source Parent dir of the download.
+	 * @param object $upgrader      Upgrader instance (unused).
+	 * @param array  $args          Hook args (includes 'plugin' during a plugin update).
+	 * @return string|WP_Error
+	 */
+	public function fix_source_dir( $source, $remote_source, $upgrader = null, $args = array() ) {
+		try {
+			$plugin = isset( $args['plugin'] ) ? $args['plugin'] : '';
+			if ( ACPS_LS_BASENAME !== $plugin ) {
+				return $source; // Not our update.
+			}
+			$desired = trailingslashit( $remote_source ) . $this->slug();
+			$source  = untrailingslashit( $source );
+			if ( untrailingslashit( $desired ) === $source ) {
+				return trailingslashit( $source );
+			}
+			global $wp_filesystem;
+			if ( $wp_filesystem && $wp_filesystem->move( $source, untrailingslashit( $desired ), true ) ) {
+				return trailingslashit( $desired );
+			}
+		} catch ( Throwable $e ) {
+			acps_ls_log_error( 'updater fix_source_dir', $e );
+		}
+		return $source;
+	}
+
+	/**
+	 * Early marker for the post-update crash test. Reaching this line proves the
+	 * new code loaded without a fatal, so it prints the marker and exits. Guarded
+	 * by the same secret as the force-update URL.
+	 */
+	public function maybe_handle_selftest() {
+		if ( ! isset( $_GET['acps_ls_update_selftest'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$secret = (string) $this->cfg['trigger'];
+		$given  = sanitize_text_field( wp_unslash( $_GET['acps_ls_update_selftest'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( '' === $secret || ! hash_equals( $secret, $given ) ) {
+			return;
+		}
+		nocache_headers();
+		status_header( 200 );
+		echo 'ACPS_LS_OK';
+		exit;
+	}
+
+	/**
+	 * Whether the just-finished upgrade included this plugin.
+	 *
+	 * @param array $options upgrader_process_complete options.
+	 * @return bool
+	 */
+	private function upgrade_touched_us( $options ) {
+		if ( ! isset( $options['type'] ) || 'plugin' !== $options['type'] ) {
+			return false;
+		}
+		if ( ! empty( $options['plugins'] ) && is_array( $options['plugins'] ) ) {
+			return in_array( ACPS_LS_BASENAME, $options['plugins'], true );
+		}
+		if ( ! empty( $options['plugin'] ) ) {
+			return ACPS_LS_BASENAME === $options['plugin'];
+		}
+		return true; // Single-plugin update with no explicit list: assume it may be us.
+	}
+
+	/**
+	 * After our plugin updates: ensure it's active, crash-test the NEW code with
+	 * a fresh loopback, and deactivate it only on a definite crash so a bad
+	 * release can't take the site down. Records success so a paired production
+	 * site can gate on it.
+	 *
+	 * @param object $upgrader Upgrader instance (unused).
+	 * @param array  $options  upgrader_process_complete options.
+	 */
+	public function verify_after_upgrade( $upgrader, $options ) {
+		try {
+			if ( ! $this->upgrade_touched_us( (array) $options ) ) {
+				return;
+			}
+			if ( ! function_exists( 'is_plugin_active' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			}
+			// Silent activation just flips the option; it does not re-include the
+			// plugin in this request (which would fatal on redeclare).
+			if ( ! is_plugin_active( ACPS_LS_BASENAME ) ) {
+				activate_plugin( ACPS_LS_BASENAME, '', false, true );
+			}
+
+			$result = $this->self_test_result();
+
+			if ( 'crash' === $result ) {
+				deactivate_plugins( ACPS_LS_BASENAME, true );
+				update_option( 'acps_ls_update_failed', array( 'when' => current_time( 'mysql' ), 'version' => ACPS_LS_VERSION ), false );
+				acps_ls_log_error( 'updater verify', new Exception( 'new version returned a fatal (5xx) on load; deactivated to protect the site' ) );
+				return;
+			}
+
+			// 'ok' or 'unknown': leave it enabled (only a definite crash disables).
+			if ( 'ok' === $result ) {
+				delete_option( 'acps_ls_update_failed' );
+				update_option( 'acps_ls_verified', array( 'version' => ACPS_LS_VERSION, 'time' => time() ), false );
+			}
+		} catch ( Throwable $e ) {
+			acps_ls_log_error( 'updater verify', $e );
+		}
+	}
+
+	/**
+	 * Crash test: hit the site with a fresh loopback request (loads the new code
+	 * from scratch) and confirm the plugin booted far enough to answer with its
+	 * marker. A fatal during load never reaches the marker.
+	 *
+	 * @return string 'ok' | 'crash' | 'unknown'
+	 */
+	private function self_test_result() {
+		$secret = (string) $this->cfg['trigger'];
+		$url    = '' !== $secret
+			? add_query_arg( 'acps_ls_update_selftest', rawurlencode( $secret ), home_url( '/' ) )
+			: home_url( '/' );
+
+		$resp = wp_remote_get( $url, array( 'timeout' => 20, 'sslverify' => false, 'redirection' => 2 ) );
+
+		if ( is_wp_error( $resp ) ) {
+			return 'unknown'; // Loopbacks blocked on some hosts — never a crash.
+		}
+		if ( (int) wp_remote_retrieve_response_code( $resp ) >= 500 ) {
+			return 'crash';
+		}
+		if ( '' !== $secret ) {
+			return ( false !== strpos( (string) wp_remote_retrieve_body( $resp ), 'ACPS_LS_OK' ) ) ? 'ok' : 'unknown';
+		}
+		return 'ok';
+	}
+
+	/**
+	 * Warn admins if a recent update was rolled back for failing its load test.
+	 */
+	public function maybe_show_update_failed_notice() {
+		if ( ! current_user_can( 'update_plugins' ) ) {
+			return;
+		}
+		$failed = get_option( 'acps_ls_update_failed' );
+		if ( ! is_array( $failed ) ) {
+			return;
+		}
+		echo '<div class="notice notice-error is-dismissible"><p>'
+			. esc_html__( 'Cayden Link Shortener: a recent update failed its load test and was kept disabled to protect the site.', 'acps-link-shortener' )
+			. ' ' . esc_html( isset( $failed['when'] ) ? $failed['when'] : '' )
+			. '</p></div>';
+	}
+
+	/* --------------------------------------------------------------------- */
+	/* Optional staged rollout (dev verifies -> production follows)           */
+	/* --------------------------------------------------------------------- */
+
+	/**
+	 * REST route so a dev install can report the version it has verified.
+	 */
+	public function register_status_route() {
+		$ns = defined( 'ACPS_LS_REST_NAMESPACE' ) ? ACPS_LS_REST_NAMESPACE : 'acps-ls/v1';
+		register_rest_route(
+			$ns,
+			'/update-status',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'rest_status' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+
+	/**
+	 * REST callback: report the verified version, key-guarded.
+	 *
+	 * @param WP_REST_Request $req Request.
+	 * @return WP_REST_Response
+	 */
+	public function rest_status( $req ) {
+		nocache_headers();
+		$key   = trim( (string) $this->cfg['verify_key'] );
+		$given = (string) $req->get_param( 'key' );
+		if ( '' === $key || ! hash_equals( $key, $given ) ) {
+			return new WP_REST_Response( array( 'ok' => false ), 403 );
+		}
+		$verified = get_option( 'acps_ls_verified' );
+		return new WP_REST_Response(
+			array(
+				'ok'       => true,
+				'role'     => $this->cfg['role'],
+				'running'  => ACPS_LS_VERSION,
+				'verified' => is_array( $verified ) && ! empty( $verified['version'] ) ? $verified['version'] : '',
+				'tested'   => is_array( $verified ) && ! empty( $verified['time'] ) ? (int) $verified['time'] : 0,
+			),
+			200
+		);
+	}
+
+	/**
+	 * For a production install: the version its paired dev site has verified.
+	 * Empty when not a production install, not configured, or unreachable (in
+	 * which case production holds rather than updating blind).
+	 *
+	 * @return string
+	 */
+	private function dev_verified_version() {
+		if ( 'production' !== $this->cfg['role'] ) {
+			return '';
+		}
+		$url = trim( (string) $this->cfg['verify_url'] );
+		$key = trim( (string) $this->cfg['verify_key'] );
+		if ( '' === $url || '' === $key ) {
+			return '';
+		}
+
+		$cached = get_transient( 'acps_ls_devstatus' );
+		if ( false !== $cached ) {
+			return (string) $cached;
+		}
+
+		$resp     = wp_remote_get( add_query_arg( 'key', rawurlencode( $key ), $url ), array( 'timeout' => 12 ) );
+		$verified = '';
+		if ( ! is_wp_error( $resp ) && 200 === (int) wp_remote_retrieve_response_code( $resp ) ) {
+			$body = json_decode( (string) wp_remote_retrieve_body( $resp ), true );
+			if ( is_array( $body ) && ! empty( $body['verified'] ) ) {
+				$verified = (string) $body['verified'];
+			}
+		}
+		set_transient( 'acps_ls_devstatus', $verified, 10 * MINUTE_IN_SECONDS );
+		return $verified;
+	}
+
+	/**
+	 * Production gate: may this install offer/apply an update to $version? Only
+	 * when the paired dev site has verified that version (or newer). Non-
+	 * production installs are never gated.
+	 *
+	 * @param string $version Candidate version.
+	 * @return bool
+	 */
+	private function rollout_allows( $version ) {
+		if ( 'production' !== $this->cfg['role'] ) {
+			return true;
+		}
+		$verified = $this->dev_verified_version();
+		if ( '' === $verified ) {
+			return false; // No confirmation yet — hold.
+		}
+		return version_compare( $verified, $version, '>=' );
+	}
+
+	/* --------------------------------------------------------------------- */
+	/* Helpers                                                                */
+	/* --------------------------------------------------------------------- */
+
+	/**
+	 * The plugin's directory-name slug.
+	 *
+	 * @return string
+	 */
+	private function slug() {
+		return dirname( ACPS_LS_BASENAME );
+	}
+
+	/**
+	 * Drop the cached remote lookup (and the dev-status cache).
 	 */
 	public function flush_cache() {
 		delete_transient( self::CACHE_KEY );
+		delete_transient( 'acps_ls_devstatus' );
 	}
 }

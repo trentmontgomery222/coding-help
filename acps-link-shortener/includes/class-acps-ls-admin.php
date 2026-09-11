@@ -491,6 +491,9 @@ class ACPS_LS_Admin {
 		$gh_asset        = isset( $_POST['gh_asset'] ) ? sanitize_file_name( wp_unslash( $_POST['gh_asset'] ) ) : '';
 		$gh_token        = isset( $_POST['gh_token'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_token'] ) ) : '';
 		$update_trigger  = isset( $_POST['update_trigger'] ) ? sanitize_title( wp_unslash( $_POST['update_trigger'] ) ) : '';
+		$update_role     = ( isset( $_POST['update_role'] ) && 'production' === $_POST['update_role'] ) ? 'production' : 'standalone';
+		$verify_url      = isset( $_POST['verify_status_url'] ) ? esc_url_raw( wp_unslash( $_POST['verify_status_url'] ), array( 'https', 'http' ) ) : '';
+		$verify_key      = isset( $_POST['verify_status_key'] ) ? sanitize_text_field( wp_unslash( $_POST['verify_status_key'] ) ) : '';
 
 		$settings                   = $existing;
 		$settings['update_enabled']  = $update_enabled;
@@ -503,6 +506,9 @@ class ACPS_LS_Admin {
 		$settings['gh_asset']        = $gh_asset;
 		$settings['gh_token']        = $gh_token;
 		$settings['update_trigger']  = $update_trigger;
+		$settings['update_role']       = $update_role;
+		$settings['verify_status_url'] = $verify_url;
+		$settings['verify_status_key'] = $verify_key;
 		$settings['link_domain']    = $link_domain;
 		$settings['shortcode_page'] = $shortcode_page;
 		$settings['people']         = $people;
@@ -1504,6 +1510,39 @@ class ACPS_LS_Admin {
 										<?php esc_html_e( 'Keep this word secret — anyone who knows it can trigger an update to the latest published version. Change it here to rotate it.', 'acps-link-shortener' ); ?>
 									</p>
 								<?php endif; ?>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<h3><?php esc_html_e( 'Staged rollout (optional, two sites)', 'acps-link-shortener' ); ?></h3>
+				<p class="description">
+					<?php esc_html_e( 'Test each release on a dev site before it reaches production. A "dev" install updates freely and crash-tests the new version; a "production" install only offers/installs a version once its paired dev site has confirmed that version loaded cleanly. Leave this on "Standalone" if you only have one site.', 'acps-link-shortener' ); ?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tbody>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'This install is', 'acps-link-shortener' ); ?></th>
+							<td>
+								<label><input type="radio" name="update_role" value="standalone" <?php checked( 'standalone', $upd['role'] ); ?> /> <?php esc_html_e( 'Standalone (no gating)', 'acps-link-shortener' ); ?></label><br />
+								<label><input type="radio" name="update_role" value="production" <?php checked( 'production', $upd['role'] ); ?> /> <?php esc_html_e( 'Production (wait for the dev site to verify)', 'acps-link-shortener' ); ?></label>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-verify-url"><?php esc_html_e( 'Dev status URL (on production)', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="url" name="verify_status_url" id="acps-ls-verify-url" class="regular-text code" value="<?php echo esc_attr( $upd['verify_url'] ); ?>" placeholder="https://dev.example.org/wp-json/acps-ls/v1/update-status" />
+								<p class="description"><?php esc_html_e( 'On the production site, point this at the dev site’s status endpoint below.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-verify-key"><?php esc_html_e( 'Shared status key', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="text" name="verify_status_key" id="acps-ls-verify-key" class="regular-text" value="<?php echo esc_attr( $upd['verify_key'] ); ?>" autocomplete="off" />
+								<p class="description">
+									<?php esc_html_e( 'Set the SAME secret on both sites. This dev install exposes its verified version at:', 'acps-link-shortener' ); ?><br />
+									<code><?php echo esc_html( rest_url( ACPS_LS_REST_NAMESPACE . '/update-status' ) ); ?></code>
+								</p>
 							</td>
 						</tr>
 					</tbody>
