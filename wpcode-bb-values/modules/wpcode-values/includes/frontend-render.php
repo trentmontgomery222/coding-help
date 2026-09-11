@@ -88,6 +88,22 @@ try {
 		}
 	}
 
+	/*
+	 * In the editor the module is rendered again on every save, without
+	 * a page reload, so its scripts run more than once in the same page.
+	 * Scoping them keeps a snippet that uses const or let at the top
+	 * level from dying on the second run. Visitors get the snippet's
+	 * output exactly as written unless the front-end filter says
+	 * otherwise.
+	 */
+	$scope = $editing
+		? apply_filters( 'wpcodebbv_scope_scripts', true )
+		: apply_filters( 'wpcodebbv_scope_scripts_on_front', false );
+
+	if ( $scope && function_exists( 'wpcodebbv_scope_scripts' ) ) {
+		$rendered = wpcodebbv_scope_scripts( $rendered );
+	}
+
 	// A note naming the snippet this module runs and what has been
 	// changed on it, so a page full of these is readable while editing.
 	// Printed only for the editor, never on the live page.

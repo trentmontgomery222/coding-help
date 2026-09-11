@@ -56,6 +56,75 @@ function wpcodebbv_snippet_code( $snippet ) {
 
 
 /**
+ * Wraps each inline script in the module's output in a function, so the
+ * same snippet can run more than once on one page.
+ *
+ * Saving a module in the Beaver Builder editor does not reload the page:
+ * Beaver Builder renders the module again and drops the new HTML in,
+ * which runs its scripts a SECOND time in the same page. A snippet that
+ * declares anything with const or let at the top level then redeclares
+ * it - "Identifier 'GCAL_CONFIG' has already been declared" - and the
+ * whole script dies before it draws anything. That is why the calendar
+ * went blank on save and came back on reload: a reload is a fresh global
+ * scope.
+ *
+ * Putting the body inside (function(){ ... })() makes those declarations
+ * local, so running it again is harmless. The cost is that anything the
+ * snippet declared at the top level stops being global, which is why
+ * this is applied in the editor and not to what visitors get - unless
+ * asked for:
+ *
+ *     add_filter( 'wpcodebbv_scope_scripts_on_front', '__return_true' );
+ *
+ * (That also lets the same snippet appear twice on one page.) To turn it
+ * off in the editor, for a snippet that really does need globals there:
+ *
+ *     add_filter( 'wpcodebbv_scope_scripts', '__return_false' );
+ *
+ * @param string $html The snippet's output.
+ * @return string
+ */
+function wpcodebbv_scope_scripts( $html ) {
+	if ( ! is_string( $html ) || '' === $html || false === stripos( $html, '<script' ) ) {
+		return $html;
+	}
+
+	$out = preg_replace_callback(
+		'#<script\b([^>]*)>(.*?)</script\s*>#is',
+		function ( $m ) {
+			$attributes = $m[1];
+			$body       = $m[2];
+
+			// Nothing to scope: an external file, or a block that is not
+			// script at all (JSON-LD, a template). A module already has
+			// its own scope and is fine to re-run.
+			if ( preg_match( '/\bsrc\s*=/i', $attributes ) ) {
+				return $m[0];
+			}
+
+			if ( preg_match( '/\btype\s*=\s*["\']?([^"\'\s>]+)/i', $attributes, $type ) ) {
+				$known = strtolower( $type[1] );
+
+				if ( 'text/javascript' !== $known && 'application/javascript' !== $known ) {
+					return $m[0];
+				}
+			}
+
+			if ( '' === trim( $body ) ) {
+				return $m[0];
+			}
+
+			return '<script' . $attributes . '>;(function(){' . $body . "\n})();</script>";
+		},
+		$html
+	);
+
+	// preg_replace_callback returns null if it hits its backtrack limit on
+	// a very large script; the original output is the safe answer.
+	return null === $out ? $html : $out;
+}
+
+/**
  * True only inside the Beaver Builder editor, for someone allowed to
  * edit pages.
  *

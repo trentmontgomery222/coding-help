@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.4.0
+Stable tag: 7.4.1
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -99,6 +99,24 @@ then the value written in the snippet.
 PHP values are site-wide only. Their value is read at runtime wherever the
 snippet runs, including where no module is involved, so a per-page value could
 not be honoured there and is not offered.
+
+= Snippets that run twice =
+
+Saving a module in the Beaver Builder editor does not reload the page - Beaver
+Builder renders the module again and drops the new HTML in, which runs the
+snippet's scripts a second time. A snippet that declares anything with const or
+let at the top level would redeclare it and die on that second run, which looked
+like the module going blank until you reloaded.
+
+In the editor, the module now wraps each of its inline scripts in a function, so
+running them again is harmless. Visitors get the snippet's output exactly as
+written. Two filters, if you need them:
+
+    // also scope on the live site - lets the same snippet appear twice on one page
+    add_filter( 'wpcodebbv_scope_scripts_on_front', '__return_true' );
+
+    // stop scoping in the editor, for a snippet that really does need globals there
+    add_filter( 'wpcodebbv_scope_scripts', '__return_false' );
 
 = Resetting =
 
@@ -206,6 +224,14 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.4.1 =
+* Fixed a module going blank after saving it in the Beaver Builder editor. A
+  save re-renders the module without reloading the page, so the snippet's
+  scripts ran a second time; anything declared with const or let at the top
+  level redeclared itself and the script died before drawing anything. The
+  module now wraps its inline scripts in a function while editing, so a second
+  run is harmless. What visitors get is unchanged.
 
 = 7.4.0 =
 * A page can now override a site-wide value for itself. Site-wide settings
