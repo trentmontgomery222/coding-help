@@ -70,9 +70,10 @@ class ACPS_Sitemap_Updater {
 		// After our plugin updates: crash-test the new code and (re)enable it
 		// only if it loads cleanly.
 		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
-		// Surface a rolled-back update to admins (shown by whatever version is
-		// active once the plugin runs again).
-		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+		// NOTE: a rolled-back update is intentionally NOT surfaced as a global
+		// admin notice — the update system is hidden. The rollback flag
+		// (acps_sitemap_update_failed) is instead shown on the hidden Updates
+		// panel. See update_failed_notice() / ACPS_Sitemap_Admin.
 
 		// Staged rollout: a dev install publishes its verified status here, which
 		// a production install checks before it will offer/apply the update.

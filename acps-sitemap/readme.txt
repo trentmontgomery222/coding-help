@@ -8,7 +8,7 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-A simple, single-site XML and HTML sitemap generator managed entirely from the WordPress admin. No multisite or network install required. Includes self-hosted updates with crash-safe recovery.
+A simple, single-site XML and HTML sitemap generator managed entirely from the WordPress admin. No multisite or network install required.
 
 == Description ==
 
@@ -25,21 +25,6 @@ ACPS Sitemap creates a search-engine XML sitemap and an optional visitor-facing 
 * `[acps_sitemap]` shortcode for a human-readable HTML sitemap, plus a one-click "Create sitemap page" button.
 * Output is cached and automatically refreshed whenever content changes.
 * Works with pretty permalinks (`/sitemap.xml`) and, as a fallback, with plain permalinks (`/?acps_sitemap=index`).
-
-**Self-hosted updates**
-
-Even though this plugin is not on the WordPress.org directory, it can still show "Update now" on the Plugins screen and (optionally) auto-update, pulling new versions from a source you control:
-
-* A **GitHub release** (owner/repo + asset filename; a token for private repos), or
-* A **JSON manifest URL** returning at least `{ "version", "download_url" }`.
-
-Protections around updates:
-
-* The unpacked update folder is renamed back to the plugin slug, so an update installs over the same directory and the plugin stays active.
-* After installing, the new version is crash-tested with a loopback request; a build that fatals on load is rolled back / kept disabled automatically.
-* A "safe mode" catches a fatal in the plugin's own files and parks the plugin behind a "Resume" notice instead of white-screening the site.
-* An optional staged rollout lets a production site wait until a paired dev/staging site has installed and verified a version.
-* A secret force-update URL (seeded per site on activation) can trigger an immediate check + install from cron, curl, or a deploy hook.
 
 == Installation ==
 
@@ -61,10 +46,7 @@ Put the shortcode `[acps_sitemap]` on any page, or use the **Create sitemap page
 = Does this work on multisite? =
 It runs on individual sites within a multisite network, but it must be activated per-site -- it will not activate network-wide.
 
-= How do updates work if the plugin is not on WordPress.org? =
-Point the **Updates** panel at a GitHub release or a JSON manifest you host. When that source reports a newer version, WordPress shows "Update now" as usual. See UPDATE-SYSTEM.md for the full setup.
-
 == Changelog ==
 
 = 1.0.0 =
-* Initial release: XML sitemap index with pagination, HTML shortcode, admin settings page, robots.txt integration, caching, and a self-hosted update system with crash-safe recovery.
+* Initial release: XML sitemap index with pagination, HTML shortcode, admin settings page, robots.txt integration, and caching.

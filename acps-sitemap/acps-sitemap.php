@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       ACPS Sitemap
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
- * Description:       Single-site XML and HTML sitemap generator, fully managed from the WordPress admin. No multisite or network install required. Includes self-hosted updates with crash-safe recovery.
+ * Description:       Single-site XML and HTML sitemap generator, fully managed from the WordPress admin. No multisite or network install required.
  * Version:           1.0.0
  * Requires at least: 5.0
  * Requires PHP:      7.0

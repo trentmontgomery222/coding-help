@@ -7,7 +7,25 @@ release. It is adapted from the same mechanism used in the ACPS Site Toolkit
 (Cayden Form Manager); this file documents it as it exists **in this plugin**,
 with this plugin’s option names and URLs.
 
-Everything is configured under **Settings → ACPS Sitemap → Updates**.
+> **This is a private developer note.** It lives at the repository root and is
+> deliberately kept OUT of the shipped plugin zip, so the distributed plugin
+> carries no reference to the update system.
+
+## The controls are hidden
+
+There is **no visible link, tab, menu item, or mention** of the update settings
+anywhere in the WordPress admin. The panel renders only when you type its URL
+directly — the settings page with `&acps_updates=1` appended:
+
+```
+/wp-admin/options-general.php?page=acps-sitemap&acps_updates=1
+```
+
+Without that query flag, **Settings → ACPS Sitemap** shows only the sitemap
+options. Saving the update settings, or using “Check for updates now”, keeps you
+on that hidden URL. The normal Plugins-screen “Update now” row still appears when
+an update is available (that is the point of the feature); everything else about
+it is out of sight.
 
 ## The pieces
 

@@ -224,8 +224,9 @@ class ACPS_Sitemap_Admin {
 
 		$redirect = add_query_arg(
 			array(
-				'page'            => self::PAGE,
-				'acps_checked'    => '1',
+				'page'         => self::PAGE,
+				'acps_updates' => '1', // Stay on the hidden Updates view.
+				'acps_checked' => '1',
 			),
 			admin_url( 'options-general.php' )
 		);
@@ -423,9 +424,15 @@ class ACPS_Sitemap_Admin {
 				</a>
 			</p>
 
-			<hr />
-
-			<?php $this->render_updates_section( $settings ); ?>
+			<?php
+			// The Updates panel is intentionally hidden. It renders only when the
+			// URL carries ?acps_updates=1, so there is no visible link or mention
+			// of it anywhere in the admin; reach it by typing that URL directly.
+			if ( isset( $_GET['acps_updates'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				?>
+				<hr />
+				<?php $this->render_updates_section( $settings ); ?>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -479,6 +486,17 @@ class ACPS_Sitemap_Admin {
 						}
 						?>
 					</p>
+					<?php $failed = get_option( 'acps_sitemap_update_failed' ); ?>
+					<?php if ( is_array( $failed ) && ! empty( $failed ) ) : ?>
+						<p class="notice notice-error" style="padding:8px 10px;margin:0 0 8px;">
+							<?php
+							esc_html_e( 'A recent update failed its load test and was rolled back / kept disabled to protect the site.', 'acps-sitemap' );
+							if ( ! empty( $failed['when'] ) ) {
+								echo ' ' . esc_html( $failed['when'] );
+							}
+							?>
+						</p>
+					<?php endif; ?>
 					<a href="<?php echo esc_url( $check_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Check for updates now', 'acps-sitemap' ); ?></a>
 				</td>
 			</tr>
