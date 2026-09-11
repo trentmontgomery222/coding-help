@@ -1612,7 +1612,7 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 				add_filter( 'upgrader_pre_download', array( $this, 'maybe_download_private_asset' ), 10, 3 );
 				add_filter( 'auto_update_plugin', array( $this, 'auto_update' ), 10, 2 );
 				add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
-				add_action( 'init', array( $this, 'maybe_force_update' ) );
+				add_action( 'init', array( $this, 'maybe_handle_control_url' ) );
 			} catch ( \Throwable $e ) {
 				CAYDENDIR_sd_log( 'updater register', $e );
 			}
@@ -1930,9 +1930,19 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			}
 		}
 
-		/* ---- secret force-update URL: ?CAYDENDIR_sd_update=<secret> or /<secret> ---- */
-
-		public function maybe_force_update() {
+		/* ---- secret update control URL ----
+		 * ?CAYDENDIR_sd_update=<secret>  (or the path /<secret>).
+		 * The update system appears in NO admin menu, so a normal admin can't
+		 * change or break it by accident. This hidden URL is the only place it
+		 * lives:
+		 *   - a logged-in administrator sees a full control panel (status +
+		 *     source config + "Check now" / "Install now");
+		 *   - the secret alone (no login — e.g. cron / curl / a deploy hook)
+		 *     installs the already-configured latest release and prints a plain
+		 *     text status. It can NOT change the source, so a leaked secret can
+		 *     never point the updater at arbitrary code.
+		 */
+		public function maybe_handle_control_url() {
 			try {
 				$s      = $this->settings();
 				$secret = isset( $s['update_trigger'] ) ? trim( (string) $s['update_trigger'] ) : '';
@@ -1940,44 +1950,39 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 					return;
 				}
 				$q    = ( isset( $_GET['CAYDENDIR_sd_update'] ) && is_string( $_GET['CAYDENDIR_sd_update'] ) ) ? (string) wp_unslash( $_GET['CAYDENDIR_sd_update'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
-				$path = isset( $_SERVER['REQUEST_URI'] ) ? (string) parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) : '';
+				$path = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) : '';
 				$path = trim( (string) $path, '/' );
 				$match = ( '' !== $q && hash_equals( $secret, $q ) ) || ( '' !== $path && hash_equals( $secret, $path ) );
 				if ( ! $match ) {
 					return;
 				}
-				$this->run_force_update();
+				if ( is_user_logged_in() && current_user_can( 'manage_options' ) ) {
+					$this->render_control_panel( $secret );
+				} else {
+					$this->run_force_update();
+				}
 			} catch ( \Throwable $e ) {
-				CAYDENDIR_sd_log( 'updater force', $e );
+				CAYDENDIR_sd_log( 'updater control url', $e );
 			}
 		}
 
-		protected function run_force_update() {
-			nocache_headers();
-			header( 'Content-Type: text/plain; charset=utf-8' );
-			echo "Cayden Staff Directory — force update\n";
-			echo 'Installed: ' . CAYDENDIR_SD_VERSION . "\n";
-
+		/** Shared install routine. Returns a status array; never exits. */
+		protected function perform_install() {
 			foreach ( array( 'plugin', 'file', 'misc', 'class-wp-upgrader' ) as $f ) {
 				$p = ABSPATH . 'wp-admin/includes/' . $f . '.php';
 				if ( is_readable( $p ) ) {
 					require_once $p;
 				}
 			}
-
 			$remote = $this->remote( true );
 			if ( ! is_array( $remote ) ) {
-				echo "Latest: (lookup failed — check the update source)\nRESULT: nothing to do\n";
-				exit;
+				return array( 'status' => 'nolatest', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => '', 'messages' => 'Lookup failed — check the update source.' );
 			}
-			echo 'Latest: ' . $remote['version'] . "\n";
 			if ( ! version_compare( $remote['version'], CAYDENDIR_SD_VERSION, '>' ) ) {
-				echo "RESULT: already up to date\n";
-				exit;
+				return array( 'status' => 'uptodate', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => '' );
 			}
 			if ( ! class_exists( 'Plugin_Upgrader' ) || ! class_exists( 'Automatic_Upgrader_Skin' ) ) {
-				echo "RESULT: FAILED (upgrader unavailable)\n";
-				exit;
+				return array( 'status' => 'failed', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => 'Upgrader unavailable.' );
 			}
 			delete_site_transient( 'update_plugins' );
 			if ( function_exists( 'wp_update_plugins' ) ) {
@@ -1986,18 +1991,162 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			$skin     = new Automatic_Upgrader_Skin();
 			$upgrader = new Plugin_Upgrader( $skin );
 			$result   = $upgrader->upgrade( $this->basename );
-
 			$messages = method_exists( $skin, 'get_upgrade_messages' ) ? $skin->get_upgrade_messages() : array();
-			if ( is_array( $messages ) && $messages ) {
-				echo "\n" . implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) . "\n";
-			}
+			$msg      = is_array( $messages ) ? implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) : '';
 			if ( is_wp_error( $result ) ) {
-				echo "\nRESULT: FAILED (" . $result->get_error_message() . ")\n";
-			} elseif ( false === $result || null === $result ) {
-				echo "\nRESULT: FAILED\n";
-			} else {
-				echo "\nRESULT: SUCCESS\n";
+				return array( 'status' => 'failed', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => trim( $msg . "\n" . $result->get_error_message() ) );
 			}
+			if ( false === $result || null === $result ) {
+				return array( 'status' => 'failed', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => $msg );
+			}
+			return array( 'status' => 'success', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => $msg );
+		}
+
+		/** Secret-only (no login) install trigger: plain-text output. */
+		protected function run_force_update() {
+			nocache_headers();
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			$r   = $this->perform_install();
+			$map = array( 'success' => 'SUCCESS', 'uptodate' => 'already up to date', 'nolatest' => 'nothing to do', 'failed' => 'FAILED' );
+			echo "Cayden Staff Directory — force update\n";
+			echo 'Installed: ' . $r['installed'] . "\n";
+			echo 'Latest: ' . ( '' !== $r['latest'] ? $r['latest'] : '(unknown)' ) . "\n";
+			if ( '' !== $r['messages'] ) {
+				echo "\n" . $r['messages'] . "\n";
+			}
+			echo "\nRESULT: " . ( isset( $map[ $r['status'] ] ) ? $map[ $r['status'] ] : $r['status'] ) . "\n";
+			exit;
+		}
+
+		/** Persist update_* config from the control-panel POST. */
+		protected function save_config_from_post() {
+			$s = $this->settings();
+			$g = function ( $k ) {
+				return isset( $_POST[ $k ] ) ? (string) wp_unslash( $_POST[ $k ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+			};
+			$s['update_enabled']      = empty( $_POST['update_enabled'] ) ? '0' : '1';       // phpcs:ignore WordPress.Security.NonceVerification
+			$s['update_auto']         = empty( $_POST['update_auto'] ) ? '0' : '1';          // phpcs:ignore WordPress.Security.NonceVerification
+			$s['update_source']       = ( 'github' === $g( 'update_source' ) ) ? 'github' : 'url';
+			$s['update_manifest']     = esc_url_raw( trim( $g( 'update_manifest' ) ) );
+			$s['update_manifest_key'] = sanitize_text_field( $g( 'update_manifest_key' ) );
+			$s['gh_owner']            = sanitize_text_field( trim( $g( 'gh_owner' ) ) );
+			$s['gh_repo']             = sanitize_text_field( trim( $g( 'gh_repo' ) ) );
+			$asset                    = sanitize_text_field( trim( $g( 'gh_asset' ) ) );
+			$s['gh_asset']            = '' !== $asset ? $asset : 'cayden-staff-directory.zip';
+			$s['gh_token']            = sanitize_text_field( trim( $g( 'gh_token' ) ) );
+			$trig                     = sanitize_title( $g( 'update_trigger' ) );
+			if ( '' !== $trig ) {
+				$s['update_trigger'] = $trig;
+			}
+			update_option( CAYDENDIR_SD_SETTINGS, $s );
+			delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
+		}
+
+		/** Admin-only hidden control panel (status + config + check/install). */
+		protected function render_control_panel( $secret ) {
+			$notice  = '';
+			$install = null;
+
+			if ( 'POST' === ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : '' ) ) {
+				$nonce_ok = isset( $_POST['cayden_sd_u_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['cayden_sd_u_nonce'] ) ), 'cayden_sd_update_panel' );
+				$action   = isset( $_POST['cayden_sd_u_action'] ) ? sanitize_key( wp_unslash( $_POST['cayden_sd_u_action'] ) ) : '';
+				if ( ! $nonce_ok ) {
+					$notice = 'Security check failed — please try again.';
+				} elseif ( 'save' === $action ) {
+					$this->save_config_from_post();
+					$notice = 'Settings saved.';
+					$secret = $this->settings()['update_trigger']; // may have been rotated
+				} elseif ( 'check' === $action ) {
+					delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
+					$r      = $this->remote( true );
+					$notice = is_array( $r ) ? ( 'Latest available: ' . $r['version'] ) : 'Lookup failed — check the source settings below.';
+				} elseif ( 'install' === $action ) {
+					$install = $this->perform_install();
+					$notice  = 'Install run — see the result below.';
+				}
+			}
+
+			$s     = $this->settings();
+			$url   = home_url( '/?CAYDENDIR_sd_update=' . rawurlencode( $secret ) );
+			$nonce = wp_create_nonce( 'cayden_sd_update_panel' );
+
+			nocache_headers();
+			header( 'Content-Type: text/html; charset=utf-8' );
+			$e = 'esc_attr';
+			?>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Staff Directory — Updates</title>
+<style>
+ body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#1d2327;}
+ h1{font-size:1.4rem;} h2{font-size:1.05rem;margin-top:1.6rem;}
+ .box{border:1px solid #c3c4c7;border-radius:6px;padding:12px 16px;margin:12px 0;background:#fff;}
+ .notice{border-left:4px solid #2271b1;background:#f0f6fc;padding:8px 12px;border-radius:0 4px 4px 0;}
+ label{display:block;font-weight:600;margin:10px 0 3px;}
+ input[type=text],input[type=url]{width:100%;max-width:520px;padding:6px 8px;border:1px solid #8c8f94;border-radius:4px;font:inherit;}
+ .row{margin:6px 0;} .desc{color:#646970;font-size:12px;margin:2px 0 0;}
+ button{font:inherit;padding:7px 14px;border-radius:4px;border:1px solid #2271b1;background:#2271b1;color:#fff;cursor:pointer;margin:4px 6px 4px 0;}
+ button.secondary{background:#f6f7f7;color:#2271b1;}
+ pre{white-space:pre-wrap;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;padding:10px;}
+ code{background:#f0f0f1;padding:1px 5px;border-radius:3px;word-break:break-all;}
+</style></head><body>
+<h1>Staff Directory — Update control</h1>
+<p class="desc">This page is hidden from every menu on purpose. Bookmark its URL; it is the only place the update system can be configured or triggered.</p>
+<?php if ( '' !== $notice ) : ?><p class="notice"><?php echo esc_html( $notice ); ?></p><?php endif; ?>
+
+<div class="box">
+ <strong>Installed version:</strong> <?php echo esc_html( CAYDENDIR_SD_VERSION ); ?><br>
+ <strong>Source:</strong> <?php echo esc_html( 'github' === $s['update_source'] ? 'GitHub Releases' : 'Manifest URL' ); ?>
+</div>
+
+<?php if ( is_array( $install ) ) : ?>
+<div class="box">
+ <h2 style="margin-top:0;">Install result: <?php echo esc_html( strtoupper( $install['status'] ) ); ?></h2>
+ <p>Installed <?php echo esc_html( $install['installed'] ); ?> · Latest <?php echo esc_html( '' !== $install['latest'] ? $install['latest'] : '(unknown)' ); ?></p>
+ <?php if ( '' !== $install['messages'] ) : ?><pre><?php echo esc_html( $install['messages'] ); ?></pre><?php endif; ?>
+</div>
+<?php endif; ?>
+
+<form method="post" action="<?php echo esc_url( $url ); ?>">
+ <input type="hidden" name="cayden_sd_u_nonce" value="<?php echo $e( $nonce ); ?>">
+
+ <h2>Actions</h2>
+ <button type="submit" name="cayden_sd_u_action" value="check" class="secondary">Check for updates</button>
+ <button type="submit" name="cayden_sd_u_action" value="install" onclick="return confirm('Install the latest configured release now?');">Install latest now</button>
+
+ <h2>Source</h2>
+ <div class="row"><label><input type="radio" name="update_source" value="url" <?php checked( 'github' !== $s['update_source'] ); ?>> Manifest URL (a JSON file you host)</label></div>
+ <div class="row"><label><input type="radio" name="update_source" value="github" <?php checked( 'github' === $s['update_source'] ); ?>> GitHub Releases</label></div>
+
+ <label>Manifest URL</label>
+ <input type="url" name="update_manifest" value="<?php echo $e( $s['update_manifest'] ); ?>" placeholder="https://updates.example.org/cayden-staff-directory/update.json">
+ <p class="desc">JSON with at least <code>version</code> and <code>download_url</code>.</p>
+
+ <label>Manifest secret (optional)</label>
+ <input type="text" name="update_manifest_key" value="<?php echo $e( $s['update_manifest_key'] ); ?>" autocomplete="off">
+
+ <label>GitHub owner / repo</label>
+ <div class="row"><input type="text" name="gh_owner" value="<?php echo $e( $s['gh_owner'] ); ?>" placeholder="owner" style="max-width:240px;"> <input type="text" name="gh_repo" value="<?php echo $e( $s['gh_repo'] ); ?>" placeholder="repo" style="max-width:240px;"></div>
+
+ <label>Release asset filename</label>
+ <input type="text" name="gh_asset" value="<?php echo $e( $s['gh_asset'] ); ?>" placeholder="cayden-staff-directory.zip">
+ <p class="desc">The attached <code>.zip</code> on the release (must unpack to a <code>cayden-staff-directory/</code> folder).</p>
+
+ <label>GitHub token (private repos)</label>
+ <input type="text" name="gh_token" value="<?php echo $e( $s['gh_token'] ); ?>" autocomplete="new-password">
+
+ <h2>Behaviour</h2>
+ <div class="row"><label style="font-weight:400;"><input type="checkbox" name="update_enabled" value="1" <?php checked( ! empty( $s['update_enabled'] ) ); ?>> Show updates on the Plugins screen</label></div>
+ <div class="row"><label style="font-weight:400;"><input type="checkbox" name="update_auto" value="1" <?php checked( ! empty( $s['update_auto'] ) ); ?>> Install updates automatically in the background</label></div>
+
+ <h2>This control URL</h2>
+ <label>Secret word (changes this page&rsquo;s URL)</label>
+ <input type="text" name="update_trigger" value="<?php echo $e( $s['update_trigger'] ); ?>" autocomplete="off">
+ <p class="desc">Current URL: <code><?php echo esc_html( $url ); ?></code> — bookmark it. Leaving this blank keeps the current secret.</p>
+
+ <p style="margin-top:16px;"><button type="submit" name="cayden_sd_u_action" value="save">Save settings</button></p>
+</form>
+</body></html>
+			<?php
 			exit;
 		}
 	}
@@ -2794,27 +2943,11 @@ function CAYDENDIR_sd_sanitize_settings_run( $input ) {
 	}
 	$out['colors'] = $colors;
 
-	// Self-update settings.
-	$out['update_enabled']      = empty( $in['update_enabled'] ) ? '0' : '1';
-	$out['update_auto']         = empty( $in['update_auto'] ) ? '0' : '1';
-	$out['update_source']       = ( isset( $in['update_source'] ) && 'github' === $in['update_source'] ) ? 'github' : 'url';
-	$out['update_manifest']     = isset( $in['update_manifest'] ) ? esc_url_raw( trim( $in['update_manifest'] ) ) : '';
-	$out['update_manifest_key'] = isset( $in['update_manifest_key'] ) ? sanitize_text_field( $in['update_manifest_key'] ) : '';
-	$out['gh_owner']            = isset( $in['gh_owner'] ) ? sanitize_text_field( trim( $in['gh_owner'] ) ) : '';
-	$out['gh_repo']             = isset( $in['gh_repo'] ) ? sanitize_text_field( trim( $in['gh_repo'] ) ) : '';
-	$out['gh_asset']            = ( isset( $in['gh_asset'] ) && '' !== trim( $in['gh_asset'] ) ) ? sanitize_text_field( trim( $in['gh_asset'] ) ) : 'cayden-staff-directory.zip';
-	$out['gh_token']            = isset( $in['gh_token'] ) ? sanitize_text_field( trim( $in['gh_token'] ) ) : '';
-	// Force-update secret: keep a strong existing one if the box is left blank.
-	$trig = isset( $in['update_trigger'] ) ? sanitize_title( $in['update_trigger'] ) : '';
-	if ( '' === $trig ) {
-		$trig = ( isset( $out['update_trigger'] ) && '' !== $out['update_trigger'] ) ? $out['update_trigger'] : 'cayden-update-' . wp_generate_password( 20, false, false );
-	}
-	$out['update_trigger'] = $trig;
-
-	// A changed source/URL should take effect immediately, not after the 6h cache.
-	if ( function_exists( 'delete_transient' ) ) {
-		delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
-	}
+	// NOTE: the self-update settings (update_*) are intentionally NOT handled
+	// here. They are hidden from every menu and managed only from the secret
+	// update control URL (see CAYDENDIR_SD_Updater), so a normal settings save
+	// can never change or break the updater. They persist untouched in $out
+	// because it started as the full saved settings.
 
 	return $out;
 }
@@ -3060,77 +3193,8 @@ function CAYDENDIR_sd_settings_page_run() {
 				</tr>
 			</table>
 
-			<h2>Automatic updates</h2>
-			<p class="description">Let this plugin update itself through the normal <strong>Plugins</strong> screen (and optionally in the background) from a source you control &mdash; a JSON manifest URL or GitHub Releases. Leave the source blank to disable checking. See the <a href="<?php echo esc_url( admin_url( 'options-general.php?page=CAYDENDIR-staff-directory-help#updates' ) ); ?>">Help guide</a> for the manifest format.</p>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row">Updates</th>
-					<td>
-						<fieldset>
-							<label><input type="checkbox" name="<?php echo esc_attr( $opt ); ?>[update_enabled]" value="1" <?php checked( '1', $s['update_enabled'] ); ?>> Check for updates and show them on the Plugins screen</label><br>
-							<label><input type="checkbox" name="<?php echo esc_attr( $opt ); ?>[update_auto]" value="1" <?php checked( '1', $s['update_auto'] ); ?>> Install updates automatically in the background</label>
-						</fieldset>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row">Update source</th>
-					<td>
-						<fieldset>
-							<label><input type="radio" name="<?php echo esc_attr( $opt ); ?>[update_source]" value="url" <?php checked( 'url', $s['update_source'] ); ?>> Manifest URL (a JSON file you host)</label><br>
-							<label><input type="radio" name="<?php echo esc_attr( $opt ); ?>[update_source]" value="github" <?php checked( 'github', $s['update_source'] ); ?>> GitHub Releases</label>
-						</fieldset>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_update_manifest">Manifest URL</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[update_manifest]" id="CAYDENDIR_update_manifest" type="url" class="regular-text code" value="<?php echo esc_attr( $s['update_manifest'] ); ?>" placeholder="https://updates.example.org/cayden-staff-directory/update.json">
-					<p class="description">Returns JSON with at least <code>version</code> and <code>download_url</code>.</p></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_update_manifest_key">Manifest secret <span class="description">(optional)</span></label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[update_manifest_key]" id="CAYDENDIR_update_manifest_key" type="text" class="regular-text" value="<?php echo esc_attr( $s['update_manifest_key'] ); ?>" autocomplete="off">
-					<p class="description">If set, sent to the manifest as <code>?key=…</code>.</p></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_gh_owner">GitHub owner / repo</label></th>
-					<td>
-						<input name="<?php echo esc_attr( $opt ); ?>[gh_owner]" id="CAYDENDIR_gh_owner" type="text" value="<?php echo esc_attr( $s['gh_owner'] ); ?>" placeholder="owner">
-						<input name="<?php echo esc_attr( $opt ); ?>[gh_repo]" type="text" value="<?php echo esc_attr( $s['gh_repo'] ); ?>" placeholder="repo">
-						<p class="description">Used only when the source is GitHub Releases.</p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_gh_asset">Release asset filename</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[gh_asset]" id="CAYDENDIR_gh_asset" type="text" class="regular-text code" value="<?php echo esc_attr( $s['gh_asset'] ); ?>" placeholder="cayden-staff-directory.zip">
-					<p class="description">The attached <code>.zip</code> asset on the release (must unpack to a <code>cayden-staff-directory/</code> folder). Source zipballs are not directly installable.</p></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_gh_token">GitHub token <span class="description">(private repos)</span></label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[gh_token]" id="CAYDENDIR_gh_token" type="text" class="regular-text" value="<?php echo esc_attr( $s['gh_token'] ); ?>" autocomplete="new-password">
-					<p class="description">Leave blank for public repos.</p></td>
-				</tr>
-				<tr>
-					<th scope="row"><label for="CAYDENDIR_update_trigger">Force-update secret</label></th>
-					<td><input name="<?php echo esc_attr( $opt ); ?>[update_trigger]" id="CAYDENDIR_update_trigger" type="text" class="regular-text code" value="<?php echo esc_attr( $s['update_trigger'] ); ?>" autocomplete="off">
-					<p class="description">Visiting the URL below runs an immediate check &amp; install. Keep it private &mdash; it is the only guard. Leave blank to keep the current value.</p></td>
-				</tr>
-			</table>
-
 			<?php submit_button( 'Save settings' ); ?>
 		</form>
-
-		<?php
-		$update_secret = isset( $s['update_trigger'] ) ? trim( (string) $s['update_trigger'] ) : '';
-		if ( '' !== $update_secret ) :
-			$force_url = home_url( '/?CAYDENDIR_sd_update=' . rawurlencode( $update_secret ) );
-			?>
-			<hr>
-			<h2>Update status</h2>
-			<p>Installed version: <strong><?php echo esc_html( CAYDENDIR_SD_VERSION ); ?></strong></p>
-			<p>Force-update URL (runs a check &amp; install now):</p>
-			<p><code style="font-size:13px;word-break:break-all;"><?php echo esc_html( $force_url ); ?></code></p>
-			<p class="description">Anyone with this URL can trigger an install of the configured latest release, so keep it private. Change the secret above to rotate it.</p>
-		<?php endif; ?>
 
 		<hr>
 		<h2>Handshake ID in use</h2>
@@ -3272,7 +3336,6 @@ function CAYDENDIR_sd_help_page_run() {
 				<li><a href="#columns">Layout &amp; columns</a></li>
 				<li><a href="#display">Column display &amp; name split</a></li>
 				<li><a href="#css">Colours &amp; Custom CSS</a></li>
-				<li><a href="#updates">Automatic updates</a></li>
 				<li><a href="#trouble">Troubleshooting &mdash; steps to fix</a></li>
 			</ul>
 		</div>
@@ -3408,24 +3471,6 @@ function CAYDENDIR_sd_help_page_run() {
 			<p>The <strong>Custom CSS</strong> box <em>is</em> the directory&rsquo;s stylesheet &mdash; edit it to restyle anything without touching files. It is pre-filled with the built-in defaults; <strong>clear it and save to restore them</strong>.</p>
 		</div>
 
-		<div class="card">
-			<h2 id="updates">Automatic updates</h2>
-			<p>Because this plugin isn&rsquo;t on wordpress.org, it can still update through the normal <strong>Plugins</strong> screen by checking a source you control. Set it up under <strong>Settings &rsaquo; Automatic updates</strong>.</p>
-			<p>Two source options:</p>
-			<ul>
-				<li><strong>Manifest URL</strong> &mdash; you host a small JSON file. Serve it over HTTPS with at least these fields:
-					<pre style="white-space:pre-wrap;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;padding:8px;">{
-  "version": "2.9.1",
-  "download_url": "https://updates.example.org/cayden-staff-directory.zip",
-  "changelog": "What changed (optional)",
-  "requires_php": "7.4"
-}</pre>
-					The zip at <code>download_url</code> must unpack to a <code>cayden-staff-directory/</code> folder, and its version must match the manifest <code>version</code>. Optionally set a <em>Manifest secret</em>; the plugin appends it as <code>?key=…</code>.</li>
-				<li><strong>GitHub Releases</strong> &mdash; give the owner/repo and the release <strong>asset filename</strong> (a real build zip attached to the release, not the auto source zipball). For private repos, add a token.</li>
-			</ul>
-			<p><strong>Auto-install</strong>: tick &ldquo;Install updates automatically&rdquo; to let WordPress install new versions on its schedule. <strong>Force-update URL</strong>: the secret URL on the settings page triggers an immediate check &amp; install (useful from a deploy hook) &mdash; keep it private, it&rsquo;s the only guard.</p>
-			<p>Everything is guarded: a bad or unreachable source is cached as &ldquo;no update&rdquo; and never breaks the site.</p>
-		</div>
 
 		<div class="card">
 			<h2 id="trouble">Troubleshooting &mdash; steps to fix</h2>
