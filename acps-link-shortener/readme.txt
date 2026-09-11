@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.15.0
+Stable tag: 1.16.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,15 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.16.0 =
+* The update controls are now on a hidden admin page. They no longer appear on
+  Settings → Link Shortener, in any menu, or anywhere else in wp-admin. The page
+  is reachable only by its direct URL:
+  wp-admin/admin.php?page=acps-link-shortener-updates
+  Saving general settings and saving update settings are now fully independent,
+  so neither can overwrite the other. All update behavior is unchanged — only
+  where the controls live.
 
 = 1.15.0 =
 * Update system hardened (ported from the Cayden Site Toolkit updater):

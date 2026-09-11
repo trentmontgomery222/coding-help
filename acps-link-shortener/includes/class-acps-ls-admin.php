@@ -16,6 +16,8 @@ class ACPS_LS_Admin {
 
 	const MENU_SLUG     = 'acps-link-shortener';
 	const SETTINGS_SLUG = 'acps-link-shortener-settings';
+	// Hidden page: registered so its URL works, but not shown in any menu.
+	const UPDATES_SLUG  = 'acps-link-shortener-updates';
 
 	/**
 	 * Notices to render, [type => [messages]].
@@ -59,6 +61,16 @@ class ACPS_LS_Admin {
 	 */
 	private function checker_url() {
 		return admin_url( 'admin.php?page=' . self::MENU_SLUG . '-checker' );
+	}
+
+	/**
+	 * URL of the hidden Updates screen. Deliberately not linked from any menu or
+	 * other screen — reachable only by someone who knows this address.
+	 *
+	 * @return string
+	 */
+	private function updates_url() {
+		return admin_url( 'admin.php?page=' . self::UPDATES_SLUG );
 	}
 
 	/**
@@ -114,6 +126,18 @@ class ACPS_LS_Admin {
 			$cap,
 			self::SETTINGS_SLUG,
 			array( $this, 'render_settings_page' )
+		);
+
+		// Hidden "Updates" page: registered with a null parent so WordPress
+		// serves it at admin.php?page=acps-link-shortener-updates but never
+		// lists it in any menu. Reachable by direct link only.
+		add_submenu_page(
+			self::MENU_SLUG . '-hidden', // A parent that does not exist -> no menu item anywhere.
+			__( 'Updates', 'acps-link-shortener' ),
+			__( 'Updates', 'acps-link-shortener' ),
+			$cap,
+			self::UPDATES_SLUG,
+			array( $this, 'render_updates_page' )
 		);
 	}
 
@@ -209,6 +233,12 @@ class ACPS_LS_Admin {
 		// Settings submission.
 		if ( isset( $_POST['acps_ls_save_settings'] ) ) {
 			$this->handle_settings_save();
+			return;
+		}
+
+		// Hidden Updates page submission.
+		if ( isset( $_POST['acps_ls_save_updates'] ) ) {
+			$this->handle_updates_save();
 			return;
 		}
 
@@ -480,35 +510,11 @@ class ACPS_LS_Admin {
 			}
 		}
 
-		// Self-updater settings.
-		$update_enabled  = isset( $_POST['update_enabled'] ) ? 1 : 0;
-		$update_auto     = isset( $_POST['update_auto'] ) ? 1 : 0;
-		$update_source   = ( isset( $_POST['update_source'] ) && 'github' === $_POST['update_source'] ) ? 'github' : 'url';
-		$update_manifest = isset( $_POST['update_manifest'] ) ? esc_url_raw( wp_unslash( $_POST['update_manifest'] ), array( 'https', 'http' ) ) : '';
-		$update_mkey     = isset( $_POST['update_manifest_key'] ) ? sanitize_text_field( wp_unslash( $_POST['update_manifest_key'] ) ) : '';
-		$gh_owner        = isset( $_POST['gh_owner'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_owner'] ) ) : '';
-		$gh_repo         = isset( $_POST['gh_repo'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_repo'] ) ) : '';
-		$gh_asset        = isset( $_POST['gh_asset'] ) ? sanitize_file_name( wp_unslash( $_POST['gh_asset'] ) ) : '';
-		$gh_token        = isset( $_POST['gh_token'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_token'] ) ) : '';
-		$update_trigger  = isset( $_POST['update_trigger'] ) ? sanitize_title( wp_unslash( $_POST['update_trigger'] ) ) : '';
-		$update_role     = ( isset( $_POST['update_role'] ) && 'production' === $_POST['update_role'] ) ? 'production' : 'standalone';
-		$verify_url      = isset( $_POST['verify_status_url'] ) ? esc_url_raw( wp_unslash( $_POST['verify_status_url'] ), array( 'https', 'http' ) ) : '';
-		$verify_key      = isset( $_POST['verify_status_key'] ) ? sanitize_text_field( wp_unslash( $_POST['verify_status_key'] ) ) : '';
+		// NOTE: all update-related settings live on the hidden Updates page and
+		// are saved by handle_updates_save(). They are intentionally NOT read or
+		// written here, so saving general settings never touches them.
 
 		$settings                   = $existing;
-		$settings['update_enabled']  = $update_enabled;
-		$settings['update_auto']     = $update_auto;
-		$settings['update_source']   = $update_source;
-		$settings['update_manifest'] = $update_manifest;
-		$settings['update_manifest_key'] = $update_mkey;
-		$settings['gh_owner']        = $gh_owner;
-		$settings['gh_repo']         = $gh_repo;
-		$settings['gh_asset']        = $gh_asset;
-		$settings['gh_token']        = $gh_token;
-		$settings['update_trigger']  = $update_trigger;
-		$settings['update_role']       = $update_role;
-		$settings['verify_status_url'] = $verify_url;
-		$settings['verify_status_key'] = $verify_key;
 		$settings['link_domain']    = $link_domain;
 		$settings['shortcode_page'] = $shortcode_page;
 		$settings['people']         = $people;
@@ -1039,7 +1045,6 @@ class ACPS_LS_Admin {
 		$sheet_url    = ! empty( $settings['sheet_url'] ) ? $settings['sheet_url'] : '';
 		$sheet_secret = ! empty( $settings['sheet_secret'] ) ? $settings['sheet_secret'] : '';
 		$last_sync    = get_option( 'acps_ls_last_sync' );
-		$upd          = ACPS_LS_Updater::config();
 		$chk           = ACPS_LS_Checker::settings();
 		$notify_email  = $chk['notify_email'] ? $chk['notify_email'] : get_option( 'admin_email' );
 		$exclusions    = implode( "\n", $chk['exclusions'] );
@@ -1438,6 +1443,75 @@ class ACPS_LS_Admin {
 				</table>
 				<p class="description"><?php esc_html_e( 'To delete a rule, clear its pattern and save. Empty rows are ignored.', 'acps-link-shortener' ); ?></p>
 
+				<p>
+					<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings', false ); ?>
+					<?php submit_button( __( 'Test connection', 'acps-link-shortener' ), 'secondary', 'acps_ls_test_sync', false ); ?>
+				</p>
+			</form>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Save the hidden Updates page. Writes ONLY the update_* settings so it never
+	 * disturbs the general settings, and vice versa.
+	 */
+	private function handle_updates_save() {
+		check_admin_referer( 'acps_ls_updates', 'acps_ls_updates_nonce' );
+
+		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
+			wp_die( esc_html__( 'You do not have permission to change settings.', 'acps-link-shortener' ) );
+		}
+
+		$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
+		$settings = is_array( $settings ) ? $settings : array();
+
+		$settings['update_enabled']     = isset( $_POST['update_enabled'] ) ? 1 : 0;
+		$settings['update_auto']        = isset( $_POST['update_auto'] ) ? 1 : 0;
+		$settings['update_source']      = ( isset( $_POST['update_source'] ) && 'github' === $_POST['update_source'] ) ? 'github' : 'url';
+		$settings['update_manifest']    = isset( $_POST['update_manifest'] ) ? esc_url_raw( wp_unslash( $_POST['update_manifest'] ), array( 'https', 'http' ) ) : '';
+		$settings['update_manifest_key'] = isset( $_POST['update_manifest_key'] ) ? sanitize_text_field( wp_unslash( $_POST['update_manifest_key'] ) ) : '';
+		$settings['gh_owner']           = isset( $_POST['gh_owner'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_owner'] ) ) : '';
+		$settings['gh_repo']            = isset( $_POST['gh_repo'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_repo'] ) ) : '';
+		$settings['gh_asset']           = isset( $_POST['gh_asset'] ) ? sanitize_file_name( wp_unslash( $_POST['gh_asset'] ) ) : '';
+		$settings['gh_token']           = isset( $_POST['gh_token'] ) ? sanitize_text_field( wp_unslash( $_POST['gh_token'] ) ) : '';
+		$settings['update_trigger']     = isset( $_POST['update_trigger'] ) ? sanitize_title( wp_unslash( $_POST['update_trigger'] ) ) : '';
+		$settings['update_role']        = ( isset( $_POST['update_role'] ) && 'production' === $_POST['update_role'] ) ? 'production' : 'standalone';
+		$settings['verify_status_url']  = isset( $_POST['verify_status_url'] ) ? esc_url_raw( wp_unslash( $_POST['verify_status_url'] ), array( 'https', 'http' ) ) : '';
+		$settings['verify_status_key']  = isset( $_POST['verify_status_key'] ) ? sanitize_text_field( wp_unslash( $_POST['verify_status_key'] ) ) : '';
+
+		update_option( ACPS_LS_OPT_SETTINGS, $settings );
+		delete_transient( 'acps_ls_update_remote' );
+		delete_transient( 'acps_ls_devstatus' );
+
+		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', $this->updates_url() ) );
+		exit;
+	}
+
+	/**
+	 * Render the HIDDEN Updates screen. Not linked from any menu or other page —
+	 * reachable only by whoever knows this URL:
+	 *   wp-admin/admin.php?page=acps-link-shortener-updates
+	 */
+	public function render_updates_page() {
+		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
+			wp_die( esc_html__( 'You do not have permission to view this page.', 'acps-link-shortener' ) );
+		}
+
+		$upd = ACPS_LS_Updater::config();
+		?>
+		<div class="wrap acps-ls-wrap">
+			<h1><?php esc_html_e( 'Link Shortener — Updates', 'acps-link-shortener' ); ?></h1>
+
+			<?php $this->render_notice_from_query(); ?>
+
+			<p class="description">
+				<?php esc_html_e( 'This screen is intentionally hidden from the menus. Bookmark its URL to return to it.', 'acps-link-shortener' ); ?>
+			</p>
+
+			<form method="post" action="<?php echo esc_url( $this->updates_url() ); ?>">
+				<?php wp_nonce_field( 'acps_ls_updates', 'acps_ls_updates_nonce' ); ?>
+
 				<h2><?php esc_html_e( 'Automatic updates', 'acps-link-shortener' ); ?></h2>
 				<p class="description">
 					<?php esc_html_e( 'Let this plugin update itself from a source you control — a file you host, or a GitHub release. When a newer version is published, WordPress shows an “Update now” button (and installs it silently if auto-update is on).', 'acps-link-shortener' ); ?>
@@ -1464,7 +1538,7 @@ class ACPS_LS_Admin {
 								<input type="url" name="update_manifest" id="acps-ls-update-manifest" class="regular-text code" value="<?php echo esc_attr( $upd['manifest'] ); ?>" placeholder="https://updates.example.org/acps-link-shortener/update.json" />
 								<p class="description">
 									<?php esc_html_e( 'A URL that returns JSON like:', 'acps-link-shortener' ); ?>
-									<code>{"version":"1.14.0","download_url":"https://…/acps-link-shortener.zip","changelog":"…"}</code><br />
+									<code>{"version":"1.15.0","download_url":"https://…/acps-link-shortener.zip","changelog":"…"}</code><br />
 									<?php esc_html_e( 'Host that file and the zip anywhere over HTTPS. To ship an update: upload the new zip, bump "version" in the JSON.', 'acps-link-shortener' ); ?>
 								</p>
 							</td>
@@ -1548,10 +1622,7 @@ class ACPS_LS_Admin {
 					</tbody>
 				</table>
 
-				<p>
-					<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings', false ); ?>
-					<?php submit_button( __( 'Test connection', 'acps-link-shortener' ), 'secondary', 'acps_ls_test_sync', false ); ?>
-				</p>
+				<p><?php submit_button( __( 'Save Update Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_updates', false ); ?></p>
 			</form>
 		</div>
 		<?php
