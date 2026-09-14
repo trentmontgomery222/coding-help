@@ -40,7 +40,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.5.0
+Stable tag: 7.5.1
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -260,6 +260,16 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.5.1 =
+* Fixed the force-update URL reporting FAILED with "The plugin is at the
+  latest version." even when a newer release was there. Switching off the
+  Plugins-screen update row in 7.2.0 also stopped this plugin being added to
+  WordPress's own update list - which is the only place WordPress looks to
+  find the package. The force-update run now adds it for the duration of that
+  one request, so the Plugins screen stays clear and the update installs.
+* If WordPress still has no entry for the plugin, the force URL now says so
+  instead of passing on WordPress's misleading "already at the latest version".
 
 = 7.5.0 =
 * Added a file manifest: the plugin now knows which files it should have, says

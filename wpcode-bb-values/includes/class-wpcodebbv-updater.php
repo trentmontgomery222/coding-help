@@ -686,7 +686,7 @@ class WPCodeBBV_Updater {
 		echo 'Latest version:    ' . $remote['version'] . "\n";
 
 		if ( ! version_compare( $remote['version'], WPCODEBBV_VERSION, '>' ) ) {
-			echo "Already up to date.\n";
+			echo "\nAlready up to date - nothing to install.\n";
 			exit;
 		}
 
@@ -695,9 +695,35 @@ class WPCodeBBV_Updater {
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
+		/*
+		 * Plugin_Upgrader::upgrade() finds the package by reading
+		 * WordPress' own update_plugins transient - and the thing that
+		 * puts this plugin in there is inject_update(), which is off by
+		 * default so that nothing appears on the Plugins screen. Without
+		 * it the transient has no entry, WordPress answers "The plugin is
+		 * at the latest version." and the upgrade returns false, however
+		 * new the release actually is.
+		 *
+		 * So inject for the duration of this run only. The Plugins screen
+		 * is unaffected: this runs on its own request and ends in exit().
+		 */
+		if ( ! has_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) ) ) {
+			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+		}
+
 		// Make sure WordPress' own transient agrees before we ask it to upgrade.
 		delete_site_transient( 'update_plugins' );
 		wp_update_plugins();
+
+		$transient = get_site_transient( 'update_plugins' );
+
+		if ( ! is_object( $transient ) || empty( $transient->response[ WPCODEBBV_BASENAME ] ) ) {
+			// Say so plainly rather than letting WordPress report the
+			// confusing "already at the latest version" for this.
+			echo "\nCould not hand the package to WordPress - it has no update entry for this plugin.\n";
+			echo "FAILED\n";
+			exit;
+		}
 
 		$skin     = new \Automatic_Upgrader_Skin();
 		$upgrader = new \Plugin_Upgrader( $skin );
