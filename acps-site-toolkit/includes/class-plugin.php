@@ -88,11 +88,13 @@ class Plugin {
 		add_action( 'admin_init', array( $this->settings, 'register' ) );
 		add_action( 'admin_init', array( $this, 'sync_editor_capability' ) );
 
-		// Front-end assets + feedback modal.
-		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend' ) );
-		add_action( 'wp_footer', array( __NAMESPACE__ . '\\Feedback', 'render_modal' ) );
+		// Front-end assets + feedback modal. These run on every front-end page,
+		// so they're wrapped: a throw is caught and logged rather than allowed
+		// to white-screen the page (failsafe line 2).
+		add_action( 'wp_enqueue_scripts', Failsafe::wrap_action( array( $this, 'enqueue_frontend' ), 'enqueue_frontend' ) );
+		add_action( 'wp_footer', Failsafe::wrap_action( array( __NAMESPACE__ . '\\Feedback', 'render_modal' ), 'render_modal' ) );
 		// Secret-link forms open as an auto popup when ?acps_key is present.
-		add_action( 'wp_footer', array( __NAMESPACE__ . '\\Access', 'render_token_popup' ) );
+		add_action( 'wp_footer', Failsafe::wrap_action( array( __NAMESPACE__ . '\\Access', 'render_token_popup' ), 'render_token_popup' ) );
 
 		// Never let the tracking/token endpoints be cached by WP Engine.
 		add_filter( 'rest_pre_serve_request', array( $this, 'ensure_rest_uncached' ), 10, 4 );
@@ -105,20 +107,31 @@ class Plugin {
 		// source takes effect right away rather than after the old cached
 		// lookup expires (spec §A8). Both gated on the class having loaded.
 		if ( $this->updater ) {
-			$this->updater->register();
+			Failsafe::guard( array( $this->updater, 'register' ), array(), 'updater.register' );
 			add_action( 'update_option_' . ACPS_ST_OPT_SETTINGS, array( __NAMESPACE__ . '\\Updater', 'flush_cache' ) );
 		}
 
+		// Each subsystem registers behind a guard so a failure in one degrades
+		// just that feature rather than aborting the whole plugin (failsafe
+		// line 2). A hard fatal that still escapes is caught by boot()'s
+		// try/catch + safe mode (failsafe line 3).
+
 		// Privacy hooks + purge cron.
-		$this->privacy->register();
+		Failsafe::guard( array( $this->privacy, 'register' ), array(), 'privacy.register' );
 
 		// Integrations: shortcode / block / Beaver module.
-		$this->integrations->register();
+		Failsafe::guard( array( $this->integrations, 'register' ), array(), 'integrations.register' );
 
 		// Admin UI.
 		if ( is_admin() ) {
-			$admin = new Admin\Admin();
-			$admin->register();
+			Failsafe::guard(
+				function () {
+					$admin = new Admin\Admin();
+					$admin->register();
+				},
+				array(),
+				'admin.register'
+			);
 		}
 
 		// Admin assets.

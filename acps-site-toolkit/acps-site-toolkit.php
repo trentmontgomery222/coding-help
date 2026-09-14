@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Form Manager
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.44.0
+ * Version:           1.45.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.44.0' );
+define( 'ACPS_ST_VERSION', '1.45.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).
@@ -215,6 +215,35 @@ function boot() {
 			add_action( 'admin_notices', __NAMESPACE__ . '\\safe_mode_notice' );
 		}
 		return; // Stay dormant — keep the site up.
+	}
+
+	// File-integrity guard (failsafe line 1): if a required file is missing —
+	// a partial/corrupt upload or a half-finished update — don't boot into a
+	// "class not found" fatal. Stay dormant and tell the admin what to restore.
+	// Wrapped in try/catch so that even the guard itself can never crash boot.
+	try {
+		if ( is_readable( ACPS_ST_PATH . 'includes/class-failsafe.php' ) ) {
+			$missing = Failsafe::missing_files();
+			if ( ! empty( $missing ) ) {
+				if ( is_admin() ) {
+					add_action(
+						'admin_notices',
+						function () use ( $missing ) {
+							Failsafe::missing_files_notice( $missing );
+						}
+					);
+				}
+				if ( function_exists( 'error_log' ) ) {
+					error_log( '[Cayden Form Manager] Missing required files — staying dormant: ' . implode( ', ', $missing ) ); // phpcs:ignore
+				}
+				return; // Keep the site up.
+			}
+		}
+	} catch ( \Throwable $e ) {
+		// The integrity check must never be the thing that breaks the site.
+		if ( function_exists( 'error_log' ) ) {
+			error_log( '[Cayden Form Manager] Integrity check error: ' . $e->getMessage() ); // phpcs:ignore
+		}
 	}
 
 	// Catch a fatal that happens later in the request (in a hook callback) so

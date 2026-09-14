@@ -21,19 +21,22 @@ class Integrations {
 	 * Register everything.
 	 */
 	public function register() {
-		add_shortcode( 'acps_form', array( $this, 'shortcode_form' ) );
-		add_shortcode( 'acps_feedback', array( $this, 'shortcode_feedback' ) );
-		add_shortcode( 'acps_contact', array( $this, 'shortcode_contact' ) );
-		add_shortcode( 'acps_qa', array( $this, 'shortcode_qa' ) );
+		// Shortcodes render HTML straight into a page, so a throw here would
+		// white-screen that page. Every render path is wrapped so a failure
+		// degrades to an empty result (or an editor-only notice) instead.
+		add_shortcode( 'acps_form', Failsafe::wrap_render( array( $this, 'shortcode_form' ), 'shortcode.form' ) );
+		add_shortcode( 'acps_feedback', Failsafe::wrap_render( array( $this, 'shortcode_feedback' ), 'shortcode.feedback' ) );
+		add_shortcode( 'acps_contact', Failsafe::wrap_render( array( $this, 'shortcode_contact' ), 'shortcode.contact' ) );
+		add_shortcode( 'acps_qa', Failsafe::wrap_render( array( $this, 'shortcode_qa' ), 'shortcode.qa' ) );
 
-		add_action( 'init', array( $this, 'register_block' ) );
-		add_action( 'init', array( $this, 'register_beaver_module' ) );
+		add_action( 'init', Failsafe::wrap_action( array( $this, 'register_block' ), 'register_block' ) );
+		add_action( 'init', Failsafe::wrap_action( array( $this, 'register_beaver_module' ), 'register_beaver_module' ) );
 
 		// Elementor widget — registered only when Elementor is present. Every
 		// other builder is already covered: GeneratePress/GenerateBlocks and the
 		// block editor via the Gutenberg block, Beaver via its module, and any
 		// builder with an HTML/shortcode widget via [acps_form].
-		add_action( 'elementor/widgets/register', array( $this, 'register_elementor_widget' ) );
+		add_action( 'elementor/widgets/register', Failsafe::wrap_action( array( $this, 'register_elementor_widget' ), 'register_elementor' ) );
 	}
 
 	/**
@@ -135,7 +138,7 @@ class Integrations {
 				'attributes'      => array(
 					'formId' => array( 'type' => 'number', 'default' => 0 ),
 				),
-				'render_callback' => array( $this, 'render_block' ),
+				'render_callback' => Failsafe::wrap_render( array( $this, 'render_block' ), 'render_block' ),
 			)
 		);
 	}
