@@ -25,12 +25,30 @@ class ACPS_Sitemap_HTML {
 	}
 
 	/**
-	 * Render the shortcode.
+	 * Render the shortcode. Guarded so a failure returns an empty string rather
+	 * than breaking the page the shortcode sits on.
 	 *
 	 * @param array|string $atts Shortcode attributes.
 	 * @return string
 	 */
 	public function render( $atts ) {
+		try {
+			return $this->build( $atts );
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[ACPS Sitemap] shortcode: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+			}
+			return '';
+		}
+	}
+
+	/**
+	 * Build the shortcode output.
+	 *
+	 * @param array|string $atts Shortcode attributes.
+	 * @return string
+	 */
+	private function build( $atts ) {
 		$settings = ACPS_Sitemap::get_settings();
 
 		$atts = shortcode_atts(

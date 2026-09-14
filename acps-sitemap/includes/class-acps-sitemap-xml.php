@@ -36,11 +36,27 @@ class ACPS_Sitemap_XML {
 	}
 
 	/**
+	 * Log a handled failure (only when WP_DEBUG is on). Failures are swallowed
+	 * so a problem in sitemap output can never surface as a site error.
+	 *
+	 * @param string $msg Message.
+	 */
+	private static function log( $msg ) {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( '[ACPS Sitemap] ' . $msg ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+		}
+	}
+
+	/**
 	 * Add rewrite rules on every request when the XML sitemap is enabled.
 	 */
 	public function maybe_add_rewrite_rules() {
-		if ( ACPS_Sitemap::get_setting( 'enable_xml' ) ) {
-			self::add_rewrite_rules();
+		try {
+			if ( ACPS_Sitemap::get_setting( 'enable_xml' ) ) {
+				self::add_rewrite_rules();
+			}
+		} catch ( \Throwable $e ) {
+			self::log( 'maybe_add_rewrite_rules: ' . $e->getMessage() );
 		}
 	}
 
@@ -71,8 +87,12 @@ class ACPS_Sitemap_XML {
 	 * @return bool
 	 */
 	public function filter_core_sitemap_enabled( $enabled ) {
-		if ( ACPS_Sitemap::get_setting( 'enable_xml' ) && ACPS_Sitemap::get_setting( 'disable_core_sitemap' ) ) {
-			return false;
+		try {
+			if ( ACPS_Sitemap::get_setting( 'enable_xml' ) && ACPS_Sitemap::get_setting( 'disable_core_sitemap' ) ) {
+				return false;
+			}
+		} catch ( \Throwable $e ) {
+			self::log( 'filter_core_sitemap_enabled: ' . $e->getMessage() );
 		}
 		return $enabled;
 	}
@@ -85,8 +105,12 @@ class ACPS_Sitemap_XML {
 	 * @return string
 	 */
 	public function robots_txt( $output, $public ) {
-		if ( $public && ACPS_Sitemap::get_setting( 'enable_xml' ) && ACPS_Sitemap::get_setting( 'add_to_robots' ) ) {
-			$output .= "\nSitemap: " . esc_url( $this->index_url() ) . "\n";
+		try {
+			if ( $public && ACPS_Sitemap::get_setting( 'enable_xml' ) && ACPS_Sitemap::get_setting( 'add_to_robots' ) ) {
+				$output .= "\nSitemap: " . esc_url( $this->index_url() ) . "\n";
+			}
+		} catch ( \Throwable $e ) {
+			self::log( 'robots_txt: ' . $e->getMessage() );
 		}
 		return $output;
 	}
@@ -96,9 +120,21 @@ class ACPS_Sitemap_XML {
 	 * --------------------------------------------------------------------- */
 
 	/**
-	 * If the current request targets a sitemap, render it and stop.
+	 * If the current request targets a sitemap, render it and stop. Guarded so
+	 * any failure falls through to normal WordPress handling rather than 500.
 	 */
 	public function maybe_render() {
+		try {
+			$this->handle_request();
+		} catch ( \Throwable $e ) {
+			self::log( 'render: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Resolve the requested sitemap and emit it (exits on a hit).
+	 */
+	private function handle_request() {
 		$what = get_query_var( self::QUERY_VAR );
 		if ( '' === $what || null === $what ) {
 			return;

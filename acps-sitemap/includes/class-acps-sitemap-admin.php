@@ -289,13 +289,28 @@ class ACPS_Sitemap_Admin {
 	 * --------------------------------------------------------------------- */
 
 	/**
-	 * Render the settings page.
+	 * Render the settings page. Guarded so an unexpected error shows a plain
+	 * message instead of fataling the admin screen.
 	 */
 	public function render_page() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+		try {
+			$this->render_page_inner();
+		} catch ( \Throwable $e ) {
+			echo '<div class="wrap"><h1>' . esc_html__( 'ACPS Sitemap', 'acps-sitemap' ) . '</h1>';
+			echo '<div class="notice notice-error"><p>' . esc_html__( 'The settings screen hit an error and could not render fully.', 'acps-sitemap' ) . '</p></div></div>';
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[ACPS Sitemap] render_page: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+			}
+		}
+	}
 
+	/**
+	 * Actual settings-page markup.
+	 */
+	private function render_page_inner() {
 		$settings   = ACPS_Sitemap::get_settings();
 		$xml        = acps_sitemap()->xml;
 		$index_url  = $xml->index_url();
@@ -320,6 +335,31 @@ class ACPS_Sitemap_Admin {
 					<?php esc_html_e( 'to any page.', 'acps-sitemap' ); ?>
 				</p>
 			</div>
+
+			<?php
+			$missing_files = function_exists( 'acps_sitemap_missing_files' ) ? acps_sitemap_missing_files() : array();
+			$total_files   = function_exists( 'acps_sitemap_required_files' ) ? count( acps_sitemap_required_files() ) : 0;
+			?>
+			<p style="margin:10px 0;">
+				<?php if ( empty( $missing_files ) ) : ?>
+					<span class="dashicons dashicons-yes" style="color:#46b450;vertical-align:middle;"></span>
+					<?php
+					/* translators: %d: number of files. */
+					printf( esc_html__( 'Plugin health: all %d core files present.', 'acps-sitemap' ), (int) $total_files );
+					?>
+				<?php else : ?>
+					<span class="dashicons dashicons-warning" style="color:#dc3232;vertical-align:middle;"></span>
+					<?php
+					/* translators: 1: missing count, 2: total count, 3: file list. */
+					printf(
+						esc_html__( 'Plugin health: %1$d of %2$d core files missing (%3$s). Reinstall the plugin.', 'acps-sitemap' ),
+						count( $missing_files ),
+						(int) $total_files,
+						esc_html( implode( ', ', $missing_files ) )
+					);
+					?>
+				<?php endif; ?>
+			</p>
 
 			<form action="options.php" method="post">
 				<?php settings_fields( 'acps_sitemap_group' ); ?>

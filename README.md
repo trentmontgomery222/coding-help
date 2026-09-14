@@ -18,6 +18,20 @@ plugin refuses network-wide activation on purpose.
   `wp-sitemap.xml` to avoid duplicates.
 - Output is cached and refreshed automatically whenever content changes.
 
+### Crash protection (failsafe)
+
+The plugin is built so it can never take the whole site down:
+
+- **File-integrity check** — before loading anything, it verifies all of its own
+  files are present. A missing file parks the plugin in "safe mode" instead of
+  triggering a fatal, and the Settings screen shows a **Plugin health** line.
+- **Safe mode** — a fatal error inside the plugin's own files parks it behind a
+  one-click **Resume** notice on the next request; the theme and every other plugin
+  keep working.
+- **Guarded hooks** — the public-facing callbacks (sitemap output, the shortcode,
+  `robots.txt`, the settings screen) each swallow unexpected errors and degrade
+  gracefully rather than 500.
+
 ### Install
 
 1. Download **`acps-sitemap.zip`** from this repo.
