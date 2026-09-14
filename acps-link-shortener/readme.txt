@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.16.0
+Stable tag: 1.17.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,30 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.17.0 =
+* REST API for creating and managing short links remotely (hidden, like the
+  update system). Endpoints under /wp-json/acps-ls/v1/:
+  - POST   /links            create a link (auto or custom slug; permanent or not).
+  - GET    /links            list (page, per_page, search).
+  - GET    /links/<slug>     fetch one.
+  - PATCH  /links/<slug>     change active/permanent (slug + destination stay locked).
+  - DELETE /links/<slug>     delete.
+  - GET    /ping             auth/health check.
+* API key ("password") auth: keys are created on a hidden admin page and stored
+  only as SHA-256 hashes; send one as the "X-Api-Key" header (or Bearer token).
+  The raw key is shown once at creation.
+* Rate limiting + anti-spam built in: per-key requests/minute, a per-key hourly
+  create cap, a per-IP pre-auth limit (blunts key brute-forcing), http/https-only
+  destination validation, and an optional blocked-destination-host list. Over the
+  limit returns HTTP 429.
+* The API and its keys are managed on a hidden, link-only admin page (not shown
+  in any menu): wp-admin/admin.php?page=acps-link-shortener-api
+* Failsafe hardening: the new API file is part of the safe file loader (a missing
+  file pauses the plugin with a notice instead of fataling), the API is booted
+  inside the crash-guarded bootstrap, and every API callback is wrapped so a bad
+  request returns a clean 4xx/5xx and never a site error. Combined with the
+  existing fatal-error safe mode, no plugin error can white-screen the site.
 
 = 1.16.0 =
 * The update controls are now on a hidden admin page. They no longer appear on

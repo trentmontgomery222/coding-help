@@ -38,5 +38,8 @@ delete_option( 'acps_ls_verified' );
 delete_transient( 'acps_ls_update_remote' );
 delete_transient( 'acps_ls_devstatus' );
 
+// NOTE: API keys live inside the acps_ls_settings option (deleted above), so no
+// separate cleanup is needed for them.
+
 // Clear any scheduled sync.
 wp_clear_scheduled_hook( 'acps_ls_sheet_sync' );
