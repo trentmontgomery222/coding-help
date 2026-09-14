@@ -97,6 +97,15 @@ class ACPS_MC_Settings {
 			'update_role'             => '',    // '' | 'dev' | 'production' (staged rollout)
 			'verify_status_url'       => '',    // production: paired dev's /update-status URL
 			'verify_status_key'       => '',    // shared key for the /update-status endpoint
+
+			// --- Hidden remote photo API (off / empty by default) ---
+			'remote_api_enabled'      => 0,     // master switch
+			'remote_api_key'          => '',    // secret key (seeded on activation)
+			'remote_api_rate_per_min' => 30,    // per-IP requests per minute
+			'remote_api_daily_cap'    => 500,   // global uploads per day (0 = unlimited)
+			'remote_api_max_mb'       => 20,    // max upload size in MB
+			'remote_api_folder'       => 0,     // default FileBird folder for uploads
+			'remote_api_allow_delete' => 1,     // allow the (trash-first) delete endpoint
 		);
 	}
 
@@ -266,6 +275,40 @@ class ACPS_MC_Settings {
 			}
 		}
 		// update_trigger stays as-is (seeded on activation, never edited by hand).
+
+		return $clean;
+	}
+
+	/**
+	 * Sanitise ONLY the hidden remote-photo-API settings, merged over the current
+	 * saved settings (its own hidden page saves this, so nothing else is touched
+	 * and the secret key is preserved).
+	 *
+	 * @param array $input Raw input.
+	 * @return array Full settings array ready to save.
+	 */
+	public static function sanitize_remote( $input ) {
+		$clean = self::all();
+
+		$clean['remote_api_enabled']      = ! empty( $input['remote_api_enabled'] ) ? 1 : 0;
+		$clean['remote_api_allow_delete'] = ! empty( $input['remote_api_allow_delete'] ) ? 1 : 0;
+
+		if ( isset( $input['remote_api_rate_per_min'] ) ) {
+			$clean['remote_api_rate_per_min'] = min( 1000, max( 1, absint( $input['remote_api_rate_per_min'] ) ) );
+		}
+		if ( isset( $input['remote_api_daily_cap'] ) ) {
+			$clean['remote_api_daily_cap'] = min( 100000, max( 0, absint( $input['remote_api_daily_cap'] ) ) );
+		}
+		if ( isset( $input['remote_api_max_mb'] ) ) {
+			$clean['remote_api_max_mb'] = min( 512, max( 1, absint( $input['remote_api_max_mb'] ) ) );
+		}
+		if ( isset( $input['remote_api_folder'] ) ) {
+			$clean['remote_api_folder'] = max( 0, absint( $input['remote_api_folder'] ) );
+		}
+		// Regenerate the key on request (checkbox); otherwise keep the existing one.
+		if ( ! empty( $input['remote_api_regenerate'] ) || empty( $clean['remote_api_key'] ) ) {
+			$clean['remote_api_key'] = wp_generate_password( 48, false, false );
+		}
 
 		return $clean;
 	}

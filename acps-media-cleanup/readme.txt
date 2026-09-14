@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.15.1
+Stable tag: 1.16.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,29 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.16.0 =
+* Full failsafe hardening — the plugin is built so it cannot take the whole site
+  down:
+  - The crash guard is now armed BEFORE the plugin's own files are even loaded,
+    so even a broken/partial file (a parse error from an incomplete upload) is
+    caught. When a fatal happens in the plugin's code, the site drops the plugin
+    into a dormant "paused" mode and shows a "Resume plugin" notice — and it now
+    loads NOTHING but that notice on the next request, which stops any repeating
+    crash instead of just the first one.
+  - File-integrity check on every admin page: any missing program OR interface
+    (JS/CSS) file is listed in a notice so an incomplete upload is obvious, with
+    the affected features safely disabled rather than crashing.
+  - Activation self-heals: it clears paused mode and re-loads files, so you can
+    recover just by re-uploading and re-activating.
+* New: hidden remote photo API. A private, unadvertised API for uploading and
+  managing photos from off-site (a phone shortcut, a script, another server).
+  Configure it only by typing the URL /wp-admin/admin.php?page=acps-mc-remote —
+  there is no menu link anywhere. It is OFF by default, protected by a secret
+  key (sent as the X-ACPS-Key header), rate-limited per IP and per day, locks
+  out an IP after repeated wrong keys, and only accepts real image files up to a
+  size you set. Endpoints: upload, list, move (to a folder), delete (Trash-first,
+  reversible, and can be turned off). Full notes in REMOTE-API.md.
 
 = 1.15.1 =
 * The self-hosted update settings now live on a hidden page with NO menu link

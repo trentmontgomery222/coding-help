@@ -20,19 +20,24 @@ class ACPS_MC_Admin {
 	/** Hidden updates page slug — NOT linked from any menu (type the URL). */
 	const UPDATES_SLUG = 'acps-mc-updates';
 
+	/** Hidden remote-photo-API page slug — NOT linked from any menu. */
+	const REMOTE_SLUG = 'acps-mc-remote';
+
 	public function __construct() {
 		// The menu itself is registered by ACPS_MC_Manager so everything lives
 		// under one "Media Manager" top-level menu (cleanup is not a separate tab).
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue' ) );
 		add_action( 'admin_post_acps_mc_save_settings', array( $this, 'save_settings' ) );
-		// Hidden self-hosted-updates page (registered with no menu entry).
+		// Hidden pages (registered with no menu entry) — each has its own save.
 		add_action( 'admin_post_acps_mc_save_updates', array( $this, 'save_updates' ) );
+		add_action( 'admin_post_acps_mc_save_remote', array( $this, 'save_remote' ) );
 	}
 
 	public function enqueue( $hook ) {
 		if ( false === strpos( (string) $hook, self::TRASH_SLUG )
 			&& false === strpos( (string) $hook, self::SETTINGS_SLUG )
-			&& false === strpos( (string) $hook, self::UPDATES_SLUG ) ) {
+			&& false === strpos( (string) $hook, self::UPDATES_SLUG )
+			&& false === strpos( (string) $hook, self::REMOTE_SLUG ) ) {
 			return;
 		}
 
@@ -777,6 +782,113 @@ class ACPS_MC_Admin {
 		wp_safe_redirect(
 			add_query_arg(
 				array( 'page' => self::UPDATES_SLUG, 'acps_mc_saved' => 1 ),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/* --------------------------------------------------------------- *
+	 * Hidden remote-photo-API page (no menu entry — type the URL:
+	 *     wp-admin/admin.php?page=acps-mc-remote
+	 * Keeps the remote-upload configuration out of sight so it can't be
+	 * changed by accident. Access still requires manage_options.
+	 * --------------------------------------------------------------- */
+
+	public function render_remote_page() {
+		if ( ! current_user_can( ACPS_MC_CAP ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'acps-media-cleanup' ) );
+		}
+		$s        = ACPS_MC_Settings::all();
+		$base     = class_exists( 'ACPS_MC_Remote_Api' ) ? ACPS_MC_Remote_Api::base_url() : '';
+		$folders  = new ACPS_MC_Folders();
+		$tree     = $folders->flat_tree();
+		?>
+		<div class="wrap acps-mc">
+			<h1><span class="dashicons dashicons-cloud-upload"></span> <?php esc_html_e( 'FileMedia — Remote photo API (hidden)', 'acps-media-cleanup' ); ?></h1>
+			<?php if ( isset( $_GET['acps_mc_saved'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Remote API settings saved.', 'acps-media-cleanup' ); ?></p></div>
+			<?php endif; ?>
+			<p class="description" style="max-width:760px;">
+				<?php esc_html_e( 'A private, unadvertised API for uploading and managing photos from off-site (a phone shortcut, a script, another server). It has no menu link, is off until you enable it, is protected by the secret key below, and is rate-limited and anti-spam hardened. The routes are hidden from the public REST index.', 'acps-media-cleanup' ); ?>
+			</p>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="acps-mc-card">
+				<?php wp_nonce_field( 'acps_mc_remote', 'acps_mc_remote_nonce' ); ?>
+				<input type="hidden" name="action" value="acps_mc_save_remote">
+
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Enable remote API', 'acps-media-cleanup' ); ?></th>
+						<td><label><input type="checkbox" name="remote_api_enabled" value="1" <?php checked( $s['remote_api_enabled'] ); ?>> <?php esc_html_e( 'Accept authenticated photo uploads / management over the API', 'acps-media-cleanup' ); ?></label></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Secret key', 'acps-media-cleanup' ); ?></th>
+						<td>
+							<input type="text" readonly onclick="this.select()" value="<?php echo esc_attr( $s['remote_api_key'] ); ?>" class="large-text code">
+							<p><label><input type="checkbox" name="remote_api_regenerate" value="1"> <?php esc_html_e( 'Generate a NEW key when I save (invalidates the current one)', 'acps-media-cleanup' ); ?></label></p>
+							<p class="description"><?php esc_html_e( 'Send this on every request as the header X-ACPS-Key, or as a "key" field. Keep it secret.', 'acps-media-cleanup' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="remote_api_folder"><?php esc_html_e( 'Default folder for uploads', 'acps-media-cleanup' ); ?></label></th>
+						<td>
+							<select id="remote_api_folder" name="remote_api_folder">
+								<option value="0"><?php esc_html_e( '— Uncategorized —', 'acps-media-cleanup' ); ?></option>
+								<?php foreach ( (array) $tree as $f ) : ?>
+									<option value="<?php echo esc_attr( $f['id'] ); ?>" <?php selected( (int) $s['remote_api_folder'], (int) $f['id'] ); ?>><?php echo esc_html( str_repeat( '— ', (int) $f['depth'] ) . $f['name'] ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<p class="description"><?php esc_html_e( 'Uploads with no folder_id given are filed here. A request can override this with a folder_id field.', 'acps-media-cleanup' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Limits', 'acps-media-cleanup' ); ?></th>
+						<td>
+							<label><?php esc_html_e( 'Max requests per minute (per IP):', 'acps-media-cleanup' ); ?> <input type="number" min="1" max="1000" name="remote_api_rate_per_min" value="<?php echo esc_attr( $s['remote_api_rate_per_min'] ); ?>" class="small-text"></label><br>
+							<label><?php esc_html_e( 'Max uploads per day (all clients, 0 = unlimited):', 'acps-media-cleanup' ); ?> <input type="number" min="0" max="100000" name="remote_api_daily_cap" value="<?php echo esc_attr( $s['remote_api_daily_cap'] ); ?>" class="small-text"></label><br>
+							<label><?php esc_html_e( 'Max upload size (MB):', 'acps-media-cleanup' ); ?> <input type="number" min="1" max="512" name="remote_api_max_mb" value="<?php echo esc_attr( $s['remote_api_max_mb'] ); ?>" class="small-text"></label>
+							<p class="description"><?php esc_html_e( 'After too many wrong-key attempts an IP is locked out for 15 minutes. Only real image files are accepted.', 'acps-media-cleanup' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Deleting', 'acps-media-cleanup' ); ?></th>
+						<td><label><input type="checkbox" name="remote_api_allow_delete" value="1" <?php checked( $s['remote_api_allow_delete'] ); ?>> <?php esc_html_e( 'Allow the delete endpoint (moves files to Trash — always reversible)', 'acps-media-cleanup' ); ?></label></td>
+					</tr>
+				</table>
+
+				<?php if ( '' !== $base ) : ?>
+					<h3><?php esc_html_e( 'Endpoints', 'acps-media-cleanup' ); ?></h3>
+					<p class="description"><?php esc_html_e( 'Send the key as the X-ACPS-Key header. Example (upload a photo):', 'acps-media-cleanup' ); ?></p>
+					<textarea readonly rows="5" class="large-text code" onclick="this.select()">POST <?php echo esc_textarea( $base ); ?>/upload
+  Header: X-ACPS-Key: <?php echo esc_textarea( $s['remote_api_key'] ); ?>
+
+  multipart form field "file"  (or JSON { "filename":"a.jpg", "content_base64":"…", "folder_id":0 })
+
+GET  <?php echo esc_textarea( $base ); ?>/list?key=…
+POST <?php echo esc_textarea( $base ); ?>/move    { id, folder_id }
+POST <?php echo esc_textarea( $base ); ?>/delete  { id }
+GET  <?php echo esc_textarea( $base ); ?>/ping</textarea>
+				<?php endif; ?>
+
+				<?php submit_button( __( 'Save remote API settings', 'acps-media-cleanup' ) ); ?>
+			</form>
+		</div>
+		<?php
+	}
+
+	public function save_remote() {
+		if ( ! current_user_can( ACPS_MC_CAP ) ) {
+			wp_die( esc_html__( 'Permission denied.', 'acps-media-cleanup' ) );
+		}
+		check_admin_referer( 'acps_mc_remote', 'acps_mc_remote_nonce' );
+
+		$clean = ACPS_MC_Settings::sanitize_remote( wp_unslash( $_POST ) );
+		update_option( ACPS_MC_OPT_SETTINGS, $clean );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array( 'page' => self::REMOTE_SLUG, 'acps_mc_saved' => 1 ),
 				admin_url( 'admin.php' )
 			)
 		);

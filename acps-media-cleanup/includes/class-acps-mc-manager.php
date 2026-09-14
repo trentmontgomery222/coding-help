@@ -78,6 +78,17 @@ class ACPS_MC_Manager {
 				ACPS_MC_Admin::UPDATES_SLUG,
 				array( $this->admin, 'render_updates_page' )
 			);
+
+			// Hidden remote photo API page — same pattern, no menu entry:
+			// wp-admin/admin.php?page=acps-mc-remote
+			add_submenu_page(
+				null,
+				__( 'FileMedia — Remote photo API', 'acps-media-cleanup' ),
+				'',
+				ACPS_MC_CAP,
+				ACPS_MC_Admin::REMOTE_SLUG,
+				array( $this->admin, 'render_remote_page' )
+			);
 		}
 	}
 
@@ -89,19 +100,23 @@ class ACPS_MC_Manager {
 	 * Redirect the classic Media Library list to the manager when enabled.
 	 */
 	public function maybe_redirect_media() {
-		if ( ! ACPS_MC_Settings::get( 'replace_media_screen' ) ) {
-			return;
+		try {
+			if ( ! ACPS_MC_Settings::get( 'replace_media_screen' ) ) {
+				return;
+			}
+			// Let people opt back to the classic screen, never touch the single-item
+			// detail view, and never loop when already on one of our own pages.
+			if ( isset( $_GET['classic'] ) || isset( $_GET['item'] ) || isset( $_GET['page'] ) ) {
+				return;
+			}
+			if ( ! current_user_can( 'upload_files' ) ) {
+				return;
+			}
+			wp_safe_redirect( self::page_url() );
+			exit;
+		} catch ( \Throwable $e ) {
+			acps_mc_log( 'maybe_redirect_media: ' . $e->getMessage() );
 		}
-		// Let people opt back to the classic screen, never touch the single-item
-		// detail view, and never loop when already on one of our own pages.
-		if ( isset( $_GET['classic'] ) || isset( $_GET['item'] ) || isset( $_GET['page'] ) ) {
-			return;
-		}
-		if ( ! current_user_can( 'upload_files' ) ) {
-			return;
-		}
-		wp_safe_redirect( self::page_url() );
-		exit;
 	}
 
 	/**
@@ -110,17 +125,21 @@ class ACPS_MC_Manager {
 	 * plain WordPress uploader.
 	 */
 	public function maybe_redirect_media_new() {
-		if ( ! ACPS_MC_Settings::get( 'replace_media_uploader' ) ) {
-			return;
+		try {
+			if ( ! ACPS_MC_Settings::get( 'replace_media_uploader' ) ) {
+				return;
+			}
+			if ( isset( $_GET['classic'] ) || isset( $_GET['page'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				return;
+			}
+			if ( ! current_user_can( 'upload_files' ) ) {
+				return;
+			}
+			wp_safe_redirect( add_query_arg( 'upload', '1', self::page_url() ) );
+			exit;
+		} catch ( \Throwable $e ) {
+			acps_mc_log( 'maybe_redirect_media_new: ' . $e->getMessage() );
 		}
-		if ( isset( $_GET['classic'] ) || isset( $_GET['page'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return;
-		}
-		if ( ! current_user_can( 'upload_files' ) ) {
-			return;
-		}
-		wp_safe_redirect( add_query_arg( 'upload', '1', self::page_url() ) );
-		exit;
 	}
 
 	public function enqueue( $hook ) {
@@ -289,6 +308,7 @@ class ACPS_MC_Manager {
 	 * @return array
 	 */
 	public function attachment_fields( $fields, $post ) {
+		try {
 		$url = wp_get_attachment_url( $post->ID );
 
 		$fields['acps_copy_url'] = array(
@@ -321,6 +341,10 @@ class ACPS_MC_Manager {
 		);
 
 		return $fields;
+		} catch ( \Throwable $e ) {
+			acps_mc_log( 'attachment_fields: ' . $e->getMessage() );
+			return $fields;
+		}
 	}
 
 	/**
