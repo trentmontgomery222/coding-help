@@ -59,6 +59,152 @@ function CAYDENDIR_sd_log( $where, $e ) {
 	error_log( sprintf( '[Cayden Staff Directory] %s: %s', $where, $msg ) );
 }
 
+/* =========================================================================
+ * FAILSAFE — fatal-error safe mode + file health check
+ *
+ * Two layers keep this plugin from ever white-screening the site:
+ *   1. Every WordPress entry point (below) is wrapped in try/catch, so most
+ *      errors are caught and the plugin just degrades gracefully.
+ *   2. This shutdown guard is the universal backstop: if anything DOES fatal
+ *      inside this plugin's files, the next request skips the plugin's whole
+ *      body and shows only a "paused / Resume" admin notice — the site stays
+ *      online. A newer plugin version auto-clears the pause (an update gets a
+ *      fresh chance). (A parse error in this main file itself can't be caught
+ *      by any PHP code — that's why every build is `php -l` linted.)
+ * ====================================================================== */
+
+define( 'CAYDENDIR_SD_SAFE_OPTION', 'CAYDENDIR_sd_safe_mode' );
+
+/** Companion files the full plugin ships with (all optional at runtime). */
+function CAYDENDIR_sd_expected_files() {
+	return array(
+		'CAYDENDIR-directory.js',
+		'CAYDENDIR-admin.js',
+		'block.js',
+		'modules/cayden-staff-directory/cayden-staff-directory.php',
+		'modules/cayden-staff-directory/includes/frontend.php',
+		'integrations/elementor-widget.php',
+	);
+}
+
+/** Companion files that are missing from the install (for the health notice). */
+function CAYDENDIR_sd_missing_files() {
+	$missing = array();
+	foreach ( CAYDENDIR_sd_expected_files() as $rel ) {
+		if ( ! is_readable( CAYDENDIR_SD_DIR . $rel ) ) {
+			$missing[] = $rel;
+		}
+	}
+	return $missing;
+}
+
+/** Shutdown backstop: pause the plugin if a fatal happened inside our files. */
+function CAYDENDIR_sd_shutdown_guard() {
+	try {
+		$err = error_get_last();
+		if ( empty( $err ) || ! isset( $err['type'], $err['file'] ) ) {
+			return;
+		}
+		$fatal = array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR );
+		if ( ! in_array( (int) $err['type'], $fatal, true ) ) {
+			return;
+		}
+		$file = function_exists( 'wp_normalize_path' ) ? wp_normalize_path( $err['file'] ) : str_replace( '\\', '/', $err['file'] );
+		$dir  = function_exists( 'wp_normalize_path' ) ? wp_normalize_path( CAYDENDIR_SD_DIR ) : str_replace( '\\', '/', CAYDENDIR_SD_DIR );
+		if ( '' === $file || false === strpos( $file, $dir ) ) {
+			return; // the fatal was not in this plugin — not ours to handle
+		}
+		if ( function_exists( 'update_option' ) ) {
+			update_option( CAYDENDIR_SD_SAFE_OPTION, array(
+				'time'    => time(),
+				'version' => defined( 'CAYDENDIR_SD_VERSION' ) ? CAYDENDIR_SD_VERSION : '',
+				'message' => isset( $err['message'] ) ? substr( (string) $err['message'], 0, 500 ) : '',
+				'file'    => $err['file'],
+				'line'    => isset( $err['line'] ) ? (int) $err['line'] : 0,
+			), false );
+		}
+	} catch ( \Throwable $e ) {
+		// A guard that throws would defeat its purpose — swallow everything.
+	}
+}
+register_shutdown_function( 'CAYDENDIR_sd_shutdown_guard' );
+
+/** Is the plugin paused after a fatal? A newer version clears the pause. */
+function CAYDENDIR_sd_is_paused() {
+	if ( ! function_exists( 'get_option' ) ) {
+		return false;
+	}
+	$info = get_option( CAYDENDIR_SD_SAFE_OPTION, false );
+	if ( ! is_array( $info ) ) {
+		return false;
+	}
+	if ( isset( $info['version'] ) && defined( 'CAYDENDIR_SD_VERSION' ) && $info['version'] !== CAYDENDIR_SD_VERSION ) {
+		// The plugin was updated since it crashed — give the new code a chance.
+		if ( function_exists( 'delete_option' ) ) {
+			delete_option( CAYDENDIR_SD_SAFE_OPTION );
+		}
+		return false;
+	}
+	return true;
+}
+
+/** Admin notice + Resume button shown while the plugin is paused. */
+function CAYDENDIR_sd_paused_notice() {
+	if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	$info = get_option( CAYDENDIR_SD_SAFE_OPTION, array() );
+	$url  = wp_nonce_url( add_query_arg( 'cayden_sd_resume', '1' ), 'cayden_sd_resume' );
+	echo '<div class="notice notice-error"><p><strong>Cayden Staff Directory is paused</strong> after a fatal error, to keep your site online. The rest of your site is unaffected.';
+	if ( is_array( $info ) && ! empty( $info['message'] ) ) {
+		echo ' <br><small>Last error: <code>' . esc_html( $info['message'] ) . '</code></small>';
+	}
+	echo '</p><p><a href="' . esc_url( $url ) . '" class="button button-primary">Resume plugin</a></p></div>';
+}
+
+/** Handle the Resume action (nonce-guarded). */
+function CAYDENDIR_sd_maybe_resume() {
+	if ( ! isset( $_GET['cayden_sd_resume'] ) ) {
+		return;
+	}
+	if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	if ( ! check_admin_referer( 'cayden_sd_resume' ) ) {
+		return;
+	}
+	delete_option( CAYDENDIR_SD_SAFE_OPTION );
+	wp_safe_redirect( remove_query_arg( array( 'cayden_sd_resume', '_wpnonce' ) ) );
+	exit;
+}
+
+/** Health notice: warn an admin if companion files are missing. */
+function CAYDENDIR_sd_missing_files_notice() {
+	if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	$missing = CAYDENDIR_sd_missing_files();
+	if ( empty( $missing ) ) {
+		return;
+	}
+	// Escape each file name on its own, then join with real <code> markup so the
+	// separators render as tags instead of being escaped into literal text.
+	$safe = array_map( 'esc_html', array_map( 'sanitize_text_field', $missing ) );
+	echo '<div class="notice notice-warning"><p><strong>Cayden Staff Directory:</strong> some plugin files are missing, so parts of it (block, Beaver Builder module, Elementor widget, front-end scripts, or updates) may be unavailable. Re-upload the complete plugin ZIP to restore them. The directory itself still works.</p><p><small>Missing: <code>' . implode( '</code>, <code>', $safe ) . '</code></small></p></div>';
+}
+
+// If a previous request fataled inside this plugin, load ONLY the paused notice
+// and stop — the plugin body below never runs, so the site cannot crash again.
+if ( CAYDENDIR_sd_is_paused() ) {
+	add_action( 'admin_notices', 'CAYDENDIR_sd_paused_notice' );
+	add_action( 'network_admin_notices', 'CAYDENDIR_sd_paused_notice' );
+	add_action( 'admin_init', 'CAYDENDIR_sd_maybe_resume' );
+	return; // <-- stops loading the rest of the plugin (safe mode)
+}
+
+// Normal load: surface a missing-file health warning to admins.
+add_action( 'admin_notices', 'CAYDENDIR_sd_missing_files_notice' );
+
 
 
 //default settings
