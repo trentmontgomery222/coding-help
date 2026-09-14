@@ -165,7 +165,13 @@ class Feedback {
 			return;
 		}
 
-		$label     = Settings::get( 'trigger_label', 'Chat with us' );
+		$label     = trim( (string) Settings::get( 'trigger_label', 'Chat with us' ) );
+		if ( '' === $label ) {
+			// The trigger must ALWAYS have an accessible name, even if an admin
+			// clears the label while using an icon-only trigger. Without this the
+			// icon button would be announced only as "button" (WCAG 4.1.2 / 2.4.4).
+			$label = __( 'Open the feedback form', 'acps-site-toolkit' );
+		}
 		$position  = Settings::get( 'trigger_position', 'bottom-right' );
 		$icon_url  = Settings::get( 'trigger_icon_url', '' );
 		$icon_hover = Settings::get( 'trigger_icon_hover_url', '' );
@@ -194,10 +200,12 @@ class Feedback {
 		?>
 		<div class="acps-feedback-root acps-pos-<?php echo esc_attr( $position ); ?>" data-current-page-id="<?php echo esc_attr( $post_id ); ?>" data-current-page-title="<?php echo esc_attr( $title ); ?>">
 			<?php if ( $icon_url ) : ?>
-				<?php // Circular icon-only trigger. The label is the accessible name. ?>
-				<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?><?php echo esc_attr( $trigger_class ); ?>" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" aria-label="<?php echo esc_attr( $label ); ?>" style="<?php echo esc_attr( $trigger_style ); ?>">
-					<img class="acps-feedback-trigger__img acps-icon-rest" src="<?php echo esc_url( $icon_url ); ?>" alt="">
+				<?php // Circular icon-only trigger. The icon image carries the accessible
+				// name via its alt text, so no empty alt and no redundant aria-label. ?>
+				<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?><?php echo esc_attr( $trigger_class ); ?>" aria-haspopup="dialog" aria-controls="acps-feedback-dialog" style="<?php echo esc_attr( $trigger_style ); ?>">
+					<img class="acps-feedback-trigger__img acps-icon-rest" src="<?php echo esc_url( $icon_url ); ?>" alt="<?php echo esc_attr( $label ); ?>">
 					<?php if ( $icon_hover ) : ?>
+						<?php // Hover image is a purely visual duplicate — keep it out of the a11y tree. ?>
 						<img class="acps-feedback-trigger__img acps-icon-hover" src="<?php echo esc_url( $icon_hover ); ?>" alt="" aria-hidden="true">
 					<?php endif; ?>
 				</button>

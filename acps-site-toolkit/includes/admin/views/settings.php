@@ -165,7 +165,7 @@ $show_updates = isset( $_GET['acps_updates'] ); // phpcs:ignore WordPress.Securi
 						<input type="url" id="acps-trigger-icon" name="<?php echo esc_attr( $name( 'trigger_icon_url' ) ); ?>" value="<?php echo esc_attr( $s['trigger_icon_url'] ); ?>" class="large-text code" placeholder="https://…/icon.png">
 						<p class="description"><?php esc_html_e( 'Image shown in a circle. Leave blank to use the default chat-bubble icon with the label.', 'acps-site-toolkit' ); ?></p>
 						<?php if ( ! empty( $s['trigger_icon_url'] ) ) : ?>
-							<img src="<?php echo esc_url( $s['trigger_icon_url'] ); ?>" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-top:.5rem;border:1px solid #ccd0d4">
+							<img src="<?php echo esc_url( $s['trigger_icon_url'] ); ?>" alt="<?php esc_attr_e( 'Current trigger icon preview', 'acps-site-toolkit' ); ?>" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-top:.5rem;border:1px solid #ccd0d4">
 						<?php endif; ?>
 					</td>
 				</tr>
@@ -175,7 +175,7 @@ $show_updates = isset( $_GET['acps_updates'] ); // phpcs:ignore WordPress.Securi
 						<input type="url" id="acps-trigger-icon-hover" name="<?php echo esc_attr( $name( 'trigger_icon_hover_url' ) ); ?>" value="<?php echo esc_attr( $s['trigger_icon_hover_url'] ); ?>" class="large-text code" placeholder="https://…/icon-hover.png">
 						<p class="description"><?php esc_html_e( 'A second image shown when the button is hovered, focused, or open. Leave blank to keep the resting icon in every state.', 'acps-site-toolkit' ); ?></p>
 						<?php if ( ! empty( $s['trigger_icon_hover_url'] ) ) : ?>
-							<img src="<?php echo esc_url( $s['trigger_icon_hover_url'] ); ?>" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-top:.5rem;border:1px solid #ccd0d4">
+							<img src="<?php echo esc_url( $s['trigger_icon_hover_url'] ); ?>" alt="<?php esc_attr_e( 'Current hover / open icon preview', 'acps-site-toolkit' ); ?>" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-top:.5rem;border:1px solid #ccd0d4">
 						<?php endif; ?>
 					</td>
 				</tr>
