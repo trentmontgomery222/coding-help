@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.4.1
+ * Version:           7.5.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.4.1' );
+define( 'WPCODEBBV_VERSION', '7.5.0' );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -193,16 +193,65 @@ function wpcodebbv_load_errors_notice() {
 			<?php foreach ( $GLOBALS['wpcodebbv_load_errors'] as $wpcodebbv_error ) : ?>
 				<li><code><?php echo esc_html( $wpcodebbv_error ); ?></code></li>
 			<?php endforeach; ?>
+			<?php foreach ( wpcodebbv_missing_files() as $wpcodebbv_file => $wpcodebbv_purpose ) : ?>
+				<li>
+					<code><?php echo esc_html( $wpcodebbv_file ); ?></code>
+					&mdash; <?php echo esc_html( $wpcodebbv_purpose ); ?>
+				</li>
+			<?php endforeach; ?>
 		</ul>
 	</div>
 	<?php
+}
+
+/**
+ * Every file this plugin needs, and what is lost without each.
+ *
+ * Surviving a missing file is not the same as knowing one is missing:
+ * without this, a half-uploaded plugin just quietly does less. The
+ * check below turns that into a notice naming the file.
+ *
+ * @return array<string, string>
+ */
+function wpcodebbv_manifest() {
+	return array(
+		'includes/functions-core.php'                     => __( 'everything except the crash guards - the module, the admin screen, reading snippets', 'wpcode-bb-values' ),
+		'includes/class-wpcodebbv-scanner.php'            => __( 'reading settings out of snippets and writing edited values back', 'wpcode-bb-values' ),
+		'includes/class-wpcodebbv-settings.php'           => __( 'update settings storage', 'wpcode-bb-values' ),
+		'includes/class-wpcodebbv-updater.php'            => __( 'updates and the post-update crash test', 'wpcode-bb-values' ),
+		'modules/wpcode-values/wpcode-values.php'         => __( 'the Beaver Builder module itself', 'wpcode-bb-values' ),
+		'modules/wpcode-values/includes/frontend.php'     => __( 'rendering the module on a page', 'wpcode-bb-values' ),
+		'modules/wpcode-values/includes/frontend-render.php' => __( 'rendering the module on a page', 'wpcode-bb-values' ),
+		'modules/wpcode-values/wpcode-values.css'         => __( 'the module\'s styling', 'wpcode-bb-values' ),
+		'assets/configurations-helper.js'                 => __( 'the CONFIG helper offered on the help screen', 'wpcode-bb-values' ),
+		'uninstall.php'                                   => __( 'cleaning up when the plugin is deleted', 'wpcode-bb-values' ),
+	);
+}
+
+/**
+ * Which of those files are missing or unreadable right now.
+ *
+ * @return array<string, string> path => what it does
+ */
+function wpcodebbv_missing_files() {
+	$missing = array();
+
+	foreach ( wpcodebbv_manifest() as $relative => $purpose ) {
+		$path = WPCODEBBV_DIR . $relative;
+
+		if ( ! file_exists( $path ) || ! is_readable( $path ) ) {
+			$missing[ $relative ] = $purpose;
+		}
+	}
+
+	return $missing;
 }
 
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-scanner.php' );
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-settings.php' );
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-updater.php' );
 
-if ( ! empty( $GLOBALS['wpcodebbv_load_errors'] ) ) {
+if ( ! empty( $GLOBALS['wpcodebbv_load_errors'] ) || wpcodebbv_missing_files() ) {
 	wpcodebbv_safe_hook( 'admin_notices', 'wpcodebbv_load_errors_notice' );
 }
 

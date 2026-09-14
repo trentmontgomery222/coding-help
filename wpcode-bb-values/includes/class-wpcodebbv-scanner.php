@@ -33,6 +33,15 @@ class WPCodeBBV_Scanner {
 	/** Variable names to look for: configurations, configurationsCalendar, configurations_2 ... */
 	const NAME_PATTERN = '/(?:var|let|const)?\s*(configurations[A-Za-z0-9_]*)\s*=\s*\[/';
 
+	/**
+	 * Largest snippet this will read. A snippet is code somebody typed,
+	 * so it is never near this; something this size is a paste accident
+	 * or a generated file, and scanning it line by line would spend real
+	 * time and memory on a page load for no gain. Past the cap it simply
+	 * finds nothing, which costs the settings list and nothing else.
+	 */
+	const MAX_BYTES = 2097152; // 2 MB.
+
 	/** The key a snippet uses to mark a setting as site-wide. */
 	const WIDE_KEY = 'siteWide';
 
@@ -45,7 +54,7 @@ class WPCodeBBV_Scanner {
 	public static function scan( $js ) {
 		$found = array();
 
-		if ( ! is_string( $js ) || '' === $js ) {
+		if ( ! is_string( $js ) || '' === $js || strlen( $js ) > self::MAX_BYTES ) {
 			return $found;
 		}
 
@@ -104,7 +113,7 @@ class WPCodeBBV_Scanner {
 	public static function scan_markers( $js ) {
 		$settings = array();
 
-		if ( ! is_string( $js ) || '' === $js || false === stripos( $js, 'configurable' ) ) {
+		if ( ! is_string( $js ) || '' === $js || strlen( $js ) > self::MAX_BYTES || false === stripos( $js, 'configurable' ) ) {
 			return $settings;
 		}
 
@@ -558,7 +567,7 @@ class WPCodeBBV_Scanner {
 	 * @return string
 	 */
 	public static function apply( $js, $overrides ) {
-		if ( ! is_string( $js ) || empty( $overrides ) || ! is_array( $overrides ) ) {
+		if ( ! is_string( $js ) || empty( $overrides ) || ! is_array( $overrides ) || strlen( $js ) > self::MAX_BYTES ) {
 			return $js;
 		}
 

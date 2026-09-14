@@ -46,6 +46,32 @@ try {
 		return;
 	}
 
+	/*
+	 * Recursion guard.
+	 *
+	 * This runs a shortcode, and nothing stops the snippet behind it
+	 * from containing this module's own shortcode - by accident, or by
+	 * a snippet that renders the page it is on. Without a guard that is
+	 * an unbounded loop that ends in exhausted memory, which is a fatal
+	 * no try/catch can catch. One snippet is never rendered inside
+	 * itself; the inner attempt simply produces nothing.
+	 */
+	if ( ! isset( $GLOBALS['wpcodebbv_rendering'] ) || ! is_array( $GLOBALS['wpcodebbv_rendering'] ) ) {
+		$GLOBALS['wpcodebbv_rendering'] = array();
+	}
+
+	$wpcodebbv_snippet_id = (int) $module->get_snippet_id();
+
+	if ( isset( $GLOBALS['wpcodebbv_rendering'][ $wpcodebbv_snippet_id ] ) ) {
+		if ( function_exists( 'wpcodebbv_log' ) ) {
+			wpcodebbv_log( 'snippet ' . $wpcodebbv_snippet_id . ' tried to render inside itself; stopped' );
+		}
+
+		return;
+	}
+
+	$GLOBALS['wpcodebbv_rendering'][ $wpcodebbv_snippet_id ] = true;
+
 	$overrides = $module->get_overrides();
 
 	// Snippets that are PHP can read this instead.
@@ -56,15 +82,35 @@ try {
 
 	$rendered = '';
 
+	// Remember how deep the buffers are before handing control to
+	// somebody else's code. A snippet that calls ob_end_clean() one time
+	// too many would otherwise eat OUR buffer, and the ob_get_clean()
+	// below would then close a buffer belonging to WordPress or the
+	// theme - swallowing part of the page. Comparing levels afterwards
+	// makes that recoverable instead.
+	$wpcodebbv_level = ob_get_level();
+
 	ob_start();
 
 	try {
 		echo do_shortcode( $shortcode );
-		$rendered = ob_get_clean();
+
+		$rendered = ob_get_level() > $wpcodebbv_level ? ob_get_clean() : '';
 	} catch ( \Throwable $e ) {
-		ob_end_clean();
+		if ( ob_get_level() > $wpcodebbv_level ) {
+			ob_end_clean();
+		}
+
 		throw $e;
 	} finally {
+		// Put back any buffer the snippet opened and forgot to close,
+		// so the rest of the page is not rendered inside it.
+		while ( ob_get_level() > $wpcodebbv_level ) {
+			ob_end_clean();
+		}
+
+		unset( $GLOBALS['wpcodebbv_rendering'][ $wpcodebbv_snippet_id ] );
+
 		if ( $had_global ) {
 			$GLOBALS['wpcode_bb_values'] = $previous_global;
 		} else {
@@ -113,6 +159,10 @@ try {
 
 	echo $rendered;
 } catch ( \Throwable $e ) {
+	if ( isset( $wpcodebbv_snippet_id, $GLOBALS['wpcodebbv_rendering'][ $wpcodebbv_snippet_id ] ) ) {
+		unset( $GLOBALS['wpcodebbv_rendering'][ $wpcodebbv_snippet_id ] );
+	}
+
 	if ( function_exists( 'wpcodebbv_log' ) ) {
 		wpcodebbv_log( 'snippet render failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 	}

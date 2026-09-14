@@ -757,7 +757,8 @@ function wpcodebbv_value_field( $label, $default, $leaf, $help ) {
  * @return array
  */
 function wpcodebbv_form() {
-	$sections = array();
+	$sections      = array();
+	$wide_sections = array();
 
 	$snippets = array();
 
@@ -1499,6 +1500,38 @@ CONFIG.match('Schools Closed Friday')        // 'noSchoolEvent'</pre>
 		<?php endif; ?>
 
 		<?php wpcodebbv_render_update_settings(); ?>
+
+		<h2><?php esc_html_e( 'Files', 'wpcode-bb-values' ); ?></h2>
+		<?php
+		$wpcodebbv_missing = function_exists( 'wpcodebbv_missing_files' ) ? wpcodebbv_missing_files() : array();
+		$wpcodebbv_all     = function_exists( 'wpcodebbv_manifest' ) ? wpcodebbv_manifest() : array();
+		?>
+		<?php if ( empty( $wpcodebbv_missing ) ) : ?>
+			<p>
+				<span class="dashicons dashicons-yes" style="color:#1a7f37;"></span>
+				<?php
+				printf(
+					/* translators: %d: number of files */
+					esc_html( _n( 'All %d file present.', 'All %d files present.', count( $wpcodebbv_all ), 'wpcode-bb-values' ) ),
+					count( $wpcodebbv_all )
+				);
+				?>
+			</p>
+		<?php else : ?>
+			<p><span class="dashicons dashicons-warning" style="color:#b26200;"></span>
+				<?php esc_html_e( 'Some files are missing. What they do is switched off; the rest of the plugin and the site are unaffected. Installing the plugin again is the fix.', 'wpcode-bb-values' ); ?>
+			</p>
+			<table class="widefat striped" style="max-width: 820px;">
+				<tbody>
+				<?php foreach ( $wpcodebbv_missing as $wpcodebbv_file => $wpcodebbv_purpose ) : ?>
+					<tr>
+						<td style="width: 360px;"><code><?php echo esc_html( $wpcodebbv_file ); ?></code></td>
+						<td><?php echo esc_html( $wpcodebbv_purpose ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
 
 		<h2><?php esc_html_e( 'If the module is not listed in the editor', 'wpcode-bb-values' ); ?></h2>
 		<p><?php esc_html_e( 'Check Settings > Beaver Builder > Modules. If that list has ever been narrowed down, a newly installed module stays off until you tick it.', 'wpcode-bb-values' ); ?></p>

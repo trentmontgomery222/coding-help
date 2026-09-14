@@ -52,6 +52,33 @@ class WPCodeBBV_Updater {
 	 * Register hooks. A no-op if the updater is turned off in Settings — the
 	 * master switch disables the force-update URL too, not just the checks.
 	 */
+	/**
+	 * Wraps one of this class's own callbacks so a throw inside it costs
+	 * that callback, not the request.
+	 *
+	 * These run during plugin-update checks, cron, REST and the upgrade
+	 * itself - places where an uncaught exception would surface as a
+	 * fatal on somebody's admin screen, or worse, part way through an
+	 * update. A filter hands back the value it was given, which always
+	 * means "I changed nothing".
+	 *
+	 * @param callable $callback
+	 * @return callable
+	 */
+	private function guarded( $callback ) {
+		return function () use ( $callback ) {
+			$args = func_get_args();
+
+			try {
+				return call_user_func_array( $callback, $args );
+			} catch ( \Throwable $e ) {
+				self::log_error( 'error in ' . ( is_array( $callback ) ? (string) $callback[1] : 'callback' ) . ': ' . $e->getMessage() );
+
+				return isset( $args[0] ) ? $args[0] : null;
+			}
+		};
+	}
+
 	public function register() {
 		if ( ! WPCodeBBV_Settings::get( 'update_enabled' ) ) {
 			return;
@@ -74,33 +101,33 @@ class WPCodeBBV_Updater {
 		 *     add_filter( 'wpcodebbv_offer_updates_in_admin', '__return_true' );
 		 */
 		if ( apply_filters( 'wpcodebbv_offer_updates_in_admin', false ) ) {
-			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
-			add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
-			add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
+			add_filter( 'pre_set_site_transient_update_plugins', $this->guarded( array( $this, 'inject_update' ) ) );
+			add_filter( 'plugins_api', $this->guarded( array( $this, 'plugin_info' ) ), 10, 3 );
+			add_filter( 'auto_update_plugin', $this->guarded( array( $this, 'maybe_auto_update' ) ), 10, 2 );
 		}
 
 		// Needed by the force-update path too (a private download has to be
 		// resolved however the install was started), so it is not gated.
-		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
+		add_filter( 'upgrader_pre_download', $this->guarded( array( $this, 'maybe_resolve_private_download' ) ), 10, 3 );
 		// Rename the extracted package folder back to our plugin slug, so an
 		// update whose zip unpacks to a different folder name (typical of GitHub
 		// release zips) installs over the SAME directory instead of a new one —
 		// which is what otherwise leaves the plugin "disabled" after an update.
-		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
-		add_action( 'init', array( $this, 'maybe_handle_force_update' ) );
+		add_filter( 'upgrader_source_selection', $this->guarded( array( $this, 'fix_source_dir' ) ), 10, 4 );
+		add_action( 'init', $this->guarded( array( $this, 'maybe_handle_force_update' ) ) );
 		// Early self-test responder used by the post-update crash check.
-		add_action( 'init', array( $this, 'maybe_handle_selftest' ), 1 );
-		add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
+		add_action( 'init', $this->guarded( array( $this, 'maybe_handle_selftest' ) ), 1 );
+		add_action( 'upgrader_process_complete', $this->guarded( array( $this, 'flush_after_upgrade' ) ), 10, 2 );
 		// After our plugin updates: crash-test the new code and (re)enable it
 		// only if it loads cleanly.
-		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
+		add_action( 'upgrader_process_complete', $this->guarded( array( $this, 'verify_after_upgrade' ) ), 20, 2 );
 		// Surface a rolled-back update to admins (shown by whatever version is
 		// active once the plugin runs again).
-		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+		add_action( 'admin_notices', $this->guarded( array( $this, 'maybe_show_update_failed_notice' ) ) );
 
 		// Staged rollout: a dev install publishes its verified status here, which
 		// a production install checks before it will offer/apply the update.
-		add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
+		add_action( 'rest_api_init', $this->guarded( array( $this, 'register_status_route' ) ) );
 	}
 
 	/**
@@ -272,8 +299,7 @@ class WPCodeBBV_Updater {
 					'icons'        => array(),
 					'banners'      => array(),
 					'tested'       => '',
-					'requires_php' => ! empty( $remote['requires_php'] ) ? $remote['requires_php'] : '',
-				);
+					'requires_php' => ! empty( $remote['requires_php'] ) ? $remote['requires_php'] : '' );
 				if ( isset( $transient->no_update[ WPCODEBBV_BASENAME ] ) ) {
 					unset( $transient->no_update[ WPCODEBBV_BASENAME ] );
 				}
@@ -326,8 +352,7 @@ class WPCodeBBV_Updater {
 				'sections'      => array(
 					'description' => $changelog,
 					'changelog'   => $changelog,
-				),
-			);
+				) );
 		} catch ( \Throwable $e ) {
 			self::log_error( 'plugin_info: ' . $e->getMessage() );
 			return $result;
@@ -746,16 +771,14 @@ class WPCodeBBV_Updater {
 			return array(
 				'checked'    => false,
 				'remote'     => false,
-				'has_update' => false,
-			);
+				'has_update' => false );
 		}
 		$remote     = $cached ? $cached : false;
 		$has_update = $remote && ! empty( $remote['version'] ) && version_compare( $remote['version'], WPCODEBBV_VERSION, '>' );
 		return array(
 			'checked'    => true,
 			'remote'     => $remote,
-			'has_update' => (bool) $has_update,
-		);
+			'has_update' => (bool) $has_update );
 	}
 
 	/**
@@ -798,8 +821,7 @@ class WPCodeBBV_Updater {
 				'html_url'     => ! empty( $body['homepage'] ) ? esc_url_raw( (string) $body['homepage'] ) : '',
 				'body'         => ! empty( $body['changelog'] ) ? (string) $body['changelog'] : '',
 				'requires_php' => ! empty( $body['requires_php'] ) ? sanitize_text_field( (string) $body['requires_php'] ) : '',
-				'requires_wp'  => ! empty( $body['requires_wp'] ) ? sanitize_text_field( (string) $body['requires_wp'] ) : '',
-			);
+				'requires_wp'  => ! empty( $body['requires_wp'] ) ? sanitize_text_field( (string) $body['requires_wp'] ) : '' );
 		} catch ( \Throwable $e ) {
 			self::log_error( 'fetch_from_url: ' . $e->getMessage() );
 			return false;
@@ -828,8 +850,7 @@ class WPCodeBBV_Updater {
 			$headers = array(
 				'Accept'               => 'application/vnd.github+json',
 				'X-GitHub-Api-Version' => '2022-11-28',
-				'User-Agent'           => 'WPCode-Values-Updater',
-			);
+				'User-Agent'           => 'WPCode-Values-Updater' );
 			if ( '' !== $token ) {
 				$headers['Authorization'] = 'Bearer ' . $token;
 			}
@@ -883,8 +904,7 @@ class WPCodeBBV_Updater {
 				'html_url'     => ! empty( $release['html_url'] ) ? (string) $release['html_url'] : '',
 				'body'         => ! empty( $release['body'] ) ? (string) $release['body'] : '',
 				'requires_php' => '', // GitHub releases don't carry this; not read from the header either.
-				'requires_wp'  => '',
-			);
+				'requires_wp'  => '' );
 		} catch ( \Throwable $e ) {
 			self::log_error( 'fetch_from_github: ' . $e->getMessage() );
 			return false;

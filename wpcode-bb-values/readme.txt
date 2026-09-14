@@ -1,10 +1,46 @@
+= If part of the plugin breaks =
+
+Every file this plugin owns can be deleted or corrupted without taking the site
+down. A damaged file costs the feature in it, an admin notice names the file and
+what it does, and everything else - including the rest of the site - carries on.
+Tools > WPCode Values lists the plugin's files and says whether they are all
+present.
+
+Nothing this plugin runs can crash a page:
+
+* Every hook it registers, its own and the updater's, runs inside a net. A
+  throw costs that one feature for that one request; filters hand back the
+  value they were given, which means "changed nothing".
+* A snippet that throws, calls an undefined function, closes one output buffer
+  too many, or leaves one open is contained, and the output buffers are put
+  back the way they were found either way.
+* A snippet that renders the module it is inside is stopped rather than
+  looping until memory runs out.
+* A snippet too large to be worth parsing is skipped rather than holding up
+  the page.
+* A fatal anywhere in the plugin arms safe mode: the next request loads only a
+  notice with a "Resume plugin" button, so a crash cannot repeat.
+
+Two files are the exception, and cannot be otherwise: PHP compiles a file
+before running any of it, so an entry point cannot catch a parse error in
+itself.
+
+* wpcode-bb-values.php - the plugin's main file. It is deliberately small (the
+  loader, the crash guards, and wpcodebbv_cfg) with the features in
+  includes/functions-core.php, so there is very little in it to break. If it
+  does, WordPress's own recovery mode handles it, and an update that lands a
+  broken one is caught by the post-update crash test and rolled back.
+* modules/wpcode-values/includes/frontend.php - Beaver Builder includes this
+  directly. It is a stable ~30-line stub that loads frontend-render.php inside
+  try/catch, so the render code that actually gets edited is protected.
+
 === WPCode Values for Beaver Builder ===
 Contributors: acps
 Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.4.1
+Stable tag: 7.5.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -224,6 +260,23 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.5.0 =
+* Added a file manifest: the plugin now knows which files it should have, says
+  so on Tools > WPCode Values, and names any that are missing in an admin
+  notice rather than quietly doing less.
+* The updater's own eleven hooks now run inside the same net as the rest of
+  the plugin's. A throw in an update check, a cron run, a REST request or
+  part way through an upgrade can no longer surface as a fatal.
+* A snippet can no longer take a page down by rendering the module it is
+  inside - that looped until memory ran out, which no try/catch can catch.
+* Output buffers are restored to the level they were at before a snippet ran,
+  so a snippet that closes one too many no longer swallows part of the page,
+  and one that leaves a buffer open no longer wraps the rest of it.
+* Snippets over 2 MB are skipped rather than parsed line by line on a page
+  load.
+* Fixed an undefined variable in the module's field schema that emitted a
+  warning on every build with WP_DEBUG on.
 
 = 7.4.1 =
 * Fixed a module going blank after saving it in the Beaver Builder editor. A
