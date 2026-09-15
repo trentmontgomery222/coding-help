@@ -23,11 +23,16 @@
 	 * the real selector at the front of each list. First match wins.
 	 * ================================================================= */
 	var SELECTORS = {
-		container: [ '.acps-search-results', '#search-results', '.search-results', 'main', '#content' ],
-		item:      [ '.acps-result', 'article.post', '.search-result', 'li.result', 'article' ],
+		// SearchWP's Beaver Builder results module. The wrapper's id is
+		// generated per render (swp-search-results-6aa940fc80207), so match
+		// on the class, never the id.
+		container: [ '.swp-search-results', '.acps-search-results', 'main', '#content' ],
+		item:      [ '.swp-result-item', '.acps-result', 'article.post', 'article' ],
 		title:     [ '.entry-title a', 'h2 a', 'h3 a', 'a' ],
-		excerpt:   [ '.entry-summary', '.entry-excerpt', 'p' ],
-		count:     [ '.search-count', '.results-count', '.acps-count' ]
+		excerpt:   [ '.swp-result-item--desc', '.entry-summary', 'p' ],
+		// "Found 271 results for staff" — this one sits OUTSIDE the results
+		// wrapper, so it is looked up document-wide as a fallback.
+		count:     [ '.swp-total-results-notice p', '.search-count', '.results-count' ]
 	};
 
 	/* =================================================================
@@ -71,9 +76,10 @@
 	/* =================================================================
 	 * 3. RULES — act on each result row.
 	 *
-	 *    when: 'title' | 'url' | 'id' | 'excerpt' | 'text'
-	 *          ('url' is the path only, lower-case, always with a trailing
-	 *           slash — '/about/', not 'https://site.org/about')
+	 *    when: 'title' | 'url' | 'id' | 'type' | 'excerpt' | 'text'
+	 *          ('url' is the path only, lower-case: pages carry a trailing
+	 *           slash — '/about/' — and file links keep their extension,
+	 *           '/wp-content/uploads/budget.pdf')
 	 *    op:   'equals' | 'contains' | 'starts' | 'ends' | 'regex' | 'in'
 	 *    then: 'hide' | 'dim' | 'rewrite' | 'badge' | 'top' | 'keep'
 	 *
@@ -91,6 +97,12 @@
 		// { when: 'title', op: 'contains', value: 'internal',     then: 'hide' },
 		// { when: 'title', op: 'starts',   value: 'Draft',        then: 'hide' },
 		// { when: 'id',    op: 'in',       value: [ 412, 998 ],   then: 'hide' },
+
+		// Post type, from the result's own `type-…` class. On this site that
+		// drops the PDFs and images that flood a broad search:
+		// { when: 'type', op: 'equals', value: 'attachment', then: 'hide' },
+		// Or just the media files, keeping the PDFs:
+		// { when: 'url',  op: 'regex',  value: '\\.(jpe?g|png|gif|svg|webp)$', then: 'hide' },
 		// { when: 'url',   op: 'regex',    value: '/20(1[0-9])/', then: 'hide' },
 
 		// --- grey out instead of removing (good while testing) -------
@@ -122,6 +134,12 @@
 		// Shown when every result was filtered away, and the default for
 		// a 'noResults' query rule that doesn't carry its own message.
 		emptyMessage: 'No matching results. Try a different search term.',
+
+		// Rewrite the "Found 271 results" notice to the number actually
+		// shown. Turn this OFF if your results are paginated: the notice
+		// counts the whole result set, but the page only holds one page of
+		// it, so the corrected number would be wrong in the other direction.
+		updateCount: true,
 
 		// Un-hide the page after this long even if something went wrong,
 		// so a bad selector can never leave the page blank.
@@ -203,11 +221,29 @@
 		return path.toLowerCase();
 	}
 
+	/**
+	 * Give a path a trailing slash so a rule fragment like '/enrollment/'
+	 * matches a top-level page, not just a nested one.
+	 *
+	 * File URLs are left alone: SearchWP indexes PDFs and images, and their
+	 * results link straight at the file. Appending a slash to
+	 * '…/budget.pdf' would break any rule anchored on the extension.
+	 */
 	function withTrailingSlash( path ) {
 		if ( ! path ) {
 			return '';
 		}
-		return ( path.charAt( path.length - 1 ) === '/' ) ? path : path + '/';
+
+		if ( path.charAt( path.length - 1 ) === '/' ) {
+			return path;
+		}
+
+		var lastSegment = path.slice( path.lastIndexOf( '/' ) + 1 );
+		if ( lastSegment.indexOf( '.' ) !== -1 ) {
+			return path; // looks like a file, e.g. /uploads/budget.pdf
+		}
+
+		return path + '/';
 	}
 
 	function pick( list, root ) {
@@ -347,18 +383,26 @@
 			}
 		}
 
-		var idMatch = /(?:^|\s)post-(\d+)(?:\s|$)/.exec( item.className || '' );
+		var className = item.className || '';
+
+		var idMatch = /(?:^|\s)post-(\d+)(?:\s|$)/.exec( className );
 		var id = idMatch
 			? idMatch[ 1 ]
 			: ( item.getAttribute( 'data-post-id' ) || item.getAttribute( 'data-id' ) || '' );
+
+		// SearchWP/WordPress stamp the post type on each result as
+		// `type-page`, `type-post`, `type-attachment` and so on.
+		var typeMatch = /(?:^|\s)type-([a-z0-9_-]+)(?:\s|$)/i.exec( className );
 
 		return {
 			el:      item,
 			titleEl: titleEl ? titleEl.el : null,
 			id:      String( id ),
+			type:    typeMatch ? typeMatch[ 1 ].toLowerCase() : '',
 			title:   ( titleEl ? titleEl.el.textContent : '' ).toLowerCase().trim(),
 			// Rules see the path with a trailing slash, so a fragment like
-			// '/enrollment/' matches a top-level page as well as a nested one.
+			// '/enrollment/' matches a top-level page as well as a nested
+			// one. File URLs keep their real ending so '.pdf$' still works.
 			url:     withTrailingSlash( path ),
 			// The un-slashed form is what the hidden-path lookup is keyed on.
 			urlKey:  path,
@@ -429,6 +473,40 @@
 		return verdict;
 	}
 
+	/**
+	 * Replace text inside an element without touching its markup.
+	 *
+	 * SearchWP wraps every matched term in <mark class="searchwp-highlight">,
+	 * so setting textContent would strip the highlighting off every title it
+	 * rewrote. Walking the text nodes leaves the markup intact.
+	 *
+	 * The one limit: a phrase split across a highlight boundary lives in two
+	 * separate text nodes and won't match. Rewrite rules should target text
+	 * that won't contain the search term — a "ACPS - " prefix, not the word
+	 * someone just searched for.
+	 */
+	function rewriteText( root, rules ) {
+		var walker = document.createTreeWalker( root, NodeFilter.SHOW_TEXT, null, false );
+		var nodes = [];
+		var node;
+
+		while ( ( node = walker.nextNode() ) ) {
+			nodes.push( node );
+		}
+
+		nodes.forEach( function ( textNode ) {
+			var text = textNode.nodeValue;
+
+			rules.forEach( function ( rule ) {
+				text = text.split( rule.match ).join( rule.replace );
+			} );
+
+			if ( text !== textNode.nodeValue ) {
+				textNode.nodeValue = text;
+			}
+		} );
+	}
+
 	function applyVerdict( fields, verdict ) {
 		var item = fields.el;
 
@@ -457,13 +535,7 @@
 
 		// Cosmetic changes only apply to results that survived.
 		if ( verdict.rewrites.length && fields.titleEl ) {
-			var text = fields.titleEl.textContent;
-			verdict.rewrites.forEach( function ( rule ) {
-				text = text.split( rule.match ).join( rule.replace );
-			} );
-			if ( text !== fields.titleEl.textContent ) {
-				fields.titleEl.textContent = text;
-			}
+			rewriteText( fields.titleEl, verdict.rewrites );
 		}
 
 		verdict.badges.forEach( function ( label ) {
@@ -490,6 +562,12 @@
 	/* --- page furniture -------------------------------------------------- */
 
 	function updateCount( container, kept ) {
+		if ( ! OPTIONS.updateCount ) {
+			return;
+		}
+
+		// The SearchWP notice lives outside the results wrapper, so fall back
+		// to a document-wide lookup when it isn't found inside.
 		var hit = pick( SELECTORS.count, container ) || pick( SELECTORS.count );
 		if ( hit ) {
 			hit.el.textContent = hit.el.textContent.replace( /\d[\d,]*/, String( kept ) );

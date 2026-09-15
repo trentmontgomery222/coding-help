@@ -15,23 +15,20 @@
  * If you'd rather accept the flash than risk any blank period,
  * delete this whole block.
  * --------------------------------------------------------------- */
-.search-results .acps-search-results,
-.search-results #search-results,
-body.search .search-results {
+.swp-search-results,
+.acps-search-results {
 	visibility: hidden;
 }
 
-html.acps-search-ready .search-results .acps-search-results,
-html.acps-search-ready .search-results #search-results,
-html.acps-search-ready body.search .search-results {
+html.acps-search-ready .swp-search-results,
+html.acps-search-ready .acps-search-results {
 	visibility: visible;
 }
 
 /* Belt and braces: never leave anything hidden if JS dies outright. */
 @media ( scripting: none ) {
-	.search-results .acps-search-results,
-	.search-results #search-results,
-	body.search .search-results {
+	.swp-search-results,
+	.acps-search-results {
 		visibility: visible;
 	}
 }
@@ -109,8 +106,12 @@ html.acps-search-ready body.search .search-results {
 /* ---------------------------------------------------------------
  * General result polish — adjust or delete to taste.
  * --------------------------------------------------------------- */
+.swp-result-item.acps-pinned,
 .acps-result {
 	padding-block: 1.1rem;
+}
+
+.acps-result {
 	border-block-end: 1px solid #ececec;
 }
 
@@ -118,6 +119,7 @@ html.acps-search-ready body.search .search-results {
 	border-block-end: 0;
 }
 
+.swp-result-item .entry-title,
 .acps-result .entry-title {
 	margin: 0 0 0.3rem;
 	font-size: 1.15rem;
@@ -131,6 +133,22 @@ html.acps-search-ready body.search .search-results {
 .acps-result .entry-title a:hover,
 .acps-result .entry-title a:focus-visible {
 	text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------
+ * SearchWP specifics
+ * --------------------------------------------------------------- */
+
+/* The admin "Hidden from visitors" flag reads better above the title
+   than floating beside the thumbnail. */
+.swp-result-item.acps-admin-hidden .swp-result-item--info-container {
+	padding-block-start: 0.25rem;
+}
+
+/* Keep the term highlighting legible on a dimmed row. */
+.acps-filtered-out.acps-dimmed mark.searchwp-highlight {
+	background: transparent;
+	color: inherit;
 }
 
 /* ---------------------------------------------------------------

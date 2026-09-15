@@ -73,15 +73,60 @@ at. First match wins.
 
 | | values |
 |---|---|
-| `when` | `title` `url` `id` `excerpt` `text` |
+| `when` | `title` `url` `id` `type` `excerpt` `text` |
 | `op` | `equals` `contains` `starts` `ends` `regex` `in` |
 | `then` (results) | `hide` `dim` `rewrite` `badge` `top` `keep` |
 | `then` (queries) | `noResults` `redirect` `notice` `allow` |
 
 All text matching is case-insensitive and trims surrounding whitespace.
-`when: 'url'` gives you the **path only, with a trailing slash** — `/about/`,
-not the full URL — so `/enrollment/` matches a top-level page as well as a
-nested one.
+
+`when: 'url'` gives you the **path only**, lower-cased. Pages carry a trailing
+slash (`/about/`, not the full URL) so `/enrollment/` matches a top-level page
+as well as a nested one. File links keep their real ending, so a rule anchored
+on an extension works:
+
+```js
+// Drop the images SearchWP indexes, keep the PDFs
+{ when: 'url', op: 'regex', value: '\\.(jpe?g|png|gif|svg|webp)$', then: 'hide' }
+```
+
+`when: 'type'` reads the post type off the result's own `type-…` class — on
+this site `page`, `post` or `attachment`:
+
+```js
+// A broad search returns a wall of PDFs; this drops them all
+{ when: 'type', op: 'equals', value: 'attachment', then: 'hide' }
+```
+
+## Fitted to this site's markup
+
+The selectors in snippet #2 are already set for the SearchWP results module:
+
+| | |
+|---|---|
+| container | `.swp-search-results` |
+| result row | `.swp-result-item` |
+| title link | `.entry-title a` |
+| excerpt | `.swp-result-item--desc` |
+| count | `.swp-total-results-notice p` |
+
+Two details worth knowing, both handled:
+
+**The wrapper id is generated per render** (`swp-search-results-6aa940fc80207`),
+so nothing matches on it — only the class.
+
+**SearchWP wraps every matched term in `<mark class="searchwp-highlight">`.**
+Rules read the title through `textContent`, so a phrase matches straight
+across a highlight boundary. A `rewrite` walks the text nodes rather than
+replacing them, so the highlighting survives being edited. The one limit: a
+phrase split *across* a `<mark>` lives in two nodes and won't be replaced —
+target a prefix like `"ACPS - "`, not the word someone just searched for.
+
+**The result count** notice sits outside the results wrapper, so it's looked
+up document-wide. Note that it reports the whole result set (271) while the
+page only holds one page of it; if your results are paginated, set
+`updateCount: false` in `OPTIONS` rather than correcting a number that was
+never about this page.
 
 ## Managing rules from wp-admin
 
@@ -135,10 +180,13 @@ in jsdom:
 
 ```
 npm install jsdom
-node wpcode/tests/rules.test.js
+node wpcode/tests/rules.test.js      # 37 cases: every operator and action
+node wpcode/tests/searchwp.test.js   # 23 cases: against the real markup
 ```
 
-37 cases covering every operator and action. Add a case when you add a rule
+`searchwp.test.js` builds a fixture from actual result rows off this site —
+highlight markup, absolute hrefs, PDFs and images included — so a rule can be
+proven before it goes near the live page. Add a case when you add a rule
 you're unsure about.
 
 ## Worth knowing
