@@ -1,0 +1,211 @@
+/**
+ * WPCode snippet #3 — "Search: results styling"
+ *
+ * Code Type:     CSS Snippet
+ * Location:      Site Wide Header
+ * Priority:      10
+ */
+
+/* ---------------------------------------------------------------
+ * Anti-flicker: keep results invisible for the split second before
+ * the JS has filtered them, so hidden items never flash on screen.
+ * The <html> element gets .acps-search-ready as soon as JS finishes
+ * (and unconditionally after 2s, so this can never strand the page).
+ *
+ * If you'd rather accept the flash than risk any blank period,
+ * delete this whole block.
+ * --------------------------------------------------------------- */
+.swp-search-results,
+.acps-search-results {
+	visibility: hidden;
+
+	/* Failsafe, in CSS rather than JS: reveal after 2s no matter what.
+	   If the JS snippet is inactive, scoped to the wrong pages, or throws
+	   before it finishes, the results still appear. Nothing here can leave
+	   the page permanently blank. */
+	animation: acps-failsafe-reveal 0s linear 2s forwards;
+}
+
+@keyframes acps-failsafe-reveal {
+	to {
+		visibility: visible;
+	}
+}
+
+html.acps-search-ready .swp-search-results,
+html.acps-search-ready .acps-search-results {
+	visibility: visible;
+}
+
+/* Belt and braces for reduced-motion and no-script environments, where the
+   animation above may never run. */
+@media ( scripting: none ), ( prefers-reduced-motion: reduce ) {
+	.swp-search-results,
+	.acps-search-results {
+		visibility: visible;
+	}
+}
+
+/* ---------------------------------------------------------------
+ * Filtered results
+ * --------------------------------------------------------------- */
+
+/* hideMode: 'remove' — the JS deletes the node, but this catches any
+   that slipped through before removal. */
+.acps-filtered-out:not( .acps-dimmed ) {
+	display: none !important;
+}
+
+/* hideMode: 'dim' — useful while you're tuning the rules. */
+.acps-filtered-out.acps-dimmed {
+	opacity: 0.35;
+	filter: grayscale( 1 );
+	position: relative;
+}
+
+.acps-filtered-out.acps-dimmed::after {
+	content: 'filtered: ' attr( data-acps-reason );
+	position: absolute;
+	inset-inline-end: 0.5rem;
+	inset-block-start: 0.5rem;
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #8a1c1c;
+	background: #fde8e8;
+	border: 1px solid #f0b4b4;
+	border-radius: 3px;
+	padding: 0.15em 0.5em;
+}
+
+/* ---------------------------------------------------------------
+ * Admin preview — you still see hidden items, clearly marked.
+ * --------------------------------------------------------------- */
+.acps-admin-hidden {
+	position: relative;
+	border-inline-start: 4px solid #d63638;
+	padding-inline-start: 0.85rem;
+	background: linear-gradient( 90deg, rgba( 214, 54, 56, 0.06 ), transparent 40% );
+}
+
+.acps-admin-hidden::before {
+	content: 'Hidden from visitors';
+	display: inline-block;
+	margin-block-end: 0.35rem;
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #fff;
+	background: #d63638;
+	border-radius: 3px;
+	padding: 0.2em 0.55em;
+}
+
+/* ---------------------------------------------------------------
+ * Empty state
+ * --------------------------------------------------------------- */
+.acps-empty-message {
+	margin: 2rem 0;
+	padding: 1.25rem 1.5rem;
+	border: 1px dashed #c9c9c9;
+	border-radius: 6px;
+	background: #fafafa;
+	color: #555;
+	font-size: 1rem;
+}
+
+/* ---------------------------------------------------------------
+ * General result polish — adjust or delete to taste.
+ * --------------------------------------------------------------- */
+.swp-result-item.acps-pinned,
+.acps-result {
+	padding-block: 1.1rem;
+}
+
+.acps-result {
+	border-block-end: 1px solid #ececec;
+}
+
+.acps-result:last-child {
+	border-block-end: 0;
+}
+
+.swp-result-item .entry-title,
+.acps-result .entry-title {
+	margin: 0 0 0.3rem;
+	font-size: 1.15rem;
+	line-height: 1.35;
+}
+
+.acps-result .entry-title a {
+	text-decoration: none;
+}
+
+.acps-result .entry-title a:hover,
+.acps-result .entry-title a:focus-visible {
+	text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------
+ * SearchWP specifics
+ * --------------------------------------------------------------- */
+
+/* The admin "Hidden from visitors" flag reads better above the title
+   than floating beside the thumbnail. */
+.swp-result-item.acps-admin-hidden .swp-result-item--info-container {
+	padding-block-start: 0.25rem;
+}
+
+/* Keep the term highlighting legible on a dimmed row. */
+.acps-filtered-out.acps-dimmed mark.searchwp-highlight {
+	background: transparent;
+	color: inherit;
+}
+
+/* ---------------------------------------------------------------
+ * Rule-driven extras: 'badge', 'notice' and 'top' actions
+ * --------------------------------------------------------------- */
+
+.acps-badge {
+	display: inline-block;
+	margin-inline-start: 0.5em;
+	vertical-align: middle;
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #1d4ed8;
+	background: #e8effd;
+	border: 1px solid #c3d4f7;
+	border-radius: 999px;
+	padding: 0.2em 0.7em;
+	white-space: nowrap;
+}
+
+.acps-notice {
+	margin: 0 0 1.5rem;
+	padding: 0.9rem 1.15rem;
+	border-inline-start: 4px solid #2271b1;
+	border-radius: 4px;
+	background: #f0f6fc;
+	color: #1c3d5a;
+}
+
+.acps-pinned {
+	background: #fffdf5;
+	border-inline-start: 3px solid #dba617;
+	padding-inline-start: 0.85rem;
+}
+
+/* Rows sunk to the bottom by a `then: 'bottom'` rule. Deliberately quiet —
+   they're de-prioritised, not flagged. Delete this block for no visual
+   difference at all. */
+.acps-sunk {
+	opacity: 0.85;
+}
+
+.acps-sunk .entry-title {
+	font-size: 1rem;
+}
