@@ -1,38 +1,53 @@
 /**
  * The rule builder on the settings screen.
  *
- * No dependencies and no build step — it clones a template row, renumbers the
- * field names, and shows only the extra field the chosen action needs.
+ * No dependencies and no build step. Each rule is a block containing a main
+ * condition, any number of extra conditions, and an action; the field names
+ * are renumbered whenever anything is added or removed so the array arrives
+ * in order on the server.
  */
 ( function () {
 	'use strict';
 
-	function init( table ) {
-		var body = table.querySelector( 'tbody' );
-		var name = table.getAttribute( 'data-name' );
+	function init( wrap ) {
+		var name = wrap.getAttribute( 'data-name' );
 		var add = document.querySelector( '[data-add-rule="' + name + '"]' );
 
+		/**
+		 * Rewrite every field name to match its position.
+		 *
+		 * Both indexes are replaced in one pass, so a condition inside rule 3
+		 * becomes name[3][conds][1][value] however it got there — cloned from
+		 * a template, or left behind when the rule above it was deleted.
+		 */
 		function renumber() {
-			Array.prototype.forEach.call( body.querySelectorAll( 'tr' ), function ( row, index ) {
-				Array.prototype.forEach.call( row.querySelectorAll( '[name]' ), function ( field ) {
+			Array.prototype.forEach.call( wrap.querySelectorAll( '.wpsqr-rule' ), function ( rule, ruleIndex ) {
+				Array.prototype.forEach.call( rule.querySelectorAll( '[name]' ), function ( field ) {
 					field.setAttribute(
 						'name',
-						field.getAttribute( 'name' ).replace( /\[\d+\]/, '[' + index + ']' )
+						field.getAttribute( 'name' ).replace( /^[^[]+\[\d+\]/, name + '[' + ruleIndex + ']' )
 					);
+				} );
+
+				Array.prototype.forEach.call( rule.querySelectorAll( '.wpsqr-cond' ), function ( cond, condIndex ) {
+					Array.prototype.forEach.call( cond.querySelectorAll( '[name]' ), function ( field ) {
+						field.setAttribute(
+							'name',
+							field.getAttribute( 'name' ).replace( /\[conds\]\[\d+\]/, '[conds][' + condIndex + ']' )
+						);
+					} );
 				} );
 			} );
 		}
 
-		// Only one of replace / label / message / url is ever relevant, so the
-		// row shows the one the chosen action actually uses.
-		function syncExtras( row ) {
-			var action = row.querySelector( '.wpsqr-then' );
+		// Only the fields the chosen action needs are shown. Rewrite is the
+		// one action wanting two: what to replace with, and where.
+		function syncExtras( rule ) {
+			var action = rule.querySelector( '.wpsqr-then' );
 			if ( ! action ) {
 				return;
 			}
 
-			// Rewrite is the one action needing two fields: what to replace
-			// the text with, and which part of the row to do it in.
 			var needs = {
 				rewrite: [ 'target', 'replace' ],
 				setDesc: [ 'desc' ],
@@ -42,40 +57,75 @@
 				redirect: [ 'url' ]
 			}[ action.value ] || [];
 
-			Array.prototype.forEach.call( row.querySelectorAll( '[data-extra]' ), function ( field ) {
+			Array.prototype.forEach.call( rule.querySelectorAll( '[data-extra]' ), function ( field ) {
 				field.hidden = needs.indexOf( field.getAttribute( 'data-extra' ) ) === -1;
 			} );
 		}
 
-		function wire( row ) {
-			var action = row.querySelector( '.wpsqr-then' );
+		function wireRule( rule ) {
+			var action = rule.querySelector( '.wpsqr-then' );
 			if ( action ) {
 				action.addEventListener( 'change', function () {
-					syncExtras( row );
+					syncExtras( rule );
 				} );
 			}
 
-			var remove = row.querySelector( '.wpsqr-remove' );
+			var remove = rule.querySelector( '.wpsqr-rule-head .wpsqr-remove' );
 			if ( remove ) {
 				remove.addEventListener( 'click', function () {
-					row.parentNode.removeChild( row );
+					rule.parentNode.removeChild( rule );
 					renumber();
-					empty();
+					updateEmpty();
 				} );
 			}
 
-			syncExtras( row );
+			var addCond = rule.querySelector( '.wpsqr-add-cond' );
+			if ( addCond ) {
+				addCond.addEventListener( 'click', function () {
+					var template = document.getElementById( 'wpsqr-cond-' + name );
+					if ( ! template ) {
+						return;
+					}
+
+					var holder = document.createElement( 'div' );
+					holder.innerHTML = template.innerHTML.trim();
+
+					var cond = holder.querySelector( '.wpsqr-cond' );
+					rule.querySelector( '.wpsqr-conds' ).appendChild( cond );
+
+					renumber();
+					wireCondition( cond );
+
+					var first = cond.querySelector( 'input[type="text"]' );
+					if ( first ) {
+						first.focus();
+					}
+				} );
+			}
+
+			Array.prototype.forEach.call( rule.querySelectorAll( '.wpsqr-cond' ), wireCondition );
+			syncExtras( rule );
 		}
 
-		function empty() {
-			var note = table.parentNode.querySelector( '.wpsqr-no-rules' );
-			if ( note ) {
-				note.hidden = body.querySelectorAll( 'tr' ).length > 0;
+		function wireCondition( cond ) {
+			var remove = cond.querySelector( '.wpsqr-remove-cond' );
+			if ( remove ) {
+				remove.addEventListener( 'click', function () {
+					cond.parentNode.removeChild( cond );
+					renumber();
+				} );
 			}
 		}
 
-		Array.prototype.forEach.call( body.querySelectorAll( 'tr' ), wire );
-		empty();
+		function updateEmpty() {
+			var note = wrap.parentNode.querySelector( '.wpsqr-no-rules' );
+			if ( note ) {
+				note.hidden = wrap.querySelectorAll( '.wpsqr-rule' ).length > 0;
+			}
+		}
+
+		Array.prototype.forEach.call( wrap.querySelectorAll( '.wpsqr-rule' ), wireRule );
+		updateEmpty();
 
 		if ( add ) {
 			add.addEventListener( 'click', function () {
@@ -84,17 +134,17 @@
 					return;
 				}
 
-				var row = document.createElement( 'tbody' );
-				row.innerHTML = template.innerHTML.trim();
+				var holder = document.createElement( 'div' );
+				holder.innerHTML = template.innerHTML.trim();
 
-				var tr = row.querySelector( 'tr' );
-				body.appendChild( tr );
+				var rule = holder.querySelector( '.wpsqr-rule' );
+				wrap.appendChild( rule );
 
 				renumber();
-				wire( tr );
-				empty();
+				wireRule( rule );
+				updateEmpty();
 
-				var first = tr.querySelector( 'input, select' );
+				var first = rule.querySelector( 'input[type="text"], select' );
 				if ( first ) {
 					first.focus();
 				}

@@ -85,8 +85,48 @@ are final, so an early Keep protects a result from every rule below it.
 | Test | contains, is exactly, starts with, ends with, matches pattern, is any of |
 | Then | Hide, Keep, Grey out, Find and replace text, Replace the description, Add a badge, Move to top, Move to bottom |
 
+### Combining conditions
+
+A rule starts with one test and takes as many more as you need, via
+**+ and/or…**. Every `and` must match; if you add any `or` conditions, at
+least one of those must match too. `not` inverts any single test.
+
+One of the fields a condition can test is **the search** — what the visitor
+actually typed — so a rule can depend on the search as well as the result:
+
+```
+When the description contains "Edited Hidden"
+  and the search contains "staff"
+  → Replace the description with "Directory results for {query}."
+```
+
+That's the staff directory case: its indexed excerpt leaks admin interface
+text, but only worth rewriting when someone is actually searching the
+directory.
+
+### Variables
+
+`{query}` `{title}` `{desc}` `{url}` `{type}` `{id}` work in rule values *and*
+in output text — descriptions, badges, messages, redirect URLs.
+
+In a **value** they turn a rule into a comparison between the result and the
+search:
+
+```
+When the title contains {query} → Move to the top
+```
+
+In **output text** they quote things back:
+
+```
+→ Replace the description with "Everything about {query} at {title}"
+```
+
+An unknown placeholder is left visible rather than blanked, so a typo looks
+like a typo instead of quietly producing empty text.
+
 **Search term rules** — act on what the visitor typed, before any result is
-looked at. First match wins.
+looked at. First match wins. These take conditions too.
 
 | Then | |
 |---|---|
@@ -129,14 +169,18 @@ If you already store descriptions elsewhere — an SEO plugin's meta key — poi
 
 ### Where each rule runs
 
-`Hide` and `Keep` on **Title, URL, Post ID or Post type** are applied on the
-server — those results never reach the browser at all, which is what makes
-hiding a real boundary rather than a cosmetic one.
+`Hide` and `Keep` are applied on the **server** — those results never reach
+the browser at all, which is what makes hiding a real boundary rather than a
+cosmetic one — as long as *every* condition on the rule tests Title, URL, Post
+ID, Post type or the search.
 
-Everything else runs in the browser: greying out, title rewrites, badges and
-reordering are presentation, and `Excerpt`/`Anything in the row` can't be
-judged server-side because the excerpt the server would build isn't
-necessarily the one the template shows.
+Add a condition on `Excerpt` or `Anything in the row` and the whole rule moves
+to the browser, because the excerpt the server would build isn't necessarily
+the one the template renders. Half-applying a rule on an incomplete test would
+be worse than not applying it there at all.
+
+Everything else is presentation and runs in the browser: greying out,
+rewrites, badges and reordering.
 
 ### In the editor
 
@@ -165,7 +209,7 @@ save pays full price. Everything else still works.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 61 cases — the browser rule engine
+node tests/browser-rules.test.js     # 76 cases — the browser rule engine
 ```
 
 See `tests/README.md`. The normalizer decides the hit rate and the rule engine

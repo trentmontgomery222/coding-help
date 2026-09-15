@@ -25,12 +25,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WPSQR_Rules {
 
-	const FIELDS = array( 'title', 'url', 'id', 'type', 'excerpt', 'text' );
+	const FIELDS = array( 'title', 'url', 'id', 'type', 'excerpt', 'text', 'query' );
 	const OPS    = array( 'contains', 'equals', 'starts', 'ends', 'regex', 'in' );
 	const ACTIONS = array( 'hide', 'dim', 'rewrite', 'setDesc', 'badge', 'top', 'bottom', 'keep' );
 
-	/** Fields the server can evaluate reliably. */
-	const SERVER_FIELDS = array( 'title', 'url', 'id', 'type' );
+	/**
+	 * Fields the server can evaluate reliably.
+	 *
+	 * 'query' is included because the server knows what was searched for;
+	 * 'excerpt' and 'text' are not, because the excerpt the server would
+	 * build is not necessarily the one the template renders.
+	 */
+	const SERVER_FIELDS = array( 'title', 'url', 'id', 'type', 'query' );
 
 	/** Actions the server carries out; the rest are the browser's. */
 	const SERVER_ACTIONS = array( 'hide', 'keep' );
@@ -41,6 +47,17 @@ class WPSQR_Rules {
 	 * @param int[] $post_ids
 	 * @return int[]
 	 */
+	/** The current search term, lower-cased, for rules that test it. */
+	protected static function current_query() {
+		static $term = null;
+
+		if ( null === $term ) {
+			$term = strtolower( trim( (string) WPSQR_Plugin::current_term() ) );
+		}
+
+		return $term;
+	}
+
 	public static function apply( $post_ids ) {
 		$settings = WPSQR_Plugin::settings();
 		$map      = WPSQR_Hidden::map();
@@ -81,20 +98,46 @@ class WPSQR_Rules {
 		return apply_filters( 'wpsqr_filter_results', $kept, $post_ids );
 	}
 
-	/** Only the rules this side can act on. */
+	/**
+	 * Only the rules this side can act on.
+	 *
+	 * Every field the rule touches has to be one the server can judge — a
+	 * rule whose extra condition tests the excerpt is left to the browser
+	 * entirely, rather than being half-applied here on an incomplete test.
+	 */
 	protected static function server_rules( $settings ) {
 		$rules = array();
 
 		foreach ( (array) $settings['result_rules'] as $rule ) {
-			$when = isset( $rule['when'] ) ? $rule['when'] : 'title';
-			$then = isset( $rule['then'] ) ? $rule['then'] : 'hide';
-
-			if ( in_array( $when, self::SERVER_FIELDS, true ) && in_array( $then, self::SERVER_ACTIONS, true ) ) {
+			if ( self::is_server_side( $rule ) ) {
 				$rules[] = $rule;
 			}
 		}
 
 		return $rules;
+	}
+
+	/** Can this whole rule — action and every condition — run on the server? */
+	public static function is_server_side( $rule ) {
+		$then = isset( $rule['then'] ) ? $rule['then'] : 'hide';
+
+		if ( ! in_array( $then, self::SERVER_ACTIONS, true ) ) {
+			return false;
+		}
+
+		$fields = array( isset( $rule['when'] ) ? $rule['when'] : 'title' );
+
+		foreach ( (array) ( $rule['conds'] ?? array() ) as $cond ) {
+			$fields[] = isset( $cond['when'] ) ? $cond['when'] : 'title';
+		}
+
+		foreach ( $fields as $field ) {
+			if ( ! in_array( $field, self::SERVER_FIELDS, true ) ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
@@ -113,14 +156,7 @@ class WPSQR_Rules {
 		$fields = self::fields( $post_id );
 
 		foreach ( $rules as $rule ) {
-			$when    = isset( $rule['when'] ) ? $rule['when'] : 'title';
-			$subject = isset( $fields[ $when ] ) ? $fields[ $when ] : null;
-
-			if ( null === $subject ) {
-				continue;
-			}
-
-			if ( ! self::matches( $subject, $rule ) ) {
+			if ( ! self::rule_matches( $fields, $rule ) ) {
 				continue;
 			}
 
@@ -132,6 +168,92 @@ class WPSQR_Rules {
 		}
 
 		return '';
+	}
+
+	/** One test: a field, an operator, a value, optionally negated. */
+	protected static function condition_matches( $fields, $cond ) {
+		$when = isset( $cond['when'] ) ? $cond['when'] : 'title';
+
+		if ( ! isset( $fields[ $when ] ) ) {
+			return false;
+		}
+
+		$result = self::matches(
+			$fields[ $when ],
+			array(
+				'op'    => isset( $cond['op'] ) ? $cond['op'] : 'contains',
+				'value' => self::interpolate( isset( $cond['value'] ) ? $cond['value'] : '', $fields ),
+			)
+		);
+
+		return empty( $cond['not'] ) ? $result : ! $result;
+	}
+
+	/**
+	 * A whole rule: its own test, plus any extra conditions.
+	 *
+	 * Mirrors ruleMatches() in the browser engine — every 'and' condition
+	 * must match, and if there are any 'any' conditions, one of those too.
+	 */
+	protected static function rule_matches( $fields, $rule ) {
+		if ( ! self::condition_matches( $fields, $rule ) ) {
+			return false;
+		}
+
+		$conds = (array) ( $rule['conds'] ?? array() );
+
+		if ( ! $conds ) {
+			return true;
+		}
+
+		$alternatives = array();
+
+		foreach ( $conds as $cond ) {
+			if ( 'any' === ( $cond['join'] ?? 'and' ) ) {
+				$alternatives[] = $cond;
+				continue;
+			}
+
+			if ( ! self::condition_matches( $fields, $cond ) ) {
+				return false;
+			}
+		}
+
+		if ( ! $alternatives ) {
+			return true;
+		}
+
+		foreach ( $alternatives as $cond ) {
+			if ( self::condition_matches( $fields, $cond ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Substitute {query}, {title}, {url}, {type} and {id}.
+	 *
+	 * An unknown placeholder is left as written rather than blanked, so a
+	 * typo looks like a typo instead of silently producing empty text.
+	 */
+	public static function interpolate( $text, $fields ) {
+		$text = (string) $text;
+
+		if ( false === strpos( $text, '{' ) ) {
+			return $text;
+		}
+
+		return (string) preg_replace_callback(
+			'/\{(\w+)\}/',
+			function ( $match ) use ( $fields ) {
+				$key = $match[1];
+
+				return isset( $fields[ $key ] ) ? (string) $fields[ $key ] : $match[0];
+			},
+			$text
+		);
 	}
 
 	/** The comparable values for a post, matching the browser's field names. */
@@ -152,6 +274,7 @@ class WPSQR_Rules {
 			'url'   => $path,
 			'id'    => (string) (int) $post_id,
 			'type'  => strtolower( (string) get_post_type( $post_id ) ),
+			'query' => self::current_query(),
 		);
 	}
 
@@ -219,8 +342,20 @@ class WPSQR_Rules {
 			return null;
 		}
 
+		$context = array(
+			'query'   => $term,
+			'title'   => '',
+			'url'     => '',
+			'id'      => '',
+			'type'    => '',
+			'excerpt' => '',
+			'text'    => '',
+		);
+
 		foreach ( (array) $settings['query_rules'] as $rule ) {
-			if ( ! self::matches( $term, $rule ) ) {
+			$rule['when'] = 'query';
+
+			if ( ! self::rule_matches( $context, $rule ) ) {
 				continue;
 			}
 
@@ -247,10 +382,9 @@ class WPSQR_Rules {
 			$when = isset( $rule['when'] ) ? $rule['when'] : 'title';
 			$then = isset( $rule['then'] ) ? $rule['then'] : 'hide';
 
-			$handled_server_side = in_array( $when, self::SERVER_FIELDS, true )
-				&& in_array( $then, self::SERVER_ACTIONS, true );
+			unset( $when, $then );
 
-			if ( ! $handled_server_side ) {
+			if ( ! self::is_server_side( $rule ) ) {
 				$result[] = $rule;
 			}
 		}

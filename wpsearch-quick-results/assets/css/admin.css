@@ -1,41 +1,95 @@
 .wpsqr-rules {
-	max-width: 70em;
+	max-width: 78em;
 	margin-block-end: .5rem;
 }
 
-.wpsqr-rules th {
-	text-align: start;
-	font-size: .82rem;
-	text-transform: uppercase;
-	letter-spacing: .04em;
+.wpsqr-rule {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: .75rem .9rem;
+	margin-block-end: .75rem;
+}
+
+.wpsqr-rule-head,
+.wpsqr-rule-foot,
+.wpsqr-cond {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: .4rem;
+}
+
+.wpsqr-cond,
+.wpsqr-rule-foot {
+	margin-block-start: .5rem;
+}
+
+.wpsqr-cond {
+	padding-inline-start: 1.5rem;
+	border-inline-start: 2px solid #dcdcde;
+	margin-inline-start: .3rem;
+	padding-block: .25rem;
+}
+
+.wpsqr-rule-foot {
+	border-block-start: 1px solid #f0f0f1;
+	padding-block-start: .6rem;
+}
+
+.wpsqr-when-label,
+.wpsqr-then-label {
+	font-weight: 600;
 	color: #646970;
+	text-transform: uppercase;
+	font-size: .72rem;
+	letter-spacing: .05em;
 }
 
-.wpsqr-rules td {
-	vertical-align: top;
-	padding: .5rem .5rem .5rem 0;
-}
-
-.wpsqr-rules select,
-.wpsqr-rules input[type="text"] {
-	max-width: 100%;
+.wpsqr-then-label {
+	margin-inline-start: auto;
 }
 
 .wpsqr-rules .wpsqr-value {
-	min-width: 12rem;
-	width: 100%;
+	flex: 1 1 14rem;
+	min-width: 10rem;
+}
+
+.wpsqr-rules input[type="text"],
+.wpsqr-rules select {
+	max-width: 100%;
+}
+
+.wpsqr-not {
+	white-space: nowrap;
+	color: #646970;
+	font-size: .85rem;
+}
+
+.wpsqr-join {
+	min-width: 5rem;
 }
 
 .wpsqr-remove {
-	color: #b32d2e;
-	cursor: pointer;
+	margin-inline-start: auto;
 	border: 0;
 	background: none;
-	padding: .25rem .5rem;
+	color: #b32d2e;
+	cursor: pointer;
+	font-size: 1.15rem;
+	line-height: 1;
+	padding: .1rem .45rem;
+	border-radius: 3px;
+}
+
+.wpsqr-remove-cond {
+	font-size: 1rem;
+	color: #787c82;
 }
 
 .wpsqr-remove:hover {
-	text-decoration: underline;
+	background: #f6e7e7;
+	color: #b32d2e;
 }
 
 .wpsqr-no-rules {
@@ -45,6 +99,18 @@
 }
 
 .wpsqr-hint {
-	max-width: 46em;
+	max-width: 52em;
 	color: #646970;
+}
+
+.wpsqr-hint code {
+	background: #f0f0f1;
+	padding: .1em .4em;
+	border-radius: 3px;
+}
+
+@media ( max-width: 782px ) {
+	.wpsqr-then-label {
+		margin-inline-start: 0;
+	}
 }

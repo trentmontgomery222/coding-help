@@ -76,7 +76,9 @@
 	/* =================================================================
 	 * 3. RULES — act on each result row.
 	 *
-	 *    when: 'title' | 'url' | 'id' | 'type' | 'excerpt' | 'text'
+	 *    when: 'title' | 'url' | 'id' | 'type' | 'excerpt' | 'text' | 'query'
+	 *          ('query' is what the visitor typed, so a rule can depend on the
+	 *           search as well as the result)
 	 *          ('url' is the path only, lower-case: pages carry a trailing
 	 *           slash — '/about/' — and file links keep their extension,
 	 *           '/wp-content/uploads/budget.pdf')
@@ -88,6 +90,18 @@
 	 *    the description outright. 'badge' needs `label`.
 	 *    'keep' protects a result from any later rule.
 	 *    Rules run top to bottom; 'hide', 'dim' and 'keep' stop the rest.
+	 *
+	 *    `not: true` inverts a test.
+	 *
+	 *    `conds` adds further tests to a rule. Every one joined with 'and'
+	 *    must match; if any are joined with 'any', at least one of those must:
+	 *
+	 *      { when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+	 *        conds: [ { join: 'and', when: 'query', op: 'contains', value: 'staff' } ],
+	 *        then: 'setDesc', desc: 'Staff directory results for {query}.' }
+	 *
+	 *    Values and output text understand {query}, {title}, {desc}, {url},
+	 *    {type} and {id}.
 	 * ================================================================= */
 	var RULES = [
 
@@ -306,7 +320,11 @@
 		var value = rule.value;
 
 		if ( 'in' === op ) {
-			var list = ( Object.prototype.toString.call( value ) === '[object Array]' ) ? value : [ value ];
+			// Either a real array, or the comma-separated string the settings
+			// screen produces — both mean the same thing.
+			var list = ( Object.prototype.toString.call( value ) === '[object Array]' )
+				? value
+				: String( value == null ? '' : value ).split( ',' );
 			for ( var i = 0; i < list.length; i++ ) {
 				if ( matches( subject, { op: 'equals', value: list[ i ] } ) ) {
 					return true;
@@ -354,11 +372,24 @@
 			return null;
 		}
 
+		// Query rules see only the search itself, so `query` is the field a
+		// condition on them can test.
+		var context = { query: term, title: '', url: '', type: '', id: '', excerpt: '', text: '' };
+
 		for ( var i = 0; i < QUERY_RULES.length; i++ ) {
 			var rule = QUERY_RULES[ i ];
-			if ( matches( term, rule ) ) {
+
+
+			if ( ruleMatches( context, { when: 'query', op: rule.op, value: rule.value, not: rule.not, conds: rule.conds } ) ) {
 				log( 'query rule matched:', rule.then, rule.value );
-				return rule;
+
+				return {
+					op: rule.op,
+					value: rule.value,
+					then: rule.then,
+					url: interpolate( rule.url || '', context ),
+					message: interpolate( rule.message || '', context )
+				};
 			}
 		}
 
@@ -429,7 +460,7 @@
 			originalCount = 0;
 			removedTotal = 1;
 			updateCount( container );
-			showEmpty( container, queryVerdict.message || OPTIONS.emptyMessage );
+			showEmpty( container, queryVerdict.message || interpolate( OPTIONS.emptyMessage, { query: DATA.query || '' } ) );
 			return true;
 		}
 
@@ -471,22 +502,131 @@
 			excerptEl.el.textContent = custom;
 		}
 
+		var titleText = ( titleEl ? titleEl.el.textContent : '' ).trim();
+		var descText = ( excerptEl ? excerptEl.el.textContent : '' ).trim();
+
 		return {
 			el:      item,
 			titleEl: titleEl ? titleEl.el : null,
 			descEl:  excerptEl ? excerptEl.el : null,
+
+			// Original casing, for {title} and {desc} in output text.
+			titleText: titleText,
+			descText:  descText,
+
+			// What the visitor typed, so a rule can test the search itself.
+			query: String( DATA.query || getQueryFromUrl() || '' ).toLowerCase().trim(),
 			id:      String( id ),
 			type:    typeMatch ? typeMatch[ 1 ].toLowerCase() : '',
-			title:   ( titleEl ? titleEl.el.textContent : '' ).toLowerCase().trim(),
+			title:   titleText.toLowerCase(),
 			// Rules see the path with a trailing slash, so a fragment like
 			// '/enrollment/' matches a top-level page as well as a nested
 			// one. File URLs keep their real ending so '.pdf$' still works.
 			url:     withTrailingSlash( path ),
 			// The un-slashed form is what the hidden-path lookup is keyed on.
 			urlKey:  path,
-			excerpt: ( excerptEl ? excerptEl.el.textContent : '' ).toLowerCase().trim(),
+			excerpt: descText.toLowerCase(),
 			text:    ( item.textContent || '' ).toLowerCase().trim()
 		};
+	}
+
+	/**
+	 * Substitute {query}, {title}, {desc}, {url}, {type} and {id}.
+	 *
+	 * Used on rule values as well as output text, so a rule can compare a
+	 * result against the search — `title contains {query}` — and a message can
+	 * quote it back.
+	 */
+	function interpolate( text, fields ) {
+		// A rule value may be an array (the `in` operator). Leave it alone
+		// rather than flattening it to a comma-joined string.
+		if ( 'string' !== typeof text ) {
+			return text;
+		}
+
+		if ( text.indexOf( '{' ) === -1 ) {
+			return text;
+		}
+
+		fields = fields || {};
+
+		return text.replace( /\{(\w+)\}/g, function ( match, key ) {
+			switch ( key ) {
+				case 'query':
+					return String( DATA.query || getQueryFromUrl() || '' ).trim();
+				case 'title':
+					return fields.titleText || '';
+				case 'desc':
+					return fields.descText || '';
+				case 'url':
+					return fields.url || '';
+				case 'type':
+					return fields.type || '';
+				case 'id':
+					return fields.id || '';
+				default:
+					// An unknown placeholder is left visible rather than
+					// silently blanked — a typo should look like a typo.
+					return match;
+			}
+		} );
+	}
+
+	/** One test: a field, an operator, a value, optionally negated. */
+	function conditionMatches( fields, cond ) {
+		var field = cond.when || 'title';
+		var subject = fields[ field ];
+
+		if ( typeof subject === 'undefined' ) {
+			cond._badField = true;
+			return false;
+		}
+
+		var result = matches( String( subject ), {
+			op: cond.op,
+			value: interpolate( cond.value, fields )
+		} );
+
+		return cond.not ? ! result : result;
+	}
+
+	/**
+	 * A whole rule: its own test, plus any extra conditions.
+	 *
+	 * Conditions joined with 'and' must all match. If any are joined with
+	 * 'any', at least one of those must match as well.
+	 */
+	function ruleMatches( fields, rule ) {
+		if ( ! conditionMatches( fields, rule ) ) {
+			return false;
+		}
+
+		var conds = rule.conds || [];
+
+		if ( ! conds.length ) {
+			return true;
+		}
+
+		var alternatives = [];
+
+		for ( var i = 0; i < conds.length; i++ ) {
+			if ( 'any' === conds[ i ].join ) {
+				alternatives.push( conds[ i ] );
+				continue;
+			}
+
+			if ( ! conditionMatches( fields, conds[ i ] ) ) {
+				return false;
+			}
+		}
+
+		if ( ! alternatives.length ) {
+			return true;
+		}
+
+		return alternatives.some( function ( cond ) {
+			return conditionMatches( fields, cond );
+		} );
 	}
 
 	/**
@@ -511,14 +651,8 @@
 
 		for ( var i = 0; i < RULES.length; i++ ) {
 			var rule = RULES[ i ];
-			var subject = fields[ rule.when || 'title' ];
 
-			if ( typeof subject === 'undefined' ) {
-				rule._badField = true;
-				continue;
-			}
-
-			if ( ! matches( String( subject ), rule ) ) {
+			if ( ! ruleMatches( fields, rule ) ) {
 				continue;
 			}
 
@@ -544,8 +678,8 @@
 
 				case 'rewrite':
 					verdict.rewrites.push( {
-						match: rule.value,
-						replace: rule.replace || '',
+						match: interpolate( rule.value, fields ),
+						replace: interpolate( rule.replace || '', fields ),
 						target: rule.target || 'title'
 					} );
 					break;
@@ -553,12 +687,12 @@
 				case 'setDesc':
 					// Last one wins, so a more specific rule further down can
 					// override a broad one above it.
-					verdict.setDesc = rule.desc || '';
+					verdict.setDesc = interpolate( rule.desc || '', fields );
 					break;
 
 				case 'badge':
 					if ( rule.label ) {
-						verdict.badges.push( rule.label );
+						verdict.badges.push( interpolate( rule.label, fields ) );
 					}
 					break;
 

@@ -163,6 +163,110 @@ check('updateCount false leaves the notice alone',
 check('legacy flat lists still work',
   run({ data: { rules: { blockUrlContains: ['/staff/directory/'] } } }).ids.includes('43'), false);
 
+console.log('\nconditions and variables');
+// The real case: a directory page whose indexed excerpt leaks admin UI text.
+const DIRECTORY = [{ id: 43, type: 'page', path: '/staff/directory/', title: 'Staff Directory',
+  desc: 'Photo Name Title Job Location Email Edit Aaron Kerr Edited Hidden Warehouse Driver' }];
+
+check('a second condition must also match',
+  run({ query: 'staff', results: DIRECTORY, rules: [{
+    when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+    conds: [{ join: 'and', when: 'query', op: 'contains', value: 'staff' }],
+    then: 'setDesc', desc: 'Directory results for {query}.'
+  }] }).descs[0], 'Directory results for staff.');
+
+check('the same rule does nothing when the search does not match',
+  run({ query: 'calendar', results: DIRECTORY, rules: [{
+    when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+    conds: [{ join: 'and', when: 'query', op: 'contains', value: 'staff' }],
+    then: 'setDesc', desc: 'Directory results for {query}.'
+  }] }).descs[0].includes('Edited Hidden'), true);
+
+check('an or condition needs only one of its group',
+  run({ query: 'employees', results: DIRECTORY, rules: [{
+    when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+    conds: [
+      { join: 'any', when: 'query', op: 'contains', value: 'staff' },
+      { join: 'any', when: 'query', op: 'contains', value: 'employees' }
+    ],
+    then: 'setDesc', desc: 'Matched.'
+  }] }).descs[0], 'Matched.');
+
+check('an or group with no member matching fails the rule',
+  run({ query: 'calendar', results: DIRECTORY, rules: [{
+    when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+    conds: [
+      { join: 'any', when: 'query', op: 'contains', value: 'staff' },
+      { join: 'any', when: 'query', op: 'contains', value: 'employees' }
+    ],
+    then: 'setDesc', desc: 'Matched.'
+  }] }).descs[0].includes('Edited Hidden'), true);
+
+check('and and or combine: all ands plus one or',
+  run({ query: 'staff', results: DIRECTORY, rules: [{
+    when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+    conds: [
+      { join: 'and', when: 'type', op: 'equals', value: 'page' },
+      { join: 'any', when: 'query', op: 'contains', value: 'staff' },
+      { join: 'any', when: 'query', op: 'contains', value: 'directory' }
+    ],
+    then: 'setDesc', desc: 'Matched.'
+  }] }).descs[0], 'Matched.');
+
+check('a failing and blocks the rule even when an or matches',
+  run({ query: 'staff', results: DIRECTORY, rules: [{
+    when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+    conds: [
+      { join: 'and', when: 'type', op: 'equals', value: 'post' },
+      { join: 'any', when: 'query', op: 'contains', value: 'staff' }
+    ],
+    then: 'setDesc', desc: 'Matched.'
+  }] }).descs[0].includes('Edited Hidden'), true);
+
+check('not inverts the base test',
+  run({ query: 'staff', rules: [{ when: 'type', op: 'equals', value: 'attachment', not: true, then: 'hide' }] }).ids,
+  ['6837', '5069']);
+
+check('not inverts a condition',
+  run({ query: 'staff', results: DIRECTORY, rules: [{
+    when: 'excerpt', op: 'contains', value: 'Edited Hidden',
+    conds: [{ join: 'and', when: 'query', op: 'contains', value: 'calendar', not: true }],
+    then: 'setDesc', desc: 'Matched.'
+  }] }).descs[0], 'Matched.');
+
+check('a rule can test the search alone',
+  run({ query: 'staff', rules: [{ when: 'query', op: 'equals', value: 'staff', then: 'hide' }] }).ids, []);
+
+check('{query} expands in a badge',
+  run({ query: 'staff', results: DIRECTORY, rules: [{ when: 'type', op: 'equals', value: 'page', then: 'badge', label: 'for {query}' }] }).badges,
+  ['for staff']);
+
+check('{title} and {type} expand in a description',
+  run({ query: 'staff', results: DIRECTORY, rules: [{ when: 'type', op: 'equals', value: 'page', then: 'setDesc', desc: '{title} ({type})' }] }).descs[0],
+  'Staff Directory (page)');
+
+check('a value can be compared against the search',
+  run({ query: 'directory', results: DIRECTORY, rules: [{ when: 'title', op: 'contains', value: '{query}', then: 'setDesc', desc: 'Title matched the search.' }] }).descs[0],
+  'Title matched the search.');
+
+check('an unknown placeholder is left visible rather than blanked',
+  run({ query: 'staff', results: DIRECTORY, rules: [{ when: 'type', op: 'equals', value: 'page', then: 'setDesc', desc: 'a {nope} b' }] }).descs[0],
+  'a {nope} b');
+
+check('query rules take conditions too',
+  run({ query: 'staff', queryRules: [{
+    op: 'contains', value: 'staff',
+    conds: [{ join: 'and', when: 'query', op: 'contains', value: 'directory' }],
+    then: 'noResults'
+  }] }).ids.length, 7);
+
+check('and fire when every condition matches',
+  run({ query: 'staff directory', queryRules: [{
+    op: 'contains', value: 'staff',
+    conds: [{ join: 'and', when: 'query', op: 'contains', value: 'directory' }],
+    then: 'noResults', message: 'Nothing for {query}.'
+  }] }).empty, 'Nothing for staff directory.');
+
 console.log('\ndescriptions');
 check('rewrite targets the title by default, leaving the description alone',
   run({ rules: [{ when: 'title', op: 'contains', value: 'Staff', then: 'rewrite', replace: 'Team' }] }).descs[0].trim(),

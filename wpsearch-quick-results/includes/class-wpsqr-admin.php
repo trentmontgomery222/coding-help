@@ -340,7 +340,17 @@ class WPSQR_Admin {
 				<p class="wpsqr-hint">
 					<?php esc_html_e( 'Rules run top to bottom against each result. "Hide" and "Keep" are final — an early Keep protects a result from every rule below it.', 'wpsqr' ); ?>
 					<br>
-					<?php esc_html_e( 'Hide and Keep on Title, URL, ID or Post type are applied on the server, so those results never reach the browser at all. Everything else is applied in the browser.', 'wpsqr' ); ?>
+					<?php esc_html_e( 'Use "+ and/or…" to add conditions. Every "and" must match; if you add any "or" conditions, at least one of those must match too. "The search" tests what the visitor typed, so a rule can depend on the search as well as the result.', 'wpsqr' ); ?>
+					<br>
+					<?php
+					printf(
+						/* translators: %s: list of placeholder variables */
+						esc_html__( 'Values and output text understand %s.', 'wpsqr' ),
+						'<code>{query}</code>, <code>{title}</code>, <code>{desc}</code>, <code>{url}</code>, <code>{type}</code>, <code>{id}</code>'
+					);
+					?>
+					<br>
+					<?php esc_html_e( 'Hide and Keep run on the server — and so never reach the browser — as long as every condition tests Title, URL, ID, Post type or the search. A condition on the description or full text moves the whole rule into the browser.', 'wpsqr' ); ?>
 				</p>
 
 				<?php $this->rule_table( 'result_rules', (array) $s['result_rules'] ); ?>
@@ -439,34 +449,13 @@ class WPSQR_Admin {
 	}
 
 	protected function render_table( $name, $rules, $fields, $actions ) {
-		$ops = array(
-			'contains' => __( 'contains', 'wpsqr' ),
-			'equals'   => __( 'is exactly', 'wpsqr' ),
-			'starts'   => __( 'starts with', 'wpsqr' ),
-			'ends'     => __( 'ends with', 'wpsqr' ),
-			'regex'    => __( 'matches pattern', 'wpsqr' ),
-			'in'       => __( 'is any of (comma separated)', 'wpsqr' ),
-		);
+		$ops = self::operators();
 		?>
-		<table class="widefat striped wpsqr-rules" data-wpsqr-rules data-name="<?php echo esc_attr( $name ); ?>">
-			<thead>
-				<tr>
-					<?php if ( $fields ) : ?>
-						<th style="width:11em"><?php esc_html_e( 'When the', 'wpsqr' ); ?></th>
-					<?php endif; ?>
-					<th style="width:12em"><?php esc_html_e( 'Test', 'wpsqr' ); ?></th>
-					<th><?php esc_html_e( 'Value', 'wpsqr' ); ?></th>
-					<th style="width:15em"><?php esc_html_e( 'Then', 'wpsqr' ); ?></th>
-					<th style="width:14em"></th>
-					<th style="width:4em"></th>
-				</tr>
-			</thead>
-			<tbody>
-				<?php foreach ( array_values( $rules ) as $i => $rule ) : ?>
-					<?php $this->render_row( $name, $i, $rule, $fields, $actions, $ops ); ?>
-				<?php endforeach; ?>
-			</tbody>
-		</table>
+		<div class="wpsqr-rules" data-wpsqr-rules data-name="<?php echo esc_attr( $name ); ?>">
+			<?php foreach ( array_values( $rules ) as $i => $rule ) : ?>
+				<?php $this->render_rule( $name, $i, $rule, $fields, $actions, $ops ); ?>
+			<?php endforeach; ?>
+		</div>
 
 		<p class="wpsqr-no-rules"><?php esc_html_e( 'No rules yet.', 'wpsqr' ); ?></p>
 
@@ -477,30 +466,60 @@ class WPSQR_Admin {
 		</p>
 
 		<template id="wpsqr-template-<?php echo esc_attr( $name ); ?>">
-			<?php $this->render_row( $name, 0, array(), $fields, $actions, $ops ); ?>
+			<?php $this->render_rule( $name, 0, array(), $fields, $actions, $ops, true ); ?>
+		</template>
+
+		<template id="wpsqr-cond-<?php echo esc_attr( $name ); ?>">
+			<?php $this->render_condition( $name . '[0][conds][0]', array(), $fields, $ops ); ?>
 		</template>
 		<?php
 	}
 
-	protected function render_row( $name, $i, $rule, $fields, $actions, $ops ) {
+	protected static function operators() {
+		return array(
+			'contains' => __( 'contains', 'wpsqr' ),
+			'equals'   => __( 'is exactly', 'wpsqr' ),
+			'starts'   => __( 'starts with', 'wpsqr' ),
+			'ends'     => __( 'ends with', 'wpsqr' ),
+			'regex'    => __( 'matches pattern', 'wpsqr' ),
+			'in'       => __( 'is any of (comma separated)', 'wpsqr' ),
+		);
+	}
+
+	/** Fields a condition can test. Query rules only ever look at the search. */
+	protected static function condition_fields( $fields ) {
+		if ( ! $fields ) {
+			return array( 'query' => __( 'the search', 'wpsqr' ) );
+		}
+
+		return $fields + array( 'query' => __( 'the search', 'wpsqr' ) );
+	}
+
+	protected function render_rule( $name, $i, $rule, $fields, $actions, $ops, $is_template = false ) {
 		$base = $name . '[' . $i . ']';
 		$get  = function ( $key, $default = '' ) use ( $rule ) {
 			return isset( $rule[ $key ] ) ? $rule[ $key ] : $default;
 		};
 		?>
-		<tr>
-			<?php if ( $fields ) : ?>
-				<td>
+		<div class="wpsqr-rule">
+			<div class="wpsqr-rule-head">
+				<span class="wpsqr-when-label"><?php esc_html_e( 'When', 'wpsqr' ); ?></span>
+
+				<?php if ( $fields ) : ?>
 					<select name="<?php echo esc_attr( $base ); ?>[when]">
-						<?php foreach ( $fields as $value => $label ) : ?>
+						<?php foreach ( self::condition_fields( $fields ) as $value => $label ) : ?>
 							<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'when', 'title' ), $value ); ?>>
 								<?php echo esc_html( $label ); ?>
 							</option>
 						<?php endforeach; ?>
 					</select>
-				</td>
-			<?php endif; ?>
-			<td>
+				<?php endif; ?>
+
+				<label class="wpsqr-not">
+					<input type="checkbox" name="<?php echo esc_attr( $base ); ?>[not]" value="1" <?php checked( $get( 'not' ), 1 ); ?>>
+					<?php esc_html_e( 'not', 'wpsqr' ); ?>
+				</label>
+
 				<select name="<?php echo esc_attr( $base ); ?>[op]">
 					<?php foreach ( $ops as $value => $label ) : ?>
 						<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'op', 'contains' ), $value ); ?>>
@@ -508,12 +527,25 @@ class WPSQR_Admin {
 						</option>
 					<?php endforeach; ?>
 				</select>
-			</td>
-			<td>
+
 				<input type="text" class="wpsqr-value" name="<?php echo esc_attr( $base ); ?>[value]"
-					value="<?php echo esc_attr( $get( 'value' ) ); ?>" placeholder="<?php esc_attr_e( 'staff-only', 'wpsqr' ); ?>">
-			</td>
-			<td>
+					value="<?php echo esc_attr( $get( 'value' ) ); ?>"
+					placeholder="<?php esc_attr_e( 'Edited Hidden', 'wpsqr' ); ?>">
+
+				<button type="button" class="wpsqr-remove" title="<?php esc_attr_e( 'Remove this rule', 'wpsqr' ); ?>">&times;</button>
+			</div>
+
+			<div class="wpsqr-conds">
+				<?php foreach ( array_values( (array) $get( 'conds', array() ) ) as $ci => $cond ) : ?>
+					<?php $this->render_condition( $base . '[conds][' . $ci . ']', $cond, $fields, $ops ); ?>
+				<?php endforeach; ?>
+			</div>
+
+			<div class="wpsqr-rule-foot">
+				<button type="button" class="button-link wpsqr-add-cond"><?php esc_html_e( '+ and/or…', 'wpsqr' ); ?></button>
+
+				<span class="wpsqr-then-label"><?php esc_html_e( 'then', 'wpsqr' ); ?></span>
+
 				<select class="wpsqr-then" name="<?php echo esc_attr( $base ); ?>[then]">
 					<?php foreach ( $actions as $value => $label ) : ?>
 						<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'then' ), $value ); ?>>
@@ -521,28 +553,65 @@ class WPSQR_Admin {
 						</option>
 					<?php endforeach; ?>
 				</select>
-			</td>
-			<td>
+
 				<select data-extra="target" name="<?php echo esc_attr( $base ); ?>[target]" hidden>
 					<option value="title" <?php selected( $get( 'target', 'title' ), 'title' ); ?>><?php esc_html_e( 'in the title', 'wpsqr' ); ?></option>
 					<option value="desc" <?php selected( $get( 'target' ), 'desc' ); ?>><?php esc_html_e( 'in the description', 'wpsqr' ); ?></option>
 					<option value="both" <?php selected( $get( 'target' ), 'both' ); ?>><?php esc_html_e( 'in both', 'wpsqr' ); ?></option>
 				</select>
+
 				<input type="text" data-extra="replace" name="<?php echo esc_attr( $base ); ?>[replace]"
 					value="<?php echo esc_attr( $get( 'replace' ) ); ?>" placeholder="<?php esc_attr_e( 'replace with…', 'wpsqr' ); ?>" hidden>
+				<input type="text" data-extra="desc" name="<?php echo esc_attr( $base ); ?>[desc]"
+					value="<?php echo esc_attr( $get( 'desc' ) ); ?>" placeholder="<?php esc_attr_e( 'Results for {query}', 'wpsqr' ); ?>" hidden>
 				<input type="text" data-extra="label" name="<?php echo esc_attr( $base ); ?>[label]"
 					value="<?php echo esc_attr( $get( 'label' ) ); ?>" placeholder="<?php esc_attr_e( 'badge text', 'wpsqr' ); ?>" hidden>
 				<input type="text" data-extra="message" name="<?php echo esc_attr( $base ); ?>[message]"
-					value="<?php echo esc_attr( $get( 'message' ) ); ?>" placeholder="<?php esc_attr_e( 'message shown', 'wpsqr' ); ?>" hidden>
+					value="<?php echo esc_attr( $get( 'message' ) ); ?>" placeholder="<?php esc_attr_e( 'Nothing found for {query}', 'wpsqr' ); ?>" hidden>
 				<input type="text" data-extra="url" name="<?php echo esc_attr( $base ); ?>[url]"
 					value="<?php echo esc_attr( $get( 'url' ) ); ?>" placeholder="/menus/" hidden>
-				<input type="text" data-extra="desc" name="<?php echo esc_attr( $base ); ?>[desc]"
-					value="<?php echo esc_attr( $get( 'desc' ) ); ?>" placeholder="<?php esc_attr_e( 'new description', 'wpsqr' ); ?>" hidden>
-			</td>
-			<td>
-				<button type="button" class="wpsqr-remove"><?php esc_html_e( 'Remove', 'wpsqr' ); ?></button>
-			</td>
-		</tr>
+			</div>
+		</div>
+		<?php
+	}
+
+	protected function render_condition( $base, $cond, $fields, $ops ) {
+		$get = function ( $key, $default = '' ) use ( $cond ) {
+			return isset( $cond[ $key ] ) ? $cond[ $key ] : $default;
+		};
+		?>
+		<div class="wpsqr-cond">
+			<select class="wpsqr-join" name="<?php echo esc_attr( $base ); ?>[join]">
+				<option value="and" <?php selected( $get( 'join', 'and' ), 'and' ); ?>><?php esc_html_e( 'and', 'wpsqr' ); ?></option>
+				<option value="any" <?php selected( $get( 'join' ), 'any' ); ?>><?php esc_html_e( 'or', 'wpsqr' ); ?></option>
+			</select>
+
+			<select name="<?php echo esc_attr( $base ); ?>[when]">
+				<?php foreach ( self::condition_fields( $fields ) as $value => $label ) : ?>
+					<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'when', 'query' ), $value ); ?>>
+						<?php echo esc_html( $label ); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
+
+			<label class="wpsqr-not">
+				<input type="checkbox" name="<?php echo esc_attr( $base ); ?>[not]" value="1" <?php checked( $get( 'not' ), 1 ); ?>>
+				<?php esc_html_e( 'not', 'wpsqr' ); ?>
+			</label>
+
+			<select name="<?php echo esc_attr( $base ); ?>[op]">
+				<?php foreach ( $ops as $value => $label ) : ?>
+					<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'op', 'contains' ), $value ); ?>>
+						<?php echo esc_html( $label ); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
+
+			<input type="text" class="wpsqr-value" name="<?php echo esc_attr( $base ); ?>[value]"
+				value="<?php echo esc_attr( $get( 'value' ) ); ?>" placeholder="<?php esc_attr_e( 'staff', 'wpsqr' ); ?>">
+
+			<button type="button" class="wpsqr-remove wpsqr-remove-cond" title="<?php esc_attr_e( 'Remove this condition', 'wpsqr' ); ?>">&times;</button>
+		</div>
 		<?php
 	}
 
@@ -662,6 +731,16 @@ class WPSQR_Admin {
 				continue;
 			}
 
+			if ( ! empty( $row['not'] ) ) {
+				$rule['not'] = 1;
+			}
+
+			$rule['conds'] = self::sanitize_conditions( $row['conds'] ?? array(), $is_result );
+
+			if ( ! $rule['conds'] ) {
+				unset( $rule['conds'] );
+			}
+
 			if ( 'rewrite' === $rule['then'] ) {
 				$target         = isset( $row['target'] ) ? $row['target'] : 'title';
 				$rule['target'] = in_array( $target, array( 'title', 'desc', 'both' ), true ) ? $target : 'title';
@@ -678,6 +757,46 @@ class WPSQR_Admin {
 			}
 
 			$clean[] = $rule;
+		}
+
+		return $clean;
+	}
+
+	/** Extra conditions hanging off a rule. */
+	protected static function sanitize_conditions( $rows, $is_result ) {
+		$clean = array();
+
+		// A query rule can only ever test the search itself.
+		$allowed = $is_result ? WPSQR_Rules::FIELDS : array( 'query' );
+
+		foreach ( (array) $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$value = isset( $row['value'] ) ? trim( sanitize_text_field( $row['value'] ) ) : '';
+
+			// An empty condition would silently widen the rule it hangs off,
+			// which is worse than it simply not being there.
+			if ( '' === $value ) {
+				continue;
+			}
+
+			$when = isset( $row['when'] ) ? $row['when'] : 'query';
+			$op   = isset( $row['op'] ) ? $row['op'] : 'contains';
+
+			$cond = array(
+				'join'  => ( isset( $row['join'] ) && 'any' === $row['join'] ) ? 'any' : 'and',
+				'when'  => in_array( $when, $allowed, true ) ? $when : $allowed[0],
+				'op'    => in_array( $op, WPSQR_Rules::OPS, true ) ? $op : 'contains',
+				'value' => $value,
+			);
+
+			if ( ! empty( $row['not'] ) ) {
+				$cond['not'] = 1;
+			}
+
+			$clean[] = $cond;
 		}
 
 		return $clean;
