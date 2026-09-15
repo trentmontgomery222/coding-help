@@ -18,6 +18,18 @@
 .swp-search-results,
 .acps-search-results {
 	visibility: hidden;
+
+	/* Failsafe, in CSS rather than JS: reveal after 2s no matter what.
+	   If the JS snippet is inactive, scoped to the wrong pages, or throws
+	   before it finishes, the results still appear. Nothing here can leave
+	   the page permanently blank. */
+	animation: acps-failsafe-reveal 0s linear 2s forwards;
+}
+
+@keyframes acps-failsafe-reveal {
+	to {
+		visibility: visible;
+	}
 }
 
 html.acps-search-ready .swp-search-results,
@@ -25,8 +37,9 @@ html.acps-search-ready .acps-search-results {
 	visibility: visible;
 }
 
-/* Belt and braces: never leave anything hidden if JS dies outright. */
-@media ( scripting: none ) {
+/* Belt and braces for reduced-motion and no-script environments, where the
+   animation above may never run. */
+@media ( scripting: none ), ( prefers-reduced-motion: reduce ) {
 	.swp-search-results,
 	.acps-search-results {
 		visibility: visible;

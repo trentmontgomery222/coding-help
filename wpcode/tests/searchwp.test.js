@@ -38,13 +38,13 @@ const SAMPLE = [
   { id: 11487, type: 'page', path: '/powerschool/', title: 'PowerSchool' },
 ];
 
-function run({ query = 'staff', results = SAMPLE, queryRules = [], rules = [], data = {} }) {
+function run({ query = 'staff', results = SAMPLE, queryRules = [], rules = [], data = {}, search = null }) {
   const dom = new JSDOM(`<!doctype html><html><body>
     <div class="swp-total-results-notice"><p>Found 271 results for ${query}</p></div>
     <div class="swp-search-results swp-results-template-1 swp-flex swp-rp--img-sm" id="swp-search-results-6aa940fc80207">
       ${results.map(item).join('')}
     </div></body></html>`,
-    { url: `${ORIGIN}/?s=${encodeURIComponent(query)}`, runScripts: 'outside-only' });
+    { url: ORIGIN + (search === null ? `/?s=${encodeURIComponent(query)}` : search), runScripts: 'outside-only' });
 
   dom.window.ACPS_SEARCH = Object.assign(
     { query, hiddenIds: [], hiddenPaths: [], isAdmin: false, rules: {} }, data);
@@ -75,7 +75,8 @@ function check(name, actual, expected) {
 console.log('\nselectors find the real markup');
 check('all 7 rows survive with no rules', run({}).ids.length, 7);
 check('the generated wrapper id is not required', run({}).titles[0], 'Staff');
-check('the count notice outside the wrapper is found', run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'hide' }] }).notice, 'Found 5 results for staff');
+check('the count notice outside the wrapper is found and adjusted',
+  run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'hide' }] }).notice, 'Found 269 results for staff');
 
 console.log('\npost type rules');
 check('type equals attachment hides PDFs and images',
@@ -130,10 +131,37 @@ check('hiddenPaths match the absolute hrefs',
 
 console.log('\nquery rules on the real page');
 check('blocking the term empties the results', run({ queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).ids, []);
-check('and zeroes the SearchWP notice',
-  run({ queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).notice, 'Found 0 results for staff');
 check('and shows the message',
   run({ queryRules: [{ op: 'equals', value: 'staff', then: 'noResults', message: 'Try the directory.' }] }).empty, 'Try the directory.');
+
+console.log('\nfinding the search term when the bridge is absent');
+// A SearchWP module on a Beaver Builder page: is_search() is false, so
+// snippet #1 never printed and window.ACPS_SEARCH carries no query.
+check('?swpquery= is read when ?s= is absent',
+  run({ search: '/search-results/?swpquery=staff', data: { query: '' },
+        queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).ids, []);
+check('the term is recovered from the results notice with no parameter at all',
+  run({ search: '/search-results/', data: { query: '' },
+        queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).ids, []);
+check('a non-matching term recovered from the notice does not fire',
+  run({ search: '/search-results/', data: { query: '' },
+        queryRules: [{ op: 'equals', value: 'payroll', then: 'noResults' }] }).ids.length, 7);
+check('queryParams from the bridge are honoured',
+  run({ search: '/results/?myterm=staff', data: { query: '', queryParams: ['myterm'] },
+        queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).ids, []);
+check('result rules still work with no bridge at all',
+  run({ search: '/search-results/?swpquery=staff', data: { query: '' },
+        rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'hide' }] }).ids.length, 5);
+
+console.log('\nthe count rewrite settles');
+check('the total is decremented by what was filtered, not replaced',
+  run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'hide' }] }).notice,
+  'Found 269 results for staff');
+check('filtering nothing leaves the plugin\'s own total untouched',
+  run({}).notice, 'Found 271 results for staff');
+check('a blocked query zeroes it outright',
+  run({ queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).notice,
+  'Found 0 results for staff');
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

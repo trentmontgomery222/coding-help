@@ -47,6 +47,13 @@ if ( ! defined( 'ACPS_HIDE_CACHE_TTL' ) ) {
 	define( 'ACPS_HIDE_CACHE_TTL', 10 * MINUTE_IN_SECONDS );
 }
 
+// Paths of any results page this can't detect on its own, comma separated
+// (e.g. '/search/,/find/'). Usually unnecessary — a page carrying ?s= or
+// ?swpquery= is detected automatically.
+if ( ! defined( 'ACPS_SEARCH_PAGE_PATHS' ) ) {
+	define( 'ACPS_SEARCH_PAGE_PATHS', '' );
+}
+
 /* =====================================================================
  * Collect the hidden posts
  * ===================================================================== */
@@ -133,23 +140,78 @@ add_action( 'deleted_post_meta', 'acps_search_flush_hidden_map' );
  * Print the data on search pages
  * ===================================================================== */
 
+/**
+ * Is the current request a search results page?
+ *
+ * is_search() alone is NOT enough here. It is only true on WordPress's own
+ * search template. A SearchWP results module dropped onto a Beaver Builder
+ * page is an ordinary page as far as WordPress is concerned, so is_search()
+ * returns false and the bridge never prints — which looks exactly like "the
+ * filtering doesn't work".
+ *
+ * So: the native search page, OR any request carrying a search query
+ * parameter, OR a page path listed in ACPS_SEARCH_PAGE_PATHS.
+ */
+function acps_search_is_results_page() {
+	if ( is_search() ) {
+		return true;
+	}
+
+	foreach ( acps_search_query_params() as $param ) {
+		if ( isset( $_GET[ $param ] ) && '' !== $_GET[ $param ] ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return true;
+		}
+	}
+
+	$paths = array_filter( array_map( 'trim', explode( ',', ACPS_SEARCH_PAGE_PATHS ) ) );
+	if ( $paths ) {
+		$current = untrailingslashit( (string) wp_parse_url( add_query_arg( array() ), PHP_URL_PATH ) );
+		foreach ( $paths as $path ) {
+			if ( $current === untrailingslashit( $path ) ) {
+				return true;
+			}
+		}
+	}
+
+	/**
+	 * Last resort: force it on for a page this can't detect.
+	 * add_filter( 'acps_search_is_results_page', function () { return is_page( 1234 ); } );
+	 */
+	return (bool) apply_filters( 'acps_search_is_results_page', false );
+}
+
+/** Query parameters that carry a search term. */
+function acps_search_query_params() {
+	// SearchWP's own parameter is swpquery; WordPress uses s.
+	return apply_filters( 'acps_search_query_params', array( 's', 'swpquery' ) );
+}
+
+/** The search term for this request, whichever parameter carried it. */
+function acps_search_current_query() {
+	foreach ( acps_search_query_params() as $param ) {
+		if ( isset( $_GET[ $param ] ) && '' !== $_GET[ $param ] ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return sanitize_text_field( wp_unslash( $_GET[ $param ] ) );
+		}
+	}
+
+	return get_search_query();
+}
+
 function acps_search_print_bridge() {
-	// Only on the search results page. Add your plugin's own results page
-	// here if it uses a dedicated URL, e.g.:
-	//   || is_page( 'search-results' )
-	if ( ! is_search() ) {
+	if ( ! acps_search_is_results_page() ) {
 		return;
 	}
 
 	$map = acps_search_get_hidden_map();
 
 	$data = array(
-		'hiddenIds'   => $map['ids'],
-		'hiddenPaths' => $map['paths'],
-		'isAdmin'     => current_user_can( 'edit_posts' ),
-		'query'       => get_search_query(),
-		'homePath'    => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
-		'rules'       => array(),
+		'hiddenIds'    => $map['ids'],
+		'hiddenPaths'  => $map['paths'],
+		'isAdmin'      => current_user_can( 'edit_posts' ),
+		'query'        => acps_search_current_query(),
+		'queryParams'  => array_values( acps_search_query_params() ),
+		'homePath'     => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
+		'rules'        => array(),
 	);
 
 	/**
@@ -174,7 +236,7 @@ add_action( 'wp_head', 'acps_search_print_bridge', 1 );
  * ===================================================================== */
 
 function acps_search_mark_results( $classes, $class, $post_id ) {
-	if ( ! is_search() ) {
+	if ( ! acps_search_is_results_page() ) {
 		return $classes;
 	}
 

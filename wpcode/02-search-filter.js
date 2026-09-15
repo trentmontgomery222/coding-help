@@ -328,9 +328,36 @@
 		return null;
 	}
 
+	/**
+	 * Find the search term.
+	 *
+	 * SearchWP uses ?swpquery=, WordPress uses ?s=, and a Beaver Builder
+	 * results page may carry neither. So: whatever the bridge reported, else
+	 * any known parameter, else the term out of the "Found 271 results for
+	 * staff" notice.
+	 */
 	function getQueryFromUrl() {
-		var m = /[?&]s=([^&]*)/.exec( window.location.search );
-		return m ? decodeURIComponent( m[ 1 ].replace( /\+/g, ' ' ) ) : '';
+		var params = DATA.queryParams || [ 's', 'swpquery' ];
+
+		for ( var i = 0; i < params.length; i++ ) {
+			var m = new RegExp( '[?&]' + params[ i ] + '=([^&]*)' ).exec( window.location.search );
+			if ( m && m[ 1 ] ) {
+				return decodeURIComponent( m[ 1 ].replace( /\+/g, ' ' ) );
+			}
+		}
+
+		return getQueryFromNotice();
+	}
+
+	function getQueryFromNotice() {
+		var hit = pick( SELECTORS.count );
+		if ( ! hit ) {
+			return '';
+		}
+
+		// "Found 271 results for staff"
+		var m = /\bfor\s+(.+)$/i.exec( hit.el.textContent.trim() );
+		return m ? m[ 1 ].trim() : '';
 	}
 
 	function applyQueryVerdict( container ) {
@@ -359,7 +386,11 @@
 					}
 				} );
 			}
-			updateCount( container, 0 );
+
+			// A blocked search shows nothing, whatever the total said.
+			originalCount = 0;
+			removedTotal = 1;
+			updateCount( container );
 			showEmpty( container, queryVerdict.message || OPTIONS.emptyMessage );
 			return true;
 		}
@@ -432,9 +463,16 @@
 			var rule = RULES[ i ];
 			var subject = fields[ rule.when || 'title' ];
 
-			if ( typeof subject === 'undefined' || ! matches( String( subject ), rule ) ) {
+			if ( typeof subject === 'undefined' ) {
+				rule._badField = true;
 				continue;
 			}
+
+			if ( ! matches( String( subject ), rule ) ) {
+				continue;
+			}
+
+			rule._hits = ( rule._hits || 0 ) + 1;
 
 			var label = ( rule.when || 'title' ) + ' ' + ( rule.op || 'contains' ) + ' "' + rule.value + '"';
 
@@ -521,6 +559,8 @@
 				return true; // still counts as shown, for the editor
 			}
 
+			removedTotal++;
+
 			if ( 'dim' === mode ) {
 				item.classList.add( 'acps-filtered-out', 'acps-dimmed' );
 			} else {
@@ -561,16 +601,45 @@
 
 	/* --- page furniture -------------------------------------------------- */
 
-	function updateCount( container, kept ) {
-		if ( ! OPTIONS.updateCount ) {
+	/**
+	 * Correct the "Found 271 results for staff" notice.
+	 *
+	 * It reports the whole result set, while this page holds only one page of
+	 * it. So subtract what was filtered rather than replacing the total with
+	 * the number of visible rows — on an unpaginated page those are the same
+	 * number, and on a paginated one subtracting is at least honest about
+	 * what changed. If nothing was filtered, the notice is left exactly as
+	 * the plugin wrote it.
+	 */
+	function updateCount( container ) {
+		if ( ! OPTIONS.updateCount || removedTotal === 0 ) {
 			return;
 		}
 
 		// The SearchWP notice lives outside the results wrapper, so fall back
 		// to a document-wide lookup when it isn't found inside.
 		var hit = pick( SELECTORS.count, container ) || pick( SELECTORS.count );
-		if ( hit ) {
-			hit.el.textContent = hit.el.textContent.replace( /\d[\d,]*/, String( kept ) );
+		if ( ! hit ) {
+			return;
+		}
+
+		var current = hit.el.textContent;
+		var found = /\d[\d,]*/.exec( current );
+		if ( ! found ) {
+			return;
+		}
+
+		if ( originalCount === null ) {
+			originalCount = parseInt( found[ 0 ].replace( /,/g, '' ), 10 );
+		}
+
+		var updated = current.replace( /\d[\d,]*/, String( Math.max( 0, originalCount - removedTotal ) ) );
+
+		// Only write when it differs. If the notice happens to sit inside the
+		// element the MutationObserver watches, an unconditional write would
+		// retrigger the observer on every pass and spin forever.
+		if ( updated !== current ) {
+			hit.el.textContent = updated;
 		}
 	}
 
@@ -608,6 +677,9 @@
 	/* --- main pass --------------------------------------------------------- */
 
 	var running = false;
+	var LAST = {};
+	var removedTotal = 0;   // rows this snippet has filtered out
+	var originalCount = null; // the number the notice showed before we touched it
 
 	function apply() {
 		if ( running ) {
@@ -617,6 +689,8 @@
 
 		try {
 			var container = pick( SELECTORS.container );
+			LAST.container = container ? container.selector : null;
+
 			if ( ! container ) {
 				log( 'no results container matched', SELECTORS.container );
 				return;
@@ -628,6 +702,8 @@
 			}
 
 			var itemHit = pick( SELECTORS.item, container.el );
+			LAST.item = itemHit ? itemHit.selector : null;
+
 			if ( ! itemHit ) {
 				log( 'no result items matched inside', container.selector );
 				return;
@@ -635,6 +711,8 @@
 
 			var items = container.el.querySelectorAll( itemHit.selector );
 			var kept = 0;
+
+			LAST.total = items.length;
 
 			Array.prototype.forEach.call( items, function ( item ) {
 				if ( item.getAttribute( 'data-acps-done' ) === '1' ) {
@@ -657,7 +735,7 @@
 				}
 			} );
 
-			updateCount( container.el, kept );
+			updateCount( container.el );
 
 			if ( kept > 0 ) {
 				clearEmpty( container.el );
@@ -665,11 +743,99 @@
 				showEmpty( container.el, OPTIONS.emptyMessage );
 			}
 
+			LAST.kept = kept;
 			log( 'showing', kept, 'of', items.length );
 		} finally {
 			reveal();
 			running = false;
+			if ( isDebug() ) {
+				renderDiagnostics();
+			}
 		}
+	}
+
+	/* --- diagnostics ---------------------------------------------------------
+	 * Add ?acpsdebug=1 to the results URL (or set OPTIONS.debug) to get a
+	 * panel showing exactly what this snippet found and which rules fired.
+	 * ----------------------------------------------------------------------- */
+
+	function isDebug() {
+		return OPTIONS.debug || /[?&]acpsdebug=1/.test( window.location.search );
+	}
+
+	function renderDiagnostics() {
+		var existing = document.getElementById( 'acps-debug-panel' );
+		if ( existing ) {
+			existing.parentNode.removeChild( existing );
+		}
+
+		var rows = [];
+
+		function row( label, value, ok ) {
+			rows.push(
+				'<tr><th style="text-align:left;padding:2px 10px 2px 0;font-weight:600;white-space:nowrap">' + label +
+				'</th><td style="padding:2px 0;color:' + ( ok === false ? '#b91c1c' : ( ok === true ? '#15803d' : 'inherit' ) ) + '">' +
+				value + '</td></tr>'
+			);
+		}
+
+		var hasBridge = !! window.ACPS_SEARCH;
+		row( 'Bridge (snippet #1)',
+			hasBridge ? 'present' : 'MISSING — window.ACPS_SEARCH is undefined',
+			hasBridge );
+
+		if ( ! hasBridge ) {
+			row( '', 'Snippet #1 is inactive, or it does not recognise this page as a results page. ' +
+				'Nothing flagged by the hide-plugin can be filtered without it. Rules below still run.' );
+		}
+
+		row( 'Results container', LAST.container || 'NOT FOUND — check SELECTORS.container', !! LAST.container );
+		row( 'Result rows', LAST.item ? ( LAST.total + ' × ' + LAST.item ) : 'NOT FOUND — check SELECTORS.item', !! LAST.item );
+
+		var term = DATA.query || getQueryFromUrl();
+		row( 'Search term', term ? '"' + term + '"' : 'NOT DETECTED — query rules cannot fire', !! term );
+
+		row( 'Flagged hidden', ( DATA.hiddenIds || [] ).length + ' ids, ' + ( DATA.hiddenPaths || [] ).length + ' paths' );
+		row( 'Viewing as', DATA.isAdmin ? ( OPTIONS.adminSeesHidden ? 'editor (hidden rows shown, marked)' : 'editor' ) : 'visitor' );
+
+		if ( queryVerdict ) {
+			row( 'Query rule fired', queryVerdict.op + ' "' + queryVerdict.value + '" → ' + queryVerdict.then, true );
+		}
+
+		row( 'Showing', ( LAST.kept === undefined ? '—' : LAST.kept + ' of ' + LAST.total ) );
+
+		var ruleRows = RULES.map( function ( rule, i ) {
+			var hits = rule._hits || 0;
+			var note = rule._badField ? ' <em style="color:#b91c1c">unknown &ldquo;when&rdquo; field</em>' : '';
+			return '<li style="color:' + ( hits ? '#15803d' : '#92400e' ) + '">' +
+				( i + 1 ) + '. ' + ( rule.when || 'title' ) + ' ' + ( rule.op || 'contains' ) +
+				' &ldquo;' + rule.value + '&rdquo; → ' + rule.then +
+				' <strong>(' + hits + ' matched)</strong>' +
+				( rule.source === 'settings' ? ' <em>from settings page</em>' : '' ) + note + '</li>';
+		} );
+
+		var panel = document.createElement( 'div' );
+		panel.id = 'acps-debug-panel';
+		panel.setAttribute( 'style',
+			'position:fixed;inset-block-end:12px;inset-inline-start:12px;z-index:99999;max-width:min(30rem,calc(100vw - 24px));' +
+			'max-height:70vh;overflow:auto;background:#fff;color:#111;border:2px solid #2271b1;border-radius:6px;' +
+			'padding:12px 14px;font:12px/1.5 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.25)' );
+
+		panel.innerHTML =
+			'<div style="display:flex;justify-content:space-between;align-items:center;gap:1em;margin-bottom:8px">' +
+			'<strong style="font-size:13px">Search filter diagnostics</strong>' +
+			'<button type="button" style="border:0;background:#eee;border-radius:4px;padding:2px 8px;cursor:pointer">close</button></div>' +
+			'<table style="border-collapse:collapse;width:100%">' + rows.join( '' ) + '</table>' +
+			( ruleRows.length
+				? '<div style="margin-top:10px"><strong>Rules</strong><ol style="margin:4px 0 0;padding-inline-start:1.4em">' +
+					ruleRows.join( '' ) + '</ol></div>'
+				: '<p style="margin:10px 0 0;color:#92400e">No rules defined — RULES is empty.</p>' );
+
+		panel.querySelector( 'button' ).addEventListener( 'click', function () {
+			panel.parentNode.removeChild( panel );
+		} );
+
+		document.body.appendChild( panel );
 	}
 
 	/* --- boot --------------------------------------------------------------- */

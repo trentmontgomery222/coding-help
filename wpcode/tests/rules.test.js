@@ -125,8 +125,10 @@ check('top pins to the front',
   run({ query: 'x', results: SAMPLE, rules: [{ when: 'url', op: 'contains', value: '/enrollment/', then: 'top' }] }).order[0], 'Enrollment Info');
 check('dim keeps the node but flags it',
   run({ query: 'x', results: SAMPLE, rules: [{ when: 'title', op: 'contains', value: 'draft', then: 'dim' }] }).order.length, 5);
-check('count reflects what survived',
-  run({ query: 'x', results: SAMPLE, rules: [{ when: 'url', op: 'contains', value: '/staff-only/', then: 'hide' }] }).count, 'About 4 results');
+check('the count is decremented by what was filtered',
+  run({ query: 'x', results: SAMPLE, rules: [{ when: 'url', op: 'contains', value: '/staff-only/', then: 'hide' }] }).count, 'About 98 results');
+check('filtering nothing leaves the count alone',
+  run({ query: 'x', results: SAMPLE }).count, 'About 99 results');
 check('everything hidden -> empty message',
   run({ query: 'x', results: SAMPLE, rules: [{ when: 'url', op: 'contains', value: '/', then: 'hide' }] }).empty,
   'No matching results. Try a different search term.');

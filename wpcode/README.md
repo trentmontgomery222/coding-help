@@ -123,10 +123,13 @@ phrase split *across* a `<mark>` lives in two nodes and won't be replaced —
 target a prefix like `"ACPS - "`, not the word someone just searched for.
 
 **The result count** notice sits outside the results wrapper, so it's looked
-up document-wide. Note that it reports the whole result set (271) while the
-page only holds one page of it; if your results are paginated, set
-`updateCount: false` in `OPTIONS` rather than correcting a number that was
-never about this page.
+up document-wide. It reports the whole result set (271) while the page holds
+only one page of it, so the snippet *subtracts what it filtered* rather than
+replacing the total with the number of visible rows — 271 becomes 269 when two
+rows are dropped. On an unpaginated page that's the same as counting what's
+left; on a paginated one it's at least honest about what changed. Filter
+nothing and the notice is left exactly as SearchWP wrote it. Set
+`updateCount: false` in `OPTIONS` to never touch it.
 
 ## Managing rules from wp-admin
 
@@ -155,6 +158,38 @@ The settings page writes the same meta key as your hide-plugin
 (`ACPS_HIDE_META_KEY`), so the two stay in sync rather than fighting — flag
 something in either place and both agree.
 
+## If it isn't working
+
+Add `?acpsdebug=1` to your results URL. A panel appears in the corner showing
+what the snippet found and which rules fired:
+
+- whether the bridge printed (`window.ACPS_SEARCH`)
+- which container and row selectors matched, and how many rows
+- the search term, and whether it was detected at all
+- every rule, with a count of how many rows it matched
+
+A rule showing **(0 matched)** is a rule that isn't doing anything — usually a
+`when` field that doesn't hold what you expect, or a URL fragment written
+without the trailing slash.
+
+The two failures worth knowing about in advance:
+
+**"Bridge MISSING".** Snippet #1 didn't run on this page. `is_search()` is
+only true on WordPress's own search template — a SearchWP module on a Beaver
+Builder page is an ordinary page, and the bridge used to skip it silently.
+It now also fires on any request carrying `?s=` or `?swpquery=`. If your
+results page has neither, add its path to `ACPS_SEARCH_PAGE_PATHS` in
+snippet #1. Without the bridge, nothing your hide-plugin flagged can be
+filtered — though the rules in snippet #2 still run.
+
+**"Search term NOT DETECTED".** Query rules can't fire without one. The term
+is looked for in `?s=`, then `?swpquery=`, then the "Found 271 results for
+staff" notice itself. If yours uses a different parameter, add it to
+`acps_search_query_params` in snippet #1.
+
+Nothing here can leave your results page blank: the anti-flicker rule reveals
+itself after 2 seconds through pure CSS, with no JavaScript involved.
+
 ## Setup
 
 1. **Point snippet #1 at your plugin's meta key.** At the top of the file,
@@ -180,8 +215,8 @@ in jsdom:
 
 ```
 npm install jsdom
-node wpcode/tests/rules.test.js      # 37 cases: every operator and action
-node wpcode/tests/searchwp.test.js   # 23 cases: against the real markup
+node wpcode/tests/rules.test.js      # 38 cases: every operator and action
+node wpcode/tests/searchwp.test.js   # 30 cases: against the real markup
 ```
 
 `searchwp.test.js` builds a fixture from actual result rows off this site —
