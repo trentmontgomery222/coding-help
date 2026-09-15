@@ -198,3 +198,14 @@ html.acps-search-ready .acps-search-results {
 	border-inline-start: 3px solid #dba617;
 	padding-inline-start: 0.85rem;
 }
+
+/* Rows sunk to the bottom by a `then: 'bottom'` rule. Deliberately quiet —
+   they're de-prioritised, not flagged. Delete this block for no visual
+   difference at all. */
+.acps-sunk {
+	opacity: 0.85;
+}
+
+.acps-sunk .entry-title {
+	font-size: 1rem;
+}

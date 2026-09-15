@@ -42,6 +42,21 @@ if ( ! defined( 'ACPS_SWP_QUERY_PARAM' ) ) {
 	define( 'ACPS_SWP_QUERY_PARAM', 'swps' );
 }
 
+// Point attachment links at the file across the whole front end, rather than
+// only when the request "looks like" a search.
+//
+// This is deliberately blunt. The original snippet tried to detect a search
+// context, which is fragile: a Beaver Builder results page isn't is_search(),
+// and if the module renders through AJAX the search parameters aren't on the
+// request at all — so the filter ran and silently did nothing. Attachment
+// pages are near-useless on this site anyway, so linking media at the file
+// everywhere is both simpler and what you actually want.
+//
+// Set false to go back to search-context-only behaviour.
+if ( ! defined( 'ACPS_SWP_ALWAYS_DIRECT_MEDIA' ) ) {
+	define( 'ACPS_SWP_ALWAYS_DIRECT_MEDIA', true );
+}
+
 /* =====================================================================
  * 1. Redirect the default WordPress search to the SearchWP page
  *
@@ -110,32 +125,81 @@ add_action( 'template_redirect', 'acps_swp_redirect_default_search' );
  * @param int|WP_Post $post     Post object on `the_permalink`, post ID on
  *                              `attachment_link`. get_post_type() takes either.
  */
+/** Counters, surfaced by ?acpsdebug=1 so this is observable rather than guessed at. */
+$GLOBALS['acps_swp_link_stats'] = array(
+	'calls'       => 0,
+	'attachments' => 0,
+	'rewritten'   => 0,
+);
+
+function acps_swp_in_search_context() {
+	if ( is_search() ) {
+		return true;
+	}
+
+	// SearchWP's live search and results endpoints.
+	if ( wp_doing_ajax() ) {
+		$action = isset( $_REQUEST['action'] ) ? (string) $_REQUEST['action'] : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		if ( false !== strpos( $action, 'searchwp' ) || false !== strpos( $action, 'swp' ) ) {
+			return true;
+		}
+	}
+
+	foreach ( array( ACPS_SWP_QUERY_PARAM, 'swps', 'swpquery', 'swp_form' ) as $param ) {
+		if ( isset( $_REQUEST[ $param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return true;
+		}
+	}
+
+	// The results page itself, reached with no parameters (a paged result).
+	$current = untrailingslashit( (string) wp_parse_url( add_query_arg( array() ), PHP_URL_PATH ) );
+	if ( $current === untrailingslashit( ACPS_SWP_RESULTS_PATH ) ) {
+		return true;
+	}
+
+	return false;
+}
+
 function acps_swp_media_direct_link( $permalink, $post = null ) {
-	if ( null === $post ) {
+	$GLOBALS['acps_swp_link_stats']['calls']++;
+
+	// Never touch links in wp-admin — the media library needs the real ones.
+	if ( is_admin() && ! wp_doing_ajax() ) {
 		return $permalink;
 	}
 
-	$in_search_context = is_search()
-		|| doing_action( 'wp_ajax_searchwp_live_search' )
-		|| doing_action( 'wp_ajax_nopriv_searchwp_live_search' )
-		|| isset( $_REQUEST[ ACPS_SWP_QUERY_PARAM ] ) // phpcs:ignore WordPress.Security.NonceVerification
-		|| isset( $_REQUEST['swp_form']['form_id'] ); // phpcs:ignore WordPress.Security.NonceVerification
-
-	if ( ! $in_search_context ) {
-		return $permalink;
-	}
-
+	// get_post_type( null ) and ( 0 ) both fall back to the global post, which
+	// is what a bare the_permalink() call inside a loop relies on.
 	if ( 'attachment' !== get_post_type( $post ) ) {
 		return $permalink;
 	}
 
-	$file_url = wp_get_attachment_url( is_object( $post ) ? $post->ID : (int) $post );
+	$GLOBALS['acps_swp_link_stats']['attachments']++;
+
+	if ( ! ACPS_SWP_ALWAYS_DIRECT_MEDIA && ! acps_swp_in_search_context() ) {
+		return $permalink;
+	}
+
+	$attachment = get_post( $post );
+	if ( ! $attachment ) {
+		return $permalink;
+	}
+
+	$file_url = wp_get_attachment_url( $attachment->ID );
 
 	// A missing file would otherwise blank the link entirely.
-	return $file_url ? esc_url( $file_url ) : $permalink;
+	if ( ! $file_url ) {
+		return $permalink;
+	}
+
+	$GLOBALS['acps_swp_link_stats']['rewritten']++;
+
+	return esc_url( $file_url );
 }
 add_filter( 'the_permalink', 'acps_swp_media_direct_link', 99, 2 );
 add_filter( 'attachment_link', 'acps_swp_media_direct_link', 99, 2 );
+// SearchWP result objects and some templates go through post_type_link too.
+add_filter( 'post_type_link', 'acps_swp_media_direct_link', 99, 2 );
 
 /* =====================================================================
  * 3. Sink attachments below every other post type
@@ -150,14 +214,26 @@ add_filter( 'attachment_link', 'acps_swp_media_direct_link', 99, 2 );
  * @link https://searchwp.com/documentation/knowledge-base/post-type-first-top/
  * ===================================================================== */
 
+$GLOBALS['acps_swp_mod_stats'] = array(
+	'filter_ran' => false,
+	'classes'    => false,
+	'source'     => '',
+	'applied'    => false,
+);
+
 function acps_swp_sink_attachments( $mods ) {
+	$GLOBALS['acps_swp_mod_stats']['filter_ran'] = true;
+
 	// SearchWP inactive or mid-upgrade — leave the query untouched rather
 	// than fataling on a missing class.
 	if ( ! class_exists( '\SearchWP\Mod' ) || ! class_exists( '\SearchWP\Utils' ) ) {
 		return $mods;
 	}
 
+	$GLOBALS['acps_swp_mod_stats']['classes'] = true;
+
 	$source = \SearchWP\Utils::get_post_type_source_name( 'attachment' );
+	$GLOBALS['acps_swp_mod_stats']['source'] = (string) $source;
 
 	if ( empty( $source ) ) {
 		return $mods;
@@ -177,7 +253,37 @@ function acps_swp_sink_attachments( $mods ) {
 	);
 
 	$mods[] = $mod;
+	$GLOBALS['acps_swp_mod_stats']['applied'] = true;
 
 	return $mods;
 }
 add_filter( 'searchwp\query\mods', 'acps_swp_sink_attachments' );
+
+/* =====================================================================
+ * Diagnostics
+ *
+ * Printed in the footer (after the results have rendered) when the page
+ * carries ?acpsdebug=1. The JS panel reads it. This is the only way to tell
+ * "the filter never ran" apart from "the filter ran and did nothing" —
+ * the two look identical on the page and need opposite fixes.
+ * ===================================================================== */
+
+function acps_swp_print_debug() {
+	if ( ! isset( $_GET['acpsdebug'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		return;
+	}
+
+	$data = array(
+		'links'          => $GLOBALS['acps_swp_link_stats'],
+		'mods'           => $GLOBALS['acps_swp_mod_stats'],
+		'alwaysDirect'   => (bool) ACPS_SWP_ALWAYS_DIRECT_MEDIA,
+		'searchContext'  => acps_swp_in_search_context(),
+		'searchwpActive' => class_exists( '\SearchWP\Mod' ),
+	);
+
+	printf(
+		'<script id="acps-swp-debug">window.ACPS_SWP_DEBUG=%s;</script>' . "\n",
+		wp_json_encode( $data )
+	);
+}
+add_action( 'wp_footer', 'acps_swp_print_debug', 999 );

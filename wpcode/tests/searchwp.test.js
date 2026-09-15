@@ -134,6 +134,28 @@ check('blocking the term empties the results', run({ queryRules: [{ op: 'equals'
 check('and shows the message',
   run({ queryRules: [{ op: 'equals', value: 'staff', then: 'noResults', message: 'Try the directory.' }] }).empty, 'Try the directory.');
 
+console.log('\nreordering');
+check('bottom sinks attachments below everything else',
+  run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }] }).ids,
+  ['5002', '43', '6063', '4930', '11487', '6837', '5069']);
+check('sunk rows keep their own relative order',
+  run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }] }).ids.slice(-2),
+  ['6837', '5069']);
+check('nothing is lost when sinking', run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }] }).ids.length, 7);
+check('multiple top rows keep their order, not reversed',
+  run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'top' }] }).ids,
+  ['6837', '5069', '5002', '43', '6063', '4930', '11487']);
+check('top and bottom together',
+  run({ rules: [
+    { when: 'url', op: 'contains', value: '/powerschool/', then: 'top' },
+    { when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }
+  ] }).ids, ['11487', '5002', '43', '6063', '4930', '6837', '5069']);
+check('a sunk row can still be hidden by an earlier rule',
+  run({ rules: [
+    { when: 'url', op: 'regex', value: '\\.jpe?g$', then: 'hide' },
+    { when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }
+  ] }).ids, ['5002', '43', '6063', '4930', '11487', '6837']);
+
 console.log('\nfinding the search term when the bridge is absent');
 // A SearchWP module on a Beaver Builder page: is_search() is false, so
 // snippet #1 never printed and window.ACPS_SEARCH carries no query.

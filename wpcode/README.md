@@ -30,9 +30,39 @@ failing can't take the others down:
 
 Form id and results path are constants at the top of the file.
 
-Note that #3 *reorders* while a rule of `{ when: 'type', value: 'attachment',
-then: 'hide' }` *removes*. They work together — sink them server-side, and
-drop them entirely on the pages where they add nothing.
+### If #2 and #3 don't take effect
+
+They fail differently from #1, and both failures look like nothing happening.
+Load the results page with `?acpsdebug=1` — the panel reports on both.
+
+**Media links.** The original detected a "search context" before rewriting
+anything, which is fragile: a Beaver Builder results page isn't `is_search()`,
+and if the module renders through AJAX the search parameters aren't on the
+request at all. The filter ran and silently did nothing. It now rewrites
+attachment links across the whole front end by default
+(`ACPS_SWP_ALWAYS_DIRECT_MEDIA`), skipping wp-admin so the media library keeps
+working, and hooks `post_type_link` as well as `the_permalink` and
+`attachment_link`. The panel reports how many permalink calls were filtered,
+how many were attachments, and how many were rewritten — which distinguishes
+"the filter never ran" from "it ran and found nothing to do". If it reports
+calls but zero attachments, the template is producing those URLs some other
+way (a stored or indexed URL) and no PHP filter can reach them.
+
+**The attachment sink.** The panel says whether the `searchwp\query\mods`
+filter ran at all. If it never ran, these results aren't coming from a
+`\SearchWP\Query` and the relevance mod has nothing to attach to — no amount
+of fixing the mod will help.
+
+Either way there's a front-end fallback that doesn't depend on any of it:
+
+```js
+{ when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }
+```
+
+That sinks every PDF and image below the real pages in the browser, after the
+fact. `bottom` reorders without removing, so the documents stay findable —
+unlike `then: 'hide'`, which drops them entirely. Use whichever matches what
+you want; the server-side mod is tidier when it works, and this always works.
 
 ## How it fits together
 
@@ -92,6 +122,7 @@ at. First match wins.
 { when: 'title', op: 'contains', value: 'ACPS - ', then: 'rewrite', replace: '' },
 { when: 'url',   op: 'contains', value: '/news/',  then: 'badge', label: 'News' },
 { when: 'url',   op: 'contains', value: '/enrollment/', then: 'top' },
+{ when: 'type',  op: 'equals',   value: 'attachment',   then: 'bottom' },
 { when: 'url',   op: 'contains', value: '/important/',  then: 'keep' }
 ```
 
@@ -99,7 +130,7 @@ at. First match wins.
 |---|---|
 | `when` | `title` `url` `id` `type` `excerpt` `text` |
 | `op` | `equals` `contains` `starts` `ends` `regex` `in` |
-| `then` (results) | `hide` `dim` `rewrite` `badge` `top` `keep` |
+| `then` (results) | `hide` `dim` `rewrite` `badge` `top` `bottom` `keep` |
 | `then` (queries) | `noResults` `redirect` `notice` `allow` |
 
 All text matching is case-insensitive and trims surrounding whitespace.
@@ -242,7 +273,7 @@ in jsdom:
 ```
 npm install jsdom
 node wpcode/tests/rules.test.js      # 38 cases: every operator and action
-node wpcode/tests/searchwp.test.js   # 34 cases: against the real markup
+node wpcode/tests/searchwp.test.js   # 40 cases: against the real markup
 ```
 
 `searchwp.test.js` builds a fixture from actual result rows off this site —

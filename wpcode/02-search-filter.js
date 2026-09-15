@@ -81,7 +81,7 @@
 	 *           slash — '/about/' — and file links keep their extension,
 	 *           '/wp-content/uploads/budget.pdf')
 	 *    op:   'equals' | 'contains' | 'starts' | 'ends' | 'regex' | 'in'
-	 *    then: 'hide' | 'dim' | 'rewrite' | 'badge' | 'top' | 'keep'
+	 *    then: 'hide' | 'dim' | 'rewrite' | 'badge' | 'top' | 'bottom' | 'keep'
 	 *
 	 *    'rewrite' needs `replace`. 'badge' needs `label`.
 	 *    'keep' protects a result from any later rule.
@@ -113,8 +113,13 @@
 		// { when: 'title', op: 'contains', value: 'Dept.',   then: 'rewrite', replace: 'Department' },
 		// { when: 'url',   op: 'contains', value: '/news/',  then: 'badge', label: 'News' },
 
-		// --- float to the top ----------------------------------------
-		// { when: 'url', op: 'contains', value: '/enrollment/', then: 'top' }
+		// --- reorder --------------------------------------------------
+		// { when: 'url',  op: 'contains', value: '/enrollment/', then: 'top' },
+
+		// Sink the indexed PDFs below everything else without removing them.
+		// Does the same job as the SearchWP relevance mod in snippet #0, but
+		// in the browser, so it works whether or not the mod takes effect.
+		// { when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }
 
 	];
 
@@ -449,7 +454,7 @@
 	 * @return {Object} { hide, dim, keep, top, badges[], rewrites[], reason }
 	 */
 	function evaluate( fields ) {
-		var verdict = { hide: false, dim: false, keep: false, top: false, badges: [], rewrites: [], reason: '' };
+		var verdict = { hide: false, dim: false, keep: false, top: false, bottom: false, badges: [], rewrites: [], reason: '' };
 
 		// The hide-plugin's flag is rule zero.
 		if ( fields.el.classList.contains( 'acps-hidden-result' ) ||
@@ -505,6 +510,10 @@
 
 				case 'top':
 					verdict.top = true;
+					break;
+
+				case 'bottom':
+					verdict.bottom = true;
 					break;
 			}
 		}
@@ -590,14 +599,54 @@
 			( fields.titleEl || item ).appendChild( badge );
 		} );
 
+		// Reordering is only flagged here. Moving rows mid-iteration would
+		// reverse the order of every row after the first one moved, so the
+		// actual move happens once, after every row has been judged.
 		if ( verdict.top ) {
 			item.classList.add( 'acps-pinned' );
-			if ( item.parentNode && item.parentNode.firstChild !== item ) {
-				item.parentNode.insertBefore( item, item.parentNode.firstChild );
-			}
+			item.setAttribute( 'data-acps-order', 'top' );
+		} else if ( verdict.bottom ) {
+			item.classList.add( 'acps-sunk' );
+			item.setAttribute( 'data-acps-order', 'bottom' );
 		}
 
 		return true;
+	}
+
+	/**
+	 * Apply the 'top' and 'bottom' actions in document order, once.
+	 * Rows with neither keep their original relative position.
+	 */
+	function reorder( container, itemSelector ) {
+		var rows = Array.prototype.slice.call( container.querySelectorAll( itemSelector ) );
+
+		var tops = rows.filter( function ( row ) {
+			return row.getAttribute( 'data-acps-order' ) === 'top';
+		} );
+
+		var bottoms = rows.filter( function ( row ) {
+			return row.getAttribute( 'data-acps-order' ) === 'bottom';
+		} );
+
+		if ( ! tops.length && ! bottoms.length ) {
+			return;
+		}
+
+		// Prepend the pinned rows in their own order, ahead of everything else.
+		var firstRow = rows[ 0 ];
+		tops.forEach( function ( row ) {
+			if ( row !== firstRow && row.parentNode ) {
+				row.parentNode.insertBefore( row, firstRow );
+			}
+			firstRow = row.nextSibling;
+		} );
+
+		// Append the sunk rows in their own order, after everything else.
+		bottoms.forEach( function ( row ) {
+			if ( row.parentNode ) {
+				row.parentNode.appendChild( row );
+			}
+		} );
 	}
 
 	/* --- page furniture -------------------------------------------------- */
@@ -736,6 +785,7 @@
 				}
 			} );
 
+			reorder( container.el, itemHit.selector );
 			updateCount( container.el );
 
 			if ( kept > 0 ) {
@@ -804,6 +854,40 @@
 		}
 
 		row( 'Showing', ( LAST.kept === undefined ? '—' : LAST.kept + ' of ' + LAST.total ) );
+
+		// Snippet #0's own report, printed in the footer.
+		var swp = window.ACPS_SWP_DEBUG;
+		if ( swp ) {
+			var links = swp.links || {};
+			row( 'SearchWP plugin', swp.searchwpActive ? 'active' : 'NOT DETECTED', !! swp.searchwpActive );
+
+			var linkSummary = links.calls
+				? links.calls + ' permalink calls, ' + links.attachments + ' attachments, ' +
+					links.rewritten + ' rewritten to the file'
+				: 'the permalink filters never ran — this template does not use them';
+			row( 'Media links', linkSummary, links.rewritten > 0 ? true : ( links.calls ? false : false ) );
+
+			if ( links.calls && ! links.attachments ) {
+				row( '', 'Permalinks were filtered but none were attachments. The template is ' +
+					'producing attachment URLs some other way (a stored/indexed URL), so the ' +
+					'PHP filter cannot reach them.' );
+			}
+
+			var mods = swp.mods || {};
+			row( 'Attachment sink (mod)',
+				! mods.filter_ran ? 'the searchwp\\query\\mods filter never ran'
+					: ( mods.applied ? 'applied to source "' + mods.source + '"'
+						: ( mods.classes ? 'ran, but no attachment source was found' : 'ran before SearchWP loaded' ) ),
+				!! mods.applied );
+
+			if ( ! mods.filter_ran ) {
+				row( '', 'These results are not coming from a \\SearchWP\\Query, so the relevance ' +
+					'mod has nothing to attach to. Use a front-end rule instead: ' +
+					'{ when: "type", op: "equals", value: "attachment", then: "bottom" }' );
+			}
+		} else {
+			row( 'Snippet #0', 'no report — inactive, or it did not run on this page', false );
+		}
 
 		var ruleRows = RULES.map( function ( rule, i ) {
 			var hits = rule._hits || 0;
