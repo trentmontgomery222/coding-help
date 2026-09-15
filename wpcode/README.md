@@ -28,6 +28,61 @@ Matching happens three ways, most reliable first:
 That third path is the fallback that makes this work even when the search
 plugin renders its own markup and ignores `post_class()` entirely.
 
+## Writing rules in the snippet
+
+Snippet #2 has two arrays at the top. Uncomment a line, edit it, save.
+
+**`QUERY_RULES`** act on what the visitor typed, before any result is looked
+at. First match wins.
+
+```js
+// Searching this exact phrase returns nothing at all.
+{ op: 'equals', value: 'staff directory', then: 'noResults',
+  message: 'That information isn\'t available here.' },
+
+// Any search containing this word returns nothing.
+{ op: 'contains', value: 'payroll', then: 'noResults' },
+
+// Several phrases at once.
+{ op: 'in', value: [ 'ssn', 'social security', 'w-2' ], then: 'noResults' },
+
+// Send a common search straight to the right page instead.
+{ op: 'equals', value: 'lunch menu', then: 'redirect', url: '/menus/' },
+
+// Banner above the results, results left alone.
+{ op: 'contains', value: 'enrollment', then: 'notice', message: 'Try admissions.' },
+
+// Let one term through even if a broader rule below would catch it.
+{ op: 'equals', value: 'board policy', then: 'allow' }
+```
+
+**`RULES`** act on each individual result. They run top to bottom; `hide`,
+`dim` and `keep` stop the rest.
+
+```js
+{ when: 'url',   op: 'contains', value: '/staff-only/', then: 'hide' },
+{ when: 'title', op: 'starts',   value: 'Draft',        then: 'hide' },
+{ when: 'id',    op: 'in',       value: [ 412, 998 ],   then: 'hide' },
+{ when: 'url',   op: 'regex',    value: '/20(1[0-9])/', then: 'hide' },
+{ when: 'title', op: 'contains', value: 'archived',     then: 'dim' },
+{ when: 'title', op: 'contains', value: 'ACPS - ', then: 'rewrite', replace: '' },
+{ when: 'url',   op: 'contains', value: '/news/',  then: 'badge', label: 'News' },
+{ when: 'url',   op: 'contains', value: '/enrollment/', then: 'top' },
+{ when: 'url',   op: 'contains', value: '/important/',  then: 'keep' }
+```
+
+| | values |
+|---|---|
+| `when` | `title` `url` `id` `excerpt` `text` |
+| `op` | `equals` `contains` `starts` `ends` `regex` `in` |
+| `then` (results) | `hide` `dim` `rewrite` `badge` `top` `keep` |
+| `then` (queries) | `noResults` `redirect` `notice` `allow` |
+
+All text matching is case-insensitive and trims surrounding whitespace.
+`when: 'url'` gives you the **path only, with a trailing slash** — `/about/`,
+not the full URL — so `/enrollment/` matches a top-level page as well as a
+nested one.
+
 ## Managing rules from wp-admin
 
 Snippet #4 is what keeps you out of the code. It adds:
@@ -43,10 +98,13 @@ Snippet #4 is what keeps you out of the code. It adds:
   so you can flag a batch in one go.
 - **A "Search" column** showing at a glance what's hidden.
 
-Manual IDs are merged with whatever your hide-plugin flags, and the keyword
+Rules saved there are translated into the same rule shape as the arrays above
+and appended to `RULES`, so the two ways of working are interchangeable — use
+the arrays for things you want in version control, the settings page for
+things editors need to change. Manual IDs are merged with whatever your
+hide-plugin flags, and the keyword
 and display rules ride along in the same `window.ACPS_SEARCH` payload. The JS
-merges them over its own defaults, so adding a rule never means editing
-snippet #2.
+merges them in, so a routine change never means editing code.
 
 The settings page writes the same meta key as your hide-plugin
 (`ACPS_HIDE_META_KEY`), so the two stay in sync rather than fighting — flag
@@ -69,6 +127,19 @@ something in either place and both agree.
    filtered. Set `hideMode: 'dim'` while tuning so you can see what's being
    caught, then switch back to `'remove'`. (Both are toggles on the settings
    page too.)
+
+## Testing a rule before it goes live
+
+`wpcode/tests/rules.test.js` runs the real snippet against a fake results page
+in jsdom:
+
+```
+npm install jsdom
+node wpcode/tests/rules.test.js
+```
+
+37 cases covering every operator and action. Add a case when you add a rule
+you're unsure about.
 
 ## Worth knowing
 

@@ -132,3 +132,38 @@ html.acps-search-ready body.search .search-results {
 .acps-result .entry-title a:focus-visible {
 	text-decoration: underline;
 }
+
+/* ---------------------------------------------------------------
+ * Rule-driven extras: 'badge', 'notice' and 'top' actions
+ * --------------------------------------------------------------- */
+
+.acps-badge {
+	display: inline-block;
+	margin-inline-start: 0.5em;
+	vertical-align: middle;
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #1d4ed8;
+	background: #e8effd;
+	border: 1px solid #c3d4f7;
+	border-radius: 999px;
+	padding: 0.2em 0.7em;
+	white-space: nowrap;
+}
+
+.acps-notice {
+	margin: 0 0 1.5rem;
+	padding: 0.9rem 1.15rem;
+	border-inline-start: 4px solid #2271b1;
+	border-radius: 4px;
+	background: #f0f6fc;
+	color: #1c3d5a;
+}
+
+.acps-pinned {
+	background: #fffdf5;
+	border-inline-start: 3px solid #dba617;
+	padding-inline-start: 0.85rem;
+}
