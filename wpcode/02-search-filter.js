@@ -331,13 +331,14 @@
 	/**
 	 * Find the search term.
 	 *
-	 * SearchWP uses ?swpquery=, WordPress uses ?s=, and a Beaver Builder
-	 * results page may carry neither. So: whatever the bridge reported, else
-	 * any known parameter, else the term out of the "Found 271 results for
-	 * staff" notice.
+	 * This site's form uses ?swps= (snippet #0 redirects /?s=term to
+	 * /search/?swp_form[form_id]=5&swps=term), other SearchWP setups use
+	 * ?swpquery=, WordPress uses ?s=, and a paged result may carry none of
+	 * them. So: whatever the bridge reported, else any known parameter, else
+	 * the term out of the "Found 271 results for staff" notice.
 	 */
 	function getQueryFromUrl() {
-		var params = DATA.queryParams || [ 's', 'swpquery' ];
+		var params = DATA.queryParams || [ 'swps', 'swpquery', 's' ];
 
 		for ( var i = 0; i < params.length; i++ ) {
 			var m = new RegExp( '[?&]' + params[ i ] + '=([^&]*)' ).exec( window.location.search );

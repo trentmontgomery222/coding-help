@@ -5,10 +5,34 @@ on the search results page — without touching the search query or the index.
 
 | File | WPCode Code Type | Location |
 |---|---|---|
+| `00-searchwp-core.php` | PHP Snippet | Run Everywhere (priority 5) |
 | `01-search-bridge.php` | PHP Snippet | Run Everywhere |
 | `02-search-filter.js` | JavaScript Snippet | Site Wide Footer |
 | `03-search-styles.css` | CSS Snippet | Site Wide Header |
 | `04-search-filter-admin.php` | PHP Snippet | Run Everywhere (priority 11) |
+
+## Snippet #0: the SearchWP plumbing
+
+The three snippets that were breaking, consolidated and guarded so one
+failing can't take the others down:
+
+1. **Redirect `/?s=term`** to `/search/?swp_form[form_id]=5&swps=term`, so the
+   browser search bar, an old theme form, a bookmark or a Google result all
+   land on the real results page. Skips admin, AJAX, REST, cron and feeds,
+   bails on an empty term, and has a loop guard for the results page itself.
+2. **Link media results at the file.** An indexed PDF sends the visitor to the
+   document, not a bare attachment page. Falls back to the normal permalink if
+   the file is missing rather than emitting an empty link.
+3. **Sink attachments below every other post type**, so a broad search doesn't
+   bury the pages people want under a wall of PDFs. Checks `\SearchWP\Mod`
+   exists first — the original would fatal if SearchWP was inactive or
+   mid-upgrade, which is the likeliest reason these "broke".
+
+Form id and results path are constants at the top of the file.
+
+Note that #3 *reorders* while a rule of `{ when: 'type', value: 'attachment',
+then: 'hide' }` *removes*. They work together — sink them server-side, and
+drop them entirely on the pages where they add nothing.
 
 ## How it fits together
 
@@ -182,10 +206,12 @@ results page has neither, add its path to `ACPS_SEARCH_PAGE_PATHS` in
 snippet #1. Without the bridge, nothing your hide-plugin flagged can be
 filtered — though the rules in snippet #2 still run.
 
-**"Search term NOT DETECTED".** Query rules can't fire without one. The term
-is looked for in `?s=`, then `?swpquery=`, then the "Found 271 results for
-staff" notice itself. If yours uses a different parameter, add it to
-`acps_search_query_params` in snippet #1.
+**"Search term NOT DETECTED".** Query rules can't fire without one. This
+site's form posts the term as **`swps`**, not `?s=` — that alone stopped query
+rules from ever firing before snippet #0 was folded in. The term is now looked
+for in `?swps=`, `?swpquery=`, `?s=`, and finally the "Found 271 results for
+staff" notice itself, so it resolves even on a paged result carrying no
+parameter. To add another, use the `acps_search_query_params` filter.
 
 Nothing here can leave your results page blank: the anti-flicker rule reveals
 itself after 2 seconds through pure CSS, with no JavaScript involved.
@@ -216,7 +242,7 @@ in jsdom:
 ```
 npm install jsdom
 node wpcode/tests/rules.test.js      # 38 cases: every operator and action
-node wpcode/tests/searchwp.test.js   # 30 cases: against the real markup
+node wpcode/tests/searchwp.test.js   # 34 cases: against the real markup
 ```
 
 `searchwp.test.js` builds a fixture from actual result rows off this site —

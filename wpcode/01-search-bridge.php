@@ -48,10 +48,11 @@ if ( ! defined( 'ACPS_HIDE_CACHE_TTL' ) ) {
 }
 
 // Paths of any results page this can't detect on its own, comma separated
-// (e.g. '/search/,/find/'). Usually unnecessary — a page carrying ?s= or
-// ?swpquery= is detected automatically.
+// (e.g. '/search/,/find/'). Defaults to the page snippet #0 redirects to, so
+// the bridge still prints on a results page reached with no query parameter
+// at all (a bare /search/ visit, or a paged result).
 if ( ! defined( 'ACPS_SEARCH_PAGE_PATHS' ) ) {
-	define( 'ACPS_SEARCH_PAGE_PATHS', '' );
+	define( 'ACPS_SEARCH_PAGE_PATHS', defined( 'ACPS_SWP_RESULTS_PATH' ) ? ACPS_SWP_RESULTS_PATH : '/search/' );
 }
 
 /* =====================================================================
@@ -180,10 +181,18 @@ function acps_search_is_results_page() {
 	return (bool) apply_filters( 'acps_search_is_results_page', false );
 }
 
-/** Query parameters that carry a search term. */
+/** Query parameters that carry a search term, most specific first. */
 function acps_search_query_params() {
-	// SearchWP's own parameter is swpquery; WordPress uses s.
-	return apply_filters( 'acps_search_query_params', array( 's', 'swpquery' ) );
+	// This site's SearchWP form posts the term as `swps` (see snippet #0,
+	// which redirects /?s=term to /search/?swp_form[form_id]=5&swps=term).
+	// `swpquery` is SearchWP's other common parameter; `s` is WordPress's.
+	$params = array( 'swps', 'swpquery', 's' );
+
+	if ( defined( 'ACPS_SWP_QUERY_PARAM' ) ) {
+		array_unshift( $params, ACPS_SWP_QUERY_PARAM );
+	}
+
+	return apply_filters( 'acps_search_query_params', array_values( array_unique( $params ) ) );
 }
 
 /** The search term for this request, whichever parameter carried it. */

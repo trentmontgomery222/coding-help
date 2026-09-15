@@ -137,6 +137,18 @@ check('and shows the message',
 console.log('\nfinding the search term when the bridge is absent');
 // A SearchWP module on a Beaver Builder page: is_search() is false, so
 // snippet #1 never printed and window.ACPS_SEARCH carries no query.
+check('?swps= is read — the parameter this site actually uses',
+  run({ search: '/search/?swp_form%5Bform_id%5D=5&swps=staff', data: { query: '' },
+        queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).ids, []);
+check('a multi-word ?swps= term is decoded',
+  run({ query: 'staff directory', search: '/search/?swps=staff%20directory', data: { query: '' },
+        queryRules: [{ op: 'equals', value: 'staff directory', then: 'noResults' }] }).ids, []);
+check('a + encoded ?swps= term is decoded',
+  run({ query: 'staff directory', search: '/search/?swps=staff+directory', data: { query: '' },
+        queryRules: [{ op: 'equals', value: 'staff directory', then: 'noResults' }] }).ids, []);
+check('swps wins over a stale ?s= on the same URL',
+  run({ search: '/search/?s=payroll&swps=staff', data: { query: '' },
+        queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).ids, []);
 check('?swpquery= is read when ?s= is absent',
   run({ search: '/search-results/?swpquery=staff', data: { query: '' },
         queryRules: [{ op: 'equals', value: 'staff', then: 'noResults' }] }).ids, []);
