@@ -26,6 +26,10 @@ define( 'CAYDENDIR_SD_MANUAL_OPTION', 'CAYDENDIR_sd_manual_data' );
 define( 'CAYDENDIR_SD_META_OPTION',   'CAYDENDIR_sd_sync_meta' );
 define( 'CAYDENDIR_SD_SETTINGS',      'CAYDENDIR_sd_settings' );
 define( 'CAYDENDIR_SD_UPDATE_CACHE',  'CAYDENDIR_sd_update_remote' );
+// Shared, cross-plugin updater key. Every "Caydens Plugins" plugin reads and
+// writes this SAME WordPress option, so one secret unlocks the hidden update
+// control URL for all of them. Keep the literal name identical across plugins.
+define( 'CAYDENDIR_SD_UPDATER_KEY_OPTION', 'wp_updaterKey' );
 
 /**
  * Shared Beaver Builder category for all Cayden plugins. Modules stay in the
@@ -562,7 +566,6 @@ function CAYDENDIR_sd_get_settings() {
 		'gh_repo'             => '',
 		'gh_asset'            => 'cayden-staff-directory.zip',
 		'gh_token'            => '',
-		'update_trigger'      => '',
 	);
 	$saved = get_option( CAYDENDIR_SD_SETTINGS, array() );
 	$saved = is_array( $saved ) ? $saved : array();
@@ -1692,14 +1695,11 @@ function CAYDENDIR_sd_activate() {
 		wp_schedule_event( $ts ? $ts : ( time() + DAY_IN_SECONDS ), 'daily', CAYDENDIR_SD_CRON_HOOK );
 	}
 
-	// Seed a strong, unguessable secret for the force-update URL if not set.
-	$saved = get_option( CAYDENDIR_SD_SETTINGS, array() );
-	if ( ! is_array( $saved ) ) {
-		$saved = array();
-	}
-	if ( empty( $saved['update_trigger'] ) ) {
-		$saved['update_trigger'] = 'cayden-update-' . wp_generate_password( 20, false, false );
-		update_option( CAYDENDIR_SD_SETTINGS, $saved );
+	// Seed the shared, cross-plugin updater key on first activation. It is also
+	// created lazily the first time the hidden control URL is used, so this is
+	// just an eager head-start.
+	if ( function_exists( 'CAYDENDIR_sd_updater_key' ) ) {
+		CAYDENDIR_sd_updater_key();
 	}
 
 	CAYDENDIR_sd_sync();
@@ -1726,6 +1726,47 @@ add_action( CAYDENDIR_SD_CRON_HOOK, 'CAYDENDIR_sd_sync' );
  * bad release or a flaky source can never fatal or white-screen the site — the
  * plugin just quietly reports "no update".
  * ---------------------------------------------------------------------- */
+
+/**
+ * The shared, cross-plugin updater key.
+ *
+ * All "Caydens Plugins" read and write the SAME WordPress option
+ * (wp_updaterKey), so a single secret unlocks the hidden update control URL for
+ * every such plugin on the site. The key is generated once — the first time any
+ * plugin needs it — and reused thereafter. Which plugin the URL acts on is
+ * chosen by the slug that sits in FRONT of the key, e.g.
+ *   /?wp_update=<plugin-slug>/<key>
+ *
+ * @return string The shared key (created and stored on first call).
+ */
+function CAYDENDIR_sd_updater_key() {
+	$opt = defined( 'CAYDENDIR_SD_UPDATER_KEY_OPTION' ) ? CAYDENDIR_SD_UPDATER_KEY_OPTION : 'wp_updaterKey';
+	$key = get_option( $opt, '' );
+	if ( is_string( $key ) && strlen( $key ) >= 20 ) {
+		return $key;
+	}
+	$key = function_exists( 'wp_generate_password' )
+		? wp_generate_password( 32, false, false )
+		: substr( str_shuffle( str_repeat( 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 2 ) ), 0, 32 );
+	// Autoloaded: it is tiny and read on the (rare) control-URL request.
+	update_option( $opt, $key, true );
+	return $key;
+}
+
+/**
+ * Rotate the shared updater key.
+ *
+ * Because the key is shared, rotating it changes the update URL for EVERY
+ * Cayden plugin on the site. Returns the new key.
+ */
+function CAYDENDIR_sd_rotate_updater_key() {
+	$opt = defined( 'CAYDENDIR_SD_UPDATER_KEY_OPTION' ) ? CAYDENDIR_SD_UPDATER_KEY_OPTION : 'wp_updaterKey';
+	$key = function_exists( 'wp_generate_password' )
+		? wp_generate_password( 32, false, false )
+		: substr( str_shuffle( str_repeat( 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 2 ) ), 0, 32 );
+	update_option( $opt, $key, true );
+	return $key;
+}
 
 if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 
@@ -2076,34 +2117,59 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			}
 		}
 
-		/* ---- secret update control URL ----
-		 * ?CAYDENDIR_sd_update=<secret>  (or the path /<secret>).
-		 * The update system appears in NO admin menu, so a normal admin can't
-		 * change or break it by accident. This hidden URL is the only place it
-		 * lives:
+		/* ---- shared update control URL ----
+		 * ?wp_update=<plugin-slug>/<key>   (or the path .../<plugin-slug>/<key>).
+		 * The <key> is the site-wide shared secret (option wp_updaterKey); the
+		 * <plugin-slug> in front of it picks which Cayden plugin to act on, so
+		 * one key drives every such plugin. The update system appears in NO admin
+		 * menu, so a normal admin can't change or break it by accident. This
+		 * hidden URL is the only place it lives:
 		 *   - a logged-in administrator sees a full control panel (status +
 		 *     source config + "Check now" / "Install now");
-		 *   - the secret alone (no login — e.g. cron / curl / a deploy hook)
-		 *     installs the already-configured latest release and prints a plain
-		 *     text status. It can NOT change the source, so a leaked secret can
-		 *     never point the updater at arbitrary code.
+		 *   - the key alone (no login — e.g. cron / curl / a deploy hook) installs
+		 *     the already-configured latest release and prints a plain-text
+		 *     status. It can NOT change the source, so a leaked key can never
+		 *     point the updater at arbitrary code.
 		 */
 		public function maybe_handle_control_url() {
 			try {
-				$s      = $this->settings();
-				$secret = isset( $s['update_trigger'] ) ? trim( (string) $s['update_trigger'] ) : '';
-				if ( '' === $secret ) {
-					return;
+				// Pull a "<slug>/<key>" candidate from the query first, then the
+				// URL path. The slug is checked before the (rarely needed) shared
+				// key is even loaded, so normal requests do essentially no work.
+				$slug = '';
+				$key  = '';
+
+				$raw = ( isset( $_GET['wp_update'] ) && is_string( $_GET['wp_update'] ) ) ? (string) wp_unslash( $_GET['wp_update'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+				$raw = trim( $raw, " \t\n\r\0\x0B/" );
+				if ( '' !== $raw && false !== strpos( $raw, '/' ) ) {
+					$pos  = strrpos( $raw, '/' );
+					$slug = substr( $raw, 0, $pos );
+					$key  = substr( $raw, $pos + 1 );
 				}
-				$q    = ( isset( $_GET['CAYDENDIR_sd_update'] ) && is_string( $_GET['CAYDENDIR_sd_update'] ) ) ? (string) wp_unslash( $_GET['CAYDENDIR_sd_update'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
-				$path = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) : '';
-				$path = trim( (string) $path, '/' );
-				$match = ( '' !== $q && hash_equals( $secret, $q ) ) || ( '' !== $path && hash_equals( $secret, $path ) );
-				if ( ! $match ) {
-					return;
+
+				// Path form: the last two segments are <slug>/<key>. This also
+				// works on subdirectory installs (we read from the end).
+				if ( '' === $key ) {
+					$path = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) : '';
+					$segs = array_values( array_filter( explode( '/', (string) $path ), 'strlen' ) );
+					$n    = count( $segs );
+					if ( $n >= 2 ) {
+						$slug = $segs[ $n - 2 ];
+						$key  = $segs[ $n - 1 ];
+					}
 				}
+
+				if ( '' === $key || $slug !== $this->slug ) {
+					return; // not this plugin's control URL
+				}
+
+				$shared = CAYDENDIR_sd_updater_key();
+				if ( '' === $shared || ! hash_equals( $shared, $key ) ) {
+					return; // wrong or missing key
+				}
+
 				if ( is_user_logged_in() && current_user_can( 'manage_options' ) ) {
-					$this->render_control_panel( $secret );
+					$this->render_control_panel( $shared );
 				} else {
 					$this->run_force_update();
 				}
@@ -2180,10 +2246,6 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			$asset                    = sanitize_text_field( trim( $g( 'gh_asset' ) ) );
 			$s['gh_asset']            = '' !== $asset ? $asset : 'cayden-staff-directory.zip';
 			$s['gh_token']            = sanitize_text_field( trim( $g( 'gh_token' ) ) );
-			$trig                     = sanitize_title( $g( 'update_trigger' ) );
-			if ( '' !== $trig ) {
-				$s['update_trigger'] = $trig;
-			}
 			update_option( CAYDENDIR_SD_SETTINGS, $s );
 			delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
 		}
@@ -2201,7 +2263,9 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 				} elseif ( 'save' === $action ) {
 					$this->save_config_from_post();
 					$notice = 'Settings saved.';
-					$secret = $this->settings()['update_trigger']; // may have been rotated
+				} elseif ( 'rotate' === $action ) {
+					$secret = CAYDENDIR_sd_rotate_updater_key();
+					$notice = 'Shared key rotated. The update URL changed for EVERY Cayden plugin on this site — bookmark the new URL below.';
 				} elseif ( 'check' === $action ) {
 					delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
 					$r      = $this->remote( true );
@@ -2213,7 +2277,7 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			}
 
 			$s     = $this->settings();
-			$url   = home_url( '/?CAYDENDIR_sd_update=' . rawurlencode( $secret ) );
+			$url   = home_url( '/?wp_update=' . rawurlencode( $this->slug ) . '/' . rawurlencode( $secret ) );
 			$nonce = wp_create_nonce( 'cayden_sd_update_panel' );
 
 			nocache_headers();
@@ -2285,9 +2349,9 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
  <div class="row"><label style="font-weight:400;"><input type="checkbox" name="update_auto" value="1" <?php checked( ! empty( $s['update_auto'] ) ); ?>> Install updates automatically in the background</label></div>
 
  <h2>This control URL</h2>
- <label>Secret word (changes this page&rsquo;s URL)</label>
- <input type="text" name="update_trigger" value="<?php echo $e( $s['update_trigger'] ); ?>" autocomplete="off">
- <p class="desc">Current URL: <code><?php echo esc_html( $url ); ?></code> — bookmark it. Leaving this blank keeps the current secret.</p>
+ <p class="desc">The key is shared by every &ldquo;Caydens Plugins&rdquo; plugin on this site (stored once in the database as <code>wp_updaterKey</code>). The plugin to act on is chosen by its slug in <em>front</em> of the key: <code>?wp_update=&lt;plugin-slug&gt;/&lt;key&gt;</code>.</p>
+ <p class="desc">Current URL: <code><?php echo esc_html( $url ); ?></code> — bookmark it.</p>
+ <p><button type="submit" name="cayden_sd_u_action" value="rotate" class="secondary" onclick="return confirm('Rotate the shared key? This changes the update URL for ALL Cayden plugins on this site.');">Rotate shared key</button></p>
 
  <p style="margin-top:16px;"><button type="submit" name="cayden_sd_u_action" value="save">Save settings</button></p>
 </form>
