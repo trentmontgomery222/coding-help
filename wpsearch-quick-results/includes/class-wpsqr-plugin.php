@@ -16,6 +16,8 @@ class WPSQR_Plugin {
 
 		( new WPSQR_Hidden() )->hooks();
 		( new WPSQR_Observer() )->hooks();
+
+		self::migrate_legacy_rules();
 		( new WPSQR_Warmer() )->hooks();
 		( new WPSQR_Assets() )->hooks();
 
@@ -25,6 +27,7 @@ class WPSQR_Plugin {
 
 		if ( is_admin() ) {
 			( new WPSQR_Admin() )->hooks();
+			( new WPSQR_PostList() )->hooks();
 		}
 
 		add_shortcode( 'wpsqr_results', array( $this, 'shortcode' ) );
@@ -111,29 +114,87 @@ class WPSQR_Plugin {
 			'manual_ids'      => array(),
 			'admin_preview'   => 1,
 
-			// Result rules
-			'block_types'     => array(),
-			'block_urls'      => array(),
-			'block_titles'    => array(),
-			'blocked_queries' => array(),
+			// Result rules — same shape the browser engine uses.
+			'result_rules'    => array(),
+			'query_rules'     => array(),
+			'hide_mode'       => 'remove',
+			'update_count'    => 1,
 			'empty_message'   => 'No matching results. Try a different search term.',
 		);
 	}
 
-	public static function settings() {
-		static $cached = null;
+	/** @var array|null Memoised settings for this request. */
+	protected static $memo = null;
 
-		if ( null !== $cached ) {
-			return $cached;
+	public static function flush_memo() {
+		self::$memo = null;
+	}
+
+	public static function settings() {
+		if ( null !== self::$memo ) {
+			return self::$memo;
 		}
 
-		$cached = wp_parse_args( (array) get_option( self::OPTION, array() ), self::defaults() );
+		self::$memo = wp_parse_args( (array) get_option( self::OPTION, array() ), self::defaults() );
 
-		return $cached;
+		return self::$memo;
+	}
+
+	/**
+	 * Fold the old flat settings into the rule array, once.
+	 *
+	 * Earlier versions stored three lists of strings. Converting rather than
+	 * supporting both keeps one code path and means an upgrade doesn't quietly
+	 * drop rules someone relies on.
+	 */
+	public static function migrate_legacy_rules() {
+		if ( get_option( 'wpsqr_rules_migrated' ) ) {
+			return;
+		}
+
+		$stored = (array) get_option( self::OPTION, array() );
+		$rules  = isset( $stored['result_rules'] ) ? (array) $stored['result_rules'] : array();
+		$query  = isset( $stored['query_rules'] ) ? (array) $stored['query_rules'] : array();
+
+		foreach ( (array) ( $stored['block_urls'] ?? array() ) as $value ) {
+			$rules[] = array( 'when' => 'url', 'op' => 'contains', 'value' => $value, 'then' => 'hide' );
+		}
+
+		foreach ( (array) ( $stored['block_titles'] ?? array() ) as $value ) {
+			$rules[] = array( 'when' => 'title', 'op' => 'contains', 'value' => $value, 'then' => 'hide' );
+		}
+
+		foreach ( (array) ( $stored['block_types'] ?? array() ) as $value ) {
+			$rules[] = array( 'when' => 'type', 'op' => 'equals', 'value' => $value, 'then' => 'hide' );
+		}
+
+		foreach ( (array) ( $stored['blocked_queries'] ?? array() ) as $rule ) {
+			$query[] = array(
+				'op'      => $rule['op'] ?? 'contains',
+				'value'   => $rule['value'] ?? '',
+				'then'    => 'noResults',
+				'message' => $rule['message'] ?? '',
+			);
+		}
+
+		if ( $rules || $query ) {
+			$stored['result_rules'] = $rules;
+			$stored['query_rules']  = $query;
+
+			unset( $stored['block_urls'], $stored['block_titles'], $stored['block_types'], $stored['blocked_queries'] );
+
+			update_option( self::OPTION, $stored );
+		}
+
+		update_option( 'wpsqr_rules_migrated', 1, false );
 	}
 
 	public static function update( $settings ) {
 		update_option( self::OPTION, $settings );
+
+		// settings() memoises within a request; a save must not leave the rest
+		// of this request reading the values it replaced.
+		self::flush_memo();
 
 		// Any setting change can alter which results are valid.
 		WPSQR_Cache::flush();

@@ -70,6 +70,49 @@ Two notes on what gets recorded:
    this matches, the hidden-content filtering can't work — the Status panel
    will tell you if it matches nothing.
 
+## Rules
+
+Everything the WPCode snippets could do, now built on **Quick Results →
+Settings** instead of edited in code. Rules are stored in the same shape the
+browser engine uses, so there is no translation layer to drift out of sync.
+
+**Result rules** — run top to bottom against each result. `Hide` and `Keep`
+are final, so an early Keep protects a result from every rule below it.
+
+| | |
+|---|---|
+| When the | Title, URL path, Post ID, Post type, Excerpt, Anything in the row |
+| Test | contains, is exactly, starts with, ends with, matches pattern, is any of |
+| Then | Hide, Keep, Grey out, Rewrite the title, Add a badge, Move to top, Move to bottom |
+
+**Search term rules** — act on what the visitor typed, before any result is
+looked at. First match wins.
+
+| Then | |
+|---|---|
+| Return no results | with an optional message |
+| Show a notice | above the results, leaving them alone |
+| Send them to a page | for a term with an obvious destination |
+| Allow | shields a term from a broader rule below it |
+
+### Where each rule runs
+
+`Hide` and `Keep` on **Title, URL, Post ID or Post type** are applied on the
+server — those results never reach the browser at all, which is what makes
+hiding a real boundary rather than a cosmetic one.
+
+Everything else runs in the browser: greying out, title rewrites, badges and
+reordering are presentation, and `Excerpt`/`Anything in the row` can't be
+judged server-side because the excerpt the server would build isn't
+necessarily the one the template shows.
+
+### In the editor
+
+Ported from the snippets: a **Hide from search results** checkbox on every
+post and page, a row action and bulk actions in the posts list, and a
+**Search** column showing what's hidden at a glance. All write the same meta
+key your hide-plugin uses, so the two never disagree.
+
 ## Three things worth knowing
 
 **Filtering moved to the server.** Hidden results are removed before the page
@@ -89,11 +132,13 @@ save pays full price. Everything else still works.
 ## Tests
 
 ```
-php tests/normalizer-test.php    # 30 cases, no WordPress needed
+php tests/normalizer-test.php        # 30 cases — cache keys
+node tests/browser-rules.test.js     # 49 cases — the browser rule engine
 ```
 
-The normalizer decides the hit rate, so it's tested on its own. The rest needs
-a WordPress test harness to exercise meaningfully.
+See `tests/README.md`. The normalizer decides the hit rate and the rule engine
+decides what people see, so both are tested; the WordPress-dependent parts
+would need a full test harness to exercise meaningfully.
 
 ## Honest limits
 

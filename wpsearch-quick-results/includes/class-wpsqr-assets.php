@@ -55,12 +55,14 @@ class WPSQR_Assets {
 					'query'       => WPSQR_Plugin::current_term(),
 					'queryParams' => WPSQR_Plugin::query_params(),
 					'homePath'    => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
-					'rules'       => array(
-						'blockUrlContains'   => array_values( (array) $settings['block_urls'] ),
-						'blockTitleContains' => array_values( (array) $settings['block_titles'] ),
-						'titleRewrites'      => array(),
-						'adminSeesHidden'    => (bool) $settings['admin_preview'],
-						'emptyMessage'       => (string) $settings['empty_message'],
+					'rules'       => array_merge(
+						WPSQR_Rules::for_browser(),
+						array(
+							'hideMode'        => (string) $settings['hide_mode'],
+							'adminSeesHidden' => (bool) $settings['admin_preview'],
+							'updateCount'     => (bool) $settings['update_count'],
+							'emptyMessage'    => (string) $settings['empty_message'],
+						)
 					),
 				)
 			) . ';',

@@ -14,9 +14,19 @@ class WPSQR_Admin {
 
 	public function hooks() {
 		add_action( 'admin_menu', array( $this, 'menu' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'admin_post_wpsqr_flush', array( $this, 'handle_flush' ) );
 		add_action( 'admin_post_wpsqr_warm', array( $this, 'handle_warm' ) );
 		add_action( 'admin_post_wpsqr_save', array( $this, 'handle_save' ) );
+	}
+
+	public function assets( $hook ) {
+		if ( false === strpos( (string) $hook, 'wpsqr' ) ) {
+			return;
+		}
+
+		wp_enqueue_style( 'wpsqr-admin', WPSQR_URL . 'assets/css/admin.css', array(), WPSQR_VERSION );
+		wp_enqueue_script( 'wpsqr-admin-rules', WPSQR_URL . 'assets/js/admin-rules.js', array(), WPSQR_VERSION, true );
 	}
 
 	public function menu() {
@@ -327,41 +337,39 @@ class WPSQR_Admin {
 				</table>
 
 				<h2><?php esc_html_e( 'Result rules', 'wpsqr' ); ?></h2>
+				<p class="wpsqr-hint">
+					<?php esc_html_e( 'Rules run top to bottom against each result. "Hide" and "Keep" are final — an early Keep protects a result from every rule below it.', 'wpsqr' ); ?>
+					<br>
+					<?php esc_html_e( 'Hide and Keep on Title, URL, ID or Post type are applied on the server, so those results never reach the browser at all. Everything else is applied in the browser.', 'wpsqr' ); ?>
+				</p>
+
+				<?php $this->rule_table( 'result_rules', (array) $s['result_rules'] ); ?>
+
+				<h2><?php esc_html_e( 'Search term rules', 'wpsqr' ); ?></h2>
+				<p class="wpsqr-hint">
+					<?php esc_html_e( 'These act on what the visitor typed, before any result is looked at. First match wins. A blocked term never reaches the search engine, which also makes it the fastest possible search.', 'wpsqr' ); ?>
+				</p>
+
+				<?php $this->query_rule_table( 'query_rules', (array) $s['query_rules'] ); ?>
+
+				<h2><?php esc_html_e( 'Presentation', 'wpsqr' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Hide post types', 'wpsqr' ); ?></th>
+						<th scope="row"><?php esc_html_e( 'Filtered results', 'wpsqr' ); ?></th>
 						<td>
-							<?php foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) : ?>
-								<label style="margin-inline-end:1.2em">
-									<input type="checkbox" name="block_types[]" value="<?php echo esc_attr( $type->name ); ?>"
-										<?php checked( in_array( $type->name, (array) $s['block_types'], true ) ); ?>>
-									<?php echo esc_html( $type->labels->name ); ?>
-								</label>
-							<?php endforeach; ?>
-							<p class="description"><?php esc_html_e( 'Ticking Media removes indexed PDFs and images from results entirely.', 'wpsqr' ); ?></p>
+							<label><input type="radio" name="hide_mode" value="remove" <?php checked( $s['hide_mode'], 'remove' ); ?>>
+								<?php esc_html_e( 'Remove them from the page', 'wpsqr' ); ?></label><br>
+							<label><input type="radio" name="hide_mode" value="dim" <?php checked( $s['hide_mode'], 'dim' ); ?>>
+								<?php esc_html_e( 'Grey out and label them', 'wpsqr' ); ?></label>
+							<p class="description"><?php esc_html_e( 'Greying out is for checking your rules catch what you expect. It only affects browser-side rules — a server-side Hide has already removed the result.', 'wpsqr' ); ?></p>
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wpsqr-burls"><?php esc_html_e( 'Hide URLs containing', 'wpsqr' ); ?></label></th>
-						<td><textarea id="wpsqr-burls" name="block_urls" rows="4" class="large-text code" placeholder="/staff-only/"><?php echo esc_textarea( implode( "\n", (array) $s['block_urls'] ) ); ?></textarea></td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="wpsqr-btitles"><?php esc_html_e( 'Hide titles containing', 'wpsqr' ); ?></label></th>
-						<td><textarea id="wpsqr-btitles" name="block_titles" rows="4" class="large-text code" placeholder="Internal"><?php echo esc_textarea( implode( "\n", (array) $s['block_titles'] ) ); ?></textarea></td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="wpsqr-bq"><?php esc_html_e( 'Return nothing for these searches', 'wpsqr' ); ?></label></th>
+						<th scope="row"><?php esc_html_e( 'Result count', 'wpsqr' ); ?></th>
 						<td>
-							<textarea id="wpsqr-bq" name="blocked_queries" rows="5" class="large-text code" placeholder="equals: staff directory&#10;contains: payroll"><?php
-								$lines = array();
-								foreach ( (array) $s['blocked_queries'] as $rule ) {
-									$lines[] = $rule['op'] . ': ' . $rule['value'];
-								}
-								echo esc_textarea( implode( "\n", $lines ) );
-							?></textarea>
-							<p class="description">
-								<?php esc_html_e( 'One per line, as "equals: phrase" or "contains: word". These never reach the search engine at all.', 'wpsqr' ); ?>
-							</p>
+							<label><input type="checkbox" name="update_count" value="1" <?php checked( $s['update_count'], 1 ); ?>>
+								<?php esc_html_e( 'Correct the "Found 271 results" notice for anything filtered in the browser', 'wpsqr' ); ?></label>
+							<p class="description"><?php esc_html_e( 'The notice counts the whole result set while the page shows one page of it, so the number is reduced by what was filtered rather than replaced. Turn this off to leave it alone entirely.', 'wpsqr' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -373,6 +381,143 @@ class WPSQR_Admin {
 				<?php submit_button(); ?>
 			</form>
 		</div>
+		<?php
+	}
+
+	/* ---- Rule builder -------------------------------------------------- */
+
+	protected function rule_table( $name, $rules ) {
+		$fields = array(
+			'title'   => __( 'Title', 'wpsqr' ),
+			'url'     => __( 'URL path', 'wpsqr' ),
+			'id'      => __( 'Post ID', 'wpsqr' ),
+			'type'    => __( 'Post type', 'wpsqr' ),
+			'excerpt' => __( 'Excerpt', 'wpsqr' ),
+			'text'    => __( 'Anything in the row', 'wpsqr' ),
+		);
+
+		$actions = array(
+			'hide'    => __( 'Hide it', 'wpsqr' ),
+			'keep'    => __( 'Keep it (protect from later rules)', 'wpsqr' ),
+			'dim'     => __( 'Grey it out', 'wpsqr' ),
+			'rewrite' => __( 'Rewrite the title', 'wpsqr' ),
+			'badge'   => __( 'Add a badge', 'wpsqr' ),
+			'top'     => __( 'Move to the top', 'wpsqr' ),
+			'bottom'  => __( 'Move to the bottom', 'wpsqr' ),
+		);
+
+		$this->render_table( $name, $rules, $fields, $actions );
+	}
+
+	protected function query_rule_table( $name, $rules ) {
+		$actions = array(
+			'noResults' => __( 'Return no results', 'wpsqr' ),
+			'notice'    => __( 'Show a notice above the results', 'wpsqr' ),
+			'redirect'  => __( 'Send them to a page instead', 'wpsqr' ),
+			'allow'     => __( 'Allow (shield from rules below)', 'wpsqr' ),
+		);
+
+		$this->render_table( $name, $rules, null, $actions );
+	}
+
+	protected function render_table( $name, $rules, $fields, $actions ) {
+		$ops = array(
+			'contains' => __( 'contains', 'wpsqr' ),
+			'equals'   => __( 'is exactly', 'wpsqr' ),
+			'starts'   => __( 'starts with', 'wpsqr' ),
+			'ends'     => __( 'ends with', 'wpsqr' ),
+			'regex'    => __( 'matches pattern', 'wpsqr' ),
+			'in'       => __( 'is any of (comma separated)', 'wpsqr' ),
+		);
+		?>
+		<table class="widefat striped wpsqr-rules" data-wpsqr-rules data-name="<?php echo esc_attr( $name ); ?>">
+			<thead>
+				<tr>
+					<?php if ( $fields ) : ?>
+						<th style="width:11em"><?php esc_html_e( 'When the', 'wpsqr' ); ?></th>
+					<?php endif; ?>
+					<th style="width:12em"><?php esc_html_e( 'Test', 'wpsqr' ); ?></th>
+					<th><?php esc_html_e( 'Value', 'wpsqr' ); ?></th>
+					<th style="width:15em"><?php esc_html_e( 'Then', 'wpsqr' ); ?></th>
+					<th style="width:14em"></th>
+					<th style="width:4em"></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( array_values( $rules ) as $i => $rule ) : ?>
+					<?php $this->render_row( $name, $i, $rule, $fields, $actions, $ops ); ?>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+
+		<p class="wpsqr-no-rules"><?php esc_html_e( 'No rules yet.', 'wpsqr' ); ?></p>
+
+		<p>
+			<button type="button" class="button" data-add-rule="<?php echo esc_attr( $name ); ?>">
+				<?php esc_html_e( '+ Add rule', 'wpsqr' ); ?>
+			</button>
+		</p>
+
+		<template id="wpsqr-template-<?php echo esc_attr( $name ); ?>">
+			<?php $this->render_row( $name, 0, array(), $fields, $actions, $ops ); ?>
+		</template>
+		<?php
+	}
+
+	protected function render_row( $name, $i, $rule, $fields, $actions, $ops ) {
+		$base = $name . '[' . $i . ']';
+		$get  = function ( $key, $default = '' ) use ( $rule ) {
+			return isset( $rule[ $key ] ) ? $rule[ $key ] : $default;
+		};
+		?>
+		<tr>
+			<?php if ( $fields ) : ?>
+				<td>
+					<select name="<?php echo esc_attr( $base ); ?>[when]">
+						<?php foreach ( $fields as $value => $label ) : ?>
+							<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'when', 'title' ), $value ); ?>>
+								<?php echo esc_html( $label ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</td>
+			<?php endif; ?>
+			<td>
+				<select name="<?php echo esc_attr( $base ); ?>[op]">
+					<?php foreach ( $ops as $value => $label ) : ?>
+						<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'op', 'contains' ), $value ); ?>>
+							<?php echo esc_html( $label ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</td>
+			<td>
+				<input type="text" class="wpsqr-value" name="<?php echo esc_attr( $base ); ?>[value]"
+					value="<?php echo esc_attr( $get( 'value' ) ); ?>" placeholder="<?php esc_attr_e( 'staff-only', 'wpsqr' ); ?>">
+			</td>
+			<td>
+				<select class="wpsqr-then" name="<?php echo esc_attr( $base ); ?>[then]">
+					<?php foreach ( $actions as $value => $label ) : ?>
+						<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $get( 'then' ), $value ); ?>>
+							<?php echo esc_html( $label ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</td>
+			<td>
+				<input type="text" data-extra="replace" name="<?php echo esc_attr( $base ); ?>[replace]"
+					value="<?php echo esc_attr( $get( 'replace' ) ); ?>" placeholder="<?php esc_attr_e( 'replace with…', 'wpsqr' ); ?>" hidden>
+				<input type="text" data-extra="label" name="<?php echo esc_attr( $base ); ?>[label]"
+					value="<?php echo esc_attr( $get( 'label' ) ); ?>" placeholder="<?php esc_attr_e( 'badge text', 'wpsqr' ); ?>" hidden>
+				<input type="text" data-extra="message" name="<?php echo esc_attr( $base ); ?>[message]"
+					value="<?php echo esc_attr( $get( 'message' ) ); ?>" placeholder="<?php esc_attr_e( 'message shown', 'wpsqr' ); ?>" hidden>
+				<input type="text" data-extra="url" name="<?php echo esc_attr( $base ); ?>[url]"
+					value="<?php echo esc_attr( $get( 'url' ) ); ?>" placeholder="/menus/" hidden>
+			</td>
+			<td>
+				<button type="button" class="wpsqr-remove"><?php esc_html_e( 'Remove', 'wpsqr' ); ?></button>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -406,23 +551,11 @@ class WPSQR_Admin {
 		$new['empty_message']   = sanitize_text_field( $in['empty_message'] ?? '' );
 
 		$new['manual_ids']   = array_values( array_filter( array_map( 'intval', self::lines( $in['manual_ids'] ?? '' ) ) ) );
-		$new['block_urls']   = self::lines( $in['block_urls'] ?? '' );
-		$new['block_titles'] = self::lines( $in['block_titles'] ?? '' );
+		$new['hide_mode']    = in_array( $in['hide_mode'] ?? '', array( 'remove', 'dim' ), true ) ? $in['hide_mode'] : 'remove';
+		$new['update_count'] = empty( $in['update_count'] ) ? 0 : 1;
 
-		$types               = isset( $in['block_types'] ) ? (array) $in['block_types'] : array();
-		$new['block_types']  = array_values( array_map( 'sanitize_key', $types ) );
-
-		$new['blocked_queries'] = array();
-		foreach ( self::lines( $in['blocked_queries'] ?? '' ) as $line ) {
-			$parts = array_map( 'trim', explode( ':', $line, 2 ) );
-			if ( count( $parts ) === 2 && '' !== $parts[1] ) {
-				$new['blocked_queries'][] = array(
-					'op'      => in_array( strtolower( $parts[0] ), array( 'equals', 'contains' ), true ) ? strtolower( $parts[0] ) : 'contains',
-					'value'   => $parts[1],
-					'message' => '',
-				);
-			}
-		}
+		$new['result_rules'] = self::sanitize_rules( $in['result_rules'] ?? array(), true );
+		$new['query_rules']  = self::sanitize_rules( $in['query_rules'] ?? array(), false );
 
 		WPSQR_Plugin::update( $new );
 
@@ -454,6 +587,68 @@ class WPSQR_Admin {
 
 		wp_safe_redirect( add_query_arg( 'warmed', (int) $result['warmed'], admin_url( 'admin.php?page=wpsqr' ) ) );
 		exit;
+	}
+
+	/**
+	 * Clean a submitted rule set.
+	 *
+	 * Rows with an empty value are dropped rather than stored — an empty
+	 * rule would either match nothing (noise in the list) or, worse, match
+	 * everything if a comparison were ever written carelessly.
+	 *
+	 * @param array $rows
+	 * @param bool  $is_result True for result rules, false for query rules.
+	 */
+	protected static function sanitize_rules( $rows, $is_result ) {
+		$clean = array();
+
+		$actions = $is_result
+			? WPSQR_Rules::ACTIONS
+			: array( 'noResults', 'notice', 'redirect', 'allow' );
+
+		foreach ( (array) $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$value = isset( $row['value'] ) ? trim( sanitize_text_field( $row['value'] ) ) : '';
+			if ( '' === $value ) {
+				continue;
+			}
+
+			$op   = isset( $row['op'] ) ? $row['op'] : 'contains';
+			$then = isset( $row['then'] ) ? $row['then'] : ( $is_result ? 'hide' : 'noResults' );
+
+			$rule = array(
+				'op'    => in_array( $op, WPSQR_Rules::OPS, true ) ? $op : 'contains',
+				'value' => $value,
+				'then'  => in_array( $then, $actions, true ) ? $then : ( $is_result ? 'hide' : 'noResults' ),
+			);
+
+			if ( $is_result ) {
+				$when         = isset( $row['when'] ) ? $row['when'] : 'title';
+				$rule['when'] = in_array( $when, WPSQR_Rules::FIELDS, true ) ? $when : 'title';
+			}
+
+			// A bad pattern would otherwise fail silently on every search.
+			if ( 'regex' === $rule['op'] && false === @preg_match( '/' . str_replace( '/', '\/', $value ) . '/iu', '' ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
+				continue;
+			}
+
+			foreach ( array( 'replace', 'label', 'message' ) as $extra ) {
+				if ( isset( $row[ $extra ] ) && '' !== trim( (string) $row[ $extra ] ) ) {
+					$rule[ $extra ] = sanitize_text_field( $row[ $extra ] );
+				}
+			}
+
+			if ( isset( $row['url'] ) && '' !== trim( (string) $row['url'] ) ) {
+				$rule['url'] = esc_url_raw( $row['url'] );
+			}
+
+			$clean[] = $rule;
+		}
+
+		return $clean;
 	}
 
 	protected static function lines( $text ) {

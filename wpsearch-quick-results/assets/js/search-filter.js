@@ -179,6 +179,24 @@
 	function importAdminRules() {
 		var admin = DATA.rules || {};
 
+		// Rules built on the settings screen arrive in exactly the shape used
+		// by the arrays above, so they append rather than being translated.
+		( admin.result || [] ).forEach( function ( rule ) {
+			if ( rule && rule.value !== undefined ) {
+				rule.source = 'settings';
+				RULES.push( rule );
+			}
+		} );
+
+		( admin.query || [] ).forEach( function ( rule ) {
+			if ( rule && rule.value !== undefined ) {
+				rule.source = 'settings';
+				QUERY_RULES.push( rule );
+			}
+		} );
+
+		// Older payloads used three flat lists. Still understood, so a site
+		// mid-upgrade doesn't lose its rules between one save and the next.
 		( admin.blockUrlContains || [] ).forEach( function ( value ) {
 			RULES.push( { when: 'url', op: 'contains', value: value, then: 'hide', source: 'settings' } );
 		} );
@@ -201,6 +219,9 @@
 		}
 		if ( typeof admin.adminSeesHidden === 'boolean' ) {
 			OPTIONS.adminSeesHidden = admin.adminSeesHidden;
+		}
+		if ( typeof admin.updateCount === 'boolean' ) {
+			OPTIONS.updateCount = admin.updateCount;
 		}
 		if ( admin.emptyMessage ) {
 			OPTIONS.emptyMessage = admin.emptyMessage;

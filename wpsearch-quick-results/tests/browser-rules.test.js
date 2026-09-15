@@ -4,7 +4,7 @@
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 
-const SRC = fs.readFileSync('/home/user/coding-help/wpcode/02-search-filter.js', 'utf8');
+const SRC = fs.readFileSync(__dirname + '/../assets/js/search-filter.js', 'utf8');
 const ORIGIN = 'https://acpsmdwebsidev.wpenginepowered.com';
 
 function build(queryRules, rules) {
