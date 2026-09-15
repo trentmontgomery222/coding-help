@@ -180,6 +180,19 @@ class Submission {
 		 */
 		do_action( 'acps_st_after_submission', $entry_id, $values, $form );
 
+		// --- Google Forms bridge. -------------------------------------------
+		// If this form sits on top of a Google Form, forward the answers there
+		// too. Guarded so a Google outage or a bad mapping can never break the
+		// visitor's own submission (already saved above).
+		if ( class_exists( __NAMESPACE__ . '\\Google_Forms_Bridge' ) && Google_Forms_Bridge::is_enabled( $form ) ) {
+			Failsafe::guard(
+				array( __NAMESPACE__ . '\\Google_Forms_Bridge', 'forward' ),
+				array( $form, $values, $fields ),
+				'gforms_bridge.forward',
+				false
+			);
+		}
+
 		// --- Notify. --------------------------------------------------------
 		Notifications::send( $form, $entry_id, $values, $fields );
 

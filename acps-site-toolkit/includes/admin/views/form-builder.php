@@ -227,6 +227,43 @@ $settings['style'] = wp_parse_args( $settings['style'], array( 'accent' => '', '
 				</tr>
 			</table>
 
+			<?php
+			$gforms = isset( $settings['gforms_bridge'] ) && is_array( $settings['gforms_bridge'] ) ? $settings['gforms_bridge'] : array();
+			$gf_on  = ! empty( $gforms['enabled'] );
+			$gf_url = isset( $gforms['url'] ) ? (string) $gforms['url'] : '';
+			// How many fields already carry a Google entry id (so we can reassure
+			// the admin the mapping is in place after an import).
+			$gf_mapped = 0;
+			foreach ( (array) $form->fields as $gf_field ) {
+				if ( is_array( $gf_field ) && ! empty( $gf_field['google_entry_id'] ) ) {
+					$gf_mapped++;
+				}
+			}
+			?>
+			<h2><?php esc_html_e( 'Google Form bridge', 'acps-site-toolkit' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Put this form “on top of” a Google Form: when someone submits here, their answers are also filed as a real response in your Google Form. Importing a Google Form (Forms → Import) sets this up automatically — the field-to-Google mapping is filled in for you. You can also map fields by hand: each field has a “Google Form field ID” box in its settings on the left.', 'acps-site-toolkit' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Forward to Google', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="settings[gforms_enabled]" value="1" <?php checked( $gf_on ); ?>> <?php esc_html_e( 'Also submit each response to a Google Form', 'acps-site-toolkit' ); ?></label>
+						<?php if ( $gf_mapped ) : ?>
+							<p class="description"><?php echo esc_html( sprintf( /* translators: %d: number of fields */ _n( '%d field is mapped to a Google entry.', '%d fields are mapped to Google entries.', $gf_mapped, 'acps-site-toolkit' ), $gf_mapped ) ); ?></p>
+						<?php else : ?>
+							<p class="description"><?php esc_html_e( 'No fields are mapped yet. Add each field’s Google entry ID (see below) or import the Google Form to fill them in automatically.', 'acps-site-toolkit' ); ?></p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-gforms-url"><?php esc_html_e( 'Google Form URL', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="url" id="acps-gforms-url" name="settings[gforms_url]" value="<?php echo esc_attr( $gf_url ); ?>" class="large-text code" placeholder="https://docs.google.com/forms/d/e/…/viewform">
+						<p class="description"><?php esc_html_e( 'Paste the Google Form’s share/viewform link. The plugin posts responses to that form’s endpoint automatically.', 'acps-site-toolkit' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Finding a field’s entry ID: open the Google Form, choose “Get pre-filled link”, fill in a marker value, copy the link, and read the number in “entry.123456789” for each question.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+			</table>
+
 			<h2><?php esc_html_e( 'Access & sharing', 'acps-site-toolkit' ); ?></h2>
 			<p class="description"><?php esc_html_e( 'Restrict who can open this form. You can combine methods — the form shows only when every enabled check passes.', 'acps-site-toolkit' ); ?></p>
 			<?php $access = \ACPS\SiteToolkit\Access::config( $form ); ?>

@@ -95,6 +95,7 @@
 			required: false,
 			options: needsOptions( type ) ? [ { label: 'Option 1', value: 'Option 1' } ] : [],
 			page: 1,
+			google_entry_id: '',
 			conditional: {}
 		};
 		this.fields.push( field );
@@ -244,6 +245,20 @@
 
 		// Page number (multi-page).
 		pane.appendChild( numberRow( 'Page number', field.page || 1, function ( v ) { field.page = v; } ) );
+
+		// Google Forms bridge: the entry id this field maps to on a backing
+		// Google Form (the number in entry.123456789). Only relevant when the
+		// "Google Form bridge" is enabled in the form settings; harmless otherwise.
+		if ( isInput( field.type ) ) {
+			var gRow = textRow( 'Google Form field ID (entry.___)', field.google_entry_id || '', function ( v ) {
+				field.google_entry_id = ( v || '' ).replace( /[^0-9]/g, '' );
+			} );
+			var gHint = document.createElement( 'span' );
+			gHint.className = 'description';
+			gHint.textContent = 'Optional. Digits only — filled in automatically when imported from Google.';
+			gRow.appendChild( gHint );
+			pane.appendChild( gRow );
+		}
 
 		// Conditional visibility — advanced: action + logic + multiple rules.
 		pane.appendChild( this.renderConditional( field ) );

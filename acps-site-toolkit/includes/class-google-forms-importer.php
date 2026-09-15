@@ -135,6 +135,9 @@ class Google_Forms_Importer {
 
 			$answer   = isset( $item[4][0] ) && is_array( $item[4][0] ) ? $item[4][0] : array();
 			$required = ! empty( $answer[2] );
+			// Google's entry id (the number in entry.123456789) lives at $answer[0].
+			// Capturing it lets the Google Forms bridge forward answers back later.
+			$entry_id = isset( $answer[0] ) ? preg_replace( '/[^0-9]/', '', (string) $answer[0] ) : '';
 			$options  = array();
 			if ( isset( $answer[1] ) && is_array( $answer[1] ) ) {
 				foreach ( $answer[1] as $opt ) {
@@ -146,11 +149,12 @@ class Google_Forms_Importer {
 			}
 
 			$field = array(
-				'type'     => self::map_type( $q_type ),
-				'label'    => $q_title,
-				'help'     => $q_help,
-				'required' => (bool) $required,
-				'page'     => $page,
+				'type'            => self::map_type( $q_type ),
+				'label'           => $q_title,
+				'help'            => $q_help,
+				'required'        => (bool) $required,
+				'page'            => $page,
+				'google_entry_id' => $entry_id,
 			);
 
 			if ( in_array( $field['type'], array( 'radio', 'checkbox', 'dropdown' ), true ) ) {
@@ -174,7 +178,18 @@ class Google_Forms_Importer {
 		$form->status = 'draft'; // review before publishing.
 		$form->fields = $fields;
 		$form->settings = wp_parse_args(
-			array( 'multipage' => $multipage ? 1 : 0 ),
+			array(
+				'multipage'     => $multipage ? 1 : 0,
+				// Pre-wire the Google Forms bridge so this form forwards responses
+				// straight back to the source Google Form. Enabled automatically
+				// when we imported from a URL (so we know where to POST); if the
+				// admin pasted page source instead, they can add the URL + enable
+				// it in the builder. The per-field entry ids are already set.
+				'gforms_bridge' => array(
+					'enabled' => ( $url && Google_Forms_Bridge::response_url( $url ) ) ? 1 : 0,
+					'url'     => (string) $url,
+				),
+			),
 			Form::default_settings()
 		);
 		$form->save();

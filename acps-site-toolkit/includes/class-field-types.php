@@ -124,6 +124,10 @@ class Field_Types {
 			'scale_min'   => isset( $field['scale_min'] ) ? (int) $field['scale_min'] : 1,
 			'scale_max'   => isset( $field['scale_max'] ) ? (int) $field['scale_max'] : 5,
 			'content'     => isset( $field['content'] ) ? wp_kses_post( $field['content'] ) : '',
+			// Google Forms bridge: the numeric "entry" id this field maps to on a
+			// backing Google Form, so its answer can be forwarded there on submit.
+			// Empty unless imported from Google or mapped by hand. Digits only.
+			'google_entry_id' => isset( $field['google_entry_id'] ) ? preg_replace( '/[^0-9]/', '', (string) $field['google_entry_id'] ) : '',
 		);
 	}
 

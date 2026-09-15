@@ -387,6 +387,12 @@ class Admin {
 			$s['style']['accent'] = sanitize_text_field( wp_unslash( $_POST['settings']['style_accent'] ) );
 		}
 
+		// Google Forms bridge (forward submissions to a backing Google Form).
+		$s['gforms_bridge'] = array(
+			'enabled' => ! empty( $_POST['settings']['gforms_enabled'] ) ? 1 : 0,
+			'url'     => isset( $_POST['settings']['gforms_url'] ) ? esc_url_raw( wp_unslash( $_POST['settings']['gforms_url'] ) ) : '',
+		);
+
 		// Access control (login/roles, password, secret link).
 		$in_access = isset( $_POST['settings']['access'] ) && is_array( $_POST['settings']['access'] ) ? wp_unslash( $_POST['settings']['access'] ) : array(); // phpcs:ignore
 		$access    = isset( $s['access'] ) && is_array( $s['access'] ) ? $s['access'] : \ACPS\SiteToolkit\Access::defaults();

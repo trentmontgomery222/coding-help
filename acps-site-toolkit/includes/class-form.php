@@ -74,6 +74,13 @@ class Form {
 				'token'            => '',
 				'denied_message'   => '',
 			),
+			// Google Forms bridge: when enabled, a submission is also forwarded to
+			// a backing Google Form (this plugin's form sits "on top" of it). The
+			// per-field Google entry ids live on the fields themselves.
+			'gforms_bridge'        => array(
+				'enabled' => 0,
+				'url'     => '', // the Google Form's viewform or formResponse URL.
+			),
 			// Per-form spam overrides fall back to global settings when unset.
 		);
 	}
