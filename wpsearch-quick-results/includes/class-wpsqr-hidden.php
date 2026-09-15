@@ -83,6 +83,58 @@ class WPSQR_Hidden {
 		return $map;
 	}
 
+	/**
+	 * Custom search descriptions, keyed by post ID.
+	 *
+	 * Needed by the browser for pages SearchWP renders itself, where this
+	 * plugin never sees the markup. Only posts that actually have one are
+	 * included, so on a normal site this is a handful of entries rather than
+	 * a copy of the content.
+	 */
+	public static function descriptions() {
+		$key = WPSQR_Plugin::settings()['desc_meta_key'];
+
+		if ( '' === $key ) {
+			return array();
+		}
+
+		$cached = get_transient( self::CACHE_KEY . '_desc' );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$ids = get_posts(
+			array(
+				'post_type'              => 'any',
+				'post_status'            => array( 'publish', 'private' ),
+				'posts_per_page'         => 500,
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_term_cache' => false,
+				'meta_query'             => array( // phpcs:ignore WordPress.DB.SlowDBQuery
+					array(
+						'key'     => $key,
+						'compare' => 'EXISTS',
+					),
+				),
+			)
+		);
+
+		$map = array();
+
+		foreach ( $ids as $id ) {
+			$text = trim( (string) get_post_meta( $id, $key, true ) );
+
+			if ( '' !== $text ) {
+				$map[ (string) $id ] = $text;
+			}
+		}
+
+		set_transient( self::CACHE_KEY . '_desc', $map, 10 * MINUTE_IN_SECONDS );
+
+		return $map;
+	}
+
 	/** True if this post should never be shown to a visitor. */
 	public static function is_hidden( $post_id ) {
 		$map = self::map();
@@ -92,6 +144,7 @@ class WPSQR_Hidden {
 
 	public static function flush() {
 		delete_transient( self::CACHE_KEY );
+		delete_transient( self::CACHE_KEY . '_desc' );
 		WPSQR_Cache::flush();
 	}
 }

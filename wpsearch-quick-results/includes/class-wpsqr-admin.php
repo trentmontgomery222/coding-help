@@ -373,6 +373,23 @@ class WPSQR_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><label for="wpsqr-words"><?php esc_html_e( 'Description length', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="number" id="wpsqr-words" name="excerpt_words" min="5" max="200" value="<?php echo esc_attr( $s['excerpt_words'] ); ?>" class="small-text">
+							<?php esc_html_e( 'words', 'wpsqr' ); ?>
+							<p class="description"><?php esc_html_e( 'Applies to descriptions this plugin builds. A page with its own excerpt, or a search description written on the edit screen, is used as written.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-desckey"><?php esc_html_e( 'Search description field', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="text" id="wpsqr-desckey" name="desc_meta_key" value="<?php echo esc_attr( $s['desc_meta_key'] ); ?>" class="regular-text">
+							<p class="description">
+								<?php esc_html_e( 'Meta key holding a per-page search description. Leave as-is unless you already store one elsewhere — set it to an existing key (a SEO plugin\'s, say) to reuse those.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="wpsqr-empty"><?php esc_html_e( 'No-results message', 'wpsqr' ); ?></label></th>
 						<td><input type="text" id="wpsqr-empty" name="empty_message" value="<?php echo esc_attr( $s['empty_message'] ); ?>" class="large-text"></td>
 					</tr>
@@ -400,7 +417,8 @@ class WPSQR_Admin {
 			'hide'    => __( 'Hide it', 'wpsqr' ),
 			'keep'    => __( 'Keep it (protect from later rules)', 'wpsqr' ),
 			'dim'     => __( 'Grey it out', 'wpsqr' ),
-			'rewrite' => __( 'Rewrite the title', 'wpsqr' ),
+			'rewrite' => __( 'Find and replace text', 'wpsqr' ),
+			'setDesc' => __( 'Replace the description', 'wpsqr' ),
 			'badge'   => __( 'Add a badge', 'wpsqr' ),
 			'top'     => __( 'Move to the top', 'wpsqr' ),
 			'bottom'  => __( 'Move to the bottom', 'wpsqr' ),
@@ -505,6 +523,11 @@ class WPSQR_Admin {
 				</select>
 			</td>
 			<td>
+				<select data-extra="target" name="<?php echo esc_attr( $base ); ?>[target]" hidden>
+					<option value="title" <?php selected( $get( 'target', 'title' ), 'title' ); ?>><?php esc_html_e( 'in the title', 'wpsqr' ); ?></option>
+					<option value="desc" <?php selected( $get( 'target' ), 'desc' ); ?>><?php esc_html_e( 'in the description', 'wpsqr' ); ?></option>
+					<option value="both" <?php selected( $get( 'target' ), 'both' ); ?>><?php esc_html_e( 'in both', 'wpsqr' ); ?></option>
+				</select>
 				<input type="text" data-extra="replace" name="<?php echo esc_attr( $base ); ?>[replace]"
 					value="<?php echo esc_attr( $get( 'replace' ) ); ?>" placeholder="<?php esc_attr_e( 'replace with…', 'wpsqr' ); ?>" hidden>
 				<input type="text" data-extra="label" name="<?php echo esc_attr( $base ); ?>[label]"
@@ -513,6 +536,8 @@ class WPSQR_Admin {
 					value="<?php echo esc_attr( $get( 'message' ) ); ?>" placeholder="<?php esc_attr_e( 'message shown', 'wpsqr' ); ?>" hidden>
 				<input type="text" data-extra="url" name="<?php echo esc_attr( $base ); ?>[url]"
 					value="<?php echo esc_attr( $get( 'url' ) ); ?>" placeholder="/menus/" hidden>
+				<input type="text" data-extra="desc" name="<?php echo esc_attr( $base ); ?>[desc]"
+					value="<?php echo esc_attr( $get( 'desc' ) ); ?>" placeholder="<?php esc_attr_e( 'new description', 'wpsqr' ); ?>" hidden>
 			</td>
 			<td>
 				<button type="button" class="wpsqr-remove"><?php esc_html_e( 'Remove', 'wpsqr' ); ?></button>
@@ -551,7 +576,9 @@ class WPSQR_Admin {
 		$new['empty_message']   = sanitize_text_field( $in['empty_message'] ?? '' );
 
 		$new['manual_ids']   = array_values( array_filter( array_map( 'intval', self::lines( $in['manual_ids'] ?? '' ) ) ) );
-		$new['hide_mode']    = in_array( $in['hide_mode'] ?? '', array( 'remove', 'dim' ), true ) ? $in['hide_mode'] : 'remove';
+		$new['hide_mode']     = in_array( $in['hide_mode'] ?? '', array( 'remove', 'dim' ), true ) ? $in['hide_mode'] : 'remove';
+		$new['excerpt_words'] = max( 5, min( 200, (int) ( $in['excerpt_words'] ?? 40 ) ) );
+		$new['desc_meta_key'] = sanitize_text_field( $in['desc_meta_key'] ?? '' );
 		$new['update_count'] = empty( $in['update_count'] ) ? 0 : 1;
 
 		$new['result_rules'] = self::sanitize_rules( $in['result_rules'] ?? array(), true );
@@ -635,7 +662,12 @@ class WPSQR_Admin {
 				continue;
 			}
 
-			foreach ( array( 'replace', 'label', 'message' ) as $extra ) {
+			if ( 'rewrite' === $rule['then'] ) {
+				$target         = isset( $row['target'] ) ? $row['target'] : 'title';
+				$rule['target'] = in_array( $target, array( 'title', 'desc', 'both' ), true ) ? $target : 'title';
+			}
+
+			foreach ( array( 'replace', 'label', 'message', 'desc' ) as $extra ) {
 				if ( isset( $row[ $extra ] ) && '' !== trim( (string) $row[ $extra ] ) ) {
 					$rule[ $extra ] = sanitize_text_field( $row[ $extra ] );
 				}

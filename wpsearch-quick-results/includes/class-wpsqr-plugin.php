@@ -118,6 +118,8 @@ class WPSQR_Plugin {
 			'result_rules'    => array(),
 			'query_rules'     => array(),
 			'hide_mode'       => 'remove',
+			'excerpt_words'   => 40,
+			'desc_meta_key'   => '_wpsqr_search_description',
 			'update_count'    => 1,
 			'empty_message'   => 'No matching results. Try a different search term.',
 		);

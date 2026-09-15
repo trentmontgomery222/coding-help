@@ -108,7 +108,7 @@ class WPSQR_Renderer {
 			wp_kses_post( self::highlight( get_the_title( $post ), $term ) )
 		);
 
-		$excerpt = self::excerpt( $post );
+		$excerpt = self::description( $post );
 		if ( '' !== $excerpt ) {
 			printf(
 				'<p class="swp-result-item--desc">%s</p>',
@@ -125,12 +125,43 @@ class WPSQR_Renderer {
 		echo '</div></article>';
 	}
 
-	protected static function excerpt( $post ) {
+	/**
+	 * The description shown under a result.
+	 *
+	 * Order of preference: a description written for search specifically,
+	 * then the post's own excerpt, then its content trimmed down. The first
+	 * exists because an indexed page's own text often makes a poor summary —
+	 * a staff directory whose excerpt is a run of names being the obvious
+	 * case — and because that text is what a visitor judges the result by.
+	 */
+	public static function description( $post ) {
+		$settings = WPSQR_Plugin::settings();
+
+		$custom = self::custom_description( $post );
+		if ( '' !== $custom ) {
+			return $custom;
+		}
+
 		$text = has_excerpt( $post ) ? $post->post_excerpt : $post->post_content;
 		$text = wp_strip_all_tags( strip_shortcodes( $text ) );
 		$text = preg_replace( '/\s+/u', ' ', $text );
 
-		return trim( wp_trim_words( $text, 40, ' […]' ) );
+		$words = max( 5, (int) $settings['excerpt_words'] );
+
+		return trim( wp_trim_words( $text, $words, ' […]' ) );
+	}
+
+	/** A description written specifically for search results, if there is one. */
+	public static function custom_description( $post ) {
+		$key = WPSQR_Plugin::settings()['desc_meta_key'];
+
+		if ( '' === $key ) {
+			return '';
+		}
+
+		$post_id = is_object( $post ) ? $post->ID : (int) $post;
+
+		return trim( (string) get_post_meta( $post_id, $key, true ) );
 	}
 
 	/**

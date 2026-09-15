@@ -61,6 +61,8 @@ function run({ query = 'staff', results = SAMPLE, queryRules = [], rules = [], d
     notice: doc.querySelector('.swp-total-results-notice p').textContent,
     marks: doc.querySelectorAll('mark.searchwp-highlight').length,
     badges: [...doc.querySelectorAll('.acps-badge')].map(b => b.textContent),
+    descs: rows.map(a => (a.querySelector('.swp-result-item--desc') || {}).textContent || ''),
+    descHTML: rows.map(a => (a.querySelector('.swp-result-item--desc') || {}).innerHTML || ''),
     titleHTML: rows.map(a => a.querySelector('.entry-title a').innerHTML.trim()),
     empty: doc.querySelector('.acps-empty-message')?.textContent || null,
   };
@@ -160,6 +162,49 @@ check('updateCount false leaves the notice alone',
   'Found 271 results for staff');
 check('legacy flat lists still work',
   run({ data: { rules: { blockUrlContains: ['/staff/directory/'] } } }).ids.includes('43'), false);
+
+console.log('\ndescriptions');
+check('rewrite targets the title by default, leaving the description alone',
+  run({ rules: [{ when: 'title', op: 'contains', value: 'Staff', then: 'rewrite', replace: 'Team' }] }).descs[0].trim(),
+  'Staff Hub (opens in new tab)');
+check('target desc rewrites only the description',
+  run({ rules: [{ when: 'excerpt', op: 'contains', value: 'hub', then: 'rewrite', replace: 'Portal', target: 'desc' }] }).descs[0].trim(),
+  'Staff Portal (opens in new tab)');
+check('target desc leaves the title alone',
+  run({ rules: [{ when: 'excerpt', op: 'contains', value: 'hub', then: 'rewrite', replace: 'Portal', target: 'desc' }] }).titles[0],
+  'Staff');
+check('target both hits title and description',
+  run({ rules: [{ when: 'title', op: 'contains', value: 'Staff', then: 'rewrite', replace: 'Team', target: 'both' }] }).descs[0].trim(),
+  'Team Hub (opens in new tab)');
+check('rewriting the description preserves its highlight markup',
+  run({ rules: [{ when: 'excerpt', op: 'contains', value: 'Hub', then: 'rewrite', replace: 'Portal', target: 'desc' }] })
+    .descHTML[0].includes('<mark class="searchwp-highlight">Staff</mark>'), true);
+check('setDesc replaces the description outright',
+  run({ rules: [{ when: 'url', op: 'contains', value: '/staff/directory/', then: 'setDesc', desc: 'Look up any employee.' }] }).descs[1],
+  'Look up any employee.');
+check('setDesc leaves other rows untouched',
+  run({ rules: [{ when: 'url', op: 'contains', value: '/staff/directory/', then: 'setDesc', desc: 'Look up any employee.' }] }).descs[0].trim(),
+  'Staff Hub (opens in new tab)');
+check('a later setDesc overrides an earlier one',
+  run({ rules: [
+    { when: 'type', op: 'equals', value: 'page', then: 'setDesc', desc: 'A page.' },
+    { when: 'url', op: 'contains', value: '/staff/directory/', then: 'setDesc', desc: 'The directory.' }
+  ] }).descs[1], 'The directory.');
+check('a custom description from the settings screen is applied by post id',
+  run({ data: { descriptions: { '43': 'Written for search.' } } }).descs[1], 'Written for search.');
+check('a rule-set description overrides a custom one',
+  run({ data: { descriptions: { '43': 'Written for search.' } },
+        rules: [{ when: 'url', op: 'contains', value: '/staff/directory/', then: 'setDesc', desc: 'Rule wins.' }] }).descs[1],
+  'Rule wins.');
+check('a rewrite applies on top of a custom description',
+  run({ data: { descriptions: { '43': 'Search the ACPS directory.' } },
+        rules: [{ when: 'excerpt', op: 'contains', value: 'ACPS', then: 'rewrite', replace: 'staff', target: 'desc' }] }).descs[1],
+  'Search the staff directory.');
+check('a hidden row never gets a description rewrite',
+  run({ rules: [
+    { when: 'url', op: 'contains', value: '/staff/directory/', then: 'hide' },
+    { when: 'url', op: 'contains', value: '/staff/directory/', then: 'setDesc', desc: 'Never seen.' }
+  ] }).descs.includes('Never seen.'), false);
 
 console.log('\nreordering');
 check('bottom sinks attachments below everything else',

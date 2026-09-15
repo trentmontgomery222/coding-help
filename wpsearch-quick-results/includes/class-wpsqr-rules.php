@@ -27,7 +27,7 @@ class WPSQR_Rules {
 
 	const FIELDS = array( 'title', 'url', 'id', 'type', 'excerpt', 'text' );
 	const OPS    = array( 'contains', 'equals', 'starts', 'ends', 'regex', 'in' );
-	const ACTIONS = array( 'hide', 'dim', 'rewrite', 'badge', 'top', 'bottom', 'keep' );
+	const ACTIONS = array( 'hide', 'dim', 'rewrite', 'setDesc', 'badge', 'top', 'bottom', 'keep' );
 
 	/** Fields the server can evaluate reliably. */
 	const SERVER_FIELDS = array( 'title', 'url', 'id', 'type' );

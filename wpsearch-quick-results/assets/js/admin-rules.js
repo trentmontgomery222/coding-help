@@ -31,16 +31,19 @@
 				return;
 			}
 
+			// Rewrite is the one action needing two fields: what to replace
+			// the text with, and which part of the row to do it in.
 			var needs = {
-				rewrite: 'replace',
-				badge: 'label',
-				noResults: 'message',
-				notice: 'message',
-				redirect: 'url'
-			}[ action.value ] || null;
+				rewrite: [ 'target', 'replace' ],
+				setDesc: [ 'desc' ],
+				badge: [ 'label' ],
+				noResults: [ 'message' ],
+				notice: [ 'message' ],
+				redirect: [ 'url' ]
+			}[ action.value ] || [];
 
 			Array.prototype.forEach.call( row.querySelectorAll( '[data-extra]' ), function ( field ) {
-				field.hidden = field.getAttribute( 'data-extra' ) !== needs;
+				field.hidden = needs.indexOf( field.getAttribute( 'data-extra' ) ) === -1;
 			} );
 		}
 

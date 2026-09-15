@@ -67,23 +67,43 @@ class WPSQR_PostList {
 	/* ---- Edit screen --------------------------------------------------- */
 
 	public function add_meta_box() {
-		if ( '' === $this->meta_key() ) {
-			return;
-		}
+		add_meta_box( 'wpsqr-visibility', __( 'Search results', 'wpsqr' ), array( $this, 'render_meta_box' ), $this->post_types(), 'side' );
+	}
 
-		add_meta_box( 'wpsqr-visibility', __( 'Search visibility', 'wpsqr' ), array( $this, 'render_meta_box' ), $this->post_types(), 'side' );
+	protected function desc_meta_key() {
+		return WPSQR_Plugin::settings()['desc_meta_key'];
 	}
 
 	public function render_meta_box( $post ) {
 		wp_nonce_field( 'wpsqr_hide_' . $post->ID, 'wpsqr_hide_nonce' );
+
+		$desc_key = $this->desc_meta_key();
+		$desc     = '' === $desc_key ? '' : (string) get_post_meta( $post->ID, $desc_key, true );
 		?>
-		<label>
-			<input type="checkbox" name="wpsqr_hide" value="1" <?php checked( self::is_hidden( $post->ID ) ); ?>>
-			<?php esc_html_e( 'Hide from search results', 'wpsqr' ); ?>
-		</label>
-		<p class="description" style="margin-top:.5em">
-			<?php esc_html_e( 'Stays published and reachable by direct link — it just will not be listed in search.', 'wpsqr' ); ?>
-		</p>
+		<?php if ( '' !== $this->meta_key() ) : ?>
+			<p>
+				<label>
+					<input type="checkbox" name="wpsqr_hide" value="1" <?php checked( self::is_hidden( $post->ID ) ); ?>>
+					<?php esc_html_e( 'Hide from search results', 'wpsqr' ); ?>
+				</label>
+			</p>
+			<p class="description">
+				<?php esc_html_e( 'Stays published and reachable by direct link — it just will not be listed in search.', 'wpsqr' ); ?>
+			</p>
+		<?php endif; ?>
+
+		<?php if ( '' !== $desc_key ) : ?>
+			<p style="margin-top:1em">
+				<label for="wpsqr-desc"><strong><?php esc_html_e( 'Search description', 'wpsqr' ); ?></strong></label>
+				<textarea id="wpsqr-desc" name="wpsqr_desc" rows="4" style="width:100%"
+					placeholder="<?php echo esc_attr( wp_strip_all_tags( WPSQR_Renderer::description( $post ) ) ); ?>"><?php
+					echo esc_textarea( $desc );
+				?></textarea>
+			</p>
+			<p class="description">
+				<?php esc_html_e( 'What this page should say when it turns up in search. Leave empty to use the automatic summary shown above — worth writing when that summary reads poorly out of context.', 'wpsqr' ); ?>
+			</p>
+		<?php endif; ?>
 		<?php
 	}
 
@@ -102,7 +122,23 @@ class WPSQR_PostList {
 			return;
 		}
 
-		self::set_hidden( $post_id, ! empty( $_POST['wpsqr_hide'] ) );
+		if ( '' !== $this->meta_key() ) {
+			self::set_hidden( $post_id, ! empty( $_POST['wpsqr_hide'] ) );
+		}
+
+		$desc_key = $this->desc_meta_key();
+
+		if ( '' !== $desc_key && isset( $_POST['wpsqr_desc'] ) ) {
+			$desc = sanitize_textarea_field( wp_unslash( $_POST['wpsqr_desc'] ) );
+
+			if ( '' === trim( $desc ) ) {
+				delete_post_meta( $post_id, $desc_key );
+			} else {
+				update_post_meta( $post_id, $desc_key, $desc );
+			}
+
+			WPSQR_Hidden::flush();
+		}
 	}
 
 	/* ---- Posts list ---------------------------------------------------- */

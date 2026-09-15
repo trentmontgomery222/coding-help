@@ -81,9 +81,11 @@
 	 *           slash — '/about/' — and file links keep their extension,
 	 *           '/wp-content/uploads/budget.pdf')
 	 *    op:   'equals' | 'contains' | 'starts' | 'ends' | 'regex' | 'in'
-	 *    then: 'hide' | 'dim' | 'rewrite' | 'badge' | 'top' | 'bottom' | 'keep'
+	 *    then: 'hide' | 'dim' | 'rewrite' | 'setDesc' | 'badge' | 'top' | 'bottom' | 'keep'
 	 *
-	 *    'rewrite' needs `replace`. 'badge' needs `label`.
+	 *    'rewrite' needs `replace`, and takes an optional `target` of 'title'
+	 *    (the default), 'desc' or 'both'. 'setDesc' needs `desc` and replaces
+	 *    the description outright. 'badge' needs `label`.
 	 *    'keep' protects a result from any later rule.
 	 *    Rules run top to bottom; 'hide', 'dim' and 'keep' stop the rest.
 	 * ================================================================= */
@@ -110,6 +112,15 @@
 
 		// --- cosmetic ------------------------------------------------
 		// { when: 'title', op: 'contains', value: 'ACPS - ', then: 'rewrite', replace: '' },
+
+		// Rewrite the description instead of, or as well as, the title.
+		// { when: 'excerpt', op: 'contains', value: '[…]', then: 'rewrite', replace: '…', target: 'desc' },
+
+		// Replace a description outright. Useful where an indexed page's own
+		// text makes a poor summary — a directory listing whose excerpt is a
+		// run of names, for instance.
+		// { when: 'url', op: 'contains', value: '/staff/directory/', then: 'setDesc',
+		//   desc: 'Look up any ACPS employee by name, school or department.' },
 		// { when: 'title', op: 'contains', value: 'Dept.',   then: 'rewrite', replace: 'Department' },
 		// { when: 'url',   op: 'contains', value: '/news/',  then: 'badge', label: 'News' },
 
@@ -452,9 +463,18 @@
 		// `type-page`, `type-post`, `type-attachment` and so on.
 		var typeMatch = /(?:^|\s)type-([a-z0-9_-]+)(?:\s|$)/i.exec( className );
 
+		// A description written for search replaces the template's own before
+		// anything is judged, so rules match against the text that will
+		// actually be on the page rather than the text it started with.
+		var custom = ( DATA.descriptions || {} )[ String( id ) ];
+		if ( undefined !== custom && excerptEl && excerptEl.el.textContent !== custom ) {
+			excerptEl.el.textContent = custom;
+		}
+
 		return {
 			el:      item,
 			titleEl: titleEl ? titleEl.el : null,
+			descEl:  excerptEl ? excerptEl.el : null,
 			id:      String( id ),
 			type:    typeMatch ? typeMatch[ 1 ].toLowerCase() : '',
 			title:   ( titleEl ? titleEl.el.textContent : '' ).toLowerCase().trim(),
@@ -475,7 +495,10 @@
 	 * @return {Object} { hide, dim, keep, top, badges[], rewrites[], reason }
 	 */
 	function evaluate( fields ) {
-		var verdict = { hide: false, dim: false, keep: false, top: false, bottom: false, badges: [], rewrites: [], reason: '' };
+		var verdict = {
+			hide: false, dim: false, keep: false, top: false, bottom: false,
+			badges: [], rewrites: [], setDesc: null, reason: ''
+		};
 
 		// The hide-plugin's flag is rule zero.
 		if ( fields.el.classList.contains( 'acps-hidden-result' ) ||
@@ -520,7 +543,17 @@
 					return verdict;
 
 				case 'rewrite':
-					verdict.rewrites.push( { match: rule.value, replace: rule.replace || '' } );
+					verdict.rewrites.push( {
+						match: rule.value,
+						replace: rule.replace || '',
+						target: rule.target || 'title'
+					} );
+					break;
+
+				case 'setDesc':
+					// Last one wins, so a more specific rule further down can
+					// override a broad one above it.
+					verdict.setDesc = rule.desc || '';
 					break;
 
 				case 'badge':
@@ -567,13 +600,30 @@
 			var text = textNode.nodeValue;
 
 			rules.forEach( function ( rule ) {
-				text = text.split( rule.match ).join( rule.replace );
+				text = replaceInsensitive( text, rule.match, rule.replace );
 			} );
 
 			if ( text !== textNode.nodeValue ) {
 				textNode.nodeValue = text;
 			}
 		} );
+	}
+
+	/**
+	 * Case-insensitive find and replace.
+	 *
+	 * Rule matching ignores case, so replacement has to as well. A rule that
+	 * matched a row on "hub" and then silently failed to replace "Hub" would
+	 * look like the rule was broken.
+	 */
+	function replaceInsensitive( text, needle, replacement ) {
+		if ( ! needle ) {
+			return text;
+		}
+
+		var escaped = String( needle ).replace( /[.*+?^${}()|[\]\\]/g, '\\$&' );
+
+		return text.replace( new RegExp( escaped, 'gi' ), replacement );
 	}
 
 	function applyVerdict( fields, verdict ) {
@@ -605,8 +655,28 @@
 		}
 
 		// Cosmetic changes only apply to results that survived.
-		if ( verdict.rewrites.length && fields.titleEl ) {
-			rewriteText( fields.titleEl, verdict.rewrites );
+
+		// The custom description was already applied in fieldsOf, before the
+		// rules ran. A setDesc rule overrides it; a rewrite edits whatever is
+		// there by then.
+		if ( null !== verdict.setDesc && fields.descEl ) {
+			fields.descEl.textContent = verdict.setDesc;
+		}
+
+		var titleRules = verdict.rewrites.filter( function ( rule ) {
+			return 'desc' !== rule.target;
+		} );
+
+		var descRules = verdict.rewrites.filter( function ( rule ) {
+			return 'desc' === rule.target || 'both' === rule.target;
+		} );
+
+		if ( titleRules.length && fields.titleEl ) {
+			rewriteText( fields.titleEl, titleRules );
+		}
+
+		if ( descRules.length && fields.descEl ) {
+			rewriteText( fields.descEl, descRules );
 		}
 
 		verdict.badges.forEach( function ( label ) {

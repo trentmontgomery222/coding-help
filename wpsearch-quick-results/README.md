@@ -83,7 +83,7 @@ are final, so an early Keep protects a result from every rule below it.
 |---|---|
 | When the | Title, URL path, Post ID, Post type, Excerpt, Anything in the row |
 | Test | contains, is exactly, starts with, ends with, matches pattern, is any of |
-| Then | Hide, Keep, Grey out, Rewrite the title, Add a badge, Move to top, Move to bottom |
+| Then | Hide, Keep, Grey out, Find and replace text, Replace the description, Add a badge, Move to top, Move to bottom |
 
 **Search term rules** — act on what the visitor typed, before any result is
 looked at. First match wins.
@@ -94,6 +94,38 @@ looked at. First match wins.
 | Show a notice | above the results, leaving them alone |
 | Send them to a page | for a term with an obvious destination |
 | Allow | shields a term from a broader rule below it |
+
+### Descriptions
+
+The text under each result is usually the page's own content trimmed down,
+which often reads badly out of context — a staff directory whose excerpt is a
+run of employee names being the obvious case here. Three ways to fix that, in
+order of how much they cost you:
+
+**A Search description on the page itself.** Every post and page gets a
+*Search description* box in the sidebar, next to the visibility checkbox. Write
+one and it replaces the automatic summary wherever that page appears. The
+placeholder shows what the automatic summary would be, so you can see whether
+it's worth overriding. This is the one to reach for when a specific page reads
+poorly.
+
+**Replace the description by rule**, when a pattern covers several pages:
+
+```
+When the URL contains /staff/directory/ → Replace the description
+```
+
+**Find and replace text**, which now takes a target — the title, the
+description, or both. Matching and replacement are both case-insensitive; a
+rule that matched a row on "hub" and then failed to replace "Hub" would just
+look broken.
+
+Rules see the description that will actually be displayed, including a custom
+one, so a rewrite can edit text a Search description put there.
+
+**Description length** for auto-generated summaries is on the settings screen.
+If you already store descriptions elsewhere — an SEO plugin's meta key — point
+*Search description field* at that key and it'll use those instead.
 
 ### Where each rule runs
 
@@ -133,7 +165,7 @@ save pays full price. Everything else still works.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 49 cases — the browser rule engine
+node tests/browser-rules.test.js     # 61 cases — the browser rule engine
 ```
 
 See `tests/README.md`. The normalizer decides the hit rate and the rule engine

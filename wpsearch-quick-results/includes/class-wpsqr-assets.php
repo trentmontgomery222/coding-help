@@ -54,7 +54,8 @@ class WPSQR_Assets {
 					'isAdmin'     => $is_editor,
 					'query'       => WPSQR_Plugin::current_term(),
 					'queryParams' => WPSQR_Plugin::query_params(),
-					'homePath'    => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
+					'homePath'     => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
+					'descriptions' => WPSQR_Hidden::descriptions(),
 					'rules'       => array_merge(
 						WPSQR_Rules::for_browser(),
 						array(
