@@ -1,6 +1,6 @@
 <?php
 /**
- * WPCode snippet #1 — "Search: hidden-content bridge"
+ * WPCode snippet #1 â "Search: hidden-content bridge"
  *
  * Code Type:     PHP Snippet
  * Location:      Run Everywhere  (or "Site Wide Header" is fine too)
@@ -16,7 +16,7 @@
  * Nothing here changes the query. The actual hiding/restyling happens in
  * snippet #2 (JS) and #3 (CSS).
  *
- * NOTE: do NOT paste the opening <?php tag into WPCode — it adds its own.
+ * NOTE: do NOT paste the opening <?php tag into WPCode â it adds its own.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -149,7 +149,14 @@ function acps_search_print_bridge() {
 		'isAdmin'     => current_user_can( 'edit_posts' ),
 		'query'       => get_search_query(),
 		'homePath'    => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
+		'rules'       => array(),
 	);
+
+	/**
+	 * Filter the whole payload before it is printed. Snippet #4 uses this to
+	 * inject the rules managed from Settings → Search Filters.
+	 */
+	$data = apply_filters( 'acps_search_bridge_data', $data );
 
 	printf(
 		'<script id="acps-search-bridge">window.ACPS_SEARCH=%s;</script>' . "\n",

@@ -8,6 +8,7 @@ on the search results page — without touching the search query or the index.
 | `01-search-bridge.php` | PHP Snippet | Run Everywhere |
 | `02-search-filter.js` | JavaScript Snippet | Site Wide Footer |
 | `03-search-styles.css` | CSS Snippet | Site Wide Header |
+| `04-search-filter-admin.php` | PHP Snippet | Run Everywhere (priority 11) |
 
 ## How it fits together
 
@@ -27,6 +28,30 @@ Matching happens three ways, most reliable first:
 That third path is the fallback that makes this work even when the search
 plugin renders its own markup and ignores `post_class()` entirely.
 
+## Managing rules from wp-admin
+
+Snippet #4 is what keeps you out of the code. It adds:
+
+- **Settings → Search Filters** — manual rules: specific post IDs or pasted
+  URLs, URL fragments, title keywords, `find => replace` title rewrites, plus
+  the display options (remove vs. grey-out, editor preview, no-results text).
+  The page also lists everything currently hidden, and where each item came
+  from, with edit links.
+- **A "Hide from search results" checkbox** in the sidebar of every post and
+  page edit screen.
+- **A "Hide from search" row action** and **bulk actions** in the posts list,
+  so you can flag a batch in one go.
+- **A "Search" column** showing at a glance what's hidden.
+
+Manual IDs are merged with whatever your hide-plugin flags, and the keyword
+and display rules ride along in the same `window.ACPS_SEARCH` payload. The JS
+merges them over its own defaults, so adding a rule never means editing
+snippet #2.
+
+The settings page writes the same meta key as your hide-plugin
+(`ACPS_HIDE_META_KEY`), so the two stay in sync rather than fighting — flag
+something in either place and both agree.
+
 ## Setup
 
 1. **Point snippet #1 at your plugin's meta key.** At the top of the file,
@@ -37,10 +62,13 @@ plugin renders its own markup and ignores `post_class()` entirely.
 2. **Point snippet #2 at your theme's markup.** Load a search results page,
    right-click a result, Inspect. Put the real container and item selectors
    at the front of `containerSelectors` and `itemSelectors`.
-3. **Turn on `debug: true`** in snippet #2 and watch the browser console —
+3. **Install snippet #4** at priority 11 so it loads after #1, then add your
+   rules under Settings → Search Filters.
+4. **Turn on `debug: true`** in snippet #2 and watch the browser console —
    it logs which container and items it matched and why each result was
    filtered. Set `hideMode: 'dim'` while tuning so you can see what's being
-   caught, then switch back to `'remove'`.
+   caught, then switch back to `'remove'`. (Both are toggles on the settings
+   page too.)
 
 ## Worth knowing
 

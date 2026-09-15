@@ -15,6 +15,11 @@
 
 	/* =================================================================
 	 * CONFIGURE ME
+	 *
+	 * Selectors have to live here — they depend on your theme's markup.
+	 * Everything else is a FALLBACK: whatever you set under
+	 * Settings → Search Filters (snippet #4) is merged in on top, so you
+	 * shouldn't need to touch this file again to add or change a rule.
 	 * ================================================================= */
 	var CONFIG = {
 		// Wrapper around the whole result list. First match wins.
@@ -54,7 +59,8 @@
 		// Set false to make admins see exactly what visitors see.
 		adminSeesHidden: true,
 
-		// Extra front-end-only rules. Case-insensitive substring match.
+		// Extra rules, merged with the ones from the settings page.
+		// Case-insensitive substring match.
 		blockTitleContains: [
 			// 'draft',
 			// 'internal'
@@ -87,6 +93,40 @@
 		query: '',
 		homePath: ''
 	};
+
+	/* -----------------------------------------------------------------
+	 * Merge the admin-managed rules over the defaults above.
+	 * Lists are combined and de-duplicated; single values overwrite.
+	 * ----------------------------------------------------------------- */
+	( function mergeServerRules() {
+		var rules = DATA.rules || {};
+
+		Object.keys( rules ).forEach( function ( key ) {
+			var value = rules[ key ];
+
+			if ( value === null || typeof value === 'undefined' ) {
+				return;
+			}
+
+			if ( Object.prototype.toString.call( value ) === '[object Array]' ) {
+				var combined = ( CONFIG[ key ] || [] ).concat( value );
+				var seen = {};
+				CONFIG[ key ] = combined.filter( function ( entry ) {
+					var fingerprint = ( typeof entry === 'object' ) ? JSON.stringify( entry ) : String( entry );
+					if ( seen[ fingerprint ] ) {
+						return false;
+					}
+					seen[ fingerprint ] = true;
+					return true;
+				} );
+				return;
+			}
+
+			if ( value !== '' ) {
+				CONFIG[ key ] = value;
+			}
+		} );
+	} )();
 
 	var hiddenIds = {};
 	( DATA.hiddenIds || [] ).forEach( function ( id ) {
