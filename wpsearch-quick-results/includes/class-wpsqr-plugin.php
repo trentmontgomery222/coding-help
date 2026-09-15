@@ -15,6 +15,7 @@ class WPSQR_Plugin {
 		WPSQR_Schema::maybe_upgrade();
 
 		( new WPSQR_Hidden() )->hooks();
+		( new WPSQR_Observer() )->hooks();
 		( new WPSQR_Warmer() )->hooks();
 		( new WPSQR_Assets() )->hooks();
 
@@ -55,6 +56,10 @@ class WPSQR_Plugin {
 			return '';
 		}
 
+		// Tell the observer not to log this search as merely watched — we are
+		// about to record it properly, with a real result count and timing.
+		WPSQR_Observer::$handled = true;
+
 		$results = WPSQR_Engine::search(
 			$term,
 			array(
@@ -91,6 +96,7 @@ class WPSQR_Plugin {
 			'per_page'        => 20,
 			'warm_enabled'    => 1,
 			'warm_count'      => 25,
+			'observe'         => 1,
 			'show_timing'     => 1,
 
 			// SearchWP integration

@@ -40,12 +40,14 @@ define( 'WPSQR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WPSQR_URL', plugin_dir_url( __FILE__ ) );
 
 // Schema version, bumped when the tables change.
-define( 'WPSQR_DB_VERSION', 1 );
+define( 'WPSQR_DB_VERSION', 2 );
 
 require_once WPSQR_PATH . 'includes/class-wpsqr-normalizer.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-schema.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-cache.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-stats.php';
+require_once WPSQR_PATH . 'includes/class-wpsqr-observer.php';
+require_once WPSQR_PATH . 'includes/class-wpsqr-status.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-rules.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-hidden.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-engine.php';

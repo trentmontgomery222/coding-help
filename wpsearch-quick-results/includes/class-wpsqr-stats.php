@@ -22,8 +22,11 @@ class WPSQR_Stats {
 	 * @param int    $results    Number of results found.
 	 * @param int    $ms         Time spent, 0 when served from cache.
 	 * @param bool   $was_cached Whether this request hit the cache.
+	 * @param bool   $results_known False when the search was merely observed —
+	 *                              the term is real but the count is not, and
+	 *                              must not be reported as "found nothing".
 	 */
-	public static function record( $normalized, $display, $results, $ms, $was_cached ) {
+	public static function record( $normalized, $display, $results, $ms, $was_cached, $results_known = true ) {
 		if ( '' === $normalized ) {
 			return;
 		}
@@ -34,11 +37,14 @@ class WPSQR_Stats {
 
 		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"INSERT INTO {$table} (term, display, searches, results, total_ms, uncached_hits, cached_hits, last_searched)
-				 VALUES (%s, %s, 1, %d, %d, %d, %d, %s)
+				"INSERT INTO {$table} (term, display, searches, results, results_known, observed_hits, total_ms, uncached_hits, cached_hits, last_searched)
+				 VALUES (%s, %s, 1, %d, %d, %d, %d, %d, %d, %s)
 				 ON DUPLICATE KEY UPDATE
 					searches = searches + 1,
-					results = VALUES(results),
+					observed_hits = observed_hits + VALUES(observed_hits),
+					-- Never let an observation overwrite a real count.
+					results = IF(VALUES(results_known) = 1, VALUES(results), results),
+					results_known = GREATEST(results_known, VALUES(results_known)),
 					total_ms = total_ms + VALUES(total_ms),
 					uncached_hits = uncached_hits + VALUES(uncached_hits),
 					cached_hits = cached_hits + VALUES(cached_hits),
@@ -47,6 +53,8 @@ class WPSQR_Stats {
 				substr( $normalized, 0, 191 ),
 				substr( (string) $display, 0, 191 ),
 				(int) $results,
+				$results_known ? 1 : 0,
+				$results_known ? 0 : 1,
 				$was_cached ? 0 : (int) $ms,
 				$was_cached ? 0 : 1,
 				$was_cached ? 1 : 0,
@@ -97,7 +105,9 @@ class WPSQR_Stats {
 
 		return (array) $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE results = 0 ORDER BY searches DESC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				// results_known guards against listing a term as "found nothing"
+			// when all we ever did was watch someone type it.
+			"SELECT * FROM {$table} WHERE results = 0 AND results_known = 1 ORDER BY searches DESC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				max( 1, (int) $limit )
 			),
 			ARRAY_A
@@ -116,6 +126,7 @@ class WPSQR_Stats {
 				COALESCE(SUM(searches),0) AS searches,
 				COALESCE(SUM(cached_hits),0) AS cached,
 				COALESCE(SUM(uncached_hits),0) AS uncached,
+				COALESCE(SUM(observed_hits),0) AS observed,
 				COALESCE(SUM(total_ms),0) AS total_ms
 			 FROM {$table}", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			ARRAY_A
@@ -126,12 +137,18 @@ class WPSQR_Stats {
 		$uncached = isset( $row['uncached'] ) ? (int) $row['uncached'] : 0;
 		$total_ms = isset( $row['total_ms'] ) ? (int) $row['total_ms'] : 0;
 
+		$observed = isset( $row['observed'] ) ? (int) $row['observed'] : 0;
+
 		return array(
+			'observed'     => $observed,
+			'rendered'     => max( 0, $searches - $observed ),
 			'unique_terms' => isset( $row['unique_terms'] ) ? (int) $row['unique_terms'] : 0,
 			'searches'     => $searches,
 			'cached'       => $cached,
 			'uncached'     => $uncached,
-			'hit_rate'     => $searches > 0 ? round( ( $cached / $searches ) * 100 ) : 0,
+			// Hit rate is only meaningful over searches this plugin actually
+			// served; observed ones never consulted the cache.
+			'hit_rate'     => ( $cached + $uncached ) > 0 ? round( ( $cached / ( $cached + $uncached ) ) * 100 ) : 0,
 			'avg_uncached' => $uncached > 0 ? (int) round( $total_ms / $uncached ) : 0,
 		);
 	}

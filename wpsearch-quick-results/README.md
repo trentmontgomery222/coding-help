@@ -34,12 +34,41 @@ share of searches, the dashboard says so in as many words.
 | `WPSQR_Warmer` | Cron job re-running the top terms after each flush |
 | `WPSQR_SearchWP` | The `/?s=` redirect, direct media links, attachment sinking |
 
+## "It says no searches yet"
+
+Searches are recorded from the moment the plugin is active — you do **not**
+need the shortcode in place for the dashboard to fill up. That was the
+original design and it was backwards: the numbers are how you decide whether
+to add the shortcode, so they have to come first.
+
+If the table is still empty, the **Status** panel at the top of the dashboard
+says why. It checks, in order: whether the tables were created, whether
+anything is being recorded, whether the shortcode is in use, what path and
+parameters count as a search, whether SearchWP was detected, whether cron is
+running, whether a persistent object cache exists, and whether the hide-plugin
+meta key matches anything.
+
+The usual cause is the **results page path or query parameter** not matching
+where you actually land. Both are on the Settings screen and both are shown in
+the Status panel.
+
+Two notes on what gets recorded:
+
+- **Crawlers are skipped** by user-agent, so the popularity numbers reflect
+  people. It's a cheap check and not airtight.
+- **A watched search has no result count.** The observer sees the term, not
+  what SearchWP found, so those rows show "—" rather than 0 — a zero there
+  would wrongly appear in "searches that found nothing".
+
 ## Setup
 
 1. Activate the plugin (creates two tables).
-2. Replace the SearchWP results module with `[wpsqr_results]`.
-3. **Set your hide-plugin's meta key** under Quick Results → Settings. Until
-   this matches, the hidden-content filtering can't work.
+2. Leave it recording for a few days. Check the dashboard: do the top terms
+   repeat? If they do, caching will help; the dashboard says so directly.
+3. Only then replace the SearchWP results module with `[wpsqr_results]`.
+4. **Set your hide-plugin's meta key** under Quick Results → Settings. Until
+   this matches, the hidden-content filtering can't work — the Status panel
+   will tell you if it matches nothing.
 
 ## Three things worth knowing
 

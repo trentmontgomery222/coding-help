@@ -50,6 +50,34 @@ class WPSQR_Admin {
 		<div class="wrap">
 			<h1><?php esc_html_e( 'Search Quick Results', 'wpsqr' ); ?></h1>
 
+			<h2><?php esc_html_e( 'Status', 'wpsqr' ); ?></h2>
+			<table class="widefat striped" style="max-width:60em;margin-bottom:2rem">
+				<tbody>
+				<?php foreach ( WPSQR_Status::checks() as $check ) : ?>
+					<?php
+					$colors = array( 'ok' => '#00a32a', 'warn' => '#dba617', 'bad' => '#d63638', 'info' => '#787c82' );
+					$color  = isset( $colors[ $check['state'] ] ) ? $colors[ $check['state'] ] : '#787c82';
+					?>
+					<tr>
+						<th scope="row" style="width:14em"><?php echo esc_html( $check['label'] ); ?></th>
+						<td>
+							<span style="color:<?php echo esc_attr( $color ); ?>;font-weight:600">&#9679;</span>
+							<?php echo esc_html( $check['value'] ); ?>
+							<?php if ( ! empty( $check['note'] ) ) : ?>
+								<p class="description" style="margin:.35em 0 0"><?php echo esc_html( $check['note'] ); ?></p>
+							<?php endif; ?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+
+			<?php if ( $summary['observed'] > 0 && 0 === $summary['rendered'] ) : ?>
+				<div class="notice notice-info"><p>
+					<?php esc_html_e( 'These searches are being watched, not served — SearchWP is still rendering the results, so nothing is cached yet and the hit rate stays at zero. That is the right order: let the table below fill up, see whether the top terms repeat, then add the shortcode if they do.', 'wpsqr' ); ?>
+				</p></div>
+			<?php endif; ?>
+
 			<?php if ( $summary['searches'] < 50 ) : ?>
 				<div class="notice notice-info"><p>
 					<?php esc_html_e( 'Fewer than 50 searches recorded so far. The numbers below need a few days of real traffic before they mean much — especially the hit rate.', 'wpsqr' ); ?>
@@ -58,8 +86,18 @@ class WPSQR_Admin {
 
 			<div style="display:flex;gap:1rem;flex-wrap:wrap;margin:1.5rem 0">
 				<?php
-				$this->stat_card( __( 'Cache hit rate', 'wpsqr' ), $summary['hit_rate'] . '%', __( 'Share of searches served without touching the search engine', 'wpsqr' ) );
-				$this->stat_card( __( 'Avg uncached search', 'wpsqr' ), $summary['avg_uncached'] . 'ms', __( 'What a cache miss costs', 'wpsqr' ) );
+				$this->stat_card(
+					__( 'Cache hit rate', 'wpsqr' ),
+					$summary['rendered'] > 0 ? $summary['hit_rate'] . '%' : '—',
+					$summary['rendered'] > 0
+						? __( 'Share of searches served without touching the search engine', 'wpsqr' )
+						: __( 'Nothing served yet — the shortcode is not in place', 'wpsqr' )
+				);
+				$this->stat_card(
+					__( 'Avg uncached search', 'wpsqr' ),
+					$summary['avg_uncached'] > 0 ? $summary['avg_uncached'] . 'ms' : '—',
+					__( 'What a cache miss costs', 'wpsqr' )
+				);
 				$this->stat_card( __( 'Searches recorded', 'wpsqr' ), number_format_i18n( $summary['searches'] ), __( 'Across', 'wpsqr' ) . ' ' . number_format_i18n( $summary['unique_terms'] ) . ' ' . __( 'unique terms', 'wpsqr' ) );
 				$this->stat_card( __( 'Cached entries', 'wpsqr' ), number_format_i18n( $cache['entries'] ), __( 'Currently stored result sets', 'wpsqr' ) );
 				?>
@@ -134,7 +172,15 @@ class WPSQR_Admin {
 						<tr>
 							<td><strong><?php echo esc_html( $row['display'] ? $row['display'] : $row['term'] ); ?></strong></td>
 							<td><?php echo (int) $row['searches']; ?></td>
-							<td><?php echo 0 === (int) $row['results'] ? '<span style="color:#b32d2e">0</span>' : (int) $row['results']; ?></td>
+							<td>
+								<?php if ( empty( $row['results_known'] ) ) : ?>
+									<span style="color:#787c82" title="<?php esc_attr_e( 'Watched only — this plugin did not run the search', 'wpsqr' ); ?>">&mdash;</span>
+								<?php elseif ( 0 === (int) $row['results'] ) : ?>
+									<span style="color:#b32d2e">0</span>
+								<?php else : ?>
+									<?php echo (int) $row['results']; ?>
+								<?php endif; ?>
+							</td>
 							<td><?php echo (int) $row['cached_hits']; ?></td>
 							<td><?php echo esc_html( $row['last_searched'] ); ?></td>
 						</tr>
@@ -215,6 +261,14 @@ class WPSQR_Admin {
 							<p><label><?php esc_html_e( 'How many terms:', 'wpsqr' ); ?>
 								<input type="number" name="warm_count" min="1" max="200" value="<?php echo esc_attr( $s['warm_count'] ); ?>" class="small-text"></label></p>
 							<p class="description"><?php esc_html_e( 'Needs WP-Cron to be running. On a site with cron disabled this does nothing and the first visitor after each save pays full price.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Recording', 'wpsqr' ); ?></th>
+						<td>
+							<label><input type="checkbox" name="observe" value="1" <?php checked( $s['observe'], 1 ); ?>>
+								<?php esc_html_e( 'Record every search, even ones this plugin does not render', 'wpsqr' ); ?></label>
+							<p class="description"><?php esc_html_e( 'Leave this on. It is what lets the dashboard tell you whether caching is worth switching on, before you switch it on.', 'wpsqr' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -340,6 +394,7 @@ class WPSQR_Admin {
 		$new['form_id']     = (int) ( $in['form_id'] ?? 0 );
 
 		$new['warm_enabled']    = empty( $in['warm_enabled'] ) ? 0 : 1;
+		$new['observe']         = empty( $in['observe'] ) ? 0 : 1;
 		$new['show_timing']     = empty( $in['show_timing'] ) ? 0 : 1;
 		$new['searchwp_compat'] = empty( $in['searchwp_compat'] ) ? 0 : 1;
 		$new['admin_preview']   = empty( $in['admin_preview'] ) ? 0 : 1;
