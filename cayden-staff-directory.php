@@ -88,6 +88,7 @@ function CAYDENDIR_sd_expected_files() {
 		'modules/cayden-staff-directory/cayden-staff-directory.php',
 		'modules/cayden-staff-directory/includes/frontend.php',
 		'integrations/elementor-widget.php',
+		'integrations/search-provider.php',
 	);
 }
 
@@ -2427,6 +2428,25 @@ function CAYDENDIR_sd_photo_markup( $name, $photo ) {
 }
 
 add_shortcode( 'CAYDENDIR_staff_directory', 'CAYDENDIR_sd_render' );
+
+/* -------------------------------------------------------------------------
+ * Search integration: WPSearch Quick Results "people" provider.
+ *
+ * Loaded defensively — the file registers a few filters that only ever run
+ * when the search plugin is active, and it is guarded so a missing file (or an
+ * error inside it) can never break the directory or the site.
+ * ---------------------------------------------------------------------- */
+add_action( 'plugins_loaded', 'CAYDENDIR_sd_load_search_provider', 20 );
+function CAYDENDIR_sd_load_search_provider() {
+	try {
+		$file = CAYDENDIR_SD_DIR . 'integrations/search-provider.php';
+		if ( is_readable( $file ) ) {
+			require_once $file;
+		}
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'search provider load', $e );
+	}
+}
 
 /**
  * Safe public entry point for the shortcode and the Beaver Builder module.

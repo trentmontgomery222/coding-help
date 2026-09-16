@@ -88,6 +88,24 @@
 		if ( search ) {
 			search.addEventListener( 'input', debounce( apply, 150 ) );
 		}
+		// Deep link from search results: ?sd_name=<name> pre-fills the search box
+		// and scrolls the matched person into view, so clicking a person in the
+		// site search "lands on them". Wrapped so a missing/odd URL is harmless.
+		if ( search ) {
+			try {
+				var params = ( 'undefined' !== typeof URLSearchParams && window.location && window.location.search )
+					? new URLSearchParams( window.location.search ) : null;
+				var wanted = params ? ( params.get( 'sd_name' ) || '' ) : '';
+				if ( wanted ) {
+					search.value = wanted;
+					apply();
+					var firstShown = items.filter( function ( it ) { return ! it.hidden; } )[ 0 ];
+					if ( firstShown && firstShown.scrollIntoView ) {
+						firstShown.scrollIntoView( { block: 'center' } );
+					}
+				}
+			} catch ( e ) {}
+		}
 		chips.forEach( function ( chip ) {
 			chip.addEventListener( 'click', function () {
 				var pressed = chip.getAttribute( 'aria-pressed' ) === 'true';
