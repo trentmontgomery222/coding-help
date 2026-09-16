@@ -18,6 +18,35 @@ class WPSQR_Admin {
 		add_action( 'admin_post_wpsqr_flush', array( $this, 'handle_flush' ) );
 		add_action( 'admin_post_wpsqr_warm', array( $this, 'handle_warm' ) );
 		add_action( 'admin_post_wpsqr_save', array( $this, 'handle_save' ) );
+		add_action( 'admin_notices', array( $this, 'directory_notice' ) );
+	}
+
+	/**
+	 * Say so when the directory page has not been identified.
+	 *
+	 * Without it the feature does nothing and gives no sign of it, which
+	 * from the outside is indistinguishable from being broken.
+	 */
+	public function directory_notice() {
+		if ( ! current_user_can( self::CAP ) ) {
+			return;
+		}
+
+		$screen = get_current_screen();
+
+		if ( ! $screen || false === strpos( (string) $screen->id, 'wpsqr' ) ) {
+			return;
+		}
+
+		if ( WPSQR_Directory::is_configured() ) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong> %s</p></div>',
+			esc_html__( 'The staff directory page has not been identified.', 'wpsqr' ),
+			esc_html__( 'Until it is, it stays an ordinary search result: it keeps its own excerpt — which on this site lists employee names and interface labels — and it appears for hidden people\'s names. Set it under Settings → The staff directory page.', 'wpsqr' )
+		);
 	}
 
 	public function assets( $hook ) {

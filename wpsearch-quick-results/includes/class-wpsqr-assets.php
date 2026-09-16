@@ -48,6 +48,7 @@ class WPSQR_Assets {
 					// later user rule should not be able to un-hide a page
 					// that is only matching through hidden content.
 					'directoryRules' => WPSQR_Directory::browser_rules( WPSQR_Plugin::current_term() ),
+					'directory'      => WPSQR_Directory::debug( WPSQR_Plugin::current_term() ),
 					'rules'       => array_merge(
 						WPSQR_Rules::for_browser(),
 						array(

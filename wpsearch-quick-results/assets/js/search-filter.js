@@ -1107,6 +1107,47 @@
 
 		row( 'Showing', ( LAST.kept === undefined ? '—' : LAST.kept + ' of ' + LAST.total ) );
 
+		// The staff directory page — the question that brought most people
+		// to this panel.
+		var dir = DATA.directory;
+
+		if ( dir ) {
+			var sources = {
+				settings: 'named in settings',
+				plugin: 'named by the directory plugin',
+				inferred: 'inferred from the directory link',
+				none: ''
+			};
+
+			if ( ! dir.configured ) {
+				row( 'Directory page', 'NOT IDENTIFIED \u2014 nothing will happen to it', false );
+				row( '', 'Quick Results \u2192 Settings \u2192 The staff directory page. Put its path in ' +
+					'the Directory page box (e.g. /staff/directory/). Until then it is an ordinary ' +
+					'result, keeps its own excerpt, and appears for hidden people\u2019s names.' );
+			} else {
+				row( 'Directory page',
+					dir.paths.concat( dir.ids ).join( ', ' ) + ' (' + ( sources[ dir.source ] || dir.source ) + ')',
+					true );
+
+				row( 'Directory handling',
+					dir.hiding
+						? 'hidden for this search \u2014 nobody visible matched'
+						: 'shown, description replaced with: \u201c' + dir.desc + '\u201d',
+					true );
+
+				if ( 'smart' === dir.mode && ! dir.provider ) {
+					row( '', 'Set to show only on a visible match, but no directory plugin is connected, ' +
+						'so it is always shown.' );
+				}
+
+				var dirRules = ( DATA.directoryRules || [] ).length;
+				if ( ! dirRules ) {
+					row( '', 'No directory rules were generated \u2014 the description is empty and ' +
+						'nothing is being hidden, so there is nothing to do.' );
+				}
+			}
+		}
+
 		// Snippet #0's own report, printed in the footer.
 		var swp = window.ACPS_SWP_DEBUG;
 		if ( swp ) {
@@ -1148,7 +1189,8 @@
 				( i + 1 ) + '. ' + ( rule.when || 'title' ) + ' ' + ( rule.op || 'contains' ) +
 				' &ldquo;' + rule.value + '&rdquo; → ' + rule.then +
 				' <strong>(' + hits + ' matched)</strong>' +
-				( rule.source === 'settings' ? ' <em>from settings page</em>' : '' ) + note + '</li>';
+				( rule.source === 'settings' ? ' <em>from settings page</em>' : '' ) +
+				( rule.source === 'directory' ? ' <em>staff directory page</em>' : '' ) + note + '</li>';
 		} );
 
 		var panel = document.createElement( 'div' );

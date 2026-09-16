@@ -71,6 +71,14 @@ class WPSQR_Directory {
 			$paths[] = self::normalize_path( $path ? $path : $entry );
 		}
 
+		// Nothing configured and no plugin naming its page leaves this
+		// feature inert with no sign of it, which is indistinguishable from
+		// broken. Fall back to anything else that already points at the
+		// directory.
+		foreach ( self::inferred() as $path ) {
+			$paths[] = $path;
+		}
+
 		/**
 		 * Let the directory plugin name its own page.
 		 *
@@ -103,6 +111,67 @@ class WPSQR_Directory {
 		);
 
 		return $cached;
+	}
+
+	/**
+	 * Paths that can be worked out without being told.
+	 *
+	 * The "search the full staff directory" link under the people results
+	 * points at the directory page by definition — whether it came from the
+	 * setting or from the directory plugin's own filter. If that is known,
+	 * the directory page is known.
+	 *
+	 * @return string[]
+	 */
+	public static function inferred() {
+		$paths = array();
+
+		$more = WPSQR_People::more_url( '' );
+
+		if ( '' !== $more ) {
+			$path = wp_parse_url( $more, PHP_URL_PATH );
+
+			if ( $path ) {
+				$paths[] = self::normalize_path( $path );
+			}
+		}
+
+		return array_values( array_filter( array_unique( $paths ) ) );
+	}
+
+	/** Where the identification came from, for the admin and debug panels. */
+	public static function source() {
+		$settings = WPSQR_Plugin::settings();
+
+		if ( array_filter( (array) $settings['directory_pages'] ) ) {
+			return 'settings';
+		}
+
+		if ( apply_filters( 'wpsqr_directory_pages', array() ) ) {
+			return 'plugin';
+		}
+
+		if ( self::inferred() ) {
+			return 'inferred';
+		}
+
+		return 'none';
+	}
+
+	/** Everything the debug panel and Status screen need, in one call. */
+	public static function debug( $term ) {
+		$pages = self::pages();
+
+		return array(
+			'configured' => self::is_configured(),
+			'source'     => self::source(),
+			'paths'      => $pages['paths'],
+			'ids'        => $pages['ids'],
+			'mode'       => WPSQR_Plugin::settings()['directory_mode'],
+			'provider'   => WPSQR_People::has_provider(),
+			'hiding'     => self::is_configured() ? self::should_hide( $term ) : false,
+			'desc'       => self::description( $term ),
+		);
 	}
 
 	/** Lower-case, leading slash, trailing slash — matching the rule engine. */

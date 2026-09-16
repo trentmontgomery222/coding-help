@@ -192,6 +192,26 @@ check('matching by post id works as well as by path',
 check('no directory rules means no change',
   run({ data: { directoryRules: [] } }).ids.length, 7);
 
+console.log('\nthe real leaking excerpt');
+// Verbatim from a live search for "aust". Two hidden employees are named in
+// the directory page's indexed excerpt, in a public result.
+const LEAKING = [{ id: 43, type: 'page', path: '/staff/directory/', title: 'Staff Directory',
+  desc: 'AF Edited Hidden \u2014 Contractual Hourly Contractual Employee \u2014 Edit AJ Austin Jacobs Edited Hidden Contractual Hourly CONTRACTUAL HOURLY Contractual Employee \u2014 Edit Austin Jacobs DL' }];
+
+check('the replacement removes every leaked name',
+  run({ query: 'aust', results: LEAKING, data: DIR_DESC }).descs[0],
+  'Look up any ACPS employee by name, school or department.');
+check('no trace of the admin labels survives',
+  /Edited Hidden|Edit |CONTRACTUAL/.test(run({ query: 'aust', results: LEAKING, data: DIR_DESC }).descs[0]), false);
+check('no employee name survives',
+  run({ query: 'aust', results: LEAKING, data: DIR_DESC }).descs[0].includes('Austin Jacobs'), false);
+check('hiding the row removes it entirely, excerpt and all',
+  run({ query: 'aust', results: LEAKING, data: DIR_HIDE }).ids.length, 0);
+check('{query} expands in the directory description',
+  run({ query: 'aust', results: LEAKING, data: { directoryRules: [{ when: 'url', op: 'equals',
+    value: '/staff/directory/', then: 'setDesc', desc: 'Staff matching {query}' }] } }).descs[0],
+  'Staff matching aust');
+
 console.log('\nconditions and variables');
 // The real case: a directory page whose indexed excerpt leaks admin UI text.
 const DIRECTORY = [{ id: 43, type: 'page', path: '/staff/directory/', title: 'Staff Directory',

@@ -3,7 +3,7 @@
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys, no WordPress needed
 npm install jsdom
-node tests/browser-rules.test.js     # 90 cases — the browser rule engine
+node tests/browser-rules.test.js     # 95 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```

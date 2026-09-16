@@ -104,7 +104,15 @@ searching a hidden person's name returns the directory page, and its
 appearance confirms that person exists. That is most of what hiding was
 supposed to prevent.
 
-**Quick Results → Settings → The staff directory page** handles it:
+**The directory page has to be identified before any of this happens.** It's
+found from, in order: the path you put in **Settings → The staff directory
+page**, a `wpsqr_directory_pages` filter from the directory plugin, or the
+"search the full directory" link if one is configured. Identified by none of
+those, it stays an ordinary result — keeps its excerpt, appears for hidden
+names — and both the admin notice and `?acpsdebug=1` say so rather than
+leaving you to wonder.
+
+Once identified:
 
 - **Its description is always replaced** with a preset. The automatic one is a
   run of employee names and admin interface labels.
@@ -270,7 +278,7 @@ save pays full price. Everything else still works.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 90 cases — the browser rule engine
+node tests/browser-rules.test.js     # 95 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
