@@ -61,6 +61,16 @@ page as "Last update", and a revert as "Last rollback".
 A status page reachable **without a wp-admin login**, at a secret URL, for
 checking on or steering the site when wp-admin itself is the problem.
 
+It is served on early `init` at the lowest priority and exits immediately, so
+the request never reaches the theme, the `wp` / `template_redirect` /
+`send_headers` / `wp_footer` hooks, or normal page rendering — a page-view
+tracker hooked to any of those never sees it. The page also loads none of the
+theme's scripts, so JavaScript pixel trackers do not fire, and the one hook
+that runs even on exit, `shutdown`, is cleared for this request so a logger
+there is skipped too. (Filter `wpsqr_remote_stealth` to `false` to disable
+this.) The crash guard, registered with `register_shutdown_function` rather
+than the shutdown hook, is unaffected.
+
 Four gates, all of which must pass:
 
 1. **The key in the URL.** The full URL is the secret. Without the exact key

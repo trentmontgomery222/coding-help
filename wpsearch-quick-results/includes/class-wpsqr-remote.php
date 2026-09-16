@@ -42,9 +42,15 @@ class WPSQR_Remote {
 	const UPDATE_COOLDOWN = 120;   // seconds between update attempts
 
 	public function hooks() {
-		// parse_request runs before the theme, so this can answer and exit
-		// without WordPress rendering a page around it.
-		add_action( 'parse_request', array( $this, 'maybe_handle' ) );
+		// Handled on init at the lowest possible priority — the earliest point
+		// where the pluggable functions this needs (redirect, password) are
+		// defined. Serving and exiting here means the request never reaches
+		// `wp`, `template_redirect`, `send_headers`, `wp_footer` or the theme,
+		// so a page-view tracker hooked to any of those never sees it. The
+		// stealth step below covers the shutdown hook as well, and because the
+		// page renders none of the theme's scripts, JS-pixel trackers never
+		// fire either.
+		add_action( 'init', array( $this, 'maybe_handle' ), -PHP_INT_MAX );
 	}
 
 	/* ---- Configuration that lives only in the DB ----------------------- */
@@ -143,7 +149,7 @@ class WPSQR_Remote {
 
 	/* ---- The request --------------------------------------------------- */
 
-	public function maybe_handle( $wp ) {
+	public function maybe_handle( $unused = null ) {
 		$key = self::key();
 
 		// No key configured, or the URL does not carry it: this is not our
@@ -161,7 +167,8 @@ class WPSQR_Remote {
 
 		// From here the request has proven it knows the key. Everything below
 		// still has to pass, but the endpoint will now answer rather than 404.
-		nocache_headers();
+		// First, make it invisible to anything that logs page views.
+		$this->go_stealth();
 
 		$ip = WPSQR_NetGate::client_ip( (bool) WPSQR_Plugin::settings()['rc_trust_proxy'] );
 
@@ -188,6 +195,30 @@ class WPSQR_Remote {
 		}
 
 		$this->render_status();
+	}
+
+	/**
+	 * Make this request invisible to page-view logging.
+	 *
+	 * Other plugins were counting a visit to the status URL because the old
+	 * handler ran late, on parse_request. This one runs on early init and
+	 * exits before the hooks most trackers use, but shutdown fires even on
+	 * exit — so any logger hooked there is unhooked. The request is
+	 * terminating with its own output, so WordPress's own shutdown work does
+	 * not matter. The crash guard is registered with
+	 * register_shutdown_function, not the shutdown action, so it is untouched.
+	 *
+	 * Filter wpsqr_remote_stealth to false to turn this off.
+	 */
+	protected function go_stealth() {
+		nocache_headers();
+		header( 'X-Robots-Tag: noindex, nofollow', true );
+
+		if ( ! apply_filters( 'wpsqr_remote_stealth', true ) ) {
+			return;
+		}
+
+		remove_all_actions( 'shutdown' );
 	}
 
 	/**
@@ -474,6 +505,7 @@ class WPSQR_Remote {
 		$out['Background'] = array(
 			'WP-Cron'    => $cron_off ? $this->row( 'DISABLE_WP_CRON is set', 'warn' ) : $this->row( 'enabled', 'ok' ),
 			'Next warm'  => $this->row( $next_warm ? human_time_diff( time(), $next_warm ) : 'not scheduled', $next_warm ? 'ok' : 'warn' ),
+			'This request' => $this->row( apply_filters( 'wpsqr_remote_stealth', true ) ? 'hidden from page-view logging' : 'visible to trackers (stealth off)', 'ok' ),
 		);
 
 		// --- updates (cached manifest unless a check was just run) ---
