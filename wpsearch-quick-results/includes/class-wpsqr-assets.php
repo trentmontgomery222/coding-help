@@ -56,6 +56,10 @@ class WPSQR_Assets {
 					'queryParams' => WPSQR_Plugin::query_params(),
 					'homePath'     => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
 					'descriptions' => WPSQR_Hidden::descriptions(),
+					// Directory rules go first: they are decisive, and a
+					// later user rule should not be able to un-hide a page
+					// that is only matching through hidden content.
+					'directoryRules' => WPSQR_Directory::browser_rules( WPSQR_Plugin::current_term() ),
 					'rules'       => array_merge(
 						WPSQR_Rules::for_browser(),
 						array(

@@ -250,6 +250,18 @@ class WPSQR_Renderer {
 	public static function description( $post ) {
 		$settings = WPSQR_Plugin::settings();
 
+		// The directory page's own text is a run of employee names and admin
+		// interface labels. It is never a usable summary, so it never wins.
+		$post_id = is_object( $post ) ? $post->ID : (int) $post;
+
+		if ( WPSQR_Directory::is_directory( $post_id ) ) {
+			$preset = WPSQR_Directory::description( WPSQR_Plugin::current_term() );
+
+			if ( '' !== $preset ) {
+				return $preset;
+			}
+		}
+
 		$custom = self::custom_description( $post );
 		if ( '' !== $custom ) {
 			return $custom;

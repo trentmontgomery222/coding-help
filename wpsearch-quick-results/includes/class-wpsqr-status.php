@@ -144,6 +144,38 @@ class WPSQR_Status {
 			'note'  => $note,
 		);
 
+		// --- the directory page as a result ------------------------------
+		$mode = $settings['directory_mode'];
+
+		if ( ! WPSQR_Directory::is_configured() ) {
+			$dir_state = 'warn';
+			$dir_value = __( 'Not identified', 'wpsqr' );
+			$dir_note  = __( 'Until the directory page is named, it is treated as an ordinary result — so searching a hidden person\'s name will return it, which confirms that person exists.', 'wpsqr' );
+		} elseif ( 'smart' === $mode && ! WPSQR_People::has_provider() ) {
+			$dir_state = 'warn';
+			$dir_value = __( 'Always shown (no directory plugin)', 'wpsqr' );
+			$dir_note  = __( 'Set to show only on a visible match, but with no directory plugin connected there is no way to tell a real match from one reached through hidden content, so it is always shown.', 'wpsqr' );
+		} else {
+			$labels = array(
+				'smart'  => __( 'Shown only on a visible match', 'wpsqr' ),
+				'always' => __( 'Always shown', 'wpsqr' ),
+				'never'  => __( 'Never shown', 'wpsqr' ),
+			);
+
+			$dir_state = ( 'always' === $mode ) ? 'info' : 'ok';
+			$dir_value = isset( $labels[ $mode ] ) ? $labels[ $mode ] : $mode;
+			$dir_note  = ( 'always' === $mode )
+				? __( 'A hidden person\'s name will return the directory page.', 'wpsqr' )
+				: '';
+		}
+
+		$checks[] = array(
+			'label' => __( 'Directory page in results', 'wpsqr' ),
+			'value' => $dir_value,
+			'state' => $dir_state,
+			'note'  => $dir_note,
+		);
+
 		// --- hidden content -----------------------------------------------
 		$map      = WPSQR_Hidden::map();
 		$meta_key = $settings['hide_meta_key'];

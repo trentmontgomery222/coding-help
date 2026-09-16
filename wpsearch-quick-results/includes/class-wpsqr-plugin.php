@@ -160,6 +160,11 @@ class WPSQR_Plugin {
 			'people_more_url'   => '',
 			'people_show_email' => 0,
 			'people_show_phone' => 0,
+
+			// The staff directory page, as a result in its own right.
+			'directory_pages' => array(),
+			'directory_mode'  => 'smart',
+			'directory_desc'  => 'Look up any ACPS employee by name, school or department.',
 		);
 	}
 

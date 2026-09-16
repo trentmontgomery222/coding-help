@@ -204,6 +204,25 @@
 	function importAdminRules() {
 		var admin = DATA.rules || {};
 
+		// The staff directory page is decided before anything else.
+		//
+		// Prepended, not appended: 'hide' and 'keep' are terminal, so a user
+		// rule sitting above a directory rule would win. When the directory
+		// page is being hidden it is because the search only reached it
+		// through content the visitor may not see, and a 'keep' rule
+		// overriding that would be a leak rather than a preference.
+		//
+		// 'setDesc' is not terminal, so a user rule further down can still
+		// refine the description when the page is shown.
+		var directoryRules = ( DATA.directoryRules || [] ).map( function ( rule ) {
+			rule.source = 'directory';
+			return rule;
+		} );
+
+		if ( directoryRules.length ) {
+			RULES = directoryRules.concat( RULES );
+		}
+
 		// Rules built on the settings screen arrive in exactly the shape used
 		// by the arrays above, so they append rather than being translated.
 		( admin.result || [] ).forEach( function ( rule ) {

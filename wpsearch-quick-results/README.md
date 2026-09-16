@@ -94,6 +94,33 @@ To see it working before the real integration exists, activate
 `examples/example-people-provider.php` as its own plugin — six invented staff,
 one of them hidden, so visibility can be tested as well as matching.
 
+### The directory page itself
+
+Separate from people results, and the more important half.
+
+The directory page's indexed text contains everyone in it, hidden people
+included — hiding controls what the page renders, not what was indexed. So
+searching a hidden person's name returns the directory page, and its
+appearance confirms that person exists. That is most of what hiding was
+supposed to prevent.
+
+**Quick Results → Settings → The staff directory page** handles it:
+
+- **Its description is always replaced** with a preset. The automatic one is a
+  run of employee names and admin interface labels.
+- **It is shown only when the search matches someone visible** (the default).
+  If a name search only reaches the page through hidden content, the page is
+  dropped.
+
+That second rule depends entirely on the directory plugin returning visible
+people only — "nobody visible matched" is inferred from its answer. With no
+directory plugin connected, the page is always shown, because there is no way
+to tell a real match from a hidden one; the Status panel says so rather than
+implying protection that isn't there.
+
+Directory rules are applied before any of your own and can't be overridden by
+a `keep`. A `hide` there isn't a preference.
+
 Contact details are **off by default**. A directory page publishing an email
 is a decision about that page; repeating it across search results, for anyone
 who types a common surname, is a different one.
@@ -237,7 +264,7 @@ save pays full price. Everything else still works.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 76 cases — the browser rule engine
+node tests/browser-rules.test.js     # 85 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 node tests/admin-builder.test.js     # 34 cases — the settings rule builder
 ```

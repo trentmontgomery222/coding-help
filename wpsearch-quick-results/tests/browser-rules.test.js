@@ -163,6 +163,35 @@ check('updateCount false leaves the notice alone',
 check('legacy flat lists still work',
   run({ data: { rules: { blockUrlContains: ['/staff/directory/'] } } }).ids.includes('43'), false);
 
+console.log('\nthe staff directory page');
+// The leak this prevents: the directory page's indexed text contains every
+// name, hidden ones included. Searching a hidden name returns the page, and
+// the page turning up confirms that person exists.
+const DIR_HIDE = { directoryRules: [{ when: 'url', op: 'equals', value: '/staff/directory/', then: 'hide' }] };
+const DIR_DESC = { directoryRules: [{ when: 'url', op: 'equals', value: '/staff/directory/', then: 'setDesc',
+  desc: 'Look up any ACPS employee by name, school or department.' }] };
+
+check('the directory page is removed when nobody visible matched',
+  run({ data: DIR_HIDE }).ids.includes('43'), false);
+check('every other result is untouched',
+  run({ data: DIR_HIDE }).ids.length, 6);
+check('its description is replaced when it does show',
+  run({ data: DIR_DESC }).descs[1], 'Look up any ACPS employee by name, school or department.');
+check('the leaked admin text is gone',
+  run({ data: DIR_DESC }).descs[1].includes('Edited Hidden'), false);
+check('other descriptions are left alone',
+  run({ data: DIR_DESC }).descs[0].trim(), 'Staff Hub (opens in new tab)');
+check('a later user rule cannot un-hide it',
+  run({ data: DIR_HIDE, rules: [{ when: 'url', op: 'contains', value: '/staff/', then: 'keep' }] }).ids.includes('43'),
+  false);
+check('a user setDesc can still refine the description when it is shown',
+  run({ data: DIR_DESC, rules: [{ when: 'url', op: 'equals', value: '/staff/directory/', then: 'setDesc', desc: 'Mine.' }] }).descs[1],
+  'Mine.');
+check('matching by post id works as well as by path',
+  run({ data: { directoryRules: [{ when: 'id', op: 'equals', value: '43', then: 'hide' }] } }).ids.includes('43'), false);
+check('no directory rules means no change',
+  run({ data: { directoryRules: [] } }).ids.length, 7);
+
 console.log('\nconditions and variables');
 // The real case: a directory page whose indexed excerpt leaks admin UI text.
 const DIRECTORY = [{ id: 43, type: 'page', path: '/staff/directory/', title: 'Staff Directory',

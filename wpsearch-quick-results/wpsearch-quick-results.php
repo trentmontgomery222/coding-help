@@ -51,6 +51,7 @@ require_once WPSQR_PATH . 'includes/class-wpsqr-status.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-rules.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-postlist.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-people.php';
+require_once WPSQR_PATH . 'includes/class-wpsqr-directory.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-hidden.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-engine.php';
 require_once WPSQR_PATH . 'includes/class-wpsqr-renderer.php';

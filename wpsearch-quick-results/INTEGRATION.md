@@ -183,7 +183,40 @@ add_filter( 'wpsqr_people_more_url', function ( $url, $term ) {
 Return the configured `$url` unchanged to leave the setting in charge, or `''`
 for no link at all.
 
-### 7. Identify yourself
+### 7. Name your directory page
+
+Optional but strongly worth doing, and it closes a leak.
+
+The directory page is a single page whose indexed text contains everyone in
+it, **hidden people included** — hiding controls what the page renders, not
+what got indexed. So searching a hidden person's name returns the directory
+page. The result does not name them, but its appearance confirms they exist,
+which is most of what hiding was for.
+
+The search plugin handles this: when a name search matches nobody visible, it
+drops the directory page entirely, and it always replaces that page's
+description with a preset. It just has to know which page is the directory.
+There is a setting for it, but you can find your own page:
+
+```php
+add_filter( 'wpsqr_directory_pages', function ( $pages ) {
+	$page_id = acps_directory_find_page(); // the page carrying your shortcode
+
+	if ( $page_id ) {
+		$pages[] = (string) $page_id;      // post ID, path or full URL
+	}
+
+	return $pages;
+} );
+```
+
+Note the interaction with rule 1: this only works because your
+`wpsqr_people_search` returns visible people only. "Nobody visible matched" is
+inferred from your answer, so if hidden people leaked into it, the directory
+page would be shown for their names — the leak this closes would reopen
+through the other door.
+
+### 8. Identify yourself
 
 So the admin screen can confirm the integration is live:
 
@@ -203,7 +236,7 @@ Without this, **Quick Results → Dashboard** shows "No directory plugin
 connected" even if your filter works — it has no other way to tell the
 difference between "not installed" and "installed but matched nobody".
 
-### 8. Degrade quietly
+### 9. Degrade quietly
 
 If the search plugin isn't active, your filter simply never runs — nothing to
 guard. But do not make your directory plugin *depend* on it: no fatal errors,
@@ -308,7 +341,10 @@ belongs to whoever runs the site.
 6. Search a job title: `warehouse driver` returns **no** people.
 7. Hide someone in the directory, then search their name — nothing. Fire
    `wpsqr_people_changed` on hide, or you'll be looking at a ten-minute cache.
-8. Log out entirely and repeat step 7. This is the test that matters.
+8. Log out entirely and repeat step 7. **This is the test that matters** — and
+   check the directory page itself does not appear either. If it does, either
+   the page is not named (rule 7) or a hidden person is reaching
+   `wpsqr_people_search`.
 9. Search two characters: no people, no database query.
 10. Deactivate the search plugin: the directory still works normally.
 
@@ -352,4 +388,6 @@ the original text still works.
   into a single person. Fixed on the search side, and the example now shows a
   string. **Caught by the directory implementer before it shipped.**
 - `wpsqr_people_more_url` added, so a directory can supply its own page link.
+- `wpsqr_directory_pages` added, so a directory can name its own page — see
+  rule 7 for the leak this closes.
 - The `fields` vocabulary for a future widening is written down above.

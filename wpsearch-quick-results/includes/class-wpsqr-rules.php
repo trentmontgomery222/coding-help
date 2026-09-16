@@ -70,8 +70,19 @@ class WPSQR_Rules {
 		$rules = self::server_rules( $settings );
 		$kept  = array();
 
+		$term        = self::current_query();
+		$hide_dir    = WPSQR_Directory::is_configured() && WPSQR_Directory::should_hide( $term );
+
 		foreach ( $post_ids as $post_id ) {
 			$post_id = (int) $post_id;
+
+			// The directory page is dropped for everyone, editors included.
+			// An editor seeing it is harmless, but leaving it in would let a
+			// cached editor result set be served to a visitor if the viewer
+			// bucketing ever slipped, and this costs nothing.
+			if ( $hide_dir && WPSQR_Directory::is_directory( $post_id ) ) {
+				continue;
+			}
 
 			if ( $show_hidden ) {
 				$kept[] = $post_id;

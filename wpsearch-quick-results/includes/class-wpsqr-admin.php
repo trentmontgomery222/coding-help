@@ -371,6 +371,68 @@ class WPSQR_Admin {
 					</tr>
 				</table>
 
+				<h2><?php esc_html_e( 'The staff directory page', 'wpsqr' ); ?></h2>
+				<p class="wpsqr-hint">
+					<?php esc_html_e( 'The directory page is one page whose indexed text contains everybody in it, hidden people included — hiding controls what the page shows, not what was indexed. So searching a hidden person\'s name returns the directory page, and the page turning up confirms that person exists. These settings handle that.', 'wpsqr' ); ?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="wpsqr-dir-pages"><?php esc_html_e( 'Directory page', 'wpsqr' ); ?></label></th>
+						<td>
+							<textarea id="wpsqr-dir-pages" name="directory_pages" rows="3" class="large-text code"
+								placeholder="/staff/directory/"><?php echo esc_textarea( implode( "\n", (array) $s['directory_pages'] ) ); ?></textarea>
+							<p class="description">
+								<?php esc_html_e( 'One path, full URL or post ID per line. A connected directory plugin can name its own page, in which case this can stay empty.', 'wpsqr' ); ?>
+								<?php if ( WPSQR_Directory::is_configured() ) : ?>
+									<br><strong><?php
+									$pages = WPSQR_Directory::pages();
+									printf(
+										/* translators: %s: list of paths and IDs */
+										esc_html__( 'Currently matching: %s', 'wpsqr' ),
+										esc_html( implode( ', ', array_merge( $pages['paths'], $pages['ids'] ) ) )
+									);
+									?></strong>
+								<?php endif; ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'When it appears', 'wpsqr' ); ?></th>
+						<td>
+							<label>
+								<input type="radio" name="directory_mode" value="smart" <?php checked( $s['directory_mode'], 'smart' ); ?>>
+								<?php esc_html_e( 'Only when the search matches someone visible', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 .8em 1.8em">
+								<?php esc_html_e( 'Recommended. If a name search only reaches the page through hidden content, the page is dropped — so a hidden person cannot be confirmed to exist by searching for them. Needs a connected directory plugin; without one the page always shows, since there is no way to tell a real match from a hidden one.', 'wpsqr' ); ?>
+							</p>
+
+							<label>
+								<input type="radio" name="directory_mode" value="always" <?php checked( $s['directory_mode'], 'always' ); ?>>
+								<?php esc_html_e( 'Always', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 .8em 1.8em">
+								<?php esc_html_e( 'The description is still replaced, but a hidden person\'s name will return the page.', 'wpsqr' ); ?>
+							</p>
+
+							<label>
+								<input type="radio" name="directory_mode" value="never" <?php checked( $s['directory_mode'], 'never' ); ?>>
+								<?php esc_html_e( 'Never', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 0 1.8em">
+								<?php esc_html_e( 'People results and the link beneath them are the only way to the directory from search.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-dir-desc"><?php esc_html_e( 'Its description', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="text" id="wpsqr-dir-desc" name="directory_desc" value="<?php echo esc_attr( $s['directory_desc'] ); ?>" class="large-text">
+							<p class="description"><?php esc_html_e( 'Always used instead of the page\'s own text, which is a run of employee names and interface labels. {query} is replaced with what was searched for.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+				</table>
+
 				<h2><?php esc_html_e( 'Hidden content', 'wpsqr' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
@@ -740,6 +802,11 @@ class WPSQR_Admin {
 		$new['hide_meta_key']   = sanitize_text_field( $in['hide_meta_key'] ?? '' );
 		$new['hide_meta_value'] = sanitize_text_field( $in['hide_meta_value'] ?? '' );
 		$new['empty_message']   = sanitize_text_field( $in['empty_message'] ?? '' );
+
+		$mode                    = $in['directory_mode'] ?? 'smart';
+		$new['directory_mode']   = in_array( $mode, array( 'smart', 'always', 'never' ), true ) ? $mode : 'smart';
+		$new['directory_desc']   = sanitize_text_field( $in['directory_desc'] ?? '' );
+		$new['directory_pages']  = self::lines( $in['directory_pages'] ?? '' );
 
 		$new['people_enabled']    = empty( $in['people_enabled'] ) ? 0 : 1;
 		$new['people_show_email'] = empty( $in['people_show_email'] ) ? 0 : 1;
