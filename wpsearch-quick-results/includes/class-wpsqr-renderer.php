@@ -115,10 +115,12 @@ class WPSQR_Renderer {
 
 		echo '</ul>';
 
-		if ( ! empty( $settings['people_more_url'] ) ) {
+		$more = WPSQR_People::more_url( $term );
+
+		if ( '' !== $more ) {
 			printf(
 				'<p class="wpsqr-people__more"><a href="%s">%s</a></p>',
-				esc_url( add_query_arg( 'q', rawurlencode( $term ), $settings['people_more_url'] ) ),
+				esc_url( $more ),
 				esc_html__( 'Search the full staff directory', 'wpsqr' )
 			);
 		}
@@ -129,7 +131,10 @@ class WPSQR_Renderer {
 	}
 
 	protected static function render_person( $person ) {
-		echo '<li class="wpsqr-person">';
+		printf(
+			'<li class="wpsqr-person"%s>',
+			'' === $person['id'] ? '' : ' data-person-id="' . esc_attr( $person['id'] ) . '"'
+		);
 
 		if ( $person['photo'] ) {
 			printf(

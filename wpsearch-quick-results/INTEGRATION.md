@@ -61,7 +61,7 @@ function acps_directory_search_people( $people, $args ) {
 
 ```php
 $people[] = array(
-	'id'         => 482,                                   // required, your record ID
+	'id'         => 'WP-1-SD-1-E',                         // your record ID, as a string
 	'name'       => 'Aaron Kerr',                          // required
 	'url'        => 'https://…/staff/directory/aaron-kerr/', // strongly preferred
 	'job_title'  => 'Warehouse Driver',                    // optional
@@ -74,6 +74,11 @@ $people[] = array(
 ```
 
 - `name` is the only truly required field. A row without one is dropped.
+- **`id` is an opaque string.** Whatever identifies the record in your
+  storage — a post ID, a merge key, `WP-1-SD-1-E`. It is never parsed, cast or
+  assumed numeric; it is used to recognise the same person appearing twice, so
+  it only needs to be stable and unique within your directory. Sending none is
+  fine; de-duplication falls back to the URL, then the name.
 - `url` should be the person's own profile page if one exists, otherwise a
   deep link into the directory that lands on them. Without it the name renders
   as plain text, which is a much weaker result.
@@ -158,7 +163,27 @@ do_action( 'wpsqr_people_changed' );
 Fire it whenever a person is added, edited, deleted, hidden or unhidden. It is
 cheap; fire it more often rather than less.
 
-### 6. Identify yourself
+### 6. Point at your own directory page, if you have one
+
+Optional. The people block can show a "Search the full staff directory" link
+under the results. There is a setting for the URL, but you almost certainly
+know your own page better than the setting does — you can find the one
+carrying your shortcode — so you get first refusal:
+
+```php
+add_filter( 'wpsqr_people_more_url', function ( $url, $term ) {
+	$page = acps_directory_find_page(); // however you locate it
+
+	return $page
+		? add_query_arg( 'sd_name', rawurlencode( $term ), $page )
+		: $url;
+}, 10, 2 );
+```
+
+Return the configured `$url` unchanged to leave the setting in charge, or `''`
+for no link at all.
+
+### 7. Identify yourself
 
 So the admin screen can confirm the integration is live:
 
@@ -178,7 +203,7 @@ Without this, **Quick Results → Dashboard** shows "No directory plugin
 connected" even if your filter works — it has no other way to tell the
 difference between "not installed" and "installed but matched nobody".
 
-### 7. Degrade quietly
+### 8. Degrade quietly
 
 If the search plugin isn't active, your filter simply never runs — nothing to
 guard. But do not make your directory plugin *depend* on it: no fatal errors,
@@ -299,5 +324,32 @@ aliases, fuzzy or phonetic matching, school filters, pagination. The `fields`
 argument is the extension point for all of it — the contract does not need to
 change to add them.
 
+When we do widen it, `fields` will carry these names, so both sides agree in
+advance rather than negotiating it later:
+
+| `fields` entry | Matches against |
+|---|---|
+| `name` | Person's name. The only one sent today. |
+| `job_title` | Job or public title |
+| `department` | Department or office |
+| `location` | School or building |
+| `tags` | Whatever free-form tags the directory keeps |
+
+Ignore any entry you have no data for; do not guess a near-match. `fields` is
+always a list, and `name` will always be in it.
+
 **Contract version 1.** If it has to change incompatibly, the version number
 goes up and both sides check it.
+
+### Changes since first issue
+
+Both clarifications, not contract changes — an implementation written against
+the original text still works.
+
+- `id` is documented as an opaque string. The original example showed
+  `'id' => 482`, which read as "integer"; the search plugin was casting it to
+  one, so a non-numeric identifier became `0` and every result de-duplicated
+  into a single person. Fixed on the search side, and the example now shows a
+  string. **Caught by the directory implementer before it shipped.**
+- `wpsqr_people_more_url` added, so a directory can supply its own page link.
+- The `fields` vocabulary for a future widening is written down above.

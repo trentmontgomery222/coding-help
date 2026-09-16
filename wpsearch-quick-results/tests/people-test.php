@@ -106,6 +106,34 @@ check( 'the row has exactly the documented keys',
 	array_keys( $row ),
 	array( 'id', 'name', 'url', 'job_title', 'department', 'location', 'photo', 'email', 'phone' ) );
 
+echo "\nids are opaque strings\n";
+// Reported by the directory implementer: their records are identified as
+// "WP-1-SD-1-E", not by post ID. Casting to int made every id 0, which
+// collapsed every result into one during de-duplication.
+check( 'a non-numeric id survives intact',
+	n( array( 'name' => 'Aaron Kerr', 'id' => 'WP-1-SD-1-E' ) )['id'], 'WP-1-SD-1-E' );
+check( 'a numeric id is kept as a string, not zeroed',
+	n( array( 'name' => 'Aaron Kerr', 'id' => 482 ) )['id'], '482' );
+check( 'a missing id is empty, not 0',
+	n( array( 'name' => 'Aaron Kerr' ) )['id'], '' );
+check( 'markup in an id is stripped',
+	n( array( 'name' => 'A', 'id' => '<b>X-1</b>' ) )['id'], 'X-1' );
+check( 'two people with different string ids both survive',
+	count( WPSQR_People::normalize_all( array(
+		array( 'name' => 'Aaron Kerr', 'id' => 'WP-1-SD-1-E' ),
+		array( 'name' => 'Mary Sibley', 'id' => 'WP-1-SD-2-E' ),
+	), 10 ) ), 2 );
+check( 'the same id twice is one person',
+	count( WPSQR_People::normalize_all( array(
+		array( 'name' => 'Aaron Kerr', 'id' => 'WP-1-SD-1-E', 'url' => '/a/' ),
+		array( 'name' => 'Aaron Kerr', 'id' => 'WP-1-SD-1-E', 'url' => '/b/' ),
+	), 10 ) ), 1 );
+check( 'id wins over url for de-duplication',
+	count( WPSQR_People::normalize_all( array(
+		array( 'name' => 'Aaron Kerr', 'id' => 'A', 'url' => '/same/' ),
+		array( 'name' => 'Aaron Kerr', 'id' => 'B', 'url' => '/same/' ),
+	), 10 ) ), 2 );
+
 echo "\nlists\n";
 $many = array();
 for ( $i = 0; $i < 20; $i++ ) {

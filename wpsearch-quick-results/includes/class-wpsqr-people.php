@@ -24,9 +24,6 @@ class WPSQR_People {
 
 	const CONTRACT_VERSION = 1;
 
-	/** Fields a person row may carry. Anything else is discarded. */
-	const ALLOWED = array( 'id', 'name', 'url', 'job_title', 'department', 'location', 'email', 'phone', 'photo' );
-
 	/**
 	 * Find people matching a search.
 	 *
@@ -109,7 +106,16 @@ class WPSQR_People {
 			}
 
 			// A person listed twice under two records is still one person.
-			$fingerprint = $person['url'] ? $person['url'] : strtolower( $person['name'] );
+			// The provider's own id is the most reliable thing to key on,
+			// since two records for the same person may differ in everything
+			// else; URL and name are fallbacks for providers that send none.
+			if ( '' !== $person['id'] ) {
+				$fingerprint = 'id:' . $person['id'];
+			} elseif ( '' !== $person['url'] ) {
+				$fingerprint = 'url:' . $person['url'];
+			} else {
+				$fingerprint = 'name:' . strtolower( $person['name'] );
+			}
 			if ( isset( $seen[ $fingerprint ] ) ) {
 				continue;
 			}
@@ -143,7 +149,12 @@ class WPSQR_People {
 		$settings = WPSQR_Plugin::settings();
 
 		$clean = array(
-			'id'         => isset( $person['id'] ) ? (int) $person['id'] : 0,
+			// An opaque string, never cast to int. A directory that stores
+			// people outside the posts table has no numeric post ID to give —
+			// identifiers like "WP-1-SD-1-E" are normal, and casting those to
+			// int turns every one of them into 0, which silently collapses
+			// every result into one during de-duplication.
+			'id'         => isset( $person['id'] ) ? sanitize_text_field( (string) $person['id'] ) : '',
 			'name'       => $name,
 			'url'        => isset( $person['url'] ) ? esc_url_raw( (string) $person['url'] ) : '',
 			'job_title'  => self::text( $person, 'job_title' ),
@@ -209,6 +220,28 @@ class WPSQR_People {
 
 	public static function has_provider() {
 		return (bool) self::providers() || has_filter( 'wpsqr_people_search' );
+	}
+
+	/**
+	 * Where "search the full directory" should point.
+	 *
+	 * A directory plugin usually knows its own page better than the setting
+	 * does — it can find the page carrying its shortcode — so it gets first
+	 * refusal, and the setting is the fallback.
+	 *
+	 * @param string $term The current search.
+	 * @return string URL, or '' to show no link.
+	 */
+	public static function more_url( $term ) {
+		$configured = (string) WPSQR_Plugin::settings()['people_more_url'];
+
+		/**
+		 * @param string $url  The configured URL, possibly empty.
+		 * @param string $term The current search term, unescaped.
+		 */
+		$url = apply_filters( 'wpsqr_people_more_url', $configured, $term );
+
+		return esc_url_raw( (string) $url );
 	}
 
 	/** Called by the directory plugin when its data changes. */
