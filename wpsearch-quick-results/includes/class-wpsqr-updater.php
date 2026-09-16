@@ -170,20 +170,42 @@ class WPSQR_Updater {
 	public function fix_source_dir( $source, $remote_source, $upgrader, $args = array() ) {
 		global $wp_filesystem;
 
-		if ( empty( $args['plugin'] ) || $args['plugin'] !== $this->basename() ) {
-			return $source;
+		// Fire when WordPress tells us this update is ours, OR — for a manifest
+		// zip that carries no such hint — when the unpacked folder is plainly
+		// this plugin (it contains our main file with our header). The second
+		// path is what catches a zip that unpacks to
+		// "wpsearch-quick-results-1.6.2/" and would otherwise install to a new
+		// folder and drop the active plugin.
+		$is_ours = ( ! empty( $args['plugin'] ) && $args['plugin'] === $this->basename() );
+
+		if ( ! $is_ours ) {
+			$candidate = untrailingslashit( $source ) . '/wpsearch-quick-results.php';
+
+			if ( ! is_readable( $candidate ) ) {
+				return $source; // not our zip
+			}
+
+			$header = file_get_contents( $candidate, false, null, 0, 2048 );
+
+			if ( false === strpos( (string) $header, 'WPSearch Quick Results' ) ) {
+				return $source; // a different plugin with a same-named file
+			}
 		}
 
 		$desired = trailingslashit( $remote_source ) . $this->slug();
 
 		if ( untrailingslashit( $source ) === untrailingslashit( $desired ) ) {
-			return $source;
+			return $source; // already the right folder name
 		}
 
 		if ( $wp_filesystem && $wp_filesystem->move( untrailingslashit( $source ), $desired ) ) {
 			return trailingslashit( $desired );
 		}
 
+		// The move failed. Rather than let WordPress install to the wrong
+		// folder and deactivate us, keep the source as-is and let the update
+		// error out visibly — a failed update the plugin survives is better
+		// than a "successful" one that turns it off.
 		return $source;
 	}
 

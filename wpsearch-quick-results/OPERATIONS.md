@@ -38,9 +38,18 @@ added to the URL** — unlinked, so nobody lands on it by accident. There:
   asking and serve a 404 otherwise.
 
 When the manifest reports a higher version, "Update now" appears on the
-Plugins screen as for any other plugin. A zip that unpacks to a differently
-named folder is renamed back in place, so the update overwrites rather than
-installing beside itself and deactivating.
+Plugins screen as for any other plugin.
+
+**Build the download zip so it unpacks to a folder named exactly
+`wpsearch-quick-results`.** This is the single most important thing for updates
+not deactivating the plugin. A zip that unpacks to `wpsearch-quick-results-1.6.3/`
+or a GitHub release's `repo-tag/` installs into a *new* folder, so WordPress
+loses the plugin it had marked active and deactivates it — the classic
+self-updater trap. As a safety net the plugin renames a wrongly-named folder
+back to its slug during install (recognising its own zip by the plugin header
+in the main file), but getting the zip right in the first place is what makes
+it reliable. If the rename ever fails, the update errors out visibly rather
+than "succeeding" into a deactivated state.
 
 **A bad update is undone, never left disabled.** Before an update installs,
 the current version's files are backed up. If the new version then crashes on
