@@ -206,6 +206,100 @@ class WPSQR_Updater {
 	}
 
 	/**
+	 * Check what version the source is offering, without installing.
+	 *
+	 * @return array { current, available, newer }
+	 */
+	public function check() {
+		$this->flush();
+		$remote = $this->remote( true );
+
+		return array(
+			'current'   => WPSQR_VERSION,
+			'available' => $remote ? (string) $remote['version'] : '',
+			'newer'     => $remote ? version_compare( $remote['version'], WPSQR_VERSION, '>' ) : false,
+		);
+	}
+
+	/**
+	 * Install the offered update now, from the front end.
+	 *
+	 * Reached from the remote status page. Runs the same upgrader the Plugins
+	 * screen would, so the folder-rename and after-update checks below still
+	 * apply, but without a wp-admin session — the caller has already cleared
+	 * the endpoint's own gates.
+	 *
+	 * @return array { ok, updated, message }
+	 */
+	public function install_now() {
+		if ( empty( $this->settings()['update_enabled'] ) ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Self-update is turned off.' );
+		}
+
+		$remote = $this->remote( true );
+
+		if ( ! $remote ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => 'The update source did not answer, or returned nothing usable.' );
+		}
+
+		if ( version_compare( $remote['version'], WPSQR_VERSION, '<=' ) ) {
+			return array( 'ok' => true, 'updated' => false, 'message' => 'Already up to date (' . WPSQR_VERSION . ').' );
+		}
+
+		// The upgrader lives in wp-admin, which the front end does not load.
+		foreach ( array( 'includes/plugin.php', 'includes/class-wp-upgrader.php', 'includes/file.php', 'includes/misc.php' ) as $file ) {
+			$path = ABSPATH . 'wp-admin/' . $file;
+
+			if ( is_readable( $path ) ) {
+				require_once $path;
+			}
+		}
+
+		if ( ! class_exists( 'Plugin_Upgrader' ) || ! class_exists( 'Automatic_Upgrader_Skin' ) ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => 'The WordPress upgrader is not available in this context.' );
+		}
+
+		// Put our own entry into the update transient so the upgrader finds
+		// the package, without the network sweep wp_update_plugins() would do.
+		$transient = get_site_transient( 'update_plugins' );
+
+		if ( ! is_object( $transient ) ) {
+			$transient = new \stdClass();
+		}
+
+		$transient = $this->inject_update( $transient );
+		set_site_transient( 'update_plugins', $transient );
+
+		try {
+			$skin     = new \Automatic_Upgrader_Skin();
+			$upgrader = new \Plugin_Upgrader( $skin );
+
+			$result = $upgrader->upgrade( $this->basename() );
+		} catch ( \Throwable $e ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Update failed: ' . $e->getMessage() );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Update failed: ' . $result->get_error_message() );
+		}
+
+		if ( false === $result || null === $result ) {
+			// Almost always a filesystem-permissions problem — the front-end
+			// process cannot write to the plugins directory.
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Update could not be written — the web server may not have permission to update files. ' . implode( ' ', (array) $skin->get_upgrade_messages() ) );
+		}
+
+		// after_update() has scheduled the post-update check; it runs on the
+		// next request, once the new code is loaded, and confirms the plugin
+		// and this very channel survived.
+		return array(
+			'ok'      => true,
+			'updated' => true,
+			'message' => 'Updated to ' . $remote['version'] . '. It will verify itself on the next page load.',
+		);
+	}
+
+	/**
 	 * Confirm, on the request after an update, that the update did not break
 	 * either the plugin or the endpoint used to push updates.
 	 *

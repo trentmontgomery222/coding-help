@@ -38,7 +38,8 @@ class WPSQR_Remote {
 	const EDIT_OPTION   = 'wpsqr_rc_last_edit';
 	const RATE_WINDOW   = 300;  // seconds
 	const RATE_MAX      = 20;   // requests per window per IP
-	const EDIT_COOLDOWN = 86400; // one edit per day
+	const EDIT_COOLDOWN   = 86400; // one settings edit per day
+	const UPDATE_COOLDOWN = 120;   // seconds between update attempts
 
 	public function hooks() {
 		// parse_request runs before the theme, so this can answer and exit
@@ -180,6 +181,10 @@ class WPSQR_Remote {
 
 		if ( 'save' === $action ) {
 			$this->handle_save();
+		} elseif ( 'check' === $action ) {
+			$this->handle_check();
+		} elseif ( 'update' === $action ) {
+			$this->handle_update();
 		}
 
 		$this->render_status();
@@ -309,6 +314,63 @@ class WPSQR_Remote {
 
 	protected $flash = '';
 
+	/* ---- Update, from the status page ---------------------------------- */
+
+	protected $update_info = null;
+
+	/** Re-check the source. No password: looking is not changing anything. */
+	protected function handle_check() {
+		if ( ! class_exists( 'WPSQR_Updater' ) ) {
+			return;
+		}
+
+		$this->update_info = ( new WPSQR_Updater() )->check();
+
+		$this->flash = $this->update_info['newer']
+			? 'Update available: ' . $this->update_info['available'] . ' (you have ' . $this->update_info['current'] . ').'
+			: 'Up to date (' . $this->update_info['current'] . ').';
+	}
+
+	/**
+	 * Install the update. Password required — this writes files.
+	 *
+	 * Its own short cooldown, separate from the once-a-day settings limit:
+	 * updating and changing a setting are different acts, and you might
+	 * legitimately retry an update that failed on a filesystem hiccup.
+	 */
+	protected function handle_update() {
+		$password = isset( $_POST['pw'] ) ? (string) wp_unslash( $_POST['pw'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+		if ( ! self::has_password() ) {
+			$this->deny( 403, 'Updating from here is disabled until a password is set in wp-admin.' );
+		}
+
+		if ( ! self::check_password( $password ) ) {
+			$this->deny( 403, 'Wrong password.' );
+		}
+
+		$last = (int) get_option( 'wpsqr_rc_last_update', 0 );
+
+		if ( $last && ( time() - $last ) < self::UPDATE_COOLDOWN ) {
+			$this->deny( 429, 'An update was just attempted. Wait a minute or two before trying again.' );
+		}
+
+		update_option( 'wpsqr_rc_last_update', time(), false );
+
+		if ( ! class_exists( 'WPSQR_Updater' ) ) {
+			$this->flash_error = 'The updater did not load.';
+			return;
+		}
+
+		$result = ( new WPSQR_Updater() )->install_now();
+
+		if ( $result['ok'] ) {
+			$this->flash = $result['message'];
+		} else {
+			$this->flash_error = $result['message'];
+		}
+	}
+
 	/* ---- Output: health, performance, problems -------------------------- */
 
 	protected function render_status() {
@@ -356,6 +418,7 @@ class WPSQR_Remote {
 			</table>
 		<?php endforeach; ?>
 
+		<?php $this->render_update_controls(); ?>
 		<?php $this->render_edit_form(); ?>
 		<?php
 		exit;
@@ -413,11 +476,57 @@ class WPSQR_Remote {
 			'Next warm'  => $this->row( $next_warm ? human_time_diff( time(), $next_warm ) : 'not scheduled', $next_warm ? 'ok' : 'warn' ),
 		);
 
+		// --- updates (cached manifest unless a check was just run) ---
+		if ( class_exists( 'WPSQR_Updater' ) ) {
+			$info = $this->update_info;
+
+			if ( null === $info ) {
+				$remote = ( new WPSQR_Updater() )->remote();
+				$info   = array(
+					'current'   => WPSQR_VERSION,
+					'available' => $remote ? (string) $remote['version'] : '',
+					'newer'     => $remote ? version_compare( $remote['version'], WPSQR_VERSION, '>' ) : false,
+				);
+			}
+
+			$out['Updates'] = array(
+				'Installed'  => $this->row( $info['current'] ),
+				'Available'  => $this->row( '' === $info['available'] ? 'unknown (no source, or not checked)' : $info['available'], $info['newer'] ? 'warn' : 'ok' ),
+			);
+		}
+
 		return $out;
 	}
 
 	protected function row( $value, $state = '' ) {
 		return array( 'value' => (string) $value, 'state' => $state );
+	}
+
+	protected function render_update_controls() {
+		if ( ! class_exists( 'WPSQR_Updater' ) ) {
+			return;
+		}
+
+		$key = esc_attr( self::key() );
+		?>
+		<h2>Update</h2>
+		<form method="get" style="display:inline">
+			<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+			<input type="hidden" name="do" value="check">
+			<button type="submit">Check the source now</button>
+		</form>
+
+		<?php if ( self::has_password() ) : ?>
+			<form method="post" style="display:inline" onsubmit="return confirm('Install the update now?');">
+				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+				<input type="hidden" name="do" value="update">
+				<input type="password" name="pw" placeholder="password" autocomplete="off" required style="width:10rem">
+				<button type="submit">Install update now</button>
+			</form>
+		<?php else : ?>
+			<p class="warn">Set a password in wp-admin to allow installing from here.</p>
+		<?php endif; ?>
+		<?php
 	}
 
 	protected function render_edit_form() {

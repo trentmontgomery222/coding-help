@@ -77,6 +77,14 @@ and whether cron is running. From it, with the password, you can flip the
 engine, toggle site-search takeover and warming, and — the reason it exists —
 **clear safe mode remotely** to bring a crashed plugin back.
 
+**It can also update the plugin.** "Check the source now" re-reads the
+manifest (no password — looking is not changing anything) and shows whether a
+newer version is offered. "Install update now" (password required) runs the
+same upgrader the Plugins screen would, folder-rename and post-update
+self-check included, so an update can be pushed and applied without ever
+opening wp-admin. Installing has its own short cooldown rather than the
+once-a-day settings limit, so a failed attempt can be retried.
+
 **The key is yours to set.** In the `?updates=1` panel, type the endpoint key
 you want (12+ characters, `A-Z a-z 0-9 . _ ~ -`) — it is not random unless you
 ask for one. Changing it changes the URL and the old one stops working at
