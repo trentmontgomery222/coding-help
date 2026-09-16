@@ -380,12 +380,21 @@ node tests/browser-rules.test.js     # 112 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 php tests/search-query-test.php      # 26 cases — tokenizing and query building
 php tests/refill-test.php            # 13 cases — refilling after a flush
+php tests/netgate-test.php           # 34 cases — remote-access IP gate
+php tests/guard-test.php             # 12 cases — crash survival
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
 
 See `tests/README.md`. The normalizer decides the hit rate and the rule engine
 decides what people see, so both are tested; the WordPress-dependent parts
 would need a full test harness to exercise meaningfully.
+
+## If it ever crashes
+
+A fatal error in this plugin pauses just this plugin — a recovery notice with
+a resume link appears in wp-admin, and the rest of the site keeps working. A
+missing file after a bad update is survived the same way. Nothing here needs
+setting up; it is always on.
 
 ## Honest limits
 

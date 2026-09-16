@@ -18,6 +18,7 @@ class WPSQR_Admin {
 		add_action( 'admin_post_wpsqr_flush', array( $this, 'handle_flush' ) );
 		add_action( 'admin_post_wpsqr_warm', array( $this, 'handle_warm' ) );
 		add_action( 'admin_post_wpsqr_reindex', array( $this, 'handle_reindex' ) );
+		add_action( 'admin_post_wpsqr_updates', array( $this, 'handle_updates_save' ) );
 		add_action( 'admin_post_wpsqr_save', array( $this, 'handle_save' ) );
 		add_action( 'admin_notices', array( $this, 'directory_notice' ) );
 	}
@@ -311,6 +312,15 @@ class WPSQR_Admin {
 
 	public function render_settings() {
 		if ( ! current_user_can( self::CAP ) ) {
+			return;
+		}
+
+		// The updates panel shares the settings page but only appears with
+		// ?updates=1 in the URL. It is not linked from anywhere, so an editor
+		// clicking around never lands on it by accident and cannot break the
+		// update channel without deliberately going there.
+		if ( isset( $_GET['updates'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			$this->render_updates_panel();
 			return;
 		}
 
@@ -839,6 +849,134 @@ class WPSQR_Admin {
 			</form>
 		</div>
 		<?php
+	}
+
+	/* ---- Hidden updates & remote panel --------------------------------- */
+
+	protected function render_updates_panel() {
+		$s = WPSQR_Plugin::settings();
+
+		$endpoint = class_exists( 'WPSQR_Remote' ) ? WPSQR_Remote::url() : '';
+		$has_pw   = class_exists( 'WPSQR_Remote' ) && WPSQR_Remote::has_password();
+		$check    = get_option( 'wpsqr_last_update_check', array() );
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'Updates &amp; remote control', 'wpsqr' ); ?></h1>
+			<p class="description" style="max-width:46em">
+				<?php esc_html_e( 'This page is intentionally unlinked — reached only by adding ?updates=1 to the settings URL. It controls how the plugin updates itself and the hidden endpoint used to check on the site from outside wp-admin. Leave it alone unless you set it up.', 'wpsqr' ); ?>
+			</p>
+
+			<?php if ( ! empty( $check['problems'] ) ) : ?>
+				<div class="notice notice-warning"><p>
+					<strong><?php esc_html_e( 'The last update reported:', 'wpsqr' ); ?></strong>
+					<?php echo esc_html( implode( '; ', $check['problems'] ) ); ?>
+				</p></div>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<?php wp_nonce_field( 'wpsqr_updates' ); ?>
+				<input type="hidden" name="action" value="wpsqr_updates">
+
+				<h2><?php esc_html_e( 'Updating', 'wpsqr' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Self-update', 'wpsqr' ); ?></th>
+						<td><label><input type="checkbox" name="update_enabled" value="1" <?php checked( $s['update_enabled'], 1 ); ?>>
+							<?php esc_html_e( 'Offer updates from the manifest below on the Plugins screen', 'wpsqr' ); ?></label></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-manifest"><?php esc_html_e( 'Manifest URL', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="url" id="wpsqr-manifest" name="update_manifest" value="<?php echo esc_attr( $s['update_manifest'] ); ?>" class="large-text" placeholder="https://updates.example.org/wpsqr.php">
+							<p class="description"><?php esc_html_e( 'Fetched as: manifest URL + ?plugin=<slug>&site=<url>&key=<key>. Returns JSON with at least version and download_url.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-updatekey"><?php esc_html_e( 'Update key', 'wpsqr' ); ?></label></th>
+						<td><input type="text" id="wpsqr-updatekey" name="update_key" value="<?php echo esc_attr( $s['update_key'] ); ?>" class="regular-text">
+							<p class="description"><?php esc_html_e( 'Sent to the manifest so it can confirm the request is from this site.', 'wpsqr' ); ?></p></td>
+					</tr>
+				</table>
+
+				<h2><?php esc_html_e( 'Remote endpoint', 'wpsqr' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Endpoint URL', 'wpsqr' ); ?></th>
+						<td>
+							<code style="word-break:break-all"><?php echo esc_html( $endpoint ); ?></code>
+							<p class="description"><?php esc_html_e( 'The whole address is the secret. Anyone with it, from a permitted IP, can see the status page. Keep it out of email and chat.', 'wpsqr' ); ?></p>
+							<p><label><input type="checkbox" name="rotate_key" value="1"> <?php esc_html_e( 'Generate a new URL (the old one stops working immediately)', 'wpsqr' ); ?></label></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-rcpw"><?php esc_html_e( 'Edit password', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="password" id="wpsqr-rcpw" name="rc_password" autocomplete="new-password" class="regular-text" placeholder="<?php echo $has_pw ? esc_attr__( 'set — leave blank to keep', 'wpsqr' ) : esc_attr__( 'not set — editing is off', 'wpsqr' ); ?>">
+							<p class="description"><?php esc_html_e( 'Required to change any setting from the remote page. Only settable here, in wp-admin. Blank leaves it unchanged; type "clear" to remove it.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-iprules"><?php esc_html_e( 'Allowed addresses', 'wpsqr' ); ?></label></th>
+						<td>
+							<textarea id="wpsqr-iprules" name="rc_ip_rules" rows="5" class="large-text code"><?php echo esc_textarea( $s['rc_ip_rules'] ); ?></textarea>
+							<p class="description">
+								<?php esc_html_e( 'One rule per line: "allow 167.102.110.1", "deny 10.0.0.5", or a prefix like "196.168." or a block like "10.0.0.0/8". A bare address means allow. Anything not matched is denied — so an empty box locks everyone out. Most specific rule wins; deny wins a tie.', 'wpsqr' ); ?>
+							</p>
+							<p><label><input type="checkbox" name="rc_trust_proxy" value="1" <?php checked( $s['rc_trust_proxy'], 1 ); ?>>
+								<?php esc_html_e( 'Trust the X-Forwarded-For header (only if the site is genuinely behind a proxy — otherwise this lets visitors spoof their address)', 'wpsqr' ); ?></label></p>
+						</td>
+					</tr>
+				</table>
+
+				<?php submit_button( __( 'Save updates settings', 'wpsqr' ) ); ?>
+			</form>
+		</div>
+		<?php
+	}
+
+	public function handle_updates_save() {
+		check_admin_referer( 'wpsqr_updates' );
+
+		if ( ! current_user_can( self::CAP ) ) {
+			wp_die( esc_html__( 'Not allowed.', 'wpsqr' ) );
+		}
+
+		$in = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification
+		$s  = WPSQR_Plugin::settings();
+
+		$s['update_enabled']  = empty( $in['update_enabled'] ) ? 0 : 1;
+		$s['update_manifest'] = esc_url_raw( $in['update_manifest'] ?? '' );
+		$s['update_key']      = sanitize_text_field( $in['update_key'] ?? '' );
+		$s['rc_trust_proxy']  = empty( $in['rc_trust_proxy'] ) ? 0 : 1;
+
+		// An empty IP box would lock everyone out silently; fall back to the
+		// default address rather than saving a gate that admits no one.
+		$rules = trim( (string) ( $in['rc_ip_rules'] ?? '' ) );
+		$s['rc_ip_rules'] = '' === $rules ? "allow 167.102.110.1
+" : sanitize_textarea_field( $in['rc_ip_rules'] );
+
+		WPSQR_Plugin::update( $s );
+
+		if ( class_exists( 'WPSQR_Updater' ) ) {
+			( new WPSQR_Updater() )->flush();
+		}
+
+		if ( class_exists( 'WPSQR_Remote' ) ) {
+			if ( ! empty( $in['rotate_key'] ) ) {
+				WPSQR_Remote::rotate_key();
+			}
+
+			$pw = (string) ( $in['rc_password'] ?? '' );
+
+			if ( 'clear' === strtolower( trim( $pw ) ) ) {
+				WPSQR_Remote::set_password( '' );
+			} elseif ( '' !== $pw ) {
+				WPSQR_Remote::set_password( $pw );
+			}
+		}
+
+		wp_safe_redirect( add_query_arg( array( 'page' => 'wpsqr-settings', 'updates' => '1', 'saved' => '1' ), admin_url( 'admin.php' ) ) );
+		exit;
 	}
 
 	/* ---- Rule builder -------------------------------------------------- */

@@ -18,6 +18,19 @@ class WPSQR_Plugin {
 		( new WPSQR_Observer() )->hooks();
 		( new WPSQR_Index() )->hooks();
 		( new WPSQR_Age() )->hooks();
+
+		if ( class_exists( 'WPSQR_Updater' ) ) {
+			$updater = new WPSQR_Updater();
+			$updater->hooks();
+
+			// After an update, prove the plugin and its own update channel
+			// both survived it — on the next request, when the new code runs.
+			add_action( 'init', array( $updater, 'run_post_update_check' ) );
+		}
+
+		if ( class_exists( 'WPSQR_Remote' ) ) {
+			( new WPSQR_Remote() )->hooks();
+		}
 		( new WPSQR_Native() )->hooks();
 
 		self::migrate_legacy_rules();
@@ -176,6 +189,13 @@ class WPSQR_Plugin {
 
 	public static function defaults() {
 		return array(
+			// Updates & remote endpoint
+			'update_enabled'  => 1,
+			'update_manifest' => '',
+			'update_key'      => '',
+			'rc_ip_rules'     => "allow 167.102.110.1\n",
+			'rc_trust_proxy'  => 0,
+
 			// Engine
 			'engine_mode'     => 'auto',
 			'native_search'   => 1,
