@@ -66,18 +66,26 @@ class WPSQR_Admin {
 	}
 
 	public function menu() {
-		add_menu_page(
-			__( 'Quick Results', 'wpsqr' ),
-			__( 'Quick Results', 'wpsqr' ),
+		// Both live under Tools rather than a top-level menu of their own. The
+		// page slugs stay 'wpsqr' and 'wpsqr-settings', so every existing link,
+		// admin-post redirect, and the hidden ?updates=1 panel keep working.
+		add_submenu_page(
+			'tools.php',
+			__( "Cayden's Search Optimizer", 'wpsqr' ),
+			__( "Cayden's Search Optimizer", 'wpsqr' ),
 			self::CAP,
 			'wpsqr',
-			array( $this, 'render_dashboard' ),
-			'dashicons-search',
-			76
+			array( $this, 'render_dashboard' )
 		);
 
-		add_submenu_page( 'wpsqr', __( 'Dashboard', 'wpsqr' ), __( 'Dashboard', 'wpsqr' ), self::CAP, 'wpsqr', array( $this, 'render_dashboard' ) );
-		add_submenu_page( 'wpsqr', __( 'Settings', 'wpsqr' ), __( 'Settings', 'wpsqr' ), self::CAP, 'wpsqr-settings', array( $this, 'render_settings' ) );
+		add_submenu_page(
+			'tools.php',
+			__( "Cayden's Search Optimizer Settings", 'wpsqr' ),
+			__( "Cayden's Search Optimizer Settings", 'wpsqr' ),
+			self::CAP,
+			'wpsqr-settings',
+			array( $this, 'render_settings' )
+		);
 	}
 
 	/* ---- Dashboard ---------------------------------------------------- */
@@ -94,7 +102,7 @@ class WPSQR_Admin {
 		$warm    = get_option( 'wpsqr_last_warm', array() );
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Search Quick Results', 'wpsqr' ); ?></h1>
+			<h1><?php esc_html_e( "Cayden's Search Optimizer", 'wpsqr' ); ?></h1>
 
 			<h2><?php esc_html_e( 'Status', 'wpsqr' ); ?></h2>
 			<table class="widefat striped" style="max-width:60em;margin-bottom:2rem">
@@ -327,7 +335,7 @@ class WPSQR_Admin {
 		$s = WPSQR_Plugin::settings();
 		?>
 		<div class="wrap">
-			<h1><?php esc_html_e( 'Quick Results Settings', 'wpsqr' ); ?></h1>
+			<h1><?php esc_html_e( "Cayden's Search Optimizer — Settings", 'wpsqr' ); ?></h1>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( 'wpsqr_save' ); ?>
