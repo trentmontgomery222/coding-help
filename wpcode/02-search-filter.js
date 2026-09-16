@@ -32,7 +32,9 @@
 		excerpt:   [ '.swp-result-item--desc', '.entry-summary', 'p' ],
 		// "Found 271 results for staff" — this one sits OUTSIDE the results
 		// wrapper, so it is looked up document-wide as a fallback.
-		count:     [ '.swp-total-results-notice p', '.search-count', '.results-count' ]
+		count:     [ '.swp-total-results-notice p', '.search-count', '.results-count' ],
+		// The "Go to Page" link under each result.
+		button:    [ '.swp-result-item--button', '.acps-result-button' ]
 	};
 
 	/* =================================================================
@@ -817,6 +819,8 @@
 
 		// Cosmetic changes only apply to results that survived.
 
+		relabelButton( fields );
+
 		// The custom description was already applied in fieldsOf, before the
 		// rules ran. A setDesc rule overrides it; a rewrite edits whatever is
 		// there by then.
@@ -899,6 +903,33 @@
 				row.parentNode.appendChild( row );
 			}
 		} );
+	}
+
+	/**
+	 * Make the button under a result say what the result is.
+	 *
+	 * SearchWP labels every result "Go to Page", including news posts and
+	 * PDFs. The post type is on the row already, as its `type-…` class, so
+	 * this needs no lookup — only the labels, which the server sends.
+	 */
+	function relabelButton( fields ) {
+		var labels = DATA.buttonLabels;
+
+		if ( ! labels || ! fields.type ) {
+			return;
+		}
+
+		var hit = pick( SELECTORS.button, fields.el );
+
+		if ( ! hit ) {
+			return;
+		}
+
+		var label = labels[ fields.type ] || labels._default;
+
+		if ( label && hit.el.textContent.trim() !== label ) {
+			hit.el.textContent = label;
+		}
 	}
 
 	/* --- page furniture -------------------------------------------------- */

@@ -172,13 +172,13 @@ html.acps-search-ready .acps-search-results {
 	display: inline-block;
 	margin-inline-start: 0.5em;
 	vertical-align: middle;
-	font-size: 0.68rem;
+	font-size: 1.3rem;
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
-	color: #1d4ed8;
-	background: #e8effd;
-	border: 1px solid #c3d4f7;
+	color: #172a51;
+	background: #eff7ff;
+	border: 1px solid #172a51;
 	border-radius: 999px;
 	padding: 0.2em 0.7em;
 	white-space: nowrap;
@@ -208,4 +208,130 @@ html.acps-search-ready .acps-search-results {
 
 .acps-sunk .entry-title {
 	font-size: 1rem;
+}
+
+/* ---------------------------------------------------------------
+ * People results
+ *
+ * Own classes rather than the result ones, so a rule written to
+ * hide or reorder page results never catches a person.
+ * --------------------------------------------------------------- */
+
+.wpsqr-people {
+	margin-block-end: 2rem;
+	padding-block-end: 1.25rem;
+	border-block-end: 1px solid #e6e6e6;
+}
+
+.wpsqr-people__heading {
+	margin: 0 0 .75rem;
+	font-size: 1.05rem;
+	color: #444;
+}
+
+.wpsqr-people__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: .5rem;
+	grid-template-columns: repeat( auto-fill, minmax( 17rem, 1fr ) );
+}
+
+.wpsqr-person {
+	display: flex;
+	align-items: center;
+	gap: .75rem;
+	padding: .6rem .75rem;
+	border: 1px solid #e6e6e6;
+	border-radius: 6px;
+	background: #fff;
+}
+
+.wpsqr-person__photo {
+	inline-size: 56px;
+	block-size: 56px;
+	border-radius: 50%;
+	object-fit: cover;
+	flex: 0 0 auto;
+	background: #eef2f7;
+}
+
+.wpsqr-person__photo--empty {
+	display: grid;
+	place-items: center;
+	font-weight: 700;
+	font-size: 1.25rem;
+	color: #4678aa;
+}
+
+.wpsqr-person__detail {
+	display: flex;
+	flex-direction: column;
+	min-inline-size: 0;
+}
+
+.wpsqr-person__name {
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.wpsqr-person__meta,
+.wpsqr-person__contact {
+	font-size: .82rem;
+	color: #5c5f62;
+	overflow-wrap: anywhere;
+}
+
+.wpsqr-people__more {
+	margin: .9rem 0 0;
+	font-size: .9rem;
+}
+
+@media ( prefers-color-scheme: dark ) {
+	.wpsqr-person {
+		background: transparent;
+	}
+}
+
+
+/* ---------------------------------------------------------------
+ * Site styling
+ *
+ * Moved here from the page's inline CSS so it travels with the
+ * plugin and survives the page being rebuilt.
+ *
+ * Scoped to the results wrappers throughout. `mark` in particular
+ * is a document-wide element the theme also styles — restyling it
+ * globally from a search plugin would change it wherever else it
+ * is used.
+ * --------------------------------------------------------------- */
+
+.swp-search-results mark,
+.swp-search-results .mark,
+.wpsqr-results mark,
+.wpsqr-results .mark {
+	background-color: #fff;
+	color: inherit;
+	padding: 0;
+	margin: 0;
+	border-radius: 0;
+}
+
+/* The extra wrapper class outruns SearchWP's own
+   `.swp-result-item .swp-result-item--button`, so these hold
+   whichever stylesheet the browser loads last. */
+.swp-search-results .swp-result-item .swp-result-item--button,
+.wpsqr-results .swp-result-item .swp-result-item--button {
+	background: #4678aa;
+	border-radius: 8px;
+	color: #fff;
+}
+
+.swp-search-results .swp-result-item .swp-result-item--button:hover,
+.swp-search-results .swp-result-item .swp-result-item--button:focus,
+.wpsqr-results .swp-result-item .swp-result-item--button:hover,
+.wpsqr-results .swp-result-item .swp-result-item--button:focus {
+	background: #3a6391;
+	color: #fff;
 }

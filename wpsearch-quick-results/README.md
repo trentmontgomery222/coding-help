@@ -138,6 +138,14 @@ To see it working before the real integration exists, activate
 `examples/example-people-provider.php` as its own plugin — six invented staff,
 one of them hidden, so visibility can be tested as well as matching.
 
+### Result buttons
+
+SearchWP labels every result *Go to Page*, including news posts and PDFs. The
+label now follows the post type — *Go to Post*, *Open File* — reading the
+`type-…` class already on each row, so it works on results SearchWP renders as
+well as this plugin's own. Custom post types get their own singular name
+without anything being configured; `wpsqr_button_labels` overrides any of it.
+
 ### The directory page itself
 
 Separate from people results, and the more important half.
@@ -344,7 +352,7 @@ Everything else still works. The Status panel says so.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 98 cases — the browser rule engine
+node tests/browser-rules.test.js     # 105 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 php tests/search-query-test.php      # 26 cases — tokenizing and query building
 php tests/refill-test.php            # 13 cases — refilling after a flush

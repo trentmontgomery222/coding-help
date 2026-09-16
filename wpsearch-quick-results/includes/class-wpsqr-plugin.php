@@ -208,6 +208,7 @@ class WPSQR_Plugin {
 			'excerpt_words'   => 40,
 			'desc_meta_key'   => '_wpsqr_search_description',
 			'update_count'    => 1,
+			'relabel_buttons' => 1,
 			'empty_message'   => 'No matching results. Try a different search term.',
 
 			// People results, supplied by a staff directory plugin.

@@ -704,6 +704,31 @@ class WPSQR_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><?php esc_html_e( 'Result buttons', 'wpsqr' ); ?></th>
+						<td>
+							<label><input type="checkbox" name="relabel_buttons" value="1" <?php checked( $s['relabel_buttons'], 1 ); ?>>
+								<?php esc_html_e( 'Label each button for what the result actually is', 'wpsqr' ); ?></label>
+							<p class="description">
+								<?php
+								$labels = WPSQR_Renderer::button_labels();
+								$sample = array();
+
+								foreach ( array( 'post', 'page', 'attachment' ) as $type ) {
+									if ( isset( $labels[ $type ] ) ) {
+										$sample[] = '“' . $labels[ $type ] . '”';
+									}
+								}
+
+								printf(
+									/* translators: %s: comma-separated example labels */
+									esc_html__( 'A news post reads %s rather than every result saying "Go to Page". Follows each post type\'s own name.', 'wpsqr' ),
+									esc_html( implode( ', ', $sample ) )
+								);
+								?>
+							</p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="wpsqr-words"><?php esc_html_e( 'Description length', 'wpsqr' ); ?></label></th>
 						<td>
 							<input type="number" id="wpsqr-words" name="excerpt_words" min="5" max="200" value="<?php echo esc_attr( $s['excerpt_words'] ); ?>" class="small-text">
@@ -1057,7 +1082,8 @@ class WPSQR_Admin {
 		$new['hide_mode']     = in_array( $in['hide_mode'] ?? '', array( 'remove', 'dim' ), true ) ? $in['hide_mode'] : 'remove';
 		$new['excerpt_words'] = max( 5, min( 200, (int) ( $in['excerpt_words'] ?? 40 ) ) );
 		$new['desc_meta_key'] = sanitize_text_field( $in['desc_meta_key'] ?? '' );
-		$new['update_count'] = empty( $in['update_count'] ) ? 0 : 1;
+		$new['update_count']    = empty( $in['update_count'] ) ? 0 : 1;
+		$new['relabel_buttons'] = empty( $in['relabel_buttons'] ) ? 0 : 1;
 
 		$new['result_rules'] = self::sanitize_rules( $in['result_rules'] ?? array(), true );
 		$new['query_rules']  = self::sanitize_rules( $in['query_rules'] ?? array(), false );

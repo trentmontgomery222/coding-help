@@ -80,6 +80,65 @@ class WPSQR_Renderer {
 	}
 
 	/**
+	 * What the button under a result should say.
+	 *
+	 * "Go to Page" under a news post is wrong, and wrong in a way that makes
+	 * the result look like something it is not. The label follows the post
+	 * type's own singular name, so a custom type reads correctly without
+	 * anything being configured.
+	 */
+	public static function button_label( $post_type ) {
+		$labels = self::button_labels();
+
+		if ( isset( $labels[ $post_type ] ) ) {
+			return $labels[ $post_type ];
+		}
+
+		return $labels['_default'];
+	}
+
+	/**
+	 * Every label, keyed by post type.
+	 *
+	 * Built once and handed to the browser as well, so results SearchWP
+	 * renders get the same treatment as the ones this plugin renders.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function button_labels() {
+		static $cached = null;
+
+		if ( null !== $cached ) {
+			return $cached;
+		}
+
+		$labels = array(
+			// A file is opened, not navigated to, and on this site these are
+			// PDFs — "Go to Page" under a budget document is misleading.
+			'attachment' => __( 'Open File', 'wpsqr' ),
+			'_default'   => __( 'Go to Page', 'wpsqr' ),
+		);
+
+		foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) {
+			if ( isset( $labels[ $type->name ] ) ) {
+				continue;
+			}
+
+			$singular = isset( $type->labels->singular_name ) ? $type->labels->singular_name : $type->label;
+
+			/* translators: %s: post type singular name, e.g. Post, Page, Event */
+			$labels[ $type->name ] = sprintf( __( 'Go to %s', 'wpsqr' ), $singular );
+		}
+
+		/**
+		 * @param array<string,string> $labels Keyed by post type, plus _default.
+		 */
+		$cached = apply_filters( 'wpsqr_button_labels', $labels );
+
+		return $cached;
+	}
+
+	/**
 	 * People matching the search, above the ordinary results.
 	 *
 	 * Markup carries its own classes rather than reusing the result ones, so
@@ -232,7 +291,7 @@ class WPSQR_Renderer {
 		printf(
 			'<a href="%s" class="swp-result-item--button">%s</a>',
 			esc_url( $permalink ),
-			esc_html__( 'Go to Page', 'wpsqr' )
+			esc_html( self::button_label( get_post_type( $post ) ) )
 		);
 
 		echo '</div></article>';

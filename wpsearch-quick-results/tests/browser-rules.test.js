@@ -62,6 +62,7 @@ function run({ query = 'staff', results = SAMPLE, queryRules = [], rules = [], d
     marks: doc.querySelectorAll('mark.searchwp-highlight').length,
     badges: [...doc.querySelectorAll('.acps-badge')].map(b => b.textContent),
     descs: rows.map(a => (a.querySelector('.swp-result-item--desc') || {}).textContent || ''),
+    buttons: rows.map(a => (a.querySelector('.swp-result-item--button') || {}).textContent || ''),
     descHTML: rows.map(a => (a.querySelector('.swp-result-item--desc') || {}).innerHTML || ''),
     titleHTML: rows.map(a => a.querySelector('.entry-title a').innerHTML.trim()),
     empty: doc.querySelector('.acps-empty-message')?.textContent || null,
@@ -387,6 +388,24 @@ check('an empty find falls back rather than replacing everything',
 check('find works on the description too',
   run({ rules: [{ when: 'url', op: 'contains', value: '/staff/', then: 'rewrite', find: 'Hub', replace: 'Portal', target: 'desc' }] })
     .descs[0].includes('Portal'), true);
+
+console.log('\nthe button says what the result is');
+const LABELS = { buttonLabels: { page: 'Go to Page', post: 'Go to Post', attachment: 'Open File', _default: 'Go to Page' } };
+
+check('a post says Go to Post',
+  run({ data: LABELS }).buttons[2], 'Go to Post');
+check('a page still says Go to Page',
+  run({ data: LABELS }).buttons[0], 'Go to Page');
+check('a PDF says Open File',
+  run({ data: LABELS }).buttons[4], 'Open File');
+check('every row gets a label',
+  run({ data: LABELS }).buttons.filter(Boolean).length, 7);
+check('an unknown type falls back to the default',
+  run({ data: { buttonLabels: { _default: 'View' } } }).buttons[2], 'View');
+check('no labels sent means nothing is touched',
+  run({}).buttons[2].trim(), 'Go to Page');
+check('a hidden row is not relabelled on its way out',
+  run({ data: Object.assign({ hiddenIds: [6063] }, LABELS) }).buttons.includes('Go to Post'), false);
 
 console.log('\nreordering');
 check('bottom sinks attachments below everything else',

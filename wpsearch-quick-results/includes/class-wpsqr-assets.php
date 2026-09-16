@@ -44,6 +44,7 @@ class WPSQR_Assets {
 					'queryParams' => WPSQR_Plugin::query_params(),
 					'homePath'     => untrailingslashit( (string) wp_parse_url( home_url(), PHP_URL_PATH ) ),
 					'descriptions' => WPSQR_Hidden::descriptions(),
+					'buttonLabels' => empty( $settings['relabel_buttons'] ) ? null : WPSQR_Renderer::button_labels(),
 					// Directory rules go first: they are decisive, and a
 					// later user rule should not be able to un-hide a page
 					// that is only matching through hidden content.

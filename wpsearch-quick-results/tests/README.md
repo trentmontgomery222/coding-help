@@ -3,7 +3,7 @@
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys, no WordPress needed
 npm install jsdom
-node tests/browser-rules.test.js     # 98 cases — the browser rule engine
+node tests/browser-rules.test.js     # 105 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 php tests/search-query-test.php      # 26 cases — tokenizing and query building
 php tests/refill-test.php            # 13 cases — refilling after a flush
