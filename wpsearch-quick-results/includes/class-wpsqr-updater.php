@@ -200,6 +200,11 @@ class WPSQR_Updater {
 
 		$this->flush();
 
+		// Record that the plugin should be active, so the post-update check
+		// can switch it back on if the update left it off. This covers updates
+		// from the Plugins screen too, not just install_now().
+		update_option( 'wpsqr_should_be_active', 1, false );
+
 		// Schedule the health check for the next request, once the new code is
 		// actually loaded — checking in this one would only test the old code.
 		update_option( 'wpsqr_post_update_check', time(), false );
@@ -278,10 +283,6 @@ class WPSQR_Updater {
 			WPSQR_Guard::arm_rollback( WPSQR_VERSION );
 		}
 
-		// Remember it was active, so the post-update check can re-enable it if
-		// the upgrader ever leaves it deactivated.
-		update_option( 'wpsqr_was_active', ( function_exists( 'is_plugin_active' ) && is_plugin_active( $this->basename() ) ) ? 1 : 0, false );
-
 		try {
 			$skin     = new \Automatic_Upgrader_Skin();
 			$upgrader = new \Plugin_Upgrader( $skin );
@@ -359,14 +360,16 @@ class WPSQR_Updater {
 			WPSQR_Guard::disarm_rollback();
 		}
 
-		// Never leave the plugin disabled after an update. If the upgrader
-		// deactivated it and it was active before, switch it back on.
-		if ( get_option( 'wpsqr_was_active' ) && function_exists( 'is_plugin_active' ) && ! is_plugin_active( $this->basename() ) ) {
+		// Never leave the plugin disabled after an update. If the update left
+		// it deactivated (the upgrader can, on some hosts), switch it back on.
+		// This only runs because the new code loaded, i.e. the update itself
+		// is sound — a crashing update is handled by rollback in the guard.
+		if ( get_option( 'wpsqr_should_be_active' ) && function_exists( 'is_plugin_active' ) && ! is_plugin_active( $this->basename() ) ) {
 			activate_plugin( $this->basename() );
 			$problems[] = 'plugin had been deactivated by the update; re-enabled';
 		}
 
-		delete_option( 'wpsqr_was_active' );
+		delete_option( 'wpsqr_should_be_active' );
 
 		update_option(
 			'wpsqr_last_update_check',

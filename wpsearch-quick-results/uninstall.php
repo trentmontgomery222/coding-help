@@ -29,7 +29,7 @@ delete_option( 'wpsqr_rc_last_edit' );
 delete_option( 'wpsqr_rc_last_update' );
 delete_option( 'wpsqr_rollback' );
 delete_option( 'wpsqr_last_rollback' );
-delete_option( 'wpsqr_was_active' );
+delete_option( 'wpsqr_should_be_active' );
 delete_option( 'wpsqr_post_update_check' );
 delete_option( 'wpsqr_last_update_check' );
 delete_transient( 'wpsqr_hidden_map' );
