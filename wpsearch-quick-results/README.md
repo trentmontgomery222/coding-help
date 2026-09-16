@@ -6,6 +6,50 @@ re-running the search engine, and filters what appears in the results.
 It replaces the six WPCode snippets in `../wpcode/` — same behaviour, but
 versioned, testable, and in one place that can't be half-deactivated.
 
+## It can be the search engine too
+
+With SearchWP installed, it's used. Without it, the plugin searches on its
+own — no setting to change, nothing to notice when SearchWP is added or
+removed. **Settings → Search engine** shows which is answering and lets you
+pin it either way.
+
+### What the built-in engine actually is
+
+Its own index table, one row per post, with the title stored apart from
+everything else worth matching and both full-text indexed. Ranking comes from
+MySQL's relevance scoring with the title weighted five times the body — so a
+search for "transportation" returns the Transportation page, not the twenty
+pages that mention buses.
+
+Every term is required and allowed to prefix-match, so `aust` finds Austin and
+`bus route` doesn't return everything about buses. The index also carries the
+slug and any taxonomy terms; `wpsqr_index_text_parts` adds anything else.
+
+Where full-text isn't available the engine falls back to LIKE with hand-written
+scoring — exact title, then title-starts-with, then title-contains, then
+body. Cruder, still far better than core's ordering, which is by date.
+
+### Taking over site search
+
+**Take over site search** answers your theme's own `/?s=` page with these
+results. The template isn't touched; it just receives better-ordered ones.
+Done through `posts_pre_query`, so WordPress's own search never runs rather
+than running and being discarded. Feeds and the REST API are left alone —
+changing what an API returns isn't what "make site search better" asked for.
+
+### The index
+
+Posts index themselves on save. An existing site needs **one rebuild** to
+catch up — Dashboard → *Rebuild the search index*, which runs in batches on
+cron and reports progress.
+
+Until that finishes, the engine **uses core search rather than the half-built
+index**, because an empty index returns nothing at all, which looks exactly
+like a broken site. The Status panel says which is running and why.
+
+Only published posts are indexed. Drafts and private posts belong to their
+authors, and an index is the easiest place to leak them from.
+
 ## Why this is faster
 
 SearchWP scores every indexed row against the search term on every request.
@@ -291,6 +335,7 @@ save pays full price. Everything else still works.
 php tests/normalizer-test.php        # 30 cases — cache keys
 node tests/browser-rules.test.js     # 98 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
+php tests/search-query-test.php      # 26 cases — tokenizing and query building
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
 

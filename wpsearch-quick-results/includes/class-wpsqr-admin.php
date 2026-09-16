@@ -17,6 +17,7 @@ class WPSQR_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'admin_post_wpsqr_flush', array( $this, 'handle_flush' ) );
 		add_action( 'admin_post_wpsqr_warm', array( $this, 'handle_warm' ) );
+		add_action( 'admin_post_wpsqr_reindex', array( $this, 'handle_reindex' ) );
 		add_action( 'admin_post_wpsqr_save', array( $this, 'handle_save' ) );
 		add_action( 'admin_notices', array( $this, 'directory_notice' ) );
 	}
@@ -172,6 +173,23 @@ class WPSQR_Admin {
 			<?php endif; ?>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:1rem 0">
+				<?php wp_nonce_field( 'wpsqr_reindex' ); ?>
+				<input type="hidden" name="action" value="wpsqr_reindex">
+				<?php submit_button( __( 'Rebuild the search index', 'wpsqr' ), 'secondary', 'submit', false ); ?>
+				<span class="description" style="margin-inline-start:1em">
+					<?php
+					$idx = WPSQR_Index::stats();
+					printf(
+						/* translators: 1: indexed, 2: expected */
+						esc_html__( '%1$s of %2$s posts indexed', 'wpsqr' ),
+						esc_html( number_format_i18n( $idx['rows'] ) ),
+						esc_html( number_format_i18n( $idx['expected'] ) )
+					);
+					?>
+				</span>
+			</form>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:1rem 0">
 				<?php wp_nonce_field( 'wpsqr_warm' ); ?>
 				<input type="hidden" name="action" value="wpsqr_warm">
 				<?php submit_button( __( 'Warm the cache now', 'wpsqr' ), 'secondary', 'submit', false ); ?>
@@ -283,6 +301,118 @@ class WPSQR_Admin {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<?php wp_nonce_field( 'wpsqr_save' ); ?>
 				<input type="hidden" name="action" value="wpsqr_save">
+
+				<h2><?php esc_html_e( 'Search engine', 'wpsqr' ); ?></h2>
+				<?php $index = WPSQR_Index::stats(); ?>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Which engine', 'wpsqr' ); ?></th>
+						<td>
+							<label>
+								<input type="radio" name="engine_mode" value="auto" <?php checked( $s['engine_mode'], 'auto' ); ?>>
+								<?php esc_html_e( 'Automatic', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 .8em 1.8em">
+								<?php esc_html_e( 'Use SearchWP when it is installed, this plugin\'s own index when it is not. Nothing to change if SearchWP is ever added or removed — the site keeps working either way.', 'wpsqr' ); ?>
+								<br>
+								<strong><?php
+								printf(
+									/* translators: %s: engine name */
+									esc_html__( 'Currently answering: %s', 'wpsqr' ),
+									esc_html(
+										array(
+											'searchwp' => __( 'SearchWP', 'wpsqr' ),
+											'builtin'  => __( 'this plugin\'s own index', 'wpsqr' ),
+											'core'     => __( 'WordPress core search', 'wpsqr' ),
+										)[ WPSQR_Plugin::engine() ]
+									)
+								);
+								?></strong>
+							</p>
+
+							<label>
+								<input type="radio" name="engine_mode" value="builtin" <?php checked( $s['engine_mode'], 'builtin' ); ?>>
+								<?php esc_html_e( 'Always this plugin', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 .8em 1.8em">
+								<?php esc_html_e( 'Ignore SearchWP even where it is installed. Useful for comparing the two on the same site.', 'wpsqr' ); ?>
+							</p>
+
+							<label>
+								<input type="radio" name="engine_mode" value="searchwp" <?php checked( $s['engine_mode'], 'searchwp' ); ?>>
+								<?php esc_html_e( 'Always SearchWP', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 .8em 1.8em">
+								<?php esc_html_e( 'Falls back to the built-in index if SearchWP goes away, rather than returning nothing.', 'wpsqr' ); ?>
+							</p>
+
+							<label>
+								<input type="radio" name="engine_mode" value="core" <?php checked( $s['engine_mode'], 'core' ); ?>>
+								<?php esc_html_e( 'WordPress core search', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 0 1.8em">
+								<?php esc_html_e( 'Caching, rules and people results still apply, but ranking is core\'s — which is to say, by date.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Take over site search', 'wpsqr' ); ?></th>
+						<td>
+							<label><input type="checkbox" name="native_search" value="1" <?php checked( $s['native_search'], 1 ); ?>>
+								<?php esc_html_e( 'Answer the theme\'s own search page with these results', 'wpsqr' ); ?></label>
+							<p class="description">
+								<?php esc_html_e( 'Applies only when this plugin\'s engine is the one answering. Your theme\'s search template is untouched — it just receives better-ordered results. Feeds and the REST API are left alone.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Index', 'wpsqr' ); ?></th>
+						<td>
+							<p>
+								<?php
+								printf(
+									/* translators: 1: indexed count, 2: expected count */
+									esc_html__( '%1$s of %2$s posts indexed.', 'wpsqr' ),
+									'<strong>' . esc_html( number_format_i18n( $index['rows'] ) ) . '</strong>',
+									esc_html( number_format_i18n( $index['expected'] ) )
+								);
+								?>
+								<?php if ( ! $index['fulltext'] ) : ?>
+									<br><span style="color:#b32d2e"><?php esc_html_e( 'Full-text indexing is unavailable on this database, so results are matched and ranked with a simpler method. It still works; it ranks less well.', 'wpsqr' ); ?></span>
+								<?php endif; ?>
+								<?php if ( ! empty( $index['rebuild']['offset'] ) && empty( $index['rebuild']['finished'] ) ) : ?>
+									<br><em><?php
+									printf(
+										/* translators: 1: done, 2: total */
+										esc_html__( 'Rebuilding: %1$s of %2$s done. Reload for progress.', 'wpsqr' ),
+										esc_html( number_format_i18n( $index['rebuild']['done'] ) ),
+										esc_html( number_format_i18n( $index['rebuild']['total'] ) )
+									);
+									?></em>
+								<?php endif; ?>
+							</p>
+							<p class="description">
+								<?php esc_html_e( 'Posts are indexed as they are saved. A full rebuild is only needed after changing which post types are searched, or after importing content.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'What to index', 'wpsqr' ); ?></th>
+						<td>
+							<?php
+							$chosen = (array) $s['index_types'];
+							foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) :
+								?>
+								<label style="margin-inline-end:1.2em">
+									<input type="checkbox" name="index_types[]" value="<?php echo esc_attr( $type->name ); ?>"
+										<?php checked( ! $chosen || in_array( $type->name, $chosen, true ) ); ?>>
+									<?php echo esc_html( $type->labels->name ); ?>
+								</label>
+							<?php endforeach; ?>
+							<p class="description"><?php esc_html_e( 'Rebuild the index after changing this.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+				</table>
 
 				<h2><?php esc_html_e( 'Cache', 'wpsqr' ); ?></h2>
 				<table class="form-table" role="presentation">
@@ -861,6 +991,11 @@ class WPSQR_Admin {
 		$in  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification
 		$new = WPSQR_Plugin::defaults();
 
+		$mode                  = $in['engine_mode'] ?? 'auto';
+		$new['engine_mode']    = in_array( $mode, array( 'auto', 'builtin', 'searchwp', 'core' ), true ) ? $mode : 'auto';
+		$new['native_search']  = empty( $in['native_search'] ) ? 0 : 1;
+		$new['index_types']    = array_values( array_map( 'sanitize_key', (array) ( $in['index_types'] ?? array() ) ) );
+
 		$new['ttl']         = max( 60, (int) ( $in['ttl'] ?? 0 ) );
 		$new['per_page']    = max( 1, min( 100, (int) ( $in['per_page'] ?? 20 ) ) );
 		$new['warm_count']  = max( 1, min( 200, (int) ( $in['warm_count'] ?? 25 ) ) );
@@ -916,6 +1051,24 @@ class WPSQR_Admin {
 		WPSQR_Cache::flush();
 
 		wp_safe_redirect( add_query_arg( 'flushed', '1', admin_url( 'admin.php?page=wpsqr' ) ) );
+		exit;
+	}
+
+	public function handle_reindex() {
+		check_admin_referer( 'wpsqr_reindex' );
+
+		if ( ! current_user_can( self::CAP ) ) {
+			wp_die( esc_html__( 'Not allowed.', 'wpsqr' ) );
+		}
+
+		WPSQR_Index::ensure_fulltext();
+		WPSQR_Index::start_rebuild();
+
+		// Run the first batch now so the count moves immediately, rather than
+		// leaving someone watching a zero until cron next fires.
+		WPSQR_Index::run_batch();
+
+		wp_safe_redirect( add_query_arg( 'reindexing', '1', admin_url( 'admin.php?page=wpsqr' ) ) );
 		exit;
 	}
 

@@ -16,6 +16,8 @@ class WPSQR_Plugin {
 
 		( new WPSQR_Hidden() )->hooks();
 		( new WPSQR_Observer() )->hooks();
+		( new WPSQR_Index() )->hooks();
+		( new WPSQR_Native() )->hooks();
 
 		self::migrate_legacy_rules();
 		( new WPSQR_Warmer() )->hooks();
@@ -104,6 +106,56 @@ class WPSQR_Plugin {
 		return WPSQR_Renderer::render_people( $term );
 	}
 
+	/**
+	 * Which backend answers an uncached search.
+	 *
+	 * In auto — the default — SearchWP is used when it is installed, and the
+	 * plugin's own index otherwise. Nothing to configure when SearchWP is
+	 * removed or added; the site keeps working either way.
+	 *
+	 * @return string 'searchwp'|'builtin'|'core'
+	 */
+	public static function engine() {
+		$mode = self::settings()['engine_mode'];
+
+		if ( 'searchwp' === $mode ) {
+			return class_exists( '\SearchWP\Query' ) ? 'searchwp' : self::best_fallback();
+		}
+
+		if ( 'builtin' === $mode ) {
+			return self::best_fallback();
+		}
+
+		if ( 'core' === $mode ) {
+			return 'core';
+		}
+
+		// Auto.
+		if ( class_exists( '\SearchWP\Query' ) ) {
+			return 'searchwp';
+		}
+
+		return self::best_fallback();
+	}
+
+	/** The built-in index, or core search if the index is not usable yet. */
+	protected static function best_fallback() {
+		$stats = WPSQR_Index::stats();
+
+		// An empty index would return nothing at all, which looks exactly
+		// like a broken site. Core search until the first build finishes.
+		return $stats['rows'] > 0 ? 'builtin' : 'core';
+	}
+
+	/** Is the plugin's own engine answering, rather than SearchWP? */
+	public static function engine_is_builtin() {
+		if ( empty( self::settings()['native_search'] ) ) {
+			return false;
+		}
+
+		return 'builtin' === self::engine();
+	}
+
 	/** The search term on this request, whichever parameter carried it. */
 	public static function current_term() {
 		foreach ( self::query_params() as $param ) {
@@ -123,6 +175,11 @@ class WPSQR_Plugin {
 
 	public static function defaults() {
 		return array(
+			// Engine
+			'engine_mode'     => 'auto',
+			'native_search'   => 1,
+			'index_types'     => array(),
+
 			// Cache
 			'ttl'             => 6 * HOUR_IN_SECONDS,
 			'per_page'        => 20,

@@ -84,13 +84,57 @@ class WPSQR_Status {
 		);
 
 		// --- search engine ----------------------------------------------
-		$has_swp  = class_exists( '\SearchWP\Query' );
+		$engine = WPSQR_Plugin::engine();
+		$index  = WPSQR_Index::stats();
+
+		$engine_labels = array(
+			'searchwp' => array( 'ok', __( 'SearchWP', 'wpsqr' ), '' ),
+			'builtin'  => array(
+				'ok',
+				__( 'This plugin\'s own index', 'wpsqr' ),
+				$index['fulltext'] ? '' : __( 'Full-text indexing is unavailable on this database, so matching and ranking use a simpler method.', 'wpsqr' ),
+			),
+			'core'     => array(
+				'warn',
+				__( 'WordPress core search', 'wpsqr' ),
+				0 === $index['rows']
+					? __( 'The built-in index is empty, so core search is being used instead of returning nothing. Rebuild the index on this page to switch over.', 'wpsqr' )
+					: __( 'Core search ranks by date, not relevance.', 'wpsqr' ),
+			),
+		);
+
+		$row      = isset( $engine_labels[ $engine ] ) ? $engine_labels[ $engine ] : array( 'info', $engine, '' );
 		$checks[] = array(
 			'label' => __( 'Search engine', 'wpsqr' ),
-			'value' => $has_swp ? __( 'SearchWP', 'wpsqr' ) : __( 'Core WordPress search', 'wpsqr' ),
-			'state' => $has_swp ? 'ok' : 'warn',
-			'note'  => $has_swp ? '' : __( 'SearchWP was not detected, so cache misses fall back to core search, which finds less.', 'wpsqr' ),
+			'value' => $row[1],
+			'state' => $row[0],
+			'note'  => $row[2],
 		);
+
+		// --- index --------------------------------------------------------
+		$complete = $index['expected'] > 0 && $index['rows'] >= $index['expected'];
+
+		$checks[] = array(
+			'label' => __( 'Search index', 'wpsqr' ),
+			'value' => sprintf(
+				/* translators: 1: indexed, 2: expected */
+				__( '%1$s of %2$s posts', 'wpsqr' ),
+				number_format_i18n( $index['rows'] ),
+				number_format_i18n( $index['expected'] )
+			),
+			'state' => $complete ? 'ok' : ( $index['rows'] > 0 ? 'warn' : 'bad' ),
+			'note'  => $complete ? '' : __( 'Posts are indexed as they are saved, so an existing site needs one rebuild to catch up. Until then some content simply will not be found.', 'wpsqr' ),
+		);
+
+		// --- site search takeover -----------------------------------------
+		if ( WPSQR_Plugin::engine_is_builtin() ) {
+			$checks[] = array(
+				'label' => __( 'Site search', 'wpsqr' ),
+				'value' => __( 'Handled by this plugin', 'wpsqr' ),
+				'state' => 'ok',
+				'note'  => __( 'The theme\'s own search page is being answered with these results.', 'wpsqr' ),
+			);
+		}
 
 		// --- cron --------------------------------------------------------
 		$next = wp_next_scheduled( WPSQR_Warmer::HOOK );

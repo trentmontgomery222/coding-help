@@ -127,11 +127,17 @@ class WPSQR_Engine {
 	 * than a blank page if SearchWP is deactivated.
 	 */
 	protected static function run_uncached( $term, $args ) {
-		if ( class_exists( '\SearchWP\Query' ) ) {
-			return self::run_searchwp( $term, $args );
-		}
+		switch ( WPSQR_Plugin::engine() ) {
+			case 'searchwp':
+				return self::run_searchwp( $term, $args );
 
-		return self::run_core( $term, $args );
+			case 'builtin':
+				return WPSQR_Search::query( $term, $args );
+
+			case 'core':
+			default:
+				return self::run_core( $term, $args );
+		}
 	}
 
 	protected static function run_searchwp( $term, $args ) {
@@ -154,13 +160,14 @@ class WPSQR_Engine {
 			);
 		} catch ( \Throwable $e ) {
 			// A SearchWP upgrade mid-request, a bad engine name, an index
-			// rebuild — fall through to core search rather than fatal on a
-			// public page.
+			// rebuild — fall through rather than fatal on a public page.
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'WPSQR: SearchWP query failed, falling back to core search: ' . $e->getMessage() ); // phpcs:ignore
+				error_log( 'WPSQR: SearchWP query failed, falling back: ' . $e->getMessage() ); // phpcs:ignore
 			}
 
-			return self::run_core( $term, $args );
+			return WPSQR_Index::has_fulltext()
+				? WPSQR_Search::query( $term, $args )
+				: self::run_core( $term, $args );
 		}
 	}
 

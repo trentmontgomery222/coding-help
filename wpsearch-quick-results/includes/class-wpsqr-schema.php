@@ -86,6 +86,8 @@ class WPSQR_Schema {
 			dbDelta( $statement );
 		}
 
+		WPSQR_Index::install();
+
 		update_option( 'wpsqr_db_version', WPSQR_DB_VERSION );
 	}
 
@@ -104,6 +106,7 @@ class WPSQR_Schema {
 		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
 		$wpdb->query( 'DROP TABLE IF EXISTS ' . self::cache_table() );
 		$wpdb->query( 'DROP TABLE IF EXISTS ' . self::terms_table() );
+		$wpdb->query( 'DROP TABLE IF EXISTS ' . WPSQR_Index::table() );
 		// phpcs:enable
 
 		delete_option( 'wpsqr_db_version' );

@@ -5,6 +5,7 @@ php tests/normalizer-test.php        # 30 cases — cache keys, no WordPress nee
 npm install jsdom
 node tests/browser-rules.test.js     # 98 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
+php tests/search-query-test.php      # 26 cases — tokenizing and query building
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
 
@@ -22,6 +23,11 @@ the console. It checks what actually reaches the server — field names, indexes
 after a removal, prototypes staying out of the submission — rather than how
 the page looks. Its fixture mirrors the markup in
 `includes/class-wpsqr-admin.php`; change one and change the other.
+
+`search-query-test.php` covers the part of the built-in engine that decides
+what gets asked of the database, including the cases where a search term would
+otherwise be read as boolean-mode syntax — `-19`, `c++`, `"staff`, `~staff`.
+The database half needs a real WordPress install to exercise.
 
 `people-test.php` covers the boundary where data written by another plugin —
 or another AI session — reaches a public page: markup stripping, URL protocol
