@@ -382,6 +382,7 @@ php tests/search-query-test.php      # 26 cases — tokenizing and query buildin
 php tests/refill-test.php            # 13 cases — refilling after a flush
 php tests/netgate-test.php           # 34 cases — remote-access IP gate
 php tests/guard-test.php             # 12 cases — crash survival
+php tests/remote-settings-test.php   # 19 cases — settings coercion
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
 

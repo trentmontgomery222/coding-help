@@ -261,6 +261,152 @@ class WPSQR_Plugin {
 		self::$memo = null;
 	}
 
+	/**
+	 * Type of each setting, so a generic editor can render and sanitize the
+	 * whole set without a hand-written field per key.
+	 *
+	 * 'enum' carries its allowed values. 'lines' is a newline list of ints or
+	 * strings; 'json' is a structure edited as JSON (the rule arrays, which
+	 * have no sensible flat form). Anything unlisted is treated as text.
+	 *
+	 * @return array<string,array>
+	 */
+	public static function meta() {
+		return array(
+			'update_enabled'  => array( 'type' => 'bool',  'group' => 'Updates' ),
+			'update_manifest' => array( 'type' => 'url',   'group' => 'Updates' ),
+			'update_key'      => array( 'type' => 'text',  'group' => 'Updates' ),
+
+			'rc_trust_proxy'  => array( 'type' => 'bool',  'group' => 'Remote' ),
+
+			'engine_mode'     => array( 'type' => 'enum',  'group' => 'Engine', 'values' => array( 'auto', 'builtin', 'searchwp', 'core' ) ),
+			'native_search'   => array( 'type' => 'bool',  'group' => 'Engine' ),
+			'index_types'     => array( 'type' => 'lines', 'group' => 'Engine' ),
+
+			'ttl'             => array( 'type' => 'int',   'group' => 'Cache' ),
+			'per_page'        => array( 'type' => 'int',   'group' => 'Cache' ),
+			'warm_enabled'    => array( 'type' => 'bool',  'group' => 'Cache' ),
+			'warm_on_flush'   => array( 'type' => 'bool',  'group' => 'Cache' ),
+			'warm_count'      => array( 'type' => 'int',   'group' => 'Cache' ),
+			'show_timing'     => array( 'type' => 'bool',  'group' => 'Cache' ),
+			'observe'         => array( 'type' => 'bool',  'group' => 'Cache' ),
+
+			'searchwp_compat' => array( 'type' => 'bool',  'group' => 'SearchWP' ),
+			'query_param'     => array( 'type' => 'text',  'group' => 'SearchWP' ),
+			'results_path'    => array( 'type' => 'text',  'group' => 'SearchWP' ),
+			'form_id'         => array( 'type' => 'int',   'group' => 'SearchWP' ),
+
+			'hide_meta_key'   => array( 'type' => 'text',  'group' => 'Hidden content' ),
+			'hide_meta_value' => array( 'type' => 'text',  'group' => 'Hidden content' ),
+			'manual_ids'      => array( 'type' => 'lines', 'group' => 'Hidden content' ),
+			'admin_preview'   => array( 'type' => 'bool',  'group' => 'Hidden content' ),
+
+			'result_rules'    => array( 'type' => 'json',  'group' => 'Rules' ),
+			'query_rules'     => array( 'type' => 'json',  'group' => 'Rules' ),
+			'hide_mode'       => array( 'type' => 'enum',  'group' => 'Rules', 'values' => array( 'remove', 'dim' ) ),
+			'update_count'    => array( 'type' => 'bool',  'group' => 'Rules' ),
+			'relabel_buttons' => array( 'type' => 'bool',  'group' => 'Rules' ),
+			'excerpt_words'   => array( 'type' => 'int',   'group' => 'Rules' ),
+			'desc_meta_key'   => array( 'type' => 'text',  'group' => 'Rules' ),
+			'empty_message'   => array( 'type' => 'text',  'group' => 'Rules' ),
+
+			'people_enabled'    => array( 'type' => 'bool', 'group' => 'People' ),
+			'people_limit'      => array( 'type' => 'int',  'group' => 'People' ),
+			'people_min_chars'  => array( 'type' => 'int',  'group' => 'People' ),
+			'people_heading'    => array( 'type' => 'text', 'group' => 'People' ),
+			'people_more_url'   => array( 'type' => 'url',  'group' => 'People' ),
+			'people_show_email' => array( 'type' => 'bool', 'group' => 'People' ),
+			'people_show_phone' => array( 'type' => 'bool', 'group' => 'People' ),
+
+			'directory_pages' => array( 'type' => 'lines', 'group' => 'Directory' ),
+			'directory_mode'  => array( 'type' => 'enum',  'group' => 'Directory', 'values' => array( 'smart', 'strict', 'always', 'never' ) ),
+			'directory_desc'  => array( 'type' => 'text',  'group' => 'Directory' ),
+
+			'age_mode'        => array( 'type' => 'enum',  'group' => 'Old results', 'values' => array( 'off', 'demote', 'hide' ) ),
+			'age_days'        => array( 'type' => 'int',   'group' => 'Old results' ),
+			'age_types'       => array( 'type' => 'lines', 'group' => 'Old results' ),
+		);
+	}
+
+	/**
+	 * Sanitize one raw value against its type.
+	 *
+	 * Returns the current value unchanged when the input is invalid, so a bad
+	 * paste into the remote editor is a no-op rather than a way to corrupt a
+	 * setting. A `null` return means "leave it alone".
+	 */
+	public static function coerce( $key, $raw, $current ) {
+		$meta = self::meta();
+		$spec = isset( $meta[ $key ] ) ? $meta[ $key ] : array( 'type' => 'text' );
+
+		switch ( $spec['type'] ) {
+			case 'bool':
+				return ( '1' === (string) $raw || 'on' === (string) $raw || 'true' === (string) $raw || 1 === $raw || true === $raw ) ? 1 : 0;
+
+			case 'int':
+				return max( 0, (int) $raw );
+
+			case 'url':
+				return esc_url_raw( (string) $raw );
+
+			case 'enum':
+				return in_array( (string) $raw, $spec['values'], true ) ? (string) $raw : $current;
+
+			case 'lines':
+				$lines = array();
+				foreach ( preg_split( '/\r\n|\r|\n/', (string) $raw ) as $line ) {
+					$line = trim( sanitize_text_field( $line ) );
+					if ( '' !== $line ) {
+						$lines[] = $line;
+					}
+				}
+				// manual_ids and age is ints elsewhere, but storing strings is
+				// harmless — every reader casts. Keep it simple and uniform.
+				return array_values( array_unique( $lines ) );
+
+			case 'json':
+				$decoded = json_decode( (string) $raw, true );
+				return is_array( $decoded ) ? $decoded : $current;
+
+			default:
+				return sanitize_text_field( (string) $raw );
+		}
+	}
+
+	/**
+	 * Apply a batch of raw values, only for the keys named.
+	 *
+	 * `$present` lists the keys the form actually carried, so an unchecked
+	 * box (absent from POST) becomes 0 for a field that was on the form,
+	 * rather than being skipped.
+	 *
+	 * @return string[] The keys that changed.
+	 */
+	public static function apply_input( $input, $present ) {
+		$settings = self::settings();
+		$changed  = array();
+
+		foreach ( (array) $present as $key ) {
+			if ( ! isset( self::meta()[ $key ] ) ) {
+				continue;
+			}
+
+			$raw   = isset( $input[ $key ] ) ? $input[ $key ] : ''; // absent bool → ''
+			$value = self::coerce( $key, $raw, $settings[ $key ] );
+
+			if ( $settings[ $key ] !== $value ) {
+				$settings[ $key ] = $value;
+				$changed[]        = $key;
+			}
+		}
+
+		if ( $changed ) {
+			self::update( $settings );
+		}
+
+		return $changed;
+	}
+
 	public static function settings() {
 		if ( null !== self::$memo ) {
 			return self::$memo;

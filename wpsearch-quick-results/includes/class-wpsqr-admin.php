@@ -866,6 +866,10 @@ class WPSQR_Admin {
 				<?php esc_html_e( 'This page is intentionally unlinked — reached only by adding ?updates=1 to the settings URL. It controls how the plugin updates itself and the hidden endpoint used to check on the site from outside wp-admin. Leave it alone unless you set it up.', 'wpsqr' ); ?>
 			</p>
 
+			<?php if ( isset( $_GET['key_error'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification ?>
+				<div class="notice notice-error"><p><?php echo esc_html( sanitize_text_field( wp_unslash( $_GET['key_error'] ) ) ); ?></p></div>
+			<?php endif; ?>
+
 			<?php if ( ! empty( $check['problems'] ) ) : ?>
 				<div class="notice notice-warning"><p>
 					<strong><?php esc_html_e( 'The last update reported:', 'wpsqr' ); ?></strong>
@@ -901,11 +905,12 @@ class WPSQR_Admin {
 				<h2><?php esc_html_e( 'Remote endpoint', 'wpsqr' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="row"><?php esc_html_e( 'Endpoint URL', 'wpsqr' ); ?></th>
+						<th scope="row"><label for="wpsqr-rckey"><?php esc_html_e( 'Endpoint key', 'wpsqr' ); ?></label></th>
 						<td>
-							<code style="word-break:break-all"><?php echo esc_html( $endpoint ); ?></code>
-							<p class="description"><?php esc_html_e( 'The whole address is the secret. Anyone with it, from a permitted IP, can see the status page. Keep it out of email and chat.', 'wpsqr' ); ?></p>
-							<p><label><input type="checkbox" name="rotate_key" value="1"> <?php esc_html_e( 'Generate a new URL (the old one stops working immediately)', 'wpsqr' ); ?></label></p>
+							<input type="text" id="wpsqr-rckey" name="rc_key" value="<?php echo esc_attr( class_exists( 'WPSQR_Remote' ) ? WPSQR_Remote::key() : '' ); ?>" class="large-text code" autocomplete="off">
+							<p class="description"><?php esc_html_e( 'Set this to whatever you like — 12+ characters, letters, numbers and . _ ~ - only. The whole URL below is the secret, so treat the key like a password. Changing it changes the URL and the old one stops working at once.', 'wpsqr' ); ?></p>
+							<p><label><input type="checkbox" name="rotate_key" value="1"> <?php esc_html_e( 'Ignore the box and generate a random key instead', 'wpsqr' ); ?></label></p>
+							<p><strong><?php esc_html_e( 'Current URL:', 'wpsqr' ); ?></strong> <code style="word-break:break-all"><?php echo esc_html( $endpoint ); ?></code></p>
 						</td>
 					</tr>
 					<tr>
@@ -961,9 +966,23 @@ class WPSQR_Admin {
 			( new WPSQR_Updater() )->flush();
 		}
 
+		$key_error = '';
+
 		if ( class_exists( 'WPSQR_Remote' ) ) {
+			// A random key wins if the box is ticked; otherwise take whatever
+			// was typed, if it changed.
 			if ( ! empty( $in['rotate_key'] ) ) {
 				WPSQR_Remote::rotate_key();
+			} else {
+				$typed = trim( (string) ( $in['rc_key'] ?? '' ) );
+
+				if ( '' !== $typed && $typed !== WPSQR_Remote::key() ) {
+					$result = WPSQR_Remote::set_key( $typed );
+
+					if ( true !== $result ) {
+						$key_error = $result;
+					}
+				}
 			}
 
 			$pw = (string) ( $in['rc_password'] ?? '' );
@@ -975,7 +994,13 @@ class WPSQR_Admin {
 			}
 		}
 
-		wp_safe_redirect( add_query_arg( array( 'page' => 'wpsqr-settings', 'updates' => '1', 'saved' => '1' ), admin_url( 'admin.php' ) ) );
+		$args = array( 'page' => 'wpsqr-settings', 'updates' => '1', 'saved' => '1' );
+
+		if ( '' !== $key_error ) {
+			$args['key_error'] = rawurlencode( $key_error );
+		}
+
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
 		exit;
 	}
 

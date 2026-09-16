@@ -72,11 +72,36 @@ class WPSQR_Remote {
 		return (string) get_option( 'wpsqr_rc_key', '' );
 	}
 
-	/** Regenerate the key. Any URL already handed out stops working. */
+	/** Regenerate a random key. Any URL already handed out stops working. */
 	public static function rotate_key() {
 		$key = wp_generate_password( 40, false, false );
 		update_option( 'wpsqr_rc_key', $key, false );
 		return $key;
+	}
+
+	/**
+	 * Set the key to one you chose.
+	 *
+	 * Kept to URL-safe characters and a length that is not trivially
+	 * guessable — the whole URL is the secret, so a two-letter key would be a
+	 * two-letter password on an unauthenticated page.
+	 *
+	 * @return true|string True on success, an error message otherwise.
+	 */
+	public static function set_key( $key ) {
+		$key = trim( (string) $key );
+
+		if ( strlen( $key ) < 12 ) {
+			return __( 'The key must be at least 12 characters — it is the only thing guarding the page.', 'wpsqr' );
+		}
+
+		if ( ! preg_match( '/^[A-Za-z0-9._~-]+$/', $key ) ) {
+			return __( 'The key may use only letters, numbers, and . _ ~ - (so it survives being put in a URL).', 'wpsqr' );
+		}
+
+		update_option( 'wpsqr_rc_key', $key, false );
+
+		return true;
 	}
 
 	public static function set_password( $plain ) {
@@ -139,8 +164,12 @@ class WPSQR_Remote {
 
 		$ip = WPSQR_NetGate::client_ip( (bool) WPSQR_Plugin::settings()['rc_trust_proxy'] );
 
+		// A blocked address is sent quietly to the homepage rather than shown
+		// a refusal — no signal that anything is here at this URL, which is
+		// the point of a hidden endpoint.
 		if ( ! WPSQR_NetGate::allows( $ip, self::rules() ) ) {
-			$this->deny( 403, 'Address not permitted.' );
+			wp_safe_redirect( home_url( '/' ) );
+			exit;
 		}
 
 		if ( ! $this->rate_ok( $ip ) ) {
@@ -219,55 +248,64 @@ class WPSQR_Remote {
 			$this->deny( 429, "Settings can be changed once a day here. Try again in {$wait}." );
 		}
 
-		// A deliberately small, safe subset — the levers you would want from
-		// outside if the site were misbehaving, and nothing that could be
-		// turned into a foothold.
-		$settings = WPSQR_Plugin::settings();
-		$changed  = array();
+		$in      = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification
+		$changed = array();
 
-		$editable = array(
-			'engine_mode'    => array( 'auto', 'builtin', 'searchwp', 'core' ),
-			'native_search'  => 'bool',
-			'age_mode'       => array( 'off', 'demote', 'hide' ),
-			'directory_mode' => array( 'smart', 'strict', 'always', 'never' ),
-			'warm_enabled'   => 'bool',
-		);
+		// Every plugin setting, by the shared metadata. The form sends the
+		// list of keys it carried so unchecked boxes register as off.
+		$present = isset( $in['_fields'] ) ? array_filter( array_map( 'sanitize_key', explode( ',', (string) $in['_fields'] ) ) ) : array();
 
-		foreach ( $editable as $field => $allowed ) {
-			if ( ! isset( $_POST[ $field ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
-				continue;
-			}
+		if ( $present ) {
+			$changed = WPSQR_Plugin::apply_input( $in, $present );
+		}
 
-			$value = sanitize_text_field( wp_unslash( $_POST[ $field ] ) ); // phpcs:ignore WordPress.Security.NonceVerification
+		// The remote access rules themselves — editable here, as asked, but
+		// only once the password is in. An empty box would lock everyone out,
+		// so it is ignored rather than saved.
+		if ( isset( $in['rc_ip_rules'] ) ) {
+			$rules = trim( (string) $in['rc_ip_rules'] );
 
-			if ( 'bool' === $allowed ) {
-				$value = ( '1' === $value || 'on' === $value || 'true' === $value ) ? 1 : 0;
-			} elseif ( ! in_array( $value, $allowed, true ) ) {
-				continue;
-			}
+			if ( '' !== $rules ) {
+				$settings = WPSQR_Plugin::settings();
 
-			if ( $settings[ $field ] !== $value ) {
-				$settings[ $field ] = $value;
-				$changed[]          = $field;
+				if ( $settings['rc_ip_rules'] !== $in['rc_ip_rules'] ) {
+					$settings['rc_ip_rules'] = sanitize_textarea_field( $in['rc_ip_rules'] );
+					WPSQR_Plugin::update( $settings );
+					$changed[] = 'rc_ip_rules';
+				}
 			}
 		}
 
-		// One special action, gated the same way: clear safe mode remotely,
-		// which is the whole reason someone would reach for this in a crisis.
-		if ( ! empty( $_POST['resume'] ) && class_exists( 'WPSQR_Guard' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		// The endpoint key. Changing it here changes the URL you are on, so
+		// the response says so and links to the new one.
+		if ( ! empty( $in['new_key'] ) ) {
+			$result = self::set_key( (string) $in['new_key'] );
+
+			if ( true === $result ) {
+				$changed[]        = 'endpoint key';
+				$this->key_changed = self::key();
+			} else {
+				$this->flash_error = $result;
+			}
+		}
+
+		// Clear safe mode, the reason this page exists in a crisis.
+		if ( ! empty( $in['resume'] ) && class_exists( 'WPSQR_Guard' ) ) {
 			WPSQR_Guard::leave_safe_mode();
 			$changed[] = 'resumed';
 		}
 
 		if ( $changed ) {
-			WPSQR_Plugin::update( $settings );
 			update_option( self::EDIT_OPTION, time(), false );
 		}
 
 		$this->flash = $changed
 			? 'Saved: ' . implode( ', ', $changed )
-			: 'Nothing changed.';
+			: ( $this->flash_error ? '' : 'Nothing changed.' );
 	}
+
+	protected $flash_error = '';
+	protected $key_changed = '';
 
 	protected $flash = '';
 
@@ -298,6 +336,12 @@ class WPSQR_Remote {
 
 		<?php if ( $this->flash ) : ?>
 			<p class="flash"><?php echo esc_html( $this->flash ); ?></p>
+		<?php endif; ?>
+		<?php if ( $this->flash_error ) : ?>
+			<p class="flash" style="background:#fce5e5;border-color:#e5a3a3"><?php echo esc_html( $this->flash_error ); ?></p>
+		<?php endif; ?>
+		<?php if ( $this->key_changed ) : ?>
+			<p class="flash">The URL changed. New address:<br><code style="word-break:break-all"><?php echo esc_html( add_query_arg( self::VAR, $this->key_changed, home_url( '/' ) ) ); ?></code></p>
 		<?php endif; ?>
 
 		<?php foreach ( $report as $section => $rows ) : ?>
@@ -380,35 +424,90 @@ class WPSQR_Remote {
 		$last     = (int) get_option( self::EDIT_OPTION, 0 );
 		$cooling  = $last && ( time() - $last ) < self::EDIT_COOLDOWN;
 		$settings = WPSQR_Plugin::settings();
-		?>
-		<form method="post">
-			<h2>Change a setting</h2>
+		$meta     = WPSQR_Plugin::meta();
 
-			<?php if ( ! self::has_password() ) : ?>
-				<p class="warn">Editing is off until a password is set in wp-admin (Settings &rarr; the hidden updates panel).</p>
-			<?php elseif ( $cooling ) : ?>
-				<p class="warn">Already changed today. Next change available in <?php echo esc_html( human_time_diff( time(), $last + self::EDIT_COOLDOWN ) ); ?>.</p>
-			<?php else : ?>
-				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo esc_attr( self::key() ); ?>">
-				<input type="hidden" name="do" value="save">
+		echo '<form method="post"><h2>Change settings</h2>';
 
-				<label>Password<br><input type="password" name="pw" autocomplete="off" required></label>
+		if ( ! self::has_password() ) {
+			echo '<p class="warn">Editing is off until a password is set in wp-admin (the settings page with <code>?updates=1</code>).</p></form>';
+			return;
+		}
 
-				<label>Engine
-					<select name="engine_mode">
-						<?php foreach ( array( 'auto', 'builtin', 'searchwp', 'core' ) as $m ) : ?>
-							<option value="<?php echo esc_attr( $m ); ?>" <?php selected( $settings['engine_mode'], $m ); ?>><?php echo esc_html( $m ); ?></option>
-						<?php endforeach; ?>
-					</select>
-				</label>
+		if ( $cooling ) {
+			echo '<p class="warn">Already changed today. Next change available in ' . esc_html( human_time_diff( time(), $last + self::EDIT_COOLDOWN ) ) . '.</p></form>';
+			return;
+		}
 
-				<label><input type="checkbox" name="native_search" value="1" <?php checked( $settings['native_search'], 1 ); ?>> Take over site search</label>
-				<label><input type="checkbox" name="warm_enabled" value="1" <?php checked( $settings['warm_enabled'], 1 ); ?>> Cache warming</label>
-				<label><input type="checkbox" name="resume" value="1"> Clear safe mode (resume the plugin)</label>
+		echo '<input type="hidden" name="' . esc_attr( self::VAR ) . '" value="' . esc_attr( self::key() ) . '">';
+		echo '<input type="hidden" name="do" value="save">';
+		echo '<input type="hidden" name="_fields" value="' . esc_attr( implode( ',', array_keys( $meta ) ) ) . '">';
 
-				<p><button type="submit">Save (once per day)</button></p>
-			<?php endif; ?>
-		</form>
-		<?php
+		echo '<label><strong>Password</strong> (required)<br><input type="password" name="pw" autocomplete="off" required style="width:100%"></label><hr>';
+
+		// Group the fields the way the metadata groups them, so a long form is
+		// still navigable.
+		$groups = array();
+		foreach ( $meta as $key => $spec ) {
+			$groups[ $spec['group'] ][ $key ] = $spec;
+		}
+
+		foreach ( $groups as $group => $fields ) {
+			echo '<h3 style="margin:1.2rem 0 .3rem">' . esc_html( $group ) . '</h3>';
+
+			foreach ( $fields as $key => $spec ) {
+				$this->render_field( $key, $spec, $settings[ $key ] );
+			}
+		}
+
+		// Access rules and the key sit with the settings, gated by the same
+		// password.
+		echo '<h3 style="margin:1.2rem 0 .3rem">Remote access</h3>';
+		echo '<label>Allowed addresses (one rule per line)<br><textarea name="rc_ip_rules" rows="4" style="width:100%">' . esc_textarea( $settings['rc_ip_rules'] ) . '</textarea></label>';
+		echo '<label>Change this page\'s key (12+ chars; letters, numbers, . _ ~ -)<br><input type="text" name="new_key" autocomplete="off" placeholder="leave blank to keep" style="width:100%"></label>';
+
+		echo '<hr><label><input type="checkbox" name="resume" value="1"> Clear safe mode (resume the plugin)</label>';
+
+		echo '<p><button type="submit">Save (once per day)</button></p></form>';
+	}
+
+	protected function render_field( $key, $spec, $value ) {
+		$name  = esc_attr( $key );
+		$label = esc_html( $key );
+
+		switch ( $spec['type'] ) {
+			case 'bool':
+				printf(
+					'<label><input type="checkbox" name="%s" value="1" %s> %s</label>',
+					$name,
+					checked( (int) $value, 1, false ),
+					$label
+				);
+				break;
+
+			case 'enum':
+				echo '<label>' . $label . '<br><select name="' . $name . '">';
+				foreach ( $spec['values'] as $option ) {
+					printf( '<option value="%1$s" %2$s>%1$s</option>', esc_attr( $option ), selected( (string) $value, $option, false ) );
+				}
+				echo '</select></label>';
+				break;
+
+			case 'int':
+				printf( '<label>%s<br><input type="number" name="%s" value="%s" style="width:8rem"></label>', $label, $name, esc_attr( (string) (int) $value ) );
+				break;
+
+			case 'lines':
+				printf( '<label>%s (one per line)<br><textarea name="%s" rows="3" style="width:100%%">%s</textarea></label>', $label, $name, esc_textarea( implode( "\n", (array) $value ) ) );
+				break;
+
+			case 'json':
+				printf( '<label>%s (JSON)<br><textarea name="%s" rows="3" style="width:100%%;font-family:monospace">%s</textarea></label>', $label, $name, esc_textarea( wp_json_encode( $value ) ) );
+				break;
+
+			case 'url':
+			default:
+				printf( '<label>%s<br><input type="text" name="%s" value="%s" style="width:100%%"></label>', $label, $name, esc_attr( (string) $value ) );
+				break;
+		}
 	}
 }

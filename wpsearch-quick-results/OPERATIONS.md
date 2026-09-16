@@ -77,7 +77,19 @@ and whether cron is running. From it, with the password, you can flip the
 engine, toggle site-search takeover and warming, and — the reason it exists —
 **clear safe mode remotely** to bring a crashed plugin back.
 
-Rotate the URL any time from the `?updates=1` panel; the old one dies at once.
+**The key is yours to set.** In the `?updates=1` panel, type the endpoint key
+you want (12+ characters, `A-Z a-z 0-9 . _ ~ -`) — it is not random unless you
+ask for one. Changing it changes the URL and the old one stops working at
+once. The key can also be changed from the remote page itself, with the
+password.
+
+**All settings are editable from the remote page**, not just a handful —
+grouped the way the admin screen groups them, sanitized by the same rules, and
+still capped at one change per day. The IP rules are editable there too, once
+the password is entered.
+
+**A blocked address is redirected to the homepage**, not shown a refusal, so
+the endpoint gives no sign of existing to an address that is not allowed.
 
 ## Tests
 
