@@ -228,6 +228,14 @@
 			RULES = directoryRules.concat( RULES );
 		}
 
+		// Age rules go last, so a Keep rule of yours protects a result from
+		// being demoted or hidden for being old. Age is a guess about
+		// relevance; a Keep is somebody having thought about that one result.
+		( DATA.ageRules || [] ).forEach( function ( rule ) {
+			rule.source = 'age';
+			RULES.push( rule );
+		} );
+
 		// Rules built on the settings screen arrive in exactly the shape used
 		// by the arrays above, so they append rather than being translated.
 		( admin.result || [] ).forEach( function ( rule ) {

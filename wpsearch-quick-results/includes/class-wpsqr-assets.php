@@ -49,6 +49,10 @@ class WPSQR_Assets {
 					// later user rule should not be able to un-hide a page
 					// that is only matching through hidden content.
 					'directoryRules' => WPSQR_Directory::browser_rules( WPSQR_Plugin::current_term() ),
+					// Age rules run after your own, so a Keep rule wins.
+					// Directory rules run before, because those are not a
+					// preference to be overridden.
+					'ageRules'       => WPSQR_Age::browser_rules(),
 					'directory'      => WPSQR_Directory::debug( WPSQR_Plugin::current_term() ),
 					'rules'       => array_merge(
 						WPSQR_Rules::for_browser(),

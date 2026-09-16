@@ -657,6 +657,90 @@ class WPSQR_Admin {
 					</tr>
 				</table>
 
+				<h2><?php esc_html_e( 'Old results', 'wpsqr' ); ?></h2>
+				<p class="wpsqr-hint">
+					<?php esc_html_e( 'A news post from 2019 and this year\'s are equally good matches for the same search, and the old one is worse than useless — nothing on it says it is out of date.', 'wpsqr' ); ?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'What to do with them', 'wpsqr' ); ?></th>
+						<td>
+							<label>
+								<input type="radio" name="age_mode" value="off" <?php checked( $s['age_mode'], 'off' ); ?>>
+								<?php esc_html_e( 'Nothing — age is ignored', 'wpsqr' ); ?>
+							</label><br>
+
+							<label>
+								<input type="radio" name="age_mode" value="demote" <?php checked( $s['age_mode'], 'demote' ); ?>>
+								<?php esc_html_e( 'Move them below everything else', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 .8em 1.8em">
+								<?php esc_html_e( 'The safer of the two. "Old" is a guess about relevance, and a wrong guess that reorders can be lived with — a wrong guess that hides cannot, because nobody finds out what they missed.', 'wpsqr' ); ?>
+							</p>
+
+							<label>
+								<input type="radio" name="age_mode" value="hide" <?php checked( $s['age_mode'], 'hide' ); ?>>
+								<?php esc_html_e( 'Remove them from results', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 0 1.8em">
+								<?php esc_html_e( 'They stay published and reachable by link — they just stop turning up in search.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-age-days"><?php esc_html_e( 'Older than', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="number" id="wpsqr-age-days" name="age_days" min="1" max="36500" value="<?php echo esc_attr( $s['age_days'] ); ?>" class="small-text">
+							<?php esc_html_e( 'days', 'wpsqr' ); ?>
+							<p class="description">
+								<?php
+								printf(
+									/* translators: %s: the configured age in years */
+									esc_html__( 'About %s. Measured from whichever is later, the date published or the date last edited — a 2019 post revised last month has been looked at recently, and treating it as stale ignores the one signal anybody gave about it.', 'wpsqr' ),
+									esc_html(
+										sprintf(
+											/* translators: %s: number of years, one decimal place */
+											_n( '%s year', '%s years', (int) round( max( 1, (int) $s['age_days'] ) / 365 ), 'wpsqr' ),
+											number_format_i18n( max( 1, (int) $s['age_days'] ) / 365, 1 )
+										)
+									)
+								);
+								?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Which content', 'wpsqr' ); ?></th>
+						<td>
+							<?php
+							$age_types = (array) $s['age_types'];
+							foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) :
+								?>
+								<label style="margin-inline-end:1.2em">
+									<input type="checkbox" name="age_types[]" value="<?php echo esc_attr( $type->name ); ?>"
+										<?php checked( in_array( $type->name, $age_types, true ) ); ?>>
+									<?php echo esc_html( $type->labels->name ); ?>
+								</label>
+							<?php endforeach; ?>
+							<p class="description">
+								<?php esc_html_e( 'Posts only, by default. Pages do not go stale the way news does — a Transportation page written in 2018 and never touched since is still the Transportation page, and expiring it would lose content nothing replaces.', 'wpsqr' ); ?>
+							</p>
+							<?php if ( WPSQR_Age::is_active() ) : ?>
+								<?php $expired = WPSQR_Age::expired_ids(); ?>
+								<p class="description">
+									<strong><?php
+									printf(
+										/* translators: %s: number of posts */
+										esc_html__( 'Currently affecting %s published items.', 'wpsqr' ),
+										esc_html( number_format_i18n( $expired['total'] ) )
+									);
+									?></strong>
+								</p>
+							<?php endif; ?>
+						</td>
+					</tr>
+				</table>
+
 				<h2><?php esc_html_e( 'Result rules', 'wpsqr' ); ?></h2>
 				<p class="wpsqr-hint">
 					<?php esc_html_e( 'Rules run top to bottom against each result. "Hide" and "Keep" are final — an early Keep protects a result from every rule below it.', 'wpsqr' ); ?>
@@ -1084,6 +1168,11 @@ class WPSQR_Admin {
 		$new['desc_meta_key'] = sanitize_text_field( $in['desc_meta_key'] ?? '' );
 		$new['update_count']    = empty( $in['update_count'] ) ? 0 : 1;
 		$new['relabel_buttons'] = empty( $in['relabel_buttons'] ) ? 0 : 1;
+
+		$age_mode         = $in['age_mode'] ?? 'off';
+		$new['age_mode']  = in_array( $age_mode, array( 'off', 'demote', 'hide' ), true ) ? $age_mode : 'off';
+		$new['age_days']  = max( 1, min( 36500, (int) ( $in['age_days'] ?? 730 ) ) );
+		$new['age_types'] = array_values( array_map( 'sanitize_key', (array) ( $in['age_types'] ?? array() ) ) );
 
 		$new['result_rules'] = self::sanitize_rules( $in['result_rules'] ?? array(), true );
 		$new['query_rules']  = self::sanitize_rules( $in['query_rules'] ?? array(), false );

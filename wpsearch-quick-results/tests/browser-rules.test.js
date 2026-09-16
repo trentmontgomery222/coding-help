@@ -407,6 +407,28 @@ check('no labels sent means nothing is touched',
 check('a hidden row is not relabelled on its way out',
   run({ data: Object.assign({ hiddenIds: [6063] }, LABELS) }).buttons.includes('Go to Post'), false);
 
+console.log('\nold results');
+// The server works out which posts are past the cutoff and sends the ids,
+// because SearchWP's markup carries no date for the browser to read.
+const OLD_DEMOTE = { ageRules: [{ when: 'id', op: 'in', value: ['6063', '11487'], then: 'bottom' }] };
+const OLD_HIDE   = { ageRules: [{ when: 'id', op: 'in', value: ['6063', '11487'], then: 'hide' }] };
+
+check('demoting moves them below everything else',
+  run({ data: OLD_DEMOTE }).ids, ['5002', '43', '4930', '6837', '5069', '6063', '11487']);
+check('and keeps their order relative to each other',
+  run({ data: OLD_DEMOTE }).ids.slice(-2), ['6063', '11487']);
+check('nothing is lost when demoting', run({ data: OLD_DEMOTE }).ids.length, 7);
+check('hiding removes them', run({ data: OLD_HIDE }).ids, ['5002', '43', '4930', '6837', '5069']);
+check('a keep rule of yours protects an old result',
+  run({ data: OLD_HIDE, rules: [{ when: 'id', op: 'equals', value: '6063', then: 'keep' }] }).ids.includes('6063'),
+  true);
+check('but a directory hide is still not overridable',
+  run({ data: { directoryRules: [{ when: 'url', op: 'equals', value: '/staff/directory/', then: 'hide' }] },
+        rules: [{ when: 'id', op: 'equals', value: '43', then: 'keep' }] }).ids.includes('43'),
+  false);
+check('an empty age list changes nothing',
+  run({ data: { ageRules: [] } }).ids.length, 7);
+
 console.log('\nreordering');
 check('bottom sinks attachments below everything else',
   run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }] }).ids,

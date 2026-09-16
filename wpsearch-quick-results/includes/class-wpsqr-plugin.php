@@ -17,6 +17,7 @@ class WPSQR_Plugin {
 		( new WPSQR_Hidden() )->hooks();
 		( new WPSQR_Observer() )->hooks();
 		( new WPSQR_Index() )->hooks();
+		( new WPSQR_Age() )->hooks();
 		( new WPSQR_Native() )->hooks();
 
 		self::migrate_legacy_rules();
@@ -209,6 +210,12 @@ class WPSQR_Plugin {
 			'desc_meta_key'   => '_wpsqr_search_description',
 			'update_count'    => 1,
 			'relabel_buttons' => 1,
+
+			// Age filtering. Posts only by default — pages do not go stale
+			// the way news does.
+			'age_mode'        => 'off',
+			'age_days'        => 730,
+			'age_types'       => array( 'post' ),
 			'empty_message'   => 'No matching results. Try a different search term.',
 
 			// People results, supplied by a staff directory plugin.

@@ -119,7 +119,6 @@ html.acps-search-ready .acps-search-results {
 /* ---------------------------------------------------------------
  * General result polish — adjust or delete to taste.
  * --------------------------------------------------------------- */
-.swp-result-item.acps-pinned,
 .acps-result {
 	padding-block: 1.1rem;
 }
@@ -135,7 +134,7 @@ html.acps-search-ready .acps-search-results {
 .swp-result-item .entry-title,
 .acps-result .entry-title {
 	margin: 0 0 0.3rem;
-	font-size: 1.15rem;
+	font-size: 2.15rem;
 	line-height: 1.35;
 }
 
@@ -193,11 +192,8 @@ html.acps-search-ready .acps-search-results {
 	color: #1c3d5a;
 }
 
-.acps-pinned {
-	background: #fffdf5;
-	border-inline-start: 3px solid #dba617;
-	padding-inline-start: 0.85rem;
-}
+/* A pinned row is no longer marked. Being first is the signal; a colour and
+   a rule on top of that reads as a warning rather than a promotion. */
 
 /* Rows sunk to the bottom by a `then: 'bottom'` rule. Deliberately quiet —
    they're de-prioritised, not flagged. Delete this block for no visual
@@ -334,4 +330,11 @@ html.acps-search-ready .acps-search-results {
 .wpsqr-results .swp-result-item .swp-result-item--button:focus {
 	background: #3a6391;
 	color: #fff;
+}
+
+/* SearchWP sets `margin: 0` on the description, which leaves it flush
+   against the edge of the row. */
+.swp-search-results .swp-result-item--desc,
+.wpsqr-results .swp-result-item--desc {
+	margin: 0 0.5rem;
 }

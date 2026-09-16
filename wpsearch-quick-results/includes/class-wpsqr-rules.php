@@ -67,8 +67,14 @@ class WPSQR_Rules {
 		// them. Everyone else never receives them.
 		$show_hidden = $settings['admin_preview'] && current_user_can( 'edit_posts' );
 
-		$rules = self::server_rules( $settings );
-		$kept  = array();
+		$rules     = self::server_rules( $settings );
+		$kept      = array();
+		$protected = array();
+
+		// Every rule below reads the title and permalink of each result, and
+		// the age filter reads its dates. One priming query beats one query
+		// per result, several times over.
+		_prime_post_caches( array_map( 'intval', $post_ids ), false, false );
 
 		$term        = self::current_query();
 		$hide_dir    = WPSQR_Directory::is_configured() && WPSQR_Directory::should_hide( $term );
@@ -93,12 +99,23 @@ class WPSQR_Rules {
 				continue;
 			}
 
-			if ( 'hide' === self::verdict( $post_id, $rules ) ) {
+			$verdict = self::verdict( $post_id, $rules );
+
+			if ( 'hide' === $verdict ) {
 				continue;
+			}
+
+			// An explicit Keep outranks the age rule. Age is a guess about
+			// relevance; a Keep is somebody saying they thought about this
+			// one, and the guess should not overrule them.
+			if ( 'keep' === $verdict ) {
+				$protected[] = $post_id;
 			}
 
 			$kept[] = $post_id;
 		}
+
+		$kept = WPSQR_Age::apply( $kept, $protected );
 
 		/**
 		 * Last word on which results survive.

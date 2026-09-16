@@ -250,6 +250,26 @@ class WPSQR_Status {
 			'note'  => $dir_note,
 		);
 
+		// --- old results ---------------------------------------------------
+		if ( WPSQR_Age::is_active() ) {
+			$expired = WPSQR_Age::expired_ids();
+
+			$checks[] = array(
+				'label' => __( 'Old results', 'wpsqr' ),
+				'value' => sprintf(
+					/* translators: 1: demoted or hidden, 2: number of days, 3: count */
+					__( '%1$s after %2$d days — %3$s items affected', 'wpsqr' ),
+					WPSQR_Age::MODE_HIDE === WPSQR_Age::mode() ? __( 'Hidden', 'wpsqr' ) : __( 'Demoted', 'wpsqr' ),
+					WPSQR_Age::days(),
+					number_format_i18n( $expired['total'] )
+				),
+				'state' => 'ok',
+				'note'  => $expired['capped']
+					? __( 'More items are affected than can be sent to the browser, so on pages SearchWP renders itself only the most recent of them are demoted. Results this plugin renders are unaffected.', 'wpsqr' )
+					: '',
+			);
+		}
+
 		// --- hidden content -----------------------------------------------
 		$map      = WPSQR_Hidden::map();
 		$meta_key = $settings['hide_meta_key'];

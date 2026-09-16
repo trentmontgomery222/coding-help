@@ -138,6 +138,30 @@ To see it working before the real integration exists, activate
 `examples/example-people-provider.php` as its own plugin — six invented staff,
 one of them hidden, so visibility can be tested as well as matching.
 
+### Old results
+
+A news post from 2019 and this year's are equally good matches for the same
+search, and the old one is worse than useless — nothing on it says it's out of
+date. **Settings → Old results** either demotes them below everything else or
+removes them from search entirely.
+
+Three decisions built in, all changeable:
+
+**Demote is the default, not hide.** "Old" is a guess about relevance. A wrong
+guess that reorders can be lived with; a wrong guess that hides can't, because
+nobody finds out what they missed.
+
+**Posts only, by default.** Pages don't go stale the way news does — the
+Transportation page written in 2018 and never touched since is still the
+Transportation page, and expiring it loses content nothing replaces.
+
+**Age is measured from the later of published or last edited.** A 2019 post
+revised last month has been looked at recently, and treating it as stale
+ignores the one signal anybody actually gave about it.
+
+A `Keep` rule of yours outranks all of this. Directory hiding doesn't — that
+one isn't a preference.
+
 ### Result buttons
 
 SearchWP labels every result *Go to Page*, including news posts and PDFs. The
@@ -352,7 +376,7 @@ Everything else still works. The Status panel says so.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 105 cases — the browser rule engine
+node tests/browser-rules.test.js     # 112 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 php tests/search-query-test.php      # 26 cases — tokenizing and query building
 php tests/refill-test.php            # 13 cases — refilling after a flush
