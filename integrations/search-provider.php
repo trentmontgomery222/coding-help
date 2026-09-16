@@ -288,10 +288,19 @@ function CAYDENDIR_sd_wpsqr_people( $people, $args = array() ) {
 				'name' => $name,
 			);
 
-			// A deep link that lands on this person: the directory page with the
-			// name pre-filled into its search box (the JS reads ?sd_name=).
+			// A deep link that lands right on this person: the directory page plus
+			// a #firstnamelastname fragment matching the id the directory renders
+			// on their row/card. Falls back to the ?sd_name= search pre-fill when
+			// we can't build a name slug.
 			if ( '' !== $dir_url ) {
-				$person['url'] = add_query_arg( 'sd_name', rawurlencode( $name ), $dir_url );
+				$slug = function_exists( 'CAYDENDIR_sd_name_slug' )
+					? CAYDENDIR_sd_name_slug( isset( $row['firstname'] ) ? $row['firstname'] : '', isset( $row['lastname'] ) ? $row['lastname'] : '', $name )
+					: '';
+				if ( '' !== $slug ) {
+					$person['url'] = $dir_url . '#' . $slug;
+				} else {
+					$person['url'] = add_query_arg( 'sd_name', rawurlencode( $name ), $dir_url );
+				}
 			}
 
 			$job = isset( $row['publictitle'] ) ? trim( (string) $row['publictitle'] ) : '';

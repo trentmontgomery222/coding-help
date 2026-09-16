@@ -2427,6 +2427,54 @@ function CAYDENDIR_sd_photo_markup( $name, $photo ) {
 	);
 }
 
+/**
+ * The base anchor slug for a person, built from first + last name
+ * (e.g. "aaronkerr"): accents stripped, everything but a-z0-9 removed. This is
+ * the un-deduplicated form — the search provider builds the same slug so its
+ * result links (#slug) point at the row this renders. '' when no usable name.
+ *
+ * @param string $firstname
+ * @param string $lastname
+ * @param string $name Full-name fallback when first/last are empty.
+ * @return string
+ */
+function CAYDENDIR_sd_name_slug( $firstname, $lastname, $name = '' ) {
+	$base = trim( (string) $firstname . (string) $lastname );
+	if ( '' === $base ) {
+		$base = (string) $name;
+	}
+	if ( function_exists( 'remove_accents' ) ) {
+		$base = remove_accents( $base );
+	}
+	return strtolower( preg_replace( '/[^a-z0-9]/i', '', $base ) );
+}
+
+/**
+ * A stable, UNIQUE HTML id for a person's row/card, built from CAYDENDIR_sd_name_slug()
+ * so a URL fragment like #aaronkerr jumps straight to them. Duplicates within
+ * one directory get a -2, -3 … suffix so every id stays unique on the page.
+ *
+ * @param string $firstname
+ * @param string $lastname
+ * @param string $name Full-name fallback when first/last are empty.
+ * @param array  $used Map of ids already handed out (passed by reference).
+ * @return string The id, or '' when no usable name is available.
+ */
+function CAYDENDIR_sd_anchor_id( $firstname, $lastname, $name, &$used ) {
+	$base = CAYDENDIR_sd_name_slug( $firstname, $lastname, $name );
+	if ( '' === $base ) {
+		return '';
+	}
+	$slug = $base;
+	$n    = 2;
+	while ( isset( $used[ $slug ] ) ) {
+		$slug = $base . '-' . $n;
+		$n++;
+	}
+	$used[ $slug ] = true;
+	return $slug;
+}
+
 add_shortcode( 'CAYDENDIR_staff_directory', 'CAYDENDIR_sd_render' );
 
 /* -------------------------------------------------------------------------
@@ -2583,6 +2631,9 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 		<p class="CAYDENDIR-sd__status" role="status" aria-live="polite" data-CAYDENDIR-status></p>
 
 		<?php
+		// Ids handed out to rows/cards, so #firstnamelastname jumps to a person
+		// and every id stays unique within this directory.
+		$anchors_used = array();
 		if ( empty( $data ) ) :
 			?>
 			<p class="CAYDENDIR-sd__empty">The directory hasn&rsquo;t been synced yet. An administrator can sync it under <strong>Settings &rsaquo; Staff Directory</strong>.</p>
@@ -2652,6 +2703,7 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 							$search_blob = strtolower( trim( $name . ' ' . $firstname . ' ' . $lastname . ' ' . $publictitle . ' ' . $job . ' ' . $location . ' ' . $email . ' ' . $rid . ' ' . implode( ' ', $tags ) ) );
 							$place         = preg_replace( '/[^0-9+]/', '', $location );
 							$rowid       = $uid . '-r' . $i;
+							$anchor      = CAYDENDIR_sd_anchor_id( $firstname, $lastname, $name, $anchors_used );
 
 							$record_attr = '';
 							if ( $can_edit ) {
@@ -2673,7 +2725,7 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 								$record_attr = ' data-key="' . esc_attr( $key ) . '" data-record="' . esc_attr( wp_json_encode( $record ) ) . '"';
 							}
 							?>
-							<tr data-CAYDENDIR-item
+							<tr data-CAYDENDIR-item<?php echo '' !== $anchor ? ' id="' . esc_attr( $anchor ) . '"' : ''; ?>
 								data-tags="<?php echo esc_attr( implode( '|', $terms_lower ) ); ?>"
 								data-search="<?php echo esc_attr( $search_blob ); ?>"<?php echo $record_attr; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above ?>>
 								<?php if ( $selectable ) : ?>
@@ -2751,6 +2803,7 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 					$terms_lower = array_map( 'strtolower', $filter_terms );
 					$search_blob = strtolower( trim( $name . ' ' . $firstname . ' ' . $lastname . ' ' . $publictitle . ' ' . $job . ' ' . $location . ' ' . $email . ' ' . $rid . ' ' . implode( ' ', $tags ) ) );
 					$place         = preg_replace( '/[^0-9+]/', '', $location );
+					$anchor      = CAYDENDIR_sd_anchor_id( $firstname, $lastname, $name, $anchors_used );
 
 					$record_attr = '';
 					if ( $can_edit ) {
@@ -2772,7 +2825,7 @@ function CAYDENDIR_sd_render_directory( $atts ) {
 						$record_attr = ' data-key="' . esc_attr( $key ) . '" data-record="' . esc_attr( wp_json_encode( $record ) ) . '"';
 					}
 					?>
-					<li class="CAYDENDIR-sd__card" data-CAYDENDIR-item data-tags="<?php echo esc_attr( implode( '|', $terms_lower ) ); ?>" data-search="<?php echo esc_attr( $search_blob ); ?>"<?php echo $record_attr; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above ?>>
+					<li class="CAYDENDIR-sd__card" data-CAYDENDIR-item<?php echo '' !== $anchor ? ' id="' . esc_attr( $anchor ) . '"' : ''; ?> data-tags="<?php echo esc_attr( implode( '|', $terms_lower ) ); ?>" data-search="<?php echo esc_attr( $search_blob ); ?>"<?php echo $record_attr; // phpcs:ignore WordPress.Security.EscapeOutput -- escaped above ?>>
 						<?php if ( $show_photo || $can_edit ) : ?>
 							<span class="CAYDENDIR-sd__photo-wrap" data-CAYDENDIR-photo-wrap><?php echo CAYDENDIR_sd_photo_markup( $name, $photo ); // phpcs:ignore WordPress.Security.EscapeOutput ?></span>
 						<?php endif; ?>

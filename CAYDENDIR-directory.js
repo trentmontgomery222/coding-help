@@ -106,6 +106,42 @@
 				}
 			} catch ( e ) {}
 		}
+		// #firstnamelastname in the URL jumps straight to a person's row/card:
+		// unhide it (in case a search filter above hid it), scroll to it and
+		// flash a brief highlight. Wrapped so an odd hash is harmless.
+		function goToHash() {
+			try {
+				var id = ( window.location && window.location.hash ) ? window.location.hash.slice( 1 ) : '';
+				if ( ! id ) {
+					return;
+				}
+				var target = null;
+				try {
+					target = root.querySelector( '#' + ( ( window.CSS && CSS.escape ) ? CSS.escape( id ) : id ) );
+				} catch ( e ) { target = null; }
+				if ( ! target || items.indexOf( target ) === -1 ) {
+					return; // not one of our people in this directory
+				}
+				target.hidden = false;
+				if ( target.scrollIntoView ) {
+					target.scrollIntoView( { block: 'center' } );
+				}
+				// Inline outline so it works regardless of the site's custom CSS.
+				var prev = target.style.outline;
+				var prevOff = target.style.outlineOffset;
+				target.style.outline = '3px solid var(--CAYDENDIR-accent, #2271b1)';
+				target.style.outlineOffset = '2px';
+				setTimeout( function () {
+					target.style.outline = prev;
+					target.style.outlineOffset = prevOff;
+				}, 2500 );
+			} catch ( e ) {}
+		}
+		goToHash();
+		// Also respond to later hash changes (clicking a #name link on the page).
+		if ( window.addEventListener ) {
+			window.addEventListener( 'hashchange', goToHash );
+		}
 		chips.forEach( function ( chip ) {
 			chip.addEventListener( 'click', function () {
 				var pressed = chip.getAttribute( 'aria-pressed' ) === 'true';
