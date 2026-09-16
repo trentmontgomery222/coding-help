@@ -95,7 +95,7 @@
 			}
 
 			var needs = {
-				rewrite: [ 'target', 'replace' ],
+				rewrite: [ 'find', 'replace', 'target' ],
 				setDesc: [ 'desc' ],
 				badge: [ 'label' ],
 				noResults: [ 'message' ],
@@ -106,6 +106,12 @@
 			Array.prototype.forEach.call( rule.querySelectorAll( '[data-extra]' ), function ( field ) {
 				field.hidden = needs.indexOf( field.getAttribute( 'data-extra' ) ) === -1;
 			} );
+		}
+
+		function valueOfExtra( rule, key ) {
+			var field = rule.querySelector( '[data-extra="' + key + '"] input, [data-extra="' + key + '"] select' );
+
+			return field ? field.value : '';
 		}
 
 		function labelOf( select ) {
@@ -148,8 +154,25 @@
 			} ).join( ' ' );
 
 			var action = labelOf( rule.querySelector( '.wpsqr-f-then' ) );
+
 			if ( action ) {
 				text += ' → ' + action;
+
+				// Spell out the find/replace pair. It is the one action whose
+				// meaning isn't obvious from its name, and the one where
+				// leaving Find empty does something non-obvious.
+				var thenValue = ( rule.querySelector( '.wpsqr-f-then' ) || {} ).value;
+
+				if ( 'rewrite' === thenValue ) {
+					var find = valueOfExtra( rule, 'find' ) ||
+						( rule.querySelector( '.wpsqr-test--first .wpsqr-f-value' ) || {} ).value || '';
+					var replace = valueOfExtra( rule, 'replace' );
+
+					if ( find ) {
+						text += ': “' + find + '” → ' +
+							( replace ? '“' + replace + '”' : 'nothing' );
+					}
+				}
 			}
 
 			target.textContent = text;

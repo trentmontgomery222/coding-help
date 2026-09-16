@@ -85,8 +85,11 @@
 	 *    op:   'equals' | 'contains' | 'starts' | 'ends' | 'regex' | 'in'
 	 *    then: 'hide' | 'dim' | 'rewrite' | 'setDesc' | 'badge' | 'top' | 'bottom' | 'keep'
 	 *
-	 *    'rewrite' needs `replace`, and takes an optional `target` of 'title'
-	 *    (the default), 'desc' or 'both'. 'setDesc' needs `desc` and replaces
+	 *    'rewrite' replaces `find` with `replace`, in `target`: 'title' (the
+	 *    default), 'desc' or 'both'. `find` defaults to the rule's own `value`
+	 *    when omitted, which is what "find the thing you matched on" usually
+	 *    means — but the two are separate so a rule can match one thing and
+	 *    replace another. 'setDesc' needs `desc` and replaces
 	 *    the description outright. 'badge' needs `label`.
 	 *    'keep' protects a result from any later rule.
 	 *    Rules run top to bottom; 'hide', 'dim' and 'keep' stop the rest.
@@ -697,7 +700,12 @@
 
 				case 'rewrite':
 					verdict.rewrites.push( {
-						match: interpolate( rule.value, fields ),
+						// `find` when given, otherwise whatever the rule
+						// matched on.
+						match: interpolate(
+							( undefined === rule.find || '' === rule.find ) ? rule.value : rule.find,
+							fields
+						),
 						replace: interpolate( rule.replace || '', fields ),
 						target: rule.target || 'title'
 					} );

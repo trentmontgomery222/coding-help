@@ -52,12 +52,13 @@ function rule(name, i, { conds = 0, off = false, value = '', then = 'hide' } = {
       <div class="wpsqr-action">
         <span class="wpsqr-action__label">Then</span>
         ${select('wpsqr-f-then', base, 'then', ACTIONS, then, off)}
-        <select class="wpsqr-f-extra" data-extra="target" name="${base}[target]" hidden${off ? ' disabled' : ''}><option value="title">in the title</option></select>
-        <input type="text" class="wpsqr-f-extra" data-extra="replace" name="${base}[replace]" hidden${off ? ' disabled' : ''}>
-        <input type="text" class="wpsqr-f-extra" data-extra="desc" name="${base}[desc]" hidden${off ? ' disabled' : ''}>
-        <input type="text" class="wpsqr-f-extra" data-extra="label" name="${base}[label]" hidden${off ? ' disabled' : ''}>
-        <input type="text" class="wpsqr-f-extra" data-extra="message" name="${base}[message]" hidden${off ? ' disabled' : ''}>
-        <input type="text" class="wpsqr-f-extra" data-extra="url" name="${base}[url]" hidden${off ? ' disabled' : ''}>
+        <label class="wpsqr-extra" data-extra="find" hidden><span>Find</span><input type="text" name="${base}[find]"${off ? ' disabled' : ''}></label>
+        <label class="wpsqr-extra" data-extra="replace" hidden><span>Replace with</span><input type="text" name="${base}[replace]"${off ? ' disabled' : ''}></label>
+        <label class="wpsqr-extra" data-extra="target" hidden><span>In</span><select name="${base}[target]"${off ? ' disabled' : ''}><option value="title">the title</option></select></label>
+        <label class="wpsqr-extra" data-extra="desc" hidden><span>New description</span><input type="text" name="${base}[desc]"${off ? ' disabled' : ''}></label>
+        <label class="wpsqr-extra" data-extra="label" hidden><span>Badge text</span><input type="text" name="${base}[label]"${off ? ' disabled' : ''}></label>
+        <label class="wpsqr-extra" data-extra="message" hidden><span>Message</span><input type="text" name="${base}[message]"${off ? ' disabled' : ''}></label>
+        <label class="wpsqr-extra" data-extra="url" hidden><span>Send them to</span><input type="text" name="${base}[url]"${off ? ' disabled' : ''}></label>
       </div>
     </div>
   </div>`;
@@ -186,7 +187,9 @@ console.log('\nthe action shows only the fields it needs');
   const then = r.querySelector('.wpsqr-f-then');
   then.value = 'rewrite';
   then.dispatchEvent(new b.doc.defaultView.Event('change', { bubbles: true }));
-  check('rewrite needs a target and a replacement', shown(), ['target', 'replace']);
+  check('rewrite offers find, replace and target', shown(), ['find', 'replace', 'target']);
+  check('the Find box is a real field that submits',
+    !!r.querySelector('[data-extra="find"] input[name="result_rules[0][find]"]'), true);
 
   then.value = 'setDesc';
   then.dispatchEvent(new b.doc.defaultView.Event('change', { bubbles: true }));
@@ -195,6 +198,28 @@ console.log('\nthe action shows only the fields it needs');
   then.value = 'badge';
   then.dispatchEvent(new b.doc.defaultView.Event('change', { bubbles: true }));
   check('badge needs its label', shown(), ['label']);
+}
+
+console.log('\nfind and replace reads back in the summary');
+{
+  const b = build([{ value: 'ACPS - ', then: 'rewrite' }]);
+  const r = b.rules()[0];
+  const view = b.doc.defaultView;
+
+  check('with no Find given, the matched text is used',
+    r.querySelector('.wpsqr-rule__summary').textContent.includes('\u201cACPS - \u201d \u2192 nothing'), true);
+
+  const replace = r.querySelector('[data-extra="replace"] input');
+  replace.value = 'Allegany ';
+  replace.dispatchEvent(new view.Event('input', { bubbles: true }));
+  check('the replacement shows',
+    r.querySelector('.wpsqr-rule__summary').textContent.includes('\u201cACPS - \u201d \u2192 \u201cAllegany \u201d'), true);
+
+  const find = r.querySelector('[data-extra="find"] input');
+  find.value = 'ACPS';
+  find.dispatchEvent(new view.Event('input', { bubbles: true }));
+  check('an explicit Find overrides the matched text',
+    r.querySelector('.wpsqr-rule__summary').textContent.includes('\u201cACPS\u201d \u2192 \u201cAllegany \u201d'), true);
 }
 
 console.log('\nthe summary reads back what the rule says');

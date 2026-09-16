@@ -21,20 +21,8 @@ class WPSQR_Assets {
 			return;
 		}
 
-		wp_enqueue_style(
-			'wpsqr-search',
-			WPSQR_URL . 'assets/css/search-filter.css',
-			array(),
-			WPSQR_VERSION
-		);
-
-		wp_enqueue_script(
-			'wpsqr-search',
-			WPSQR_URL . 'assets/js/search-filter.js',
-			array(),
-			WPSQR_VERSION,
-			true
-		);
+		wp_enqueue_style( 'wpsqr-search', WPSQR_URL . 'assets/css/search-filter.css', array(), self::asset_version( 'assets/css/search-filter.css' ) );
+		wp_enqueue_script( 'wpsqr-search', WPSQR_URL . 'assets/js/search-filter.js', array(), self::asset_version( 'assets/js/search-filter.js' ), true );
 
 		$map      = WPSQR_Hidden::map();
 		$settings = WPSQR_Plugin::settings();
@@ -73,6 +61,22 @@ class WPSQR_Assets {
 			) . ';',
 			'before'
 		);
+	}
+
+	/**
+	 * Cache-busting version for an asset.
+	 *
+	 * The plugin version alone is not enough: an edited file with the version
+	 * left alone is served from the browser cache, which looks exactly like
+	 * the change never happening. Falling back to the file's modification
+	 * time makes that impossible.
+	 */
+	public static function asset_version( $relative ) {
+		$path = WPSQR_PATH . $relative;
+
+		$mtime = is_readable( $path ) ? filemtime( $path ) : 0;
+
+		return $mtime ? WPSQR_VERSION . '.' . $mtime : WPSQR_VERSION;
 	}
 
 	protected function is_results_page() {

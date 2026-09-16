@@ -30,8 +30,8 @@ class WPSQR_Admin {
 			return;
 		}
 
-		wp_enqueue_style( 'wpsqr-admin', WPSQR_URL . 'assets/css/admin.css', array(), WPSQR_VERSION );
-		wp_enqueue_script( 'wpsqr-admin-rules', WPSQR_URL . 'assets/js/admin-rules.js', array(), WPSQR_VERSION, true );
+		wp_enqueue_style( 'wpsqr-admin', WPSQR_URL . 'assets/css/admin.css', array(), WPSQR_Assets::asset_version( 'assets/css/admin.css' ) );
+		wp_enqueue_script( 'wpsqr-admin-rules', WPSQR_URL . 'assets/js/admin-rules.js', array(), WPSQR_Assets::asset_version( 'assets/js/admin-rules.js' ), true );
 	}
 
 	public function menu() {
@@ -709,22 +709,55 @@ class WPSQR_Admin {
 						<?php endforeach; ?>
 					</select>
 
-					<select class="wpsqr-f-extra" data-extra="target" name="<?php echo esc_attr( $base ); ?>[target]" hidden<?php echo $off; ?>>
-						<option value="title" <?php selected( $get( 'target', 'title' ), 'title' ); ?>><?php esc_html_e( 'in the title', 'wpsqr' ); ?></option>
-						<option value="desc" <?php selected( $get( 'target' ), 'desc' ); ?>><?php esc_html_e( 'in the description', 'wpsqr' ); ?></option>
-						<option value="both" <?php selected( $get( 'target' ), 'both' ); ?>><?php esc_html_e( 'in both', 'wpsqr' ); ?></option>
-					</select>
+					<label class="wpsqr-extra" data-extra="find" hidden>
+						<span><?php esc_html_e( 'Find', 'wpsqr' ); ?></span>
+						<input type="text" name="<?php echo esc_attr( $base ); ?>[find]"
+							value="<?php echo esc_attr( $get( 'find' ) ); ?>"
+							placeholder="<?php esc_attr_e( 'leave empty to use the matched text', 'wpsqr' ); ?>"<?php echo $off; ?>>
+					</label>
 
-					<input type="text" class="wpsqr-f-extra" data-extra="replace" name="<?php echo esc_attr( $base ); ?>[replace]"
-						value="<?php echo esc_attr( $get( 'replace' ) ); ?>" placeholder="<?php esc_attr_e( 'replace it with…', 'wpsqr' ); ?>" hidden<?php echo $off; ?>>
-					<input type="text" class="wpsqr-f-extra" data-extra="desc" name="<?php echo esc_attr( $base ); ?>[desc]"
-						value="<?php echo esc_attr( $get( 'desc' ) ); ?>" placeholder="<?php esc_attr_e( 'Results for {query}', 'wpsqr' ); ?>" hidden<?php echo $off; ?>>
-					<input type="text" class="wpsqr-f-extra" data-extra="label" name="<?php echo esc_attr( $base ); ?>[label]"
-						value="<?php echo esc_attr( $get( 'label' ) ); ?>" placeholder="<?php esc_attr_e( 'badge text', 'wpsqr' ); ?>" hidden<?php echo $off; ?>>
-					<input type="text" class="wpsqr-f-extra" data-extra="message" name="<?php echo esc_attr( $base ); ?>[message]"
-						value="<?php echo esc_attr( $get( 'message' ) ); ?>" placeholder="<?php esc_attr_e( 'Nothing found for {query}', 'wpsqr' ); ?>" hidden<?php echo $off; ?>>
-					<input type="text" class="wpsqr-f-extra" data-extra="url" name="<?php echo esc_attr( $base ); ?>[url]"
-						value="<?php echo esc_attr( $get( 'url' ) ); ?>" placeholder="/menus/" hidden<?php echo $off; ?>>
+					<label class="wpsqr-extra" data-extra="replace" hidden>
+						<span><?php esc_html_e( 'Replace with', 'wpsqr' ); ?></span>
+						<input type="text" name="<?php echo esc_attr( $base ); ?>[replace]"
+							value="<?php echo esc_attr( $get( 'replace' ) ); ?>"
+							placeholder="<?php esc_attr_e( 'empty deletes it', 'wpsqr' ); ?>"<?php echo $off; ?>>
+					</label>
+
+					<label class="wpsqr-extra" data-extra="target" hidden>
+						<span><?php esc_html_e( 'In', 'wpsqr' ); ?></span>
+						<select name="<?php echo esc_attr( $base ); ?>[target]"<?php echo $off; ?>>
+							<option value="title" <?php selected( $get( 'target', 'title' ), 'title' ); ?>><?php esc_html_e( 'the title', 'wpsqr' ); ?></option>
+							<option value="desc" <?php selected( $get( 'target' ), 'desc' ); ?>><?php esc_html_e( 'the description', 'wpsqr' ); ?></option>
+							<option value="both" <?php selected( $get( 'target' ), 'both' ); ?>><?php esc_html_e( 'both', 'wpsqr' ); ?></option>
+						</select>
+					</label>
+
+					<label class="wpsqr-extra wpsqr-extra--wide" data-extra="desc" hidden>
+						<span><?php esc_html_e( 'New description', 'wpsqr' ); ?></span>
+						<input type="text" name="<?php echo esc_attr( $base ); ?>[desc]"
+							value="<?php echo esc_attr( $get( 'desc' ) ); ?>"
+							placeholder="<?php esc_attr_e( 'Results for {query}', 'wpsqr' ); ?>"<?php echo $off; ?>>
+					</label>
+
+					<label class="wpsqr-extra" data-extra="label" hidden>
+						<span><?php esc_html_e( 'Badge text', 'wpsqr' ); ?></span>
+						<input type="text" name="<?php echo esc_attr( $base ); ?>[label]"
+							value="<?php echo esc_attr( $get( 'label' ) ); ?>"
+							placeholder="<?php esc_attr_e( 'News', 'wpsqr' ); ?>"<?php echo $off; ?>>
+					</label>
+
+					<label class="wpsqr-extra wpsqr-extra--wide" data-extra="message" hidden>
+						<span><?php esc_html_e( 'Message', 'wpsqr' ); ?></span>
+						<input type="text" name="<?php echo esc_attr( $base ); ?>[message]"
+							value="<?php echo esc_attr( $get( 'message' ) ); ?>"
+							placeholder="<?php esc_attr_e( 'Nothing found for {query}', 'wpsqr' ); ?>"<?php echo $off; ?>>
+					</label>
+
+					<label class="wpsqr-extra" data-extra="url" hidden>
+						<span><?php esc_html_e( 'Send them to', 'wpsqr' ); ?></span>
+						<input type="text" name="<?php echo esc_attr( $base ); ?>[url]"
+							value="<?php echo esc_attr( $get( 'url' ) ); ?>" placeholder="/menus/"<?php echo $off; ?>>
+					</label>
 				</div>
 			</div>
 		</div>
@@ -918,7 +951,7 @@ class WPSQR_Admin {
 				$rule['target'] = in_array( $target, array( 'title', 'desc', 'both' ), true ) ? $target : 'title';
 			}
 
-			foreach ( array( 'replace', 'label', 'message', 'desc' ) as $extra ) {
+			foreach ( array( 'find', 'replace', 'label', 'message', 'desc' ) as $extra ) {
 				if ( isset( $row[ $extra ] ) && '' !== trim( (string) $row[ $extra ] ) ) {
 					$rule[ $extra ] = sanitize_text_field( $row[ $extra ] );
 				}

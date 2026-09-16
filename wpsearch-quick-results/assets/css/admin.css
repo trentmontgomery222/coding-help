@@ -206,14 +206,44 @@ select.wpsqr-test__join {
 	flex: 0 0 4.1rem;
 }
 
-.wpsqr-action select,
-.wpsqr-action input[type="text"] {
-	inline-size: auto;
-	min-inline-size: 11rem;
+/* Each action field carries a visible label rather than relying on a
+   placeholder. "Replace with" next to an empty box is answerable; an empty
+   box on its own is a guess. */
+.wpsqr-extra {
+	display: flex;
+	flex-direction: column;
+	gap: .15rem;
+	flex: 0 1 12rem;
+	min-inline-size: 0;
 }
 
-.wpsqr-action input[type="text"] {
-	flex: 1 1 14rem;
+.wpsqr-extra--wide {
+	flex: 1 1 18rem;
+}
+
+.wpsqr-extra > span {
+	font-size: .7rem;
+	font-weight: 700;
+	letter-spacing: .04em;
+	text-transform: uppercase;
+	color: #787c82;
+}
+
+.wpsqr-action > select {
+	flex: 0 0 auto;
+	min-inline-size: 12rem;
+	inline-size: auto;
+	align-self: end;
+}
+
+.wpsqr-action .wpsqr-extra input,
+.wpsqr-action .wpsqr-extra select {
+	inline-size: 100%;
+}
+
+.wpsqr-action__label {
+	align-self: end;
+	padding-block-end: .35rem;
 }
 
 /* ---------------------------------------------------------------
@@ -291,5 +321,11 @@ select.wpsqr-test__join {
 
 	.wpsqr-rule__summary {
 		white-space: normal;
+	}
+
+	.wpsqr-extra,
+	.wpsqr-extra--wide,
+	.wpsqr-action > select {
+		flex: 1 1 100%;
 	}
 }

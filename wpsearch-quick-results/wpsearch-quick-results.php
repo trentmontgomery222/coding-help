@@ -3,7 +3,7 @@
  * Plugin Name:       WPSearch Quick Results
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Serves popular searches from a cache instead of re-running the search engine, and filters what appears in the results.
- * Version:           1.0.0
+ * Version:           1.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Allegany County Public Schools
@@ -34,7 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WPSQR_VERSION', '1.0.0' );
+define( 'WPSQR_VERSION', '1.2.0' );
 define( 'WPSQR_FILE', __FILE__ );
 define( 'WPSQR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WPSQR_URL', plugin_dir_url( __FILE__ ) );

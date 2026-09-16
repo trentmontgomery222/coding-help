@@ -339,6 +339,23 @@ check('a hidden row never gets a description rewrite',
     { when: 'url', op: 'contains', value: '/staff/directory/', then: 'setDesc', desc: 'Never seen.' }
   ] }).descs.includes('Never seen.'), false);
 
+console.log('\nfind, separate from what the rule matched on');
+check('find defaults to the matched text',
+  run({ rules: [{ when: 'title', op: 'contains', value: 'ACPS ', then: 'rewrite', replace: 'Allegany ' }] })
+    .titles.some(t => t.startsWith('Holiday Message to Allegany Staff')), true);
+check('an explicit find is used instead',
+  run({ rules: [{ when: 'title', op: 'contains', value: 'Holiday', then: 'rewrite', find: 'ACPS ', replace: 'Allegany ' }] })
+    .titles.some(t => t.startsWith('Holiday Message to Allegany Staff')), true);
+check('so a rule can match one thing and replace another',
+  run({ rules: [{ when: 'url', op: 'contains', value: '/staff/directory/', then: 'rewrite', find: 'Directory', replace: 'Lookup' }] })
+    .titles.includes('Staff Lookup'), true);
+check('an empty find falls back rather than replacing everything',
+  run({ rules: [{ when: 'title', op: 'contains', value: 'Board', then: 'rewrite', find: '', replace: 'School' }] })
+    .titles.includes('School Policies'), true);
+check('find works on the description too',
+  run({ rules: [{ when: 'url', op: 'contains', value: '/staff/', then: 'rewrite', find: 'Hub', replace: 'Portal', target: 'desc' }] })
+    .descs[0].includes('Portal'), true);
+
 console.log('\nreordering');
 check('bottom sinks attachments below everything else',
   run({ rules: [{ when: 'type', op: 'equals', value: 'attachment', then: 'bottom' }] }).ids,

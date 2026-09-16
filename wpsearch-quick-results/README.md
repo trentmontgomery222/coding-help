@@ -140,6 +140,12 @@ are final, so an early Keep protects a result from every rule below it.
 | Test | contains, is exactly, starts with, ends with, matches pattern, is any of |
 | Then | Hide, Keep, Grey out, Find and replace text, Replace the description, Add a badge, Move to top, Move to bottom |
 
+**Find and replace** takes its own *Find* box, separate from what the rule
+matched on. Leave it empty and it replaces the text the rule matched — which
+is what you usually want. Fill it in when you need to match one thing and
+replace another: *when the URL is the directory page, replace "Directory" with
+"Lookup"*.
+
 ### Combining conditions
 
 A rule starts with one test and takes as many more as you need, via
@@ -264,9 +270,9 @@ save pays full price. Everything else still works.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 85 cases — the browser rule engine
+node tests/browser-rules.test.js     # 90 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
-node tests/admin-builder.test.js     # 34 cases — the settings rule builder
+node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
 
 See `tests/README.md`. The normalizer decides the hit rate and the rule engine
