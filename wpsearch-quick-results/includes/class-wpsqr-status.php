@@ -114,6 +114,36 @@ class WPSQR_Status {
 			'note'  => $ext ? '' : __( 'Without one, a cached search still costs a single indexed database lookup — fast, but not free. Redis or Memcached would make warm searches cost nothing.', 'wpsqr' ),
 		);
 
+		// --- staff directory ---------------------------------------------
+		$providers = WPSQR_People::providers();
+		$has_filter = has_filter( 'wpsqr_people_search' );
+
+		if ( $providers ) {
+			$names = array();
+			foreach ( $providers as $provider ) {
+				$names[] = trim( $provider['name'] . ' ' . $provider['version'] );
+			}
+
+			$state = 'ok';
+			$value = implode( ', ', $names );
+			$note  = '';
+		} elseif ( $has_filter ) {
+			$state = 'warn';
+			$value = __( 'Answering, but unidentified', 'wpsqr' );
+			$note  = __( 'Something is responding to wpsqr_people_search but has not registered itself through wpsqr_people_providers, so there is no way to tell which plugin or version it is.', 'wpsqr' );
+		} else {
+			$state = 'info';
+			$value = __( 'No directory plugin connected', 'wpsqr' );
+			$note  = __( 'People results are off until a staff directory plugin implements the wpsqr_people_search filter. See INTEGRATION.md in the plugin folder.', 'wpsqr' );
+		}
+
+		$checks[] = array(
+			'label' => __( 'Staff directory', 'wpsqr' ),
+			'value' => $value,
+			'state' => $state,
+			'note'  => $note,
+		);
+
 		// --- hidden content -----------------------------------------------
 		$map      = WPSQR_Hidden::map();
 		$meta_key = $settings['hide_meta_key'];

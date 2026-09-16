@@ -70,6 +70,34 @@ Two notes on what gets recorded:
    this matches, the hidden-content filtering can't work — the Status panel
    will tell you if it matches nothing.
 
+## People results
+
+When someone searches a name, the useful answer is that person — not the
+directory page they appear on. `[wpsqr_people]` shows matching staff above the
+ordinary results.
+
+This plugin owns none of that data. It defines a contract; whatever staff
+directory plugin is installed implements one filter and decides who is visible
+and who matches. That split is deliberate — visibility rules belong with the
+data, and a search plugin guessing at them is how someone who asked to be
+unlisted ends up listed.
+
+**[INTEGRATION.md](INTEGRATION.md) is the brief for whoever writes that side.**
+Hand it over as-is; it's written to be implemented against without needing this
+conversation.
+
+`[wpsqr_people]` is a separate shortcode from `[wpsqr_results]`, so it can go
+on the existing SearchWP results page today without waiting on the caching
+half. `[wpsqr_results]` includes it automatically.
+
+To see it working before the real integration exists, activate
+`examples/example-people-provider.php` as its own plugin — six invented staff,
+one of them hidden, so visibility can be tested as well as matching.
+
+Contact details are **off by default**. A directory page publishing an email
+is a decision about that page; repeating it across search results, for anyone
+who types a common surname, is a different one.
+
 ## Rules
 
 Everything the WPCode snippets could do, now built on **Quick Results →
@@ -210,6 +238,7 @@ save pays full price. Everything else still works.
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
 node tests/browser-rules.test.js     # 76 cases — the browser rule engine
+php tests/people-test.php            # 25 cases — person-row sanitizing
 ```
 
 See `tests/README.md`. The normalizer decides the hit rate and the rule engine

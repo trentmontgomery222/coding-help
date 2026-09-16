@@ -31,6 +31,7 @@ class WPSQR_Plugin {
 		}
 
 		add_shortcode( 'wpsqr_results', array( $this, 'shortcode' ) );
+		add_shortcode( 'wpsqr_people', array( $this, 'people_shortcode' ) );
 
 		load_plugin_textdomain( 'wpsqr', false, dirname( plugin_basename( WPSQR_FILE ) ) . '/languages' );
 	}
@@ -72,7 +73,35 @@ class WPSQR_Plugin {
 			)
 		);
 
-		return WPSQR_Renderer::render( $results, $term );
+		return WPSQR_Renderer::render_people( $term ) . WPSQR_Renderer::render( $results, $term );
+	}
+
+	/**
+	 * `[wpsqr_people]` — matching people, on their own.
+	 *
+	 * Separate from the results shortcode so it can go on the existing
+	 * SearchWP results page today, above the module, without waiting for the
+	 * caching half to be switched on.
+	 */
+	public function people_shortcode( $atts ) {
+		$atts = shortcode_atts( array( 'limit' => 0 ), $atts, 'wpsqr_people' );
+
+		$term = self::current_term();
+
+		if ( '' === trim( $term ) ) {
+			return '';
+		}
+
+		if ( (int) $atts['limit'] > 0 ) {
+			add_filter(
+				'wpsqr_people_limit_override',
+				function () use ( $atts ) {
+					return (int) $atts['limit'];
+				}
+			);
+		}
+
+		return WPSQR_Renderer::render_people( $term );
 	}
 
 	/** The search term on this request, whichever parameter carried it. */
@@ -122,6 +151,15 @@ class WPSQR_Plugin {
 			'desc_meta_key'   => '_wpsqr_search_description',
 			'update_count'    => 1,
 			'empty_message'   => 'No matching results. Try a different search term.',
+
+			// People results, supplied by a staff directory plugin.
+			'people_enabled'    => 1,
+			'people_limit'      => 5,
+			'people_min_chars'  => 3,
+			'people_heading'    => 'People matching "{query}"',
+			'people_more_url'   => '',
+			'people_show_email' => 0,
+			'people_show_phone' => 0,
 		);
 	}
 

@@ -79,6 +79,114 @@ class WPSQR_Renderer {
 		return ob_get_clean();
 	}
 
+	/**
+	 * People matching the search, above the ordinary results.
+	 *
+	 * Markup carries its own classes rather than reusing the result ones, so
+	 * a rule written to hide or reorder page results never accidentally
+	 * catches a person.
+	 */
+	public static function render_people( $term ) {
+		$people = WPSQR_People::search( $term );
+
+		if ( ! $people ) {
+			return '';
+		}
+
+		$settings = WPSQR_Plugin::settings();
+
+		ob_start();
+
+		echo '<section class="wpsqr-people" aria-label="' . esc_attr__( 'People', 'wpsqr' ) . '">';
+
+		$heading = trim( (string) $settings['people_heading'] );
+		if ( '' !== $heading ) {
+			printf(
+				'<h2 class="wpsqr-people__heading">%s</h2>',
+				esc_html( str_replace( '{query}', $term, $heading ) )
+			);
+		}
+
+		echo '<ul class="wpsqr-people__list">';
+
+		foreach ( $people as $person ) {
+			self::render_person( $person );
+		}
+
+		echo '</ul>';
+
+		if ( ! empty( $settings['people_more_url'] ) ) {
+			printf(
+				'<p class="wpsqr-people__more"><a href="%s">%s</a></p>',
+				esc_url( add_query_arg( 'q', rawurlencode( $term ), $settings['people_more_url'] ) ),
+				esc_html__( 'Search the full staff directory', 'wpsqr' )
+			);
+		}
+
+		echo '</section>';
+
+		return ob_get_clean();
+	}
+
+	protected static function render_person( $person ) {
+		echo '<li class="wpsqr-person">';
+
+		if ( $person['photo'] ) {
+			printf(
+				'<img class="wpsqr-person__photo" src="%s" alt="" loading="lazy" decoding="async" width="56" height="56">',
+				esc_url( $person['photo'] )
+			);
+		} else {
+			// A neutral placeholder keeps the row heights even, which matters
+			// more than it sounds when half a directory has no photo.
+			printf(
+				'<span class="wpsqr-person__photo wpsqr-person__photo--empty" aria-hidden="true">%s</span>',
+				esc_html( mb_substr( $person['name'], 0, 1 ) )
+			);
+		}
+
+		echo '<span class="wpsqr-person__detail">';
+
+		if ( $person['url'] ) {
+			printf(
+				'<a class="wpsqr-person__name" href="%s">%s</a>',
+				esc_url( $person['url'] ),
+				esc_html( $person['name'] )
+			);
+		} else {
+			printf( '<span class="wpsqr-person__name">%s</span>', esc_html( $person['name'] ) );
+		}
+
+		$meta = array_filter( array( $person['job_title'], $person['department'], $person['location'] ) );
+
+		if ( $meta ) {
+			printf(
+				'<span class="wpsqr-person__meta">%s</span>',
+				esc_html( implode( ' · ', $meta ) )
+			);
+		}
+
+		$contact = array();
+
+		if ( $person['email'] ) {
+			$contact[] = sprintf(
+				'<a href="mailto:%s">%s</a>',
+				esc_attr( $person['email'] ),
+				esc_html( $person['email'] )
+			);
+		}
+
+		if ( $person['phone'] ) {
+			$contact[] = esc_html( $person['phone'] );
+		}
+
+		if ( $contact ) {
+			echo '<span class="wpsqr-person__contact">' . wp_kses_post( implode( ' · ', $contact ) ) . '</span>';
+		}
+
+		echo '</span></li>';
+	}
+
 	protected static function render_item( $post, $term ) {
 		$is_hidden = WPSQR_Hidden::is_hidden( $post->ID );
 

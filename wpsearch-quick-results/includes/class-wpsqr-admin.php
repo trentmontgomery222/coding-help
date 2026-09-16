@@ -310,6 +310,62 @@ class WPSQR_Admin {
 					</tr>
 				</table>
 
+				<h2><?php esc_html_e( 'People results', 'wpsqr' ); ?></h2>
+				<p class="wpsqr-hint">
+					<?php esc_html_e( 'When someone searches a name, show that person above the ordinary results instead of the directory page they appear on. Requires a staff directory plugin that implements the integration — see INTEGRATION.md in the plugin folder.', 'wpsqr' ); ?>
+					<?php if ( ! WPSQR_People::has_provider() ) : ?>
+						<br><strong><?php esc_html_e( 'No directory plugin is connected yet, so these settings do nothing so far.', 'wpsqr' ); ?></strong>
+					<?php endif; ?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'People results', 'wpsqr' ); ?></th>
+						<td><label><input type="checkbox" name="people_enabled" value="1" <?php checked( $s['people_enabled'], 1 ); ?>>
+							<?php esc_html_e( 'Show matching people above search results', 'wpsqr' ); ?></label></td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-people-limit"><?php esc_html_e( 'How many', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="number" id="wpsqr-people-limit" name="people_limit" min="1" max="50" value="<?php echo esc_attr( $s['people_limit'] ); ?>" class="small-text">
+							<?php esc_html_e( 'people at most', 'wpsqr' ); ?>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-people-min"><?php esc_html_e( 'Minimum term length', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="number" id="wpsqr-people-min" name="people_min_chars" min="2" max="10" value="<?php echo esc_attr( $s['people_min_chars'] ); ?>" class="small-text">
+							<?php esc_html_e( 'characters', 'wpsqr' ); ?>
+							<p class="description"><?php esc_html_e( 'Shorter searches match half the directory and help nobody, so they are not sent to it at all.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-people-heading"><?php esc_html_e( 'Heading', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="text" id="wpsqr-people-heading" name="people_heading" value="<?php echo esc_attr( $s['people_heading'] ); ?>" class="large-text">
+							<p class="description"><?php esc_html_e( '{query} is replaced with what was searched for. Leave empty for no heading.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-people-more"><?php esc_html_e( 'Full directory link', 'wpsqr' ); ?></label></th>
+						<td>
+							<input type="text" id="wpsqr-people-more" name="people_more_url" value="<?php echo esc_attr( $s['people_more_url'] ); ?>" class="large-text" placeholder="/staff/directory/">
+							<p class="description"><?php esc_html_e( 'Shown under the people, for searches with more matches than fit. Leave empty to omit.', 'wpsqr' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Contact details', 'wpsqr' ); ?></th>
+						<td>
+							<label><input type="checkbox" name="people_show_email" value="1" <?php checked( $s['people_show_email'], 1 ); ?>>
+								<?php esc_html_e( 'Show email addresses', 'wpsqr' ); ?></label><br>
+							<label><input type="checkbox" name="people_show_phone" value="1" <?php checked( $s['people_show_phone'], 1 ); ?>>
+								<?php esc_html_e( 'Show phone numbers', 'wpsqr' ); ?></label>
+							<p class="description">
+								<?php esc_html_e( 'Off by default, and worth leaving off unless you have decided otherwise. A directory page publishing an address is a decision about that page; repeating it across search results, for anyone who types a common surname, is a different one.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
+				</table>
+
 				<h2><?php esc_html_e( 'Hidden content', 'wpsqr' ); ?></h2>
 				<table class="form-table" role="presentation">
 					<tr>
@@ -643,6 +699,14 @@ class WPSQR_Admin {
 		$new['hide_meta_key']   = sanitize_text_field( $in['hide_meta_key'] ?? '' );
 		$new['hide_meta_value'] = sanitize_text_field( $in['hide_meta_value'] ?? '' );
 		$new['empty_message']   = sanitize_text_field( $in['empty_message'] ?? '' );
+
+		$new['people_enabled']    = empty( $in['people_enabled'] ) ? 0 : 1;
+		$new['people_show_email'] = empty( $in['people_show_email'] ) ? 0 : 1;
+		$new['people_show_phone'] = empty( $in['people_show_phone'] ) ? 0 : 1;
+		$new['people_limit']      = max( 1, min( 50, (int) ( $in['people_limit'] ?? 5 ) ) );
+		$new['people_min_chars']  = max( 2, min( 10, (int) ( $in['people_min_chars'] ?? 3 ) ) );
+		$new['people_heading']    = sanitize_text_field( $in['people_heading'] ?? '' );
+		$new['people_more_url']   = esc_url_raw( $in['people_more_url'] ?? '' );
 
 		$new['manual_ids']   = array_values( array_filter( array_map( 'intval', self::lines( $in['manual_ids'] ?? '' ) ) ) );
 		$new['hide_mode']     = in_array( $in['hide_mode'] ?? '', array( 'remove', 'dim' ), true ) ? $in['hide_mode'] : 'remove';
