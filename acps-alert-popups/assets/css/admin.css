@@ -1,0 +1,85 @@
+/**
+ * Admin styles for ACPS Alert Popups.
+ */
+
+.acps-alerts-wrap .acps-section {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	margin: 16px 0;
+	padding: 0 16px 8px;
+}
+
+.acps-alerts-wrap .acps-section__title {
+	font-size: 14px;
+	margin: 12px 0 0;
+	padding: 0;
+}
+
+.acps-alerts-wrap .acps-section .form-table th {
+	width: 200px;
+	padding-left: 0;
+}
+
+.acps-checkbox-list label {
+	display: block;
+	margin-bottom: 4px;
+}
+
+.acps-check {
+	display: block;
+	margin-bottom: 4px;
+}
+
+.acps-status {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.acps-status--live {
+	background: #d5f5dd;
+	color: #005c1f;
+}
+
+.acps-status--scheduled {
+	background: #fcf3d4;
+	color: #6a4c00;
+}
+
+.acps-status--off {
+	background: #e8e8e8;
+	color: #50575e;
+}
+
+.acps-severity--critical {
+	color: #d63638;
+	font-weight: 600;
+}
+
+.acps-severity--warning {
+	color: #996800;
+}
+
+.acps-badge--draft {
+	background: #f0f0f1;
+	border-radius: 3px;
+	color: #50575e;
+	font-size: 11px;
+	padding: 1px 6px;
+	text-transform: uppercase;
+}
+
+.acps-steps {
+	max-width: 640px;
+}
+
+/* Meta box: no card chrome inside the post editor. */
+#acps-alert-settings .acps-section {
+	border: 0;
+	border-top: 1px solid #dcdcde;
+	border-radius: 0;
+	padding: 0;
+}

@@ -1,0 +1,141 @@
+/**
+ * Front end styles for ACPS Alert Popups.
+ *
+ * Deliberately minimal: the alert body is a Beaver Builder layout and should
+ * keep the site's own design. Only the shell is styled here.
+ */
+
+.acps-alert {
+	position: fixed;
+	inset: 0;
+	z-index: var( --acps-alert-z-index, 999999 );
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+}
+
+.acps-alert.is-open {
+	display: flex;
+}
+
+.acps-alert[hidden] {
+	display: none;
+}
+
+.acps-alert__overlay {
+	position: absolute;
+	inset: 0;
+	background: rgba( 0, 0, 0, 0.6 );
+}
+
+.acps-alert--no-overlay {
+	pointer-events: none;
+}
+
+.acps-alert--no-overlay .acps-alert__overlay {
+	display: none;
+}
+
+.acps-alert--no-overlay .acps-alert__dialog {
+	pointer-events: auto;
+}
+
+.acps-alert__dialog {
+	position: relative;
+	width: 100%;
+	max-height: calc( 100vh - 48px );
+	overflow: auto;
+	background: #fff;
+	border-radius: 6px;
+	box-shadow: 0 10px 40px rgba( 0, 0, 0, 0.3 );
+	border-top: 5px solid #2271b1;
+}
+
+.acps-alert--success .acps-alert__dialog {
+	border-top-color: #00a32a;
+}
+
+.acps-alert--warning .acps-alert__dialog {
+	border-top-color: #dba617;
+}
+
+.acps-alert--critical .acps-alert__dialog {
+	border-top-color: #d63638;
+}
+
+.acps-alert__close {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	z-index: 2;
+	width: 36px;
+	height: 36px;
+	line-height: 1;
+	font-size: 26px;
+	color: #1d2327;
+	background: transparent;
+	border: 0;
+	border-radius: 50%;
+	cursor: pointer;
+}
+
+.acps-alert__close:hover,
+.acps-alert__close:focus {
+	background: rgba( 0, 0, 0, 0.08 );
+}
+
+.acps-alert__content {
+	padding: 8px;
+}
+
+/* Positions. */
+.acps-alert--top {
+	align-items: flex-start;
+}
+
+.acps-alert--bottom {
+	align-items: flex-end;
+}
+
+.acps-alert--bottom-right {
+	align-items: flex-end;
+	justify-content: flex-end;
+}
+
+.acps-alert--bottom-left {
+	align-items: flex-end;
+	justify-content: flex-start;
+}
+
+body.acps-alert-is-open {
+	overflow: hidden;
+}
+
+@media ( max-width: 600px ) {
+	.acps-alert {
+		padding: 12px;
+	}
+
+	.acps-alert__dialog {
+		max-height: calc( 100vh - 24px );
+	}
+}
+
+@media ( prefers-reduced-motion: no-preference ) {
+	.acps-alert.is-open .acps-alert__dialog {
+		animation: acps-alert-in 0.2s ease-out;
+	}
+
+	@keyframes acps-alert-in {
+		from {
+			opacity: 0;
+			transform: translateY( 12px );
+		}
+
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+}
