@@ -1,116 +1,295 @@
+/**
+ * Rule builder.
+ *
+ * Each test is a CSS grid with named columns rather than a wrapping flex row.
+ * Flex-wrap was the whole problem in the old version: at any width narrower
+ * than the sum of its parts, fields wrapped in arbitrary places and the
+ * delete button ended up somewhere unrelated to the rule it deleted. A grid
+ * keeps the columns aligned down the whole card, and collapses to stacked
+ * rows in one deliberate step rather than field by field.
+ */
+
 .wpsqr-rules {
-	max-width: 78em;
-	margin-block-end: .5rem;
+	max-width: 62rem;
+	margin-block: 0 1rem;
 }
+
+/* ---------------------------------------------------------------
+ * The card
+ * --------------------------------------------------------------- */
 
 .wpsqr-rule {
 	background: #fff;
-	border: 1px solid #c3c4c7;
-	border-radius: 4px;
-	padding: .75rem .9rem;
-	margin-block-end: .75rem;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	margin-block-end: .85rem;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, .04 );
 }
 
-.wpsqr-rule-head,
-.wpsqr-rule-foot,
+.wpsqr-rule__bar {
+	display: flex;
+	align-items: center;
+	gap: .6rem;
+	padding: .5rem .75rem;
+	background: #f6f7f7;
+	border-block-end: 1px solid #dcdcde;
+	border-start-start-radius: 5px;
+	border-start-end-radius: 5px;
+}
+
+.wpsqr-rule__num {
+	flex: 0 0 auto;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
+	background: #2271b1;
+	color: #fff;
+	font-size: .75rem;
+	font-weight: 700;
+}
+
+/* The rule restated as a sentence — the fastest way to spot one that
+   says something other than what you meant. */
+.wpsqr-rule__summary {
+	flex: 1 1 auto;
+	min-inline-size: 0;
+	font-size: .82rem;
+	color: #50575e;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wpsqr-rule__delete {
+	flex: 0 0 auto;
+	border: 1px solid transparent;
+	background: none;
+	color: #b32d2e;
+	cursor: pointer;
+	font-size: .78rem;
+	padding: .2rem .55rem;
+	border-radius: 3px;
+}
+
+.wpsqr-rule__delete:hover,
+.wpsqr-rule__delete:focus {
+	background: #fcf0f1;
+	border-color: #f0c2c3;
+}
+
+.wpsqr-rule__body {
+	padding: .85rem .75rem .75rem;
+}
+
+/* ---------------------------------------------------------------
+ * A test: join | field | operator | value | invert | remove
+ * --------------------------------------------------------------- */
+
+.wpsqr-test {
+	display: grid;
+	grid-template-columns: 4.5rem minmax( 7rem, 11rem ) minmax( 7rem, 10rem ) minmax( 8rem, 1fr ) auto auto;
+	align-items: center;
+	gap: .4rem;
+	margin-block-end: .45rem;
+}
+
+.wpsqr-test__join,
+.wpsqr-action__label {
+	font-size: .72rem;
+	font-weight: 700;
+	letter-spacing: .05em;
+	text-transform: uppercase;
+	color: #787c82;
+}
+
+/* The join on the first test is a fixed word, not a dropdown. */
+span.wpsqr-test__join {
+	padding-inline-start: .15rem;
+}
+
+select.wpsqr-test__join {
+	text-transform: none;
+	letter-spacing: 0;
+	font-weight: 400;
+	font-size: 13px;
+	color: inherit;
+}
+
+.wpsqr-test__fixed {
+	font-style: italic;
+	color: #50575e;
+	font-size: .85rem;
+}
+
+.wpsqr-rules select,
+.wpsqr-rules input[type="text"] {
+	inline-size: 100%;
+	max-inline-size: 100%;
+	margin: 0;
+}
+
+.wpsqr-test__not {
+	white-space: nowrap;
+	font-size: .78rem;
+	color: #787c82;
+}
+
+.wpsqr-test__not input {
+	margin-block: 0;
+}
+
+/* Keeps the first row's columns aligned with the condition rows below it,
+   which have a remove button where this has nothing. */
+.wpsqr-test__spacer {
+	inline-size: 1.6rem;
+}
+
+.wpsqr-test__remove {
+	inline-size: 1.6rem;
+	border: 0;
+	background: none;
+	color: #787c82;
+	cursor: pointer;
+	font-size: 1.1rem;
+	line-height: 1;
+	border-radius: 3px;
+	padding: .1rem;
+}
+
+.wpsqr-test__remove:hover,
+.wpsqr-test__remove:focus {
+	background: #f0f0f1;
+	color: #b32d2e;
+}
+
 .wpsqr-cond {
+	position: relative;
+}
+
+/* A quiet rail down the extra conditions, so they read as belonging to
+   the test above rather than as separate rules. */
+.wpsqr-cond::before {
+	content: "";
+	position: absolute;
+	inset-block: -.45rem 50%;
+	inset-inline-start: 1.6rem;
+	inline-size: 1px;
+	background: #dcdcde;
+}
+
+.wpsqr-rule__addcond {
+	margin: .1rem 0 .75rem;
+	padding-inline-start: 4.9rem;
+}
+
+.wpsqr-rule__addcond .button-link {
+	font-size: .82rem;
+	color: #2271b1;
+}
+
+/* ---------------------------------------------------------------
+ * The action
+ * --------------------------------------------------------------- */
+
+.wpsqr-action {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: .4rem;
-}
-
-.wpsqr-cond,
-.wpsqr-rule-foot {
-	margin-block-start: .5rem;
-}
-
-.wpsqr-cond {
-	padding-inline-start: 1.5rem;
-	border-inline-start: 2px solid #dcdcde;
-	margin-inline-start: .3rem;
-	padding-block: .25rem;
-}
-
-.wpsqr-rule-foot {
+	padding-block-start: .7rem;
 	border-block-start: 1px solid #f0f0f1;
-	padding-block-start: .6rem;
 }
 
-.wpsqr-when-label,
-.wpsqr-then-label {
-	font-weight: 600;
-	color: #646970;
-	text-transform: uppercase;
-	font-size: .72rem;
-	letter-spacing: .05em;
+.wpsqr-action__label {
+	flex: 0 0 4.1rem;
 }
 
-.wpsqr-then-label {
-	margin-inline-start: auto;
+.wpsqr-action select,
+.wpsqr-action input[type="text"] {
+	inline-size: auto;
+	min-inline-size: 11rem;
 }
 
-.wpsqr-rules .wpsqr-value {
+.wpsqr-action input[type="text"] {
 	flex: 1 1 14rem;
-	min-width: 10rem;
 }
 
-.wpsqr-rules input[type="text"],
-.wpsqr-rules select {
-	max-width: 100%;
-}
-
-.wpsqr-not {
-	white-space: nowrap;
-	color: #646970;
-	font-size: .85rem;
-}
-
-.wpsqr-join {
-	min-width: 5rem;
-}
-
-.wpsqr-remove {
-	margin-inline-start: auto;
-	border: 0;
-	background: none;
-	color: #b32d2e;
-	cursor: pointer;
-	font-size: 1.15rem;
-	line-height: 1;
-	padding: .1rem .45rem;
-	border-radius: 3px;
-}
-
-.wpsqr-remove-cond {
-	font-size: 1rem;
-	color: #787c82;
-}
-
-.wpsqr-remove:hover {
-	background: #f6e7e7;
-	color: #b32d2e;
-}
+/* ---------------------------------------------------------------
+ * Chrome
+ * --------------------------------------------------------------- */
 
 .wpsqr-no-rules {
-	color: #646970;
+	color: #787c82;
 	font-style: italic;
-	margin: .5rem 0 1rem;
+	margin: 0 0 .85rem;
+	padding: 1rem;
+	border: 1px dashed #dcdcde;
+	border-radius: 6px;
+	text-align: center;
+}
+
+.wpsqr-rules__add {
+	margin: 0 0 1.5rem;
+}
+
+.wpsqr-proto {
+	display: none !important;
 }
 
 .wpsqr-hint {
-	max-width: 52em;
-	color: #646970;
+	max-width: 52rem;
+	color: #50575e;
 }
 
 .wpsqr-hint code {
 	background: #f0f0f1;
 	padding: .1em .4em;
 	border-radius: 3px;
+	font-size: .9em;
 }
 
-@media ( max-width: 782px ) {
-	.wpsqr-then-label {
-		margin-inline-start: 0;
+/* ---------------------------------------------------------------
+ * Narrow screens: stack in one deliberate step.
+ * --------------------------------------------------------------- */
+
+@media ( max-width: 900px ) {
+	.wpsqr-test {
+		grid-template-columns: 4.5rem 1fr auto;
+	}
+
+	.wpsqr-test .wpsqr-f-when {
+		grid-column: 2 / -1;
+	}
+
+	.wpsqr-test .wpsqr-f-op,
+	.wpsqr-test .wpsqr-f-value {
+		grid-column: 2 / -1;
+	}
+
+	.wpsqr-test__not {
+		grid-column: 2 / -1;
+	}
+
+	.wpsqr-test__spacer {
+		display: none;
+	}
+
+	.wpsqr-test__remove {
+		grid-row: 1;
+		grid-column: 3;
+	}
+
+	.wpsqr-cond::before {
+		display: none;
+	}
+
+	.wpsqr-rule__addcond {
+		padding-inline-start: 0;
+	}
+
+	.wpsqr-rule__summary {
+		white-space: normal;
 	}
 }
