@@ -1,0 +1,4 @@
+Bump WPSQR_VERSION (in wpsearch-quick-results.php header AND the define) on
+every change to the plugin's files. The version drives both the self-updater's
+version_compare and the front-end asset cache-busting, so a change shipped
+without a bump can be served stale or never offered as an update.

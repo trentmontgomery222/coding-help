@@ -42,11 +42,19 @@ Plugins screen as for any other plugin. A zip that unpacks to a differently
 named folder is renamed back in place, so the update overwrites rather than
 installing beside itself and deactivating.
 
+**A bad update is undone, never left disabled.** Before an update installs,
+the current version's files are backed up. If the new version then crashes on
+load, the bootstrap restores the backup on the very next request — before any
+of the broken code runs — clears safe mode, and the plugin comes back on the
+previous version. The plugin is never left deactivated: the worst outcome of a
+failed update is that it is running the version from before it. If the upgrader
+itself ever deactivates the plugin, the post-update check switches it back on.
+
 **After every update**, on the next request, the plugin confirms it still
 loaded *and* that the remote endpoint's key still exists — regenerating it if
 an update somehow cleared it. This is the piece that stops an update from
 severing the channel used to push the next one. The result is on the status
-page as "Last update".
+page as "Last update", and a revert as "Last rollback".
 
 ## The remote endpoint
 

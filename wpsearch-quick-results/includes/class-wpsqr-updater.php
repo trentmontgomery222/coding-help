@@ -270,6 +270,18 @@ class WPSQR_Updater {
 		$transient = $this->inject_update( $transient );
 		set_site_transient( 'update_plugins', $transient );
 
+		// Back up the current version first, so if the new one crashes on load
+		// the bootstrap can put this one back rather than leave the plugin
+		// paused. A backup that cannot be made is not fatal — the update still
+		// proceeds, just without an automatic undo.
+		if ( class_exists( 'WPSQR_Guard' ) ) {
+			WPSQR_Guard::arm_rollback( WPSQR_VERSION );
+		}
+
+		// Remember it was active, so the post-update check can re-enable it if
+		// the upgrader ever leaves it deactivated.
+		update_option( 'wpsqr_was_active', ( function_exists( 'is_plugin_active' ) && is_plugin_active( $this->basename() ) ) ? 1 : 0, false );
+
 		try {
 			$skin     = new \Automatic_Upgrader_Skin();
 			$upgrader = new \Plugin_Upgrader( $skin );
@@ -315,6 +327,11 @@ class WPSQR_Updater {
 
 		delete_option( 'wpsqr_post_update_check' );
 
+		// The activation helpers are admin-only includes.
+		if ( ! function_exists( 'is_plugin_active' ) && is_readable( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
 		$problems = array();
 
 		// The core classes loaded, or the bootstrap would already be in safe
@@ -336,7 +353,20 @@ class WPSQR_Updater {
 			if ( $missing ) {
 				$problems[] = count( $missing ) . ' file(s) missing after update';
 			}
+
+			// This request loaded the new code without a fatal — it is good.
+			// Drop the rollback backup so it is not restored by mistake.
+			WPSQR_Guard::disarm_rollback();
 		}
+
+		// Never leave the plugin disabled after an update. If the upgrader
+		// deactivated it and it was active before, switch it back on.
+		if ( get_option( 'wpsqr_was_active' ) && function_exists( 'is_plugin_active' ) && ! is_plugin_active( $this->basename() ) ) {
+			activate_plugin( $this->basename() );
+			$problems[] = 'plugin had been deactivated by the update; re-enabled';
+		}
+
+		delete_option( 'wpsqr_was_active' );
 
 		update_option(
 			'wpsqr_last_update_check',

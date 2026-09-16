@@ -3,7 +3,7 @@
  * Plugin Name:       WPSearch Quick Results
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Serves popular searches from a cache instead of re-running the search engine, and filters what appears in the results.
- * Version:           1.2.0
+ * Version:           1.6.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Allegany County Public Schools
@@ -34,7 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WPSQR_VERSION', '1.2.0' );
+define( 'WPSQR_VERSION', '1.6.0' );
 define( 'WPSQR_FILE', __FILE__ );
 define( 'WPSQR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WPSQR_URL', plugin_dir_url( __FILE__ ) );
@@ -62,8 +62,19 @@ if ( ! class_exists( 'WPSQR_Guard' ) ) {
 // so a bad release cannot take the site down until someone reaches the server.
 WPSQR_Guard::register_shutdown_guard();
 
-// Already in safe mode from a previous crash: load only the recovery notice.
+// Already in safe mode from a previous crash. If it was a bad update that
+// tripped it, revert to the version before the update rather than sit paused —
+// the plugin is never left disabled; at worst it runs the previous version.
 if ( WPSQR_Guard::is_safe_mode() ) {
+	if ( WPSQR_Guard::maybe_rollback() ) {
+		// The previous version's files are back. This request has already
+		// loaded none of the plugin; the next one loads the reverted code
+		// normally, with safe mode cleared. Nothing more to do here.
+		return;
+	}
+
+	// No rollback available — a crash that was not an update. Show the
+	// recovery notice, still without loading whatever crashed.
 	if ( is_admin() ) {
 		WPSQR_Guard::run_safe_mode();
 	}

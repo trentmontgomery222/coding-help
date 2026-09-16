@@ -493,6 +493,14 @@ class WPSQR_Remote {
 				'Installed'  => $this->row( $info['current'] ),
 				'Available'  => $this->row( '' === $info['available'] ? 'unknown (no source, or not checked)' : $info['available'], $info['newer'] ? 'warn' : 'ok' ),
 			);
+
+			$rollback = get_option( 'wpsqr_last_rollback', array() );
+			if ( ! empty( $rollback['reverted_to'] ) ) {
+				$out['Updates']['Last rollback'] = $this->row(
+					'reverted to ' . $rollback['reverted_to'] . ' — a newer version crashed and was undone',
+					'warn'
+				);
+			}
 		}
 
 		return $out;

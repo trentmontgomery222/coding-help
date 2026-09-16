@@ -21,6 +21,7 @@ class WPSQR_Guard {
 
 	const SAFE_MODE_OPTION = 'wpsqr_safe_mode';
 	const HEALTH_OPTION    = 'wpsqr_last_health';
+	const ROLLBACK_OPTION  = 'wpsqr_rollback';
 
 	/** Every include the plugin needs, relative to WPSQR_PATH. */
 	public static function required_files() {
@@ -197,5 +198,178 @@ class WPSQR_Guard {
 
 		wp_safe_redirect( admin_url( 'plugins.php' ) );
 		exit;
+	}
+
+	/* ---- Rollback ------------------------------------------------------ */
+
+	/**
+	 * Remember the current plugin directory so a bad update can be undone.
+	 *
+	 * Called just before an update installs. If the new version then fatals,
+	 * the bootstrap restores this copy on the next request instead of leaving
+	 * the plugin paused — the plugin is never left disabled; the worst case is
+	 * that it is running the previous version.
+	 *
+	 * @param string $version The version being backed up (the current one).
+	 * @return string|false The backup path, or false if it could not be made.
+	 */
+	public static function arm_rollback( $version ) {
+		$backup = self::backup_dir() . 'v' . preg_replace( '/[^0-9A-Za-z._-]/', '', (string) $version ) . '-' . time();
+
+		if ( ! self::copy_tree( untrailingslashit( WPSQR_PATH ), $backup ) ) {
+			return false;
+		}
+
+		update_option(
+			self::ROLLBACK_OPTION,
+			array(
+				'backup'  => $backup,
+				'version' => (string) $version,
+				'time'    => time(),
+			),
+			false
+		);
+
+		return $backup;
+	}
+
+	/** An update that loaded cleanly no longer needs its backup. */
+	public static function disarm_rollback() {
+		$state = get_option( self::ROLLBACK_OPTION );
+
+		if ( is_array( $state ) && ! empty( $state['backup'] ) ) {
+			self::remove_tree( $state['backup'] );
+		}
+
+		delete_option( self::ROLLBACK_OPTION );
+	}
+
+	/**
+	 * If a bad update tripped safe mode, restore the previous version.
+	 *
+	 * Runs from the bootstrap's safe-mode branch, before anything else loads,
+	 * so it works even when the new code cannot. On success the plugin is left
+	 * running the old version with safe mode cleared; the next request loads
+	 * it normally.
+	 *
+	 * @return bool Whether a rollback was performed.
+	 */
+	public static function maybe_rollback() {
+		$state = get_option( self::ROLLBACK_OPTION );
+
+		if ( ! is_array( $state ) || empty( $state['backup'] ) || ! is_dir( $state['backup'] ) ) {
+			return false;
+		}
+
+		if ( ! self::copy_tree( $state['backup'], untrailingslashit( WPSQR_PATH ) ) ) {
+			return false;
+		}
+
+		self::remove_tree( $state['backup'] );
+		delete_option( self::ROLLBACK_OPTION );
+		self::leave_safe_mode();
+
+		update_option(
+			self::HEALTH_OPTION,
+			false,
+			false
+		);
+
+		update_option(
+			'wpsqr_last_rollback',
+			array(
+				'reverted_to' => (string) $state['version'],
+				'time'        => time(),
+			),
+			false
+		);
+
+		return true;
+	}
+
+	protected static function backup_dir() {
+		$base = defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : dirname( dirname( dirname( WPSQR_PATH ) ) );
+		$dir  = trailingslashit( $base ) . 'wpsqr-rollback/';
+
+		if ( ! is_dir( $dir ) ) {
+			wp_mkdir_p( $dir );
+		}
+
+		return $dir;
+	}
+
+	/**
+	 * Copy a directory tree, overwriting the destination.
+	 *
+	 * Plain filesystem functions rather than WP_Filesystem, because this must
+	 * work in the safe-mode path where as little as possible is loaded and the
+	 * new code may be broken.
+	 */
+	protected static function copy_tree( $from, $to ) {
+		$from = untrailingslashit( $from );
+		$to   = untrailingslashit( $to );
+
+		if ( ! is_dir( $from ) ) {
+			return false;
+		}
+
+		if ( ! is_dir( $to ) && ! wp_mkdir_p( $to ) ) {
+			return false;
+		}
+
+		$items = @scandir( $from ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+		if ( false === $items ) {
+			return false;
+		}
+
+		foreach ( $items as $item ) {
+			if ( '.' === $item || '..' === $item ) {
+				continue;
+			}
+
+			$src = $from . '/' . $item;
+			$dst = $to . '/' . $item;
+
+			if ( is_dir( $src ) ) {
+				if ( ! self::copy_tree( $src, $dst ) ) {
+					return false;
+				}
+			} elseif ( ! @copy( $src, $dst ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	protected static function remove_tree( $dir ) {
+		$dir = untrailingslashit( $dir );
+
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+
+		$items = @scandir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+		if ( false === $items ) {
+			return;
+		}
+
+		foreach ( $items as $item ) {
+			if ( '.' === $item || '..' === $item ) {
+				continue;
+			}
+
+			$path = $dir . '/' . $item;
+
+			if ( is_dir( $path ) ) {
+				self::remove_tree( $path );
+			} else {
+				@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			}
+		}
+
+		@rmdir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 	}
 }

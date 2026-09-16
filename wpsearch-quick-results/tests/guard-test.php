@@ -17,6 +17,10 @@ function get_option( $k, $d = false ) { return $GLOBALS['options'][ $k ] ?? $d; 
 function update_option( $k, $v, $a = null ) { $GLOBALS['options'][ $k ] = $v; return true; }
 function delete_option( $k ) { unset( $GLOBALS['options'][ $k ] ); return true; }
 function wp_normalize_path( $p ) { return str_replace( '\\', '/', $p ); }
+function untrailingslashit( $p ) { return rtrim( $p, '/\\' ); }
+function trailingslashit( $p ) { return untrailingslashit( $p ) . '/'; }
+function wp_mkdir_p( $d ) { return is_dir( $d ) || mkdir( $d, 0777, true ); }
+define( 'WP_CONTENT_DIR', sys_get_temp_dir() . '/wpsqr-content-' . getmypid() );
 
 require_once __DIR__ . '/../includes/class-wpsqr-guard.php';
 
@@ -64,7 +68,37 @@ check( 'the reason is kept', $GLOBALS['options']['wpsqr_safe_mode']['reason'], '
 WPSQR_Guard::leave_safe_mode();
 check( 'off after resume', WPSQR_Guard::is_safe_mode(), false );
 
+echo "\nrollback restores a bad update to the previous version\n";
+// Seed a working v1 in the plugin dir.
+file_put_contents( $dir . '/marker.txt', 'version-1' );
+$backup = WPSQR_Guard::arm_rollback( '1.0.0' );
+check( 'a backup was made', is_string( $backup ) && is_dir( $backup ), true );
+check( 'the rollback is armed', isset( $GLOBALS['options']['wpsqr_rollback'] ), true );
+
+// Simulate a bad update overwriting the marker and tripping safe mode.
+file_put_contents( $dir . '/marker.txt', 'version-2-broken' );
+WPSQR_Guard::enter_safe_mode( 'fatal in v2' );
+
+check( 'rollback runs and succeeds', WPSQR_Guard::maybe_rollback(), true );
+check( 'the previous version file is back', trim( file_get_contents( $dir . '/marker.txt' ) ), 'version-1' );
+check( 'safe mode is cleared', WPSQR_Guard::is_safe_mode(), false );
+check( 'the rollback is disarmed', isset( $GLOBALS['options']['wpsqr_rollback'] ), false );
+check( 'the backup is cleaned up', is_dir( $backup ), false );
+check( 'the revert is recorded', $GLOBALS['options']['wpsqr_last_rollback']['reverted_to'], '1.0.0' );
+
+echo "\nwith no armed rollback, maybe_rollback does nothing\n";
+check( 'returns false', WPSQR_Guard::maybe_rollback(), false );
+
+echo "\na clean update disarms the rollback instead\n";
+file_put_contents( $dir . '/marker.txt', 'version-1' );
+$backup2 = WPSQR_Guard::arm_rollback( '1.0.0' );
+WPSQR_Guard::disarm_rollback();
+check( 'the backup is removed', is_dir( $backup2 ), false );
+check( 'and the option cleared', isset( $GLOBALS['options']['wpsqr_rollback'] ), false );
+
 // Clean up.
+@unlink( $dir . '/marker.txt' );
+foreach ( glob( WP_CONTENT_DIR . '/wpsqr-rollback/*' ) as $g ) { is_dir( $g ) && array_map( 'unlink', glob( $g . '/*' ) ) && rmdir( $g ); }
 array_map( 'unlink', glob( $dir . '/includes/*' ) );
 @rmdir( $dir . '/includes' );
 @rmdir( $dir );
