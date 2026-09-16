@@ -196,15 +196,36 @@ class WPSQR_Admin {
 				<?php if ( ! empty( $warm['time'] ) ) : ?>
 					<span class="description" style="margin-inline-start:1em">
 						<?php
+						$triggers = array(
+							'cron'   => __( 'scheduled', 'wpsqr' ),
+							'refill' => __( 'after the cache was emptied', 'wpsqr' ),
+							'manual' => __( 'by hand', 'wpsqr' ),
+						);
+						$trigger  = isset( $warm['trigger'] ) ? $warm['trigger'] : 'cron';
+
 						printf(
-							/* translators: 1: time, 2: number warmed, 3: number skipped */
-							esc_html__( 'Last run %1$s — %2$d warmed, %3$d already fresh', 'wpsqr' ),
+							/* translators: 1: time, 2: trigger, 3: number warmed, 4: number skipped */
+							esc_html__( 'Last run %1$s (%2$s) — %3$d warmed, %4$d already fresh', 'wpsqr' ),
 							esc_html( $warm['time'] ),
+							esc_html( isset( $triggers[ $trigger ] ) ? $triggers[ $trigger ] : $trigger ),
 							(int) $warm['warmed'],
 							(int) $warm['skipped']
 						);
 						?>
 					</span>
+				<?php endif; ?>
+
+				<?php $queued = wp_next_scheduled( WPSQR_Warmer::REFILL ); ?>
+				<?php if ( $queued ) : ?>
+					<p class="description" style="margin-top:.4em">
+						<?php
+						printf(
+							/* translators: %s: human time diff */
+							esc_html__( 'A refill is queued, about %s from now — the cache was emptied recently.', 'wpsqr' ),
+							esc_html( human_time_diff( time(), $queued ) )
+						);
+						?>
+					</p>
 				<?php endif; ?>
 			</form>
 
@@ -434,7 +455,12 @@ class WPSQR_Admin {
 								<?php esc_html_e( 'Re-run the most popular searches in the background every 15 minutes', 'wpsqr' ); ?></label>
 							<p><label><?php esc_html_e( 'How many terms:', 'wpsqr' ); ?>
 								<input type="number" name="warm_count" min="1" max="200" value="<?php echo esc_attr( $s['warm_count'] ); ?>" class="small-text"></label></p>
-							<p class="description"><?php esc_html_e( 'Needs WP-Cron to be running. On a site with cron disabled this does nothing and the first visitor after each save pays full price.', 'wpsqr' ); ?></p>
+							<p><label><input type="checkbox" name="warm_on_flush" value="1" <?php checked( $s['warm_on_flush'], 1 ); ?>>
+								<?php esc_html_e( 'Also re-warm straight after the cache is emptied', 'wpsqr' ); ?></label></p>
+							<p class="description">
+								<?php esc_html_e( 'Saving a post empties the cache, so without this the next visitor to search each popular term pays full price. The refill waits a minute first, so saving fifteen pages in a row produces one refill rather than fifteen.', 'wpsqr' ); ?>
+							</p>
+							<p class="description"><?php esc_html_e( 'Both need WP-Cron to be running. On a site with cron disabled neither happens and the first visitor after each save pays full price.', 'wpsqr' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -1002,6 +1028,7 @@ class WPSQR_Admin {
 		$new['form_id']     = (int) ( $in['form_id'] ?? 0 );
 
 		$new['warm_enabled']    = empty( $in['warm_enabled'] ) ? 0 : 1;
+		$new['warm_on_flush']   = empty( $in['warm_on_flush'] ) ? 0 : 1;
 		$new['observe']         = empty( $in['observe'] ) ? 0 : 1;
 		$new['show_timing']     = empty( $in['show_timing'] ) ? 0 : 1;
 		$new['searchwp_compat'] = empty( $in['searchwp_compat'] ) ? 0 : 1;
@@ -1079,7 +1106,7 @@ class WPSQR_Admin {
 			wp_die( esc_html__( 'Not allowed.', 'wpsqr' ) );
 		}
 
-		$result = WPSQR_Warmer::run();
+		$result = WPSQR_Warmer::run( null, 'manual' );
 
 		wp_safe_redirect( add_query_arg( 'warmed', (int) $result['warmed'], admin_url( 'admin.php?page=wpsqr' ) ) );
 		exit;

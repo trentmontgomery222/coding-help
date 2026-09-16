@@ -175,6 +175,10 @@ class WPSQR_Cache {
 		if ( function_exists( 'wp_cache_flush_group' ) ) {
 			wp_cache_flush_group( self::GROUP );
 		}
+
+		// Put the popular searches straight back, rather than leaving the
+		// next visitor to pay for the first one of each.
+		WPSQR_Warmer::schedule_refill();
 	}
 
 	/** Remove expired rows. Runs on cron, not on a page view. */

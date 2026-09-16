@@ -6,6 +6,7 @@ npm install jsdom
 node tests/browser-rules.test.js     # 98 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 php tests/search-query-test.php      # 26 cases — tokenizing and query building
+php tests/refill-test.php            # 13 cases — refilling after a flush
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
 
@@ -23,6 +24,11 @@ the console. It checks what actually reaches the server — field names, indexes
 after a removal, prototypes staying out of the submission — rather than how
 the page looks. Its fixture mirrors the markup in
 `includes/class-wpsqr-admin.php`; change one and change the other.
+
+`refill-test.php` shims WP-Cron to check the debounce around re-warming: one
+refill after a burst of saves rather than one per save, and never deferred
+past the cap however long the saving goes on. Wrong in either direction is
+costly and neither shows up as an error.
 
 `search-query-test.php` covers the part of the built-in engine that decides
 what gets asked of the database, including the cases where a search term would

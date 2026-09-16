@@ -185,6 +185,7 @@ class WPSQR_Plugin {
 			'per_page'        => 20,
 			'warm_enabled'    => 1,
 			'warm_count'      => 25,
+			'warm_on_flush'   => 1,
 			'observe'         => 1,
 			'show_timing'     => 1,
 

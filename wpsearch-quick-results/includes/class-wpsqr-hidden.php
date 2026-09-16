@@ -142,7 +142,18 @@ class WPSQR_Hidden {
 		return in_array( (int) $post_id, $map['ids'], true );
 	}
 
-	public static function flush() {
+	/**
+	 * @param int|null $post_id Present when called from a save_post hook.
+	 */
+	public static function flush( $post_id = null ) {
+		// A save writes a revision and an autosave as well as the post, so an
+		// unguarded hook empties the cache three times per edit — and the
+		// refill it now triggers makes that considerably more expensive than
+		// it used to be.
+		if ( $post_id && ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) ) {
+			return;
+		}
+
 		delete_transient( self::CACHE_KEY );
 		delete_transient( self::CACHE_KEY . '_desc' );
 		WPSQR_Cache::flush();

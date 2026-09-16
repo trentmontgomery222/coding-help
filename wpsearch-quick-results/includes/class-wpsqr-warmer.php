@@ -13,11 +13,31 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WPSQR_Warmer {
 
-	const HOOK  = 'wpsqr_warm_cache';
-	const SWEEP = 'wpsqr_sweep_cache';
+	const HOOK   = 'wpsqr_warm_cache';
+	const SWEEP  = 'wpsqr_sweep_cache';
+	const REFILL = 'wpsqr_refill_cache';
+
+	/**
+	 * How long a refill waits after the cache is emptied.
+	 *
+	 * Long enough to coalesce: saving fifteen pages in a row, or running an
+	 * import, empties the cache fifteen times, and re-warming after each one
+	 * would mean re-running the top searches fifteen times for nothing.
+	 */
+	const REFILL_DELAY = 60;
+
+	/**
+	 * But never defer past this, however long the saving goes on.
+	 *
+	 * Without a cap, a long import would keep pushing the refill out and the
+	 * cache would stay cold for the whole of it — exactly when the site is
+	 * least able to afford uncached searches.
+	 */
+	const REFILL_MAX_DEFER = 300;
 
 	public function hooks() {
 		add_action( self::HOOK, array( __CLASS__, 'run' ) );
+		add_action( self::REFILL, array( __CLASS__, 'run_refill' ) );
 		add_action( self::SWEEP, array( 'WPSQR_Cache', 'sweep' ) );
 		add_filter( 'cron_schedules', array( __CLASS__, 'add_schedule' ) ); // phpcs:ignore WordPress.WP.CronInterval
 
@@ -51,6 +71,48 @@ class WPSQR_Warmer {
 	public static function unschedule() {
 		wp_clear_scheduled_hook( self::HOOK );
 		wp_clear_scheduled_hook( self::SWEEP );
+		wp_clear_scheduled_hook( self::REFILL );
+	}
+
+	/**
+	 * Queue a refill because the cache was just emptied.
+	 *
+	 * Debounced rather than throttled: each flush pushes the run back, so a
+	 * burst of saves produces one refill after the burst rather than one per
+	 * save. The cap above stops a long import deferring it indefinitely.
+	 */
+	public static function schedule_refill() {
+		$settings = WPSQR_Plugin::settings();
+
+		if ( empty( $settings['warm_enabled'] ) || empty( $settings['warm_on_flush'] ) ) {
+			return;
+		}
+
+		$now     = time();
+		$pending = wp_next_scheduled( self::REFILL );
+		$first   = (int) get_option( 'wpsqr_refill_since', 0 );
+
+		if ( ! $pending ) {
+			// Nothing queued: start a fresh debounce window.
+			update_option( 'wpsqr_refill_since', $now, false );
+			wp_schedule_single_event( $now + self::REFILL_DELAY, self::REFILL );
+			return;
+		}
+
+		// Already waiting. Push it back unless it has waited long enough.
+		if ( $first && ( $now - $first ) >= self::REFILL_MAX_DEFER ) {
+			return;
+		}
+
+		wp_unschedule_event( $pending, self::REFILL );
+		wp_schedule_single_event( $now + self::REFILL_DELAY, self::REFILL );
+	}
+
+	/** The refill itself. */
+	public static function run_refill() {
+		delete_option( 'wpsqr_refill_since' );
+
+		self::run( null, 'refill' );
 	}
 
 	/**
@@ -59,7 +121,7 @@ class WPSQR_Warmer {
 	 * @param int|null $limit Override the configured number of terms.
 	 * @return array{warmed:int,skipped:int,terms:string[]}
 	 */
-	public static function run( $limit = null ) {
+	public static function run( $limit = null, $trigger = 'cron' ) {
 		$settings = WPSQR_Plugin::settings();
 
 		if ( empty( $settings['warm_enabled'] ) ) {
@@ -110,6 +172,7 @@ class WPSQR_Warmer {
 				'time'    => current_time( 'mysql' ),
 				'warmed'  => $warmed,
 				'skipped' => $skipped,
+				'trigger' => $trigger,
 			),
 			false
 		);

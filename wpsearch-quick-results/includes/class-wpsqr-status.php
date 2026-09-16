@@ -149,6 +149,24 @@ class WPSQR_Status {
 				: '',
 		);
 
+		// --- refill after a flush ------------------------------------------
+		if ( ! empty( $settings['warm_enabled'] ) ) {
+			$queued = wp_next_scheduled( WPSQR_Warmer::REFILL );
+
+			$checks[] = array(
+				'label' => __( 'Refill after emptying', 'wpsqr' ),
+				'value' => empty( $settings['warm_on_flush'] )
+					? __( 'Off', 'wpsqr' )
+					: ( $queued
+						? sprintf( /* translators: %s: human time diff */ __( 'Queued, about %s from now', 'wpsqr' ), human_time_diff( time(), $queued ) )
+						: __( 'On, nothing queued', 'wpsqr' ) ),
+				'state' => empty( $settings['warm_on_flush'] ) ? 'info' : 'ok',
+				'note'  => empty( $settings['warm_on_flush'] )
+					? __( 'After a post is saved the cache is empty until the next scheduled warm, so the first visitor to search each popular term pays full price.', 'wpsqr' )
+					: '',
+			);
+		}
+
 		// --- object cache -------------------------------------------------
 		$ext = wp_using_ext_object_cache();
 		$checks[] = array(

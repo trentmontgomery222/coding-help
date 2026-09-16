@@ -326,8 +326,19 @@ which cached searches a given edit affects means re-running those searches,
 which costs exactly what the cache exists to avoid. Flushing and letting the
 warmer refill is cheaper and can never serve a stale result.
 
-**Warming needs WP-Cron.** If cron is disabled, the first visitor after each
-save pays full price. Everything else still works.
+**The cache refills itself.** Saving a post empties it, and a refill is queued
+a minute later that re-runs the current top searches — so the popular terms
+are usually warm again before anyone notices. It's debounced: saving fifteen
+pages in a row produces one refill after the burst, not fifteen. A cap stops a
+long import deferring it indefinitely, which is exactly when a cold cache
+hurts most.
+
+It re-reads the popularity table each time, so the terms it warms follow what
+people are actually searching rather than a list fixed when it was set up.
+
+**All of this needs WP-Cron.** With cron disabled, neither the scheduled warm
+nor the refill happens, and the first visitor after each save pays full price.
+Everything else still works. The Status panel says so.
 
 ## Tests
 
@@ -336,6 +347,7 @@ php tests/normalizer-test.php        # 30 cases — cache keys
 node tests/browser-rules.test.js     # 98 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 php tests/search-query-test.php      # 26 cases — tokenizing and query building
+php tests/refill-test.php            # 13 cases — refilling after a flush
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```
 
