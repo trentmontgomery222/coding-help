@@ -210,11 +210,33 @@ add_filter( 'wpsqr_directory_pages', function ( $pages ) {
 } );
 ```
 
-Note the interaction with rule 1: this only works because your
-`wpsqr_people_search` returns visible people only. "Nobody visible matched" is
-inferred from your answer, so if hidden people leaked into it, the directory
-page would be shown for their names — the leak this closes would reopen
-through the other door.
+#### The one extra thing worth implementing
+
+Two searches return no visible people, and they need opposite treatment:
+
+| Search | Visible matches | What should happen |
+|---|---|---|
+| `aust` (a hidden employee) | none | Directory page **hidden** — its appearance confirms them |
+| `staff directory` | none | Directory page **shown** — it is exactly what was wanted |
+
+Nothing in `wpsqr_people_search` can tell them apart, so the search plugin
+asks you directly:
+
+```php
+add_filter( 'wpsqr_people_matches_hidden', function ( $matches, $args ) {
+	// Same name matching as wpsqr_people_search, over the HIDDEN people only.
+	return acps_directory_name_matches_hidden( $args['query'] );
+}, 10, 2 );
+```
+
+Return a bare `true` or `false`. **No names, no records, nothing else.** The
+answer never reaches the browser; it only decides whether one result is
+dropped server-side. That is the whole reason it is safe to ask.
+
+Without this filter the search plugin will not hide the directory page at all,
+because it cannot distinguish the two cases above, and hiding the page from
+every topical search would be worse than the risk it prevents. The description
+replacement still happens either way, so no names leak through the excerpt.
 
 ### 8. Identify yourself
 
@@ -390,4 +412,8 @@ the original text still works.
 - `wpsqr_people_more_url` added, so a directory can supply its own page link.
 - `wpsqr_directory_pages` added, so a directory can name its own page — see
   rule 7 for the leak this closes.
+- `wpsqr_people_matches_hidden` added, answering "does this term match a
+  hidden person?" with a bare boolean. Without it the directory page is never
+  hidden, because a hidden name and a topical search are indistinguishable
+  from the visible results alone.
 - The `fields` vocabulary for a future widening is written down above.

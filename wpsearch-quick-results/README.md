@@ -116,15 +116,26 @@ Once identified:
 
 - **Its description is always replaced** with a preset. The automatic one is a
   run of employee names and admin interface labels.
-- **It is shown only when the search matches someone visible** (the default).
-  If a name search only reaches the page through hidden content, the page is
-  dropped.
+- **It is hidden when the search names a hidden person** (the default), so
+  that person cannot be confirmed to exist.
 
-That second rule depends entirely on the directory plugin returning visible
-people only — "nobody visible matched" is inferred from its answer. With no
-directory plugin connected, the page is always shown, because there is no way
-to tell a real match from a hidden one; the Status panel says so rather than
-implying protection that isn't there.
+That second rule needs the directory plugin to answer one question:
+*does this term match somebody hidden?* Because these two searches both return
+no visible people and need opposite treatment:
+
+| Search | What should happen |
+|---|---|
+| `aust`, a hidden employee | hide the page — its appearance confirms them |
+| `staff directory` | show it — it is exactly what was wanted |
+
+Without that signal the page is **not** hidden, and the Status panel says so.
+Hiding it from every topical search — which is what "nobody visible matched"
+amounts to — would make the directory page essentially unreachable from
+search, which is worse than the risk it prevents. The description replacement
+happens either way, so no names leak through the excerpt regardless.
+
+A `strict` mode is available for hiding on any no-visible-match, if you'd
+rather lose the page from topical searches than wait for the signal.
 
 Directory rules are applied before any of your own and can't be overridden by
 a `keep`. A `hide` there isn't a preference.
@@ -278,7 +289,7 @@ save pays full price. Everything else still works.
 
 ```
 php tests/normalizer-test.php        # 30 cases — cache keys
-node tests/browser-rules.test.js     # 95 cases — the browser rule engine
+node tests/browser-rules.test.js     # 98 cases — the browser rule engine
 php tests/people-test.php            # 32 cases — person-row sanitizing
 node tests/admin-builder.test.js     # 38 cases — the settings rule builder
 ```

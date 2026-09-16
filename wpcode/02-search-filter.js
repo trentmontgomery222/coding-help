@@ -1131,13 +1131,22 @@
 
 				row( 'Directory handling',
 					dir.hiding
-						? 'hidden for this search \u2014 nobody visible matched'
+						? 'hidden for this search'
 						: 'shown, description replaced with: \u201c' + dir.desc + '\u201d',
 					true );
 
-				if ( 'smart' === dir.mode && ! dir.provider ) {
-					row( '', 'Set to show only on a visible match, but no directory plugin is connected, ' +
-						'so it is always shown.' );
+				var why = {
+					smart_no_signal: 'Set to hide only for a hidden person\u2019s name, but the directory ' +
+						'plugin cannot answer whether a term matches one, so nothing is hidden. ' +
+						'The description is still replaced.',
+					smart_no_provider: 'No directory plugin is connected, so a hidden name cannot be recognised.',
+					strict: 'Hidden whenever nobody visible matched \u2014 which includes topical searches ' +
+						'like \u201cstaff directory\u201d.',
+					always: 'A hidden person\u2019s name will return the page.'
+				}[ dir.modeState ];
+
+				if ( why ) {
+					row( '', why );
 				}
 
 				var dirRules = ( DATA.directoryRules || [] ).length;

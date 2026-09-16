@@ -28,6 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class WPSQR_Directory {
 
 	const MODE_SMART  = 'smart';
+	const MODE_STRICT = 'strict';
 	const MODE_ALWAYS = 'always';
 	const MODE_NEVER  = 'never';
 
@@ -168,6 +169,7 @@ class WPSQR_Directory {
 			'paths'      => $pages['paths'],
 			'ids'        => $pages['ids'],
 			'mode'       => WPSQR_Plugin::settings()['directory_mode'],
+			'modeState'  => self::mode_state(),
 			'provider'   => WPSQR_People::has_provider(),
 			'hiding'     => self::is_configured() ? self::should_hide( $term ) : false,
 			'desc'       => self::description( $term ),
@@ -219,9 +221,19 @@ class WPSQR_Directory {
 	/**
 	 * Should the directory page be hidden for this search?
 	 *
-	 * Only in smart mode, and only when nobody visible matched — which is
-	 * exactly the case where the page is being returned because of content a
-	 * visitor is not allowed to see.
+	 * The distinction that matters is between a search for a hidden person's
+	 * name and a topical search that simply matches nobody:
+	 *
+	 *   "aust"            names a hidden employee. The page must not appear.
+	 *   "staff directory" names nobody at all. The page is what was wanted.
+	 *
+	 * Both return no visible people. Treating "no visible match" as proof of
+	 * the first — which this did at first — hides the directory page from
+	 * every topical search, so it effectively never appears. That is wrong in
+	 * the ordinary case to defend against the rare one.
+	 *
+	 * So smart mode asks the directory plugin directly, and does nothing
+	 * unless it can answer.
 	 */
 	public static function should_hide( $term ) {
 		$mode = WPSQR_Plugin::settings()['directory_mode'];
@@ -234,14 +246,48 @@ class WPSQR_Directory {
 			return false;
 		}
 
-		// Smart. An empty people result means either nobody matched, or no
-		// directory plugin is connected. Hiding on the second is wrong, so
-		// check for a provider first.
 		if ( ! WPSQR_People::has_provider() ) {
 			return false;
 		}
 
-		return ! WPSQR_People::search( $term );
+		if ( self::MODE_STRICT === $mode ) {
+			// Hide whenever nobody visible matched. Safe, and blunt: topical
+			// searches lose the directory page too.
+			return ! WPSQR_People::search( $term );
+		}
+
+		// Smart. Hide only for a term that matches a hidden person and
+		// nobody visible.
+		$hidden = WPSQR_People::matches_hidden( $term );
+
+		if ( null === $hidden ) {
+			// No provider can tell us. Showing the page is the right default:
+			// its description is replaced either way, so nothing leaks through
+			// the excerpt, and the page's own presence is a far weaker signal
+			// than the names its excerpt used to carry.
+			return false;
+		}
+
+		return $hidden && ! WPSQR_People::search( $term );
+	}
+
+	/** Why the current mode is behaving as it is, for the admin screens. */
+	public static function mode_state() {
+		$mode = WPSQR_Plugin::settings()['directory_mode'];
+
+		if ( self::MODE_SMART !== $mode ) {
+			return $mode;
+		}
+
+		if ( ! WPSQR_People::has_provider() ) {
+			return 'smart_no_provider';
+		}
+
+		if ( null === WPSQR_People::matches_hidden( 'x' ) ) {
+			return 'smart_no_signal';
+		}
+
+		return 'smart';
 	}
 
 	/** The replacement description, with {query} expanded. */

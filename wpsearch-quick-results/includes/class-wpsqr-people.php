@@ -188,6 +188,52 @@ class WPSQR_People {
 	}
 
 	/**
+	 * Does this search match somebody who is hidden?
+	 *
+	 * Optional, and answered with a bare true/false — no names, no records.
+	 * It exists to tell two very different searches apart:
+	 *
+	 *   "aust"            a hidden employee's name. The directory page must
+	 *                     not appear, because its appearance confirms them.
+	 *   "staff directory" a topical search matching nobody's name. The
+	 *                     directory page is exactly what was wanted.
+	 *
+	 * Both return no visible people, so without this signal they are
+	 * indistinguishable, and treating them the same is wrong either way:
+	 * suppress both and the directory page effectively never appears;
+	 * suppress neither and hidden people can be probed for.
+	 *
+	 * The answer never reaches the browser — it only decides whether a result
+	 * is dropped server-side.
+	 *
+	 * @return bool|null Null when no provider can answer.
+	 */
+	public static function matches_hidden( $term ) {
+		if ( ! has_filter( 'wpsqr_people_matches_hidden' ) ) {
+			return null;
+		}
+
+		$term = trim( (string) $term );
+
+		if ( '' === $term ) {
+			return false;
+		}
+
+		/**
+		 * @param bool  $matches Whether the term matches a hidden person's name.
+		 * @param array $args    query, fields.
+		 */
+		return (bool) apply_filters(
+			'wpsqr_people_matches_hidden',
+			false,
+			array(
+				'query'  => $term,
+				'fields' => array( 'name' ),
+			)
+		);
+	}
+
+	/**
 	 * Which directory plugin, if any, is answering.
 	 *
 	 * @return array[] Each: name, version.

@@ -430,26 +430,39 @@ class WPSQR_Admin {
 						<td>
 							<label>
 								<input type="radio" name="directory_mode" value="smart" <?php checked( $s['directory_mode'], 'smart' ); ?>>
-								<?php esc_html_e( 'Only when the search matches someone visible', 'wpsqr' ); ?>
+								<?php esc_html_e( 'Hide it only when the search names a hidden person', 'wpsqr' ); ?>
 							</label>
 							<p class="description" style="margin:.2em 0 .8em 1.8em">
-								<?php esc_html_e( 'Recommended. If a name search only reaches the page through hidden content, the page is dropped — so a hidden person cannot be confirmed to exist by searching for them. Needs a connected directory plugin; without one the page always shows, since there is no way to tell a real match from a hidden one.', 'wpsqr' ); ?>
+								<?php esc_html_e( 'Recommended. Searching a hidden employee\'s name drops the page, so that person cannot be confirmed to exist. Topical searches like "staff directory" still return it, with the description below.', 'wpsqr' ); ?>
+								<?php if ( 'smart_no_signal' === WPSQR_Directory::mode_state() ) : ?>
+									<br><strong><?php esc_html_e( 'Your directory plugin cannot answer whether a term matches a hidden person, so nothing is being hidden. The description is still replaced. Ask for the wpsqr_people_matches_hidden filter — it is about ten lines and documented in INTEGRATION.md.', 'wpsqr' ); ?></strong>
+								<?php elseif ( 'smart_no_provider' === WPSQR_Directory::mode_state() ) : ?>
+									<br><strong><?php esc_html_e( 'No directory plugin is connected, so nothing is being hidden.', 'wpsqr' ); ?></strong>
+								<?php endif; ?>
+							</p>
+
+							<label>
+								<input type="radio" name="directory_mode" value="strict" <?php checked( $s['directory_mode'], 'strict' ); ?>>
+								<?php esc_html_e( 'Hide it whenever nobody visible matched', 'wpsqr' ); ?>
+							</label>
+							<p class="description" style="margin:.2em 0 .8em 1.8em">
+								<?php esc_html_e( 'Safe but blunt: a search for "staff directory" matches nobody\'s name either, so the page disappears from topical searches too. Only worth it if your directory plugin cannot answer the question above and you would rather lose the page than risk the signal.', 'wpsqr' ); ?>
 							</p>
 
 							<label>
 								<input type="radio" name="directory_mode" value="always" <?php checked( $s['directory_mode'], 'always' ); ?>>
-								<?php esc_html_e( 'Always', 'wpsqr' ); ?>
+								<?php esc_html_e( 'Always show it', 'wpsqr' ); ?>
 							</label>
 							<p class="description" style="margin:.2em 0 .8em 1.8em">
-								<?php esc_html_e( 'The description is still replaced, but a hidden person\'s name will return the page.', 'wpsqr' ); ?>
+								<?php esc_html_e( 'The description is still replaced, so no names leak through the excerpt — but a hidden person\'s name will return the page.', 'wpsqr' ); ?>
 							</p>
 
 							<label>
 								<input type="radio" name="directory_mode" value="never" <?php checked( $s['directory_mode'], 'never' ); ?>>
-								<?php esc_html_e( 'Never', 'wpsqr' ); ?>
+								<?php esc_html_e( 'Never show it', 'wpsqr' ); ?>
 							</label>
 							<p class="description" style="margin:.2em 0 0 1.8em">
-								<?php esc_html_e( 'People results and the link beneath them are the only way to the directory from search.', 'wpsqr' ); ?>
+								<?php esc_html_e( 'People results and the link beneath them become the only route to the directory from search.', 'wpsqr' ); ?>
 							</p>
 						</td>
 					</tr>
@@ -866,7 +879,7 @@ class WPSQR_Admin {
 		$new['empty_message']   = sanitize_text_field( $in['empty_message'] ?? '' );
 
 		$mode                    = $in['directory_mode'] ?? 'smart';
-		$new['directory_mode']   = in_array( $mode, array( 'smart', 'always', 'never' ), true ) ? $mode : 'smart';
+		$new['directory_mode']   = in_array( $mode, array( 'smart', 'strict', 'always', 'never' ), true ) ? $mode : 'smart';
 		$new['directory_desc']   = sanitize_text_field( $in['directory_desc'] ?? '' );
 		$new['directory_pages']  = self::lines( $in['directory_pages'] ?? '' );
 

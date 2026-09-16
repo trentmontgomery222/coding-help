@@ -212,6 +212,18 @@ check('{query} expands in the directory description',
     value: '/staff/directory/', then: 'setDesc', desc: 'Staff matching {query}' }] } }).descs[0],
   'Staff matching aust');
 
+console.log('\ntopical searches keep the directory page');
+// The regression that prompted this: treating "no visible person matched" as
+// proof of a hidden-name probe hid the page from every topical search too,
+// so it effectively never appeared. The server decides; the browser is handed
+// either a setDesc rule or a hide rule, never both.
+check('a topical search gets the page with a replaced description',
+  run({ query: 'staff directory', results: LEAKING, data: DIR_DESC }).ids, ['43']);
+check('and the leaked excerpt is still gone',
+  run({ query: 'staff directory', results: LEAKING, data: DIR_DESC }).descs[0].includes('Edited Hidden'), false);
+check('a hidden-name search gets no page at all',
+  run({ query: 'aust', results: LEAKING, data: DIR_HIDE }).ids, []);
+
 console.log('\nconditions and variables');
 // The real case: a directory page whose indexed excerpt leaks admin UI text.
 const DIRECTORY = [{ id: 43, type: 'page', path: '/staff/directory/', title: 'Staff Directory',
