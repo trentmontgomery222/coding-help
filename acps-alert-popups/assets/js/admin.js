@@ -53,17 +53,21 @@
 	 * @return {string} The value, or '' if the field is absent.
 	 */
 	function value( root, key ) {
-		var field = root.querySelector( '[name="acps_alert[' + key + ']"]' );
+		var selector = '[name="acps_alert[' + key + ']"]';
 
-		if ( ! field ) {
-			return '';
+		// Every checkbox is preceded by a hidden input of the SAME name, so an
+		// unticked box still posts a 0. querySelector returns the first match in
+		// document order, which is that hidden input — reading it would report
+		// "0" for a ticked box and never change. Ask for the checkbox by name.
+		var checkbox = root.querySelector( 'input[type="checkbox"]' + selector );
+
+		if ( checkbox ) {
+			return checkbox.checked ? '1' : '0';
 		}
 
-		if ( 'checkbox' === field.type ) {
-			return field.checked ? '1' : '0';
-		}
+		var field = root.querySelector( selector );
 
-		return field.value;
+		return field ? field.value : '';
 	}
 
 	/**

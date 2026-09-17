@@ -14,6 +14,7 @@ php tests/post-type-test.php
 php tests/status-test.php
 php tests/render-test.php
 php tests/help-test.php
+node tests/admin-fields-test.js
 for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
 ```
 
@@ -126,6 +127,26 @@ builder-styled and once theme-styled. These checks assert:
 
 Verified non-vacuous: run against the pre-fix renderer it fails with exactly the
 reported symptom.
+
+`admin-fields-test.js` — pins the false "every way of closing this alert is
+switched off" warning. Each checkbox is preceded by a hidden input of the same
+name so an unticked box still posts a 0. That is right on save (PHP takes the
+last value for a repeated name) but a trap in the browser: `querySelector`
+returns the FIRST match in document order, the hidden input, so a ticked box
+read as "0" forever. The warning fired with everything switched on, and the live
+preview always drew with no overlay and no close button. These checks assert:
+
+- the form really does emit a hidden input before each checkbox, so the test is
+  pinned to the actual markup rather than a memory of it
+- a ticked box reads as on, an unticked one as off, and a mix reads correctly
+- the accessibility warning fires only when all three closing routes really are
+  off
+- selects and number fields are unaffected, and a missing field reads as empty
+
+The DOM is a small stand-in, but the behaviour under test is modelled
+faithfully: `querySelector` returns the first element matching, in document
+order. Verified non-vacuous: against the pre-fix reader it fails with "no
+warning when all three are on: expected false, got true".
 
 `help-test.php` — the teaching layer:
 
