@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Link Shortener
  * Plugin URI:        https://caydenriddle.com/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.17.0
+ * Version:           1.18.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.17.0' );
+define( 'ACPS_LS_VERSION', '1.18.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -120,6 +120,7 @@ function acps_ls_load_files() {
 		'includes/class-acps-ls-checker.php',
 		'includes/class-acps-ls-updater.php',
 		'includes/class-acps-ls-api.php',
+		'includes/class-acps-ls-help.php',
 	);
 
 	$missing = array();
@@ -720,6 +721,11 @@ function acps_ls_bootstrap() {
 		// REST API for remote link creation/management (key-authenticated).
 		if ( class_exists( 'ACPS_LS_API' ) ) {
 			( new ACPS_LS_API() )->register();
+		}
+
+		// In-admin help: Getting Started hub + guided tour + Help tabs.
+		if ( is_admin() && class_exists( 'ACPS_LS_Help' ) ) {
+			( new ACPS_LS_Help() )->register();
 		}
 
 		// Admin UI; load it lazily.

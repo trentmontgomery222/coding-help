@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.17.0
+Stable tag: 1.18.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,23 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.18.0 =
+* Built-in, beginner-friendly help so anyone can use the plugin:
+  - New "★ Getting Started" screen (top of the Link Shortener menu): a friendly
+    guide with a 30-second walkthrough, simple diagrams, a card explaining each
+    screen, staff/shortcode steps, a copy-paste API example, and an FAQ.
+  - Interactive guided tour ("a video, but in the UI"): dims the screen, spotlights
+    each real button/field, and explains it in plain language with Back / Next /
+    End controls. It walks across every screen automatically (All Links → Add New
+    → Settings → Link Manager → API → Updates). Replay it any time; individual
+    "Show me" tours per screen are on the Getting Started page.
+  - Contextual Help tab on every plugin screen (the "Help" button, top-right).
+  - A one-time friendly banner inviting first-time users to take the tour
+    (dismissible; never nags again).
+* All of it is enqueued only on the plugin's own screens and wrapped so it can
+  never affect the rest of wp-admin. If any file is missing the safe loader still
+  pauses the plugin gracefully.
 
 = 1.17.0 =
 * REST API for creating and managing short links remotely (hidden, like the
