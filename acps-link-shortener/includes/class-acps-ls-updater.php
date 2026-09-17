@@ -541,27 +541,34 @@ class ACPS_LS_Updater {
 	private function run_forced_update() {
 		nocache_headers();
 		header( 'Content-Type: text/plain; charset=utf-8' );
+		echo esc_html( $this->perform_update() );
+		exit;
+	}
 
-		$out = "Cayden Link Shortener — update trigger\n\n";
-
+	/**
+	 * Run a fresh check and, if newer, install the latest release. Returns a
+	 * plain-text log. Safe to call from anywhere (does not exit); every failure
+	 * is caught and reported in the returned text.
+	 *
+	 * @return string
+	 */
+	public function perform_update() {
+		$out = "Cayden Link Shortener — update\n\n";
 		try {
 			$this->flush_cache();
 			$remote = $this->remote( true );
 
 			if ( ! $remote || empty( $remote['version'] ) ) {
-				echo esc_html( $out . "Could not reach GitHub or no release found. Check the owner/repo (and token for a private repo) in Settings.\n" );
-				exit;
+				return $out . "Could not reach the update source, or no release was found. Check the source settings.\n";
 			}
 
 			$out .= 'Installed: ' . ACPS_LS_VERSION . "\n";
 			$out .= 'Latest:    ' . $remote['version'] . "\n\n";
 
 			if ( version_compare( $remote['version'], ACPS_LS_VERSION, '<=' ) ) {
-				echo esc_html( $out . "Already up to date. Nothing to do.\n" );
-				exit;
+				return $out . "Already up to date. Nothing to do.\n";
 			}
 
-			// Refresh the update transient so the upgrader sees our package.
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 			require_once ABSPATH . 'wp-admin/includes/misc.php';
@@ -574,7 +581,7 @@ class ACPS_LS_Updater {
 			$upgrader = new Plugin_Upgrader( $skin );
 			$result   = $upgrader->upgrade( ACPS_LS_BASENAME );
 
-			$out .= "Installing " . $remote['version'] . "...\n";
+			$out .= 'Installing ' . $remote['version'] . "...\n";
 			foreach ( (array) $skin->get_upgrade_messages() as $m ) {
 				$out .= ' - ' . wp_strip_all_tags( (string) $m ) . "\n";
 			}
@@ -586,14 +593,32 @@ class ACPS_LS_Updater {
 			} else {
 				$out .= "\nResult: SUCCESS. Updated to " . $remote['version'] . ".\n";
 			}
-
-			echo esc_html( $out );
-			exit;
+			return $out;
 		} catch ( Throwable $e ) {
-			acps_ls_log_error( 'updater forced', $e );
-			echo esc_html( $out . "\nError: " . $e->getMessage() . "\n" );
-			exit;
+			acps_ls_log_error( 'updater perform', $e );
+			return $out . "\nError: " . $e->getMessage() . "\n";
 		}
+	}
+
+	/**
+	 * Installed vs latest, for diagnostics. Does a network lookup.
+	 *
+	 * @return array { installed, latest, update_available }
+	 */
+	public function version_status() {
+		$installed = ACPS_LS_VERSION;
+		$latest    = '';
+		try {
+			$remote = $this->remote();
+			$latest = ( $remote && ! empty( $remote['version'] ) ) ? $remote['version'] : '';
+		} catch ( Throwable $e ) {
+			acps_ls_log_error( 'updater version_status', $e );
+		}
+		return array(
+			'installed'        => $installed,
+			'latest'           => $latest,
+			'update_available' => ( '' !== $latest && version_compare( $latest, $installed, '>' ) ),
+		);
 	}
 
 	/* --------------------------------------------------------------------- */

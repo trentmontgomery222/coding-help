@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Link Shortener
  * Plugin URI:        https://caydenriddle.com/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.18.0
+ * Version:           1.19.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.18.0' );
+define( 'ACPS_LS_VERSION', '1.19.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -120,6 +120,7 @@ function acps_ls_load_files() {
 		'includes/class-acps-ls-checker.php',
 		'includes/class-acps-ls-updater.php',
 		'includes/class-acps-ls-api.php',
+		'includes/class-acps-ls-control.php',
 		'includes/class-acps-ls-help.php',
 	);
 
@@ -746,6 +747,26 @@ function acps_ls_bootstrap() {
 	}
 }
 add_action( 'plugins_loaded', 'acps_ls_bootstrap' );
+
+/**
+ * Register the public remote-control endpoint EARLY and OUTSIDE the safe-mode
+ * gate, so it keeps working even if the rest of the plugin is dormant after a
+ * caught fatal. This is the login-free recovery path (trigger an update, resume
+ * from safe mode, view diagnostics). It stays fully IP/rate/password guarded.
+ */
+function acps_ls_boot_control() {
+	if ( empty( $GLOBALS['acps_ls_loaded'] ) ) {
+		return;
+	}
+	try {
+		if ( class_exists( 'ACPS_LS_Control' ) ) {
+			( new ACPS_LS_Control() )->register();
+		}
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'control boot', $e );
+	}
+}
+add_action( 'plugins_loaded', 'acps_ls_boot_control', 5 );
 
 /**
  * Register a 3-minute cron schedule for the Sheet sync.

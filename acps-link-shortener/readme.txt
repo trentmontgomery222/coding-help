@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.18.0
+Stable tag: 1.19.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,29 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.19.0 =
+* Update controls moved onto the Settings screen behind a hidden flag: reach them
+  by adding &updates=1 to the Settings address (Settings → Link Shortener). No
+  menu item, no links, no mentions anywhere in the UI — so they can't be opened
+  by accident.
+* New public "remote control" endpoint (no wp-admin login) for remote admin and
+  emergency recovery, at {home}/?acps_ls_ctrl=<url-key>:
+  - IP-restricted: allow-list or deny-list, with prefix ranges like "196.168."
+    or "196.168.*". Default allows only 167.102.110.1. Anyone not allowed is
+    silently sent to the homepage.
+  - Password-protected (the password is set only in wp-admin, in the hidden
+    updates settings) via a short signed session cookie; hard-throttled logins.
+  - Rate-limited per IP (configurable).
+  - From it you can: trigger an update, view diagnostics (performance, health,
+    problems — memory, safe-mode, broken links, cron, versions), edit plugin
+    settings (limited to once every 24 hours), change the control password, and
+    resume the plugin from safe mode.
+  - It runs even while the plugin is dormant in safe mode, so it is a genuine
+    login-free recovery path if an update ever breaks the site.
+* Resilience: update/control settings live in the database, so an update (which
+  only replaces files) can never reset them; the endpoint keeps working across
+  updates and during safe mode.
 
 = 1.18.0 =
 * Built-in, beginner-friendly help so anyone can use the plugin:

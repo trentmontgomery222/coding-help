@@ -62,7 +62,6 @@ class ACPS_LS_Help {
 			'acps-link-shortener-settings'     => 'settings',
 			'acps-link-shortener-checker'      => 'checker',
 			'acps-link-shortener-api'          => 'api',
-			'acps-link-shortener-updates'      => 'updates',
 		);
 		return isset( $map[ $page ] ) ? $map[ $page ] : '';
 	}
@@ -122,7 +121,6 @@ class ACPS_LS_Help {
 		$settings_url = admin_url( 'options-general.php?page=acps-link-shortener-settings' );
 		$checker_url  = admin_url( 'admin.php?page=acps-link-shortener-checker' );
 		$api_url      = admin_url( 'admin.php?page=acps-link-shortener-api' );
-		$updates_url  = admin_url( 'admin.php?page=acps-link-shortener-updates' );
 		$help_url     = admin_url( 'admin.php?page=' . self::HELP_SLUG );
 
 		return array(
@@ -183,14 +181,6 @@ class ACPS_LS_Help {
 					array( 'target' => '#acps-ls-key-label', 'title' => __( 'Make an API key', 'acps-link-shortener' ), 'html' => __( 'Advanced: to create links from another program, generate a key here and send it as the <code>X-Api-Key</code> header. Skip this if you don\'t need it.', 'acps-link-shortener' ) ),
 				),
 			),
-			array(
-				'key'   => 'updates',
-				'url'   => $updates_url,
-				'label' => __( 'Updates (advanced)', 'acps-link-shortener' ),
-				'steps' => array(
-					array( 'target' => '#acps-ls-update-manifest', 'title' => __( 'Automatic updates', 'acps-link-shortener' ), 'html' => __( 'Advanced: point this at a file you host and the plugin can update itself. Most people can leave this alone.', 'acps-link-shortener' ) ),
-				),
-			),
 		);
 	}
 
@@ -216,7 +206,6 @@ class ACPS_LS_Help {
 				'settings' => __( 'Optional: a custom short domain, staff accounts for the front-end form, Google Sheet sync, and the link checker schedule.', 'acps-link-shortener' ),
 				'checker'  => __( 'The Link Manager checks that your links still work. Use the tabs to see Broken ones; each broken row shows how long it has been broken.', 'acps-link-shortener' ),
 				'api'      => __( 'Advanced: a REST API so other programs can create/manage links with an API key. Manage keys and limits here.', 'acps-link-shortener' ),
-				'updates'  => __( 'Advanced: let the plugin update itself from a file you host or from GitHub, plus a secret force-update URL.', 'acps-link-shortener' ),
 			);
 			if ( empty( $map[ $key ] ) ) {
 				return;

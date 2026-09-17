@@ -71,7 +71,9 @@ class ACPS_LS_Admin {
 	 * @return string
 	 */
 	private function updates_url() {
-		return admin_url( 'admin.php?page=' . self::UPDATES_SLUG );
+		// Hidden behind a query flag on the Settings screen so it can't be opened
+		// by accident and is not linked from any menu.
+		return admin_url( 'options-general.php?page=' . self::SETTINGS_SLUG . '&updates=1' );
 	}
 
 	/**
@@ -138,19 +140,11 @@ class ACPS_LS_Admin {
 			array( $this, 'render_settings_page' )
 		);
 
-		// Hidden "Updates" page: registered with a null parent so WordPress
-		// serves it at admin.php?page=acps-link-shortener-updates but never
-		// lists it in any menu. Reachable by direct link only.
-		add_submenu_page(
-			self::MENU_SLUG . '-hidden', // A parent that does not exist -> no menu item anywhere.
-			__( 'Updates', 'acps-link-shortener' ),
-			__( 'Updates', 'acps-link-shortener' ),
-			$cap,
-			self::UPDATES_SLUG,
-			array( $this, 'render_updates_page' )
-		);
+		// The Updates settings are NOT a menu page. They live on the Settings
+		// screen behind ?updates=1 (see render_settings_page) so they can't be
+		// opened by accident and are not referenced anywhere in the UI.
 
-		// Hidden "API" page: same trick — reachable by direct link only.
+		// Hidden "API" page: reachable by direct link only.
 		add_submenu_page(
 			self::MENU_SLUG . '-hidden',
 			__( 'API', 'acps-link-shortener' ),
@@ -1073,6 +1067,12 @@ class ACPS_LS_Admin {
 			wp_die( esc_html__( 'You do not have permission to view this page.', 'acps-link-shortener' ) );
 		}
 
+		// Hidden Updates panel: Settings screen + ?updates=1. Not linked anywhere.
+		if ( isset( $_GET['updates'] ) && '1' === $_GET['updates'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$this->render_updates_page();
+			return;
+		}
+
 		$settings        = get_option( ACPS_LS_OPT_SETTINGS, array() );
 		$settings        = is_array( $settings ) ? $settings : array();
 		$link_domain     = ! empty( $settings['link_domain'] ) ? $settings['link_domain'] : '';
@@ -1516,6 +1516,30 @@ class ACPS_LS_Admin {
 		$settings['verify_status_url']  = isset( $_POST['verify_status_url'] ) ? esc_url_raw( wp_unslash( $_POST['verify_status_url'] ), array( 'https', 'http' ) ) : '';
 		$settings['verify_status_key']  = isset( $_POST['verify_status_key'] ) ? sanitize_text_field( wp_unslash( $_POST['verify_status_key'] ) ) : '';
 
+		// Remote control endpoint settings.
+		$settings['ctrl_enabled'] = isset( $_POST['ctrl_enabled'] ) ? 1 : 0;
+		$settings['ctrl_key']     = isset( $_POST['ctrl_key'] ) ? sanitize_text_field( wp_unslash( $_POST['ctrl_key'] ) ) : '';
+		$settings['ctrl_ip_mode'] = ( isset( $_POST['ctrl_ip_mode'] ) && 'deny' === $_POST['ctrl_ip_mode'] ) ? 'deny' : 'allow';
+		$settings['ctrl_rate']    = isset( $_POST['ctrl_rate'] ) ? max( 1, absint( wp_unslash( $_POST['ctrl_rate'] ) ) ) : 20;
+
+		$ips = array();
+		if ( isset( $_POST['ctrl_ips'] ) ) {
+			$lines = preg_split( '/[\r\n]+/', sanitize_textarea_field( wp_unslash( $_POST['ctrl_ips'] ) ) );
+			foreach ( (array) $lines as $line ) {
+				$line = trim( $line );
+				if ( '' !== $line ) {
+					$ips[] = $line;
+				}
+			}
+		}
+		$settings['ctrl_ips'] = $ips;
+
+		// Control password: only set/changed here. Blank keeps the current one.
+		$pw = isset( $_POST['ctrl_password'] ) ? (string) $_POST['ctrl_password'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- hashed below, never stored raw.
+		if ( '' !== trim( $pw ) ) {
+			$settings['ctrl_password'] = wp_hash_password( $pw );
+		}
+
 		update_option( ACPS_LS_OPT_SETTINGS, $settings );
 		delete_transient( 'acps_ls_update_remote' );
 		delete_transient( 'acps_ls_devstatus' );
@@ -1525,16 +1549,25 @@ class ACPS_LS_Admin {
 	}
 
 	/**
+	 * Best-effort admin-side client IP (for the "your current IP" hint).
+	 *
+	 * @return string
+	 */
+	private function admin_client_ip() {
+		return isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+	}
+
+	/**
 	 * Render the HIDDEN Updates screen. Not linked from any menu or other page —
-	 * reachable only by whoever knows this URL:
-	 *   wp-admin/admin.php?page=acps-link-shortener-updates
+	 * reachable only via the Settings screen with &updates=1 appended.
 	 */
 	public function render_updates_page() {
 		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
 			wp_die( esc_html__( 'You do not have permission to view this page.', 'acps-link-shortener' ) );
 		}
 
-		$upd = ACPS_LS_Updater::config();
+		$upd  = ACPS_LS_Updater::config();
+		$ctrl = class_exists( 'ACPS_LS_Control' ) ? ACPS_LS_Control::config() : array();
 		?>
 		<div class="wrap acps-ls-wrap">
 			<h1><?php esc_html_e( 'Link Shortener — Updates', 'acps-link-shortener' ); ?></h1>
@@ -1542,7 +1575,7 @@ class ACPS_LS_Admin {
 			<?php $this->render_notice_from_query(); ?>
 
 			<p class="description">
-				<?php esc_html_e( 'This screen is intentionally hidden from the menus. Bookmark its URL to return to it.', 'acps-link-shortener' ); ?>
+				<?php esc_html_e( 'This screen is intentionally hidden. Reach it by adding &updates=1 to the Settings screen address. Bookmark it to return.', 'acps-link-shortener' ); ?>
 			</p>
 
 			<form method="post" action="<?php echo esc_url( $this->updates_url() ); ?>">
@@ -1654,6 +1687,57 @@ class ACPS_LS_Admin {
 									<code><?php echo esc_html( rest_url( ACPS_LS_REST_NAMESPACE . '/update-status' ) ); ?></code>
 								</p>
 							</td>
+						</tr>
+					</tbody>
+				</table>
+
+				<hr />
+				<h2><?php esc_html_e( 'Remote control endpoint (no login)', 'acps-link-shortener' ); ?></h2>
+				<p class="description">
+					<?php esc_html_e( 'A public web address (no wp-admin login) for emergencies: from an allowed IP you can enter the control password to trigger an update, see diagnostics, and edit settings once a day. It is IP-restricted, rate-limited, and password-protected. Anyone not allowed is silently sent to the homepage.', 'acps-link-shortener' ); ?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tbody>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Enable endpoint', 'acps-link-shortener' ); ?></th>
+							<td><label><input type="checkbox" name="ctrl_enabled" value="1" <?php checked( ! empty( $ctrl['enabled'] ) ); ?> /> <?php esc_html_e( 'Allow the public control URL', 'acps-link-shortener' ); ?></label></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-ctrl-key"><?php esc_html_e( 'URL key', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="text" name="ctrl_key" id="acps-ls-ctrl-key" class="regular-text" value="<?php echo esc_attr( isset( $ctrl['key'] ) ? $ctrl['key'] : '' ); ?>" autocomplete="off" />
+								<?php if ( ! empty( $ctrl['key'] ) ) : ?>
+									<p class="description">
+										<?php esc_html_e( 'The endpoint address is:', 'acps-link-shortener' ); ?><br />
+										<code><?php echo esc_html( home_url( '/?acps_ls_ctrl=' . rawurlencode( $ctrl['key'] ) ) ); ?></code>
+									</p>
+								<?php endif; ?>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-ctrl-pw"><?php esc_html_e( 'Control password', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<input type="password" name="ctrl_password" id="acps-ls-ctrl-pw" class="regular-text" autocomplete="new-password" placeholder="<?php echo ! empty( $ctrl['has_password'] ) ? esc_attr__( 'set — leave blank to keep', 'acps-link-shortener' ) : esc_attr__( '(not set yet)', 'acps-link-shortener' ); ?>" />
+								<p class="description"><?php esc_html_e( 'Only settable here, in wp-admin. Leave blank to keep the current one. This is the password the control page asks for.', 'acps-link-shortener' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'IP rule mode', 'acps-link-shortener' ); ?></th>
+							<td>
+								<label><input type="radio" name="ctrl_ip_mode" value="allow" <?php checked( 'deny' !== ( isset( $ctrl['ip_mode'] ) ? $ctrl['ip_mode'] : 'allow' ) ); ?> /> <?php esc_html_e( 'Allow only the IPs below', 'acps-link-shortener' ); ?></label><br />
+								<label><input type="radio" name="ctrl_ip_mode" value="deny" <?php checked( 'deny' === ( isset( $ctrl['ip_mode'] ) ? $ctrl['ip_mode'] : 'allow' ) ); ?> /> <?php esc_html_e( 'Allow everyone EXCEPT the IPs below', 'acps-link-shortener' ); ?></label>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-ctrl-ips"><?php esc_html_e( 'IP list', 'acps-link-shortener' ); ?></label></th>
+							<td>
+								<textarea name="ctrl_ips" id="acps-ls-ctrl-ips" rows="4" class="large-text code" placeholder="167.102.110.1&#10;196.168."><?php echo esc_textarea( implode( "\n", ( isset( $ctrl['ips'] ) && is_array( $ctrl['ips'] ) ) ? $ctrl['ips'] : array() ) ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'One per line. Use a full address (167.102.110.1) or a prefix to match a range — “196.168.” or “196.168.*” matches anything starting with 196.168. Your current IP:', 'acps-link-shortener' ); ?> <code><?php echo esc_html( $this->admin_client_ip() ); ?></code></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-ls-ctrl-rate"><?php esc_html_e( 'Rate limit (requests/min per IP)', 'acps-link-shortener' ); ?></label></th>
+							<td><input type="number" min="1" name="ctrl_rate" id="acps-ls-ctrl-rate" class="small-text" value="<?php echo esc_attr( isset( $ctrl['rate'] ) ? (int) $ctrl['rate'] : 20 ); ?>" /></td>
 						</tr>
 					</tbody>
 				</table>
