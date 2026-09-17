@@ -30,7 +30,7 @@ It does not rely on Beaver Builder registering a popup post type, because that f
 
 Drop the **School Status Board** module (Beaver Builder → Site Alerts group) onto your status page. From then on that page is where you work:
 
-- **Post an update** by editing the module and saving. The compose boxes empty themselves afterwards, so saving the page again can't post a duplicate.
+- **Post an update** by editing the module and saving. Saving the page again cannot re-post it: posting is guarded by a fingerprint of what you typed, so only a genuine change posts anything.
 - The module renders the **current status banner** plus the **archive** of past updates, as an expandable list.
 - Each update can also **pop up across the rest of the site** — but never on the status page itself.
 - Everything **archives itself at 5:50pm** (configurable) unless you chose "keep it up until I archive it". An update posted after the cut-off runs until the following day.
