@@ -519,4 +519,163 @@ class Admin {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'acps-site-toolkit' ), 403 );
 		}
 	}
+
+	/**
+	 * Interactive-tour definitions handed to admin-tour.js. Each tour is a list
+	 * of steps: el (CSS selector to spotlight, optional), title, html, side.
+	 * A step whose element isn't on the current screen shows as a centered card,
+	 * so tours never break when a feature is toggled off.
+	 *
+	 * @return array
+	 */
+	public static function tour_data() {
+		$forms_new = admin_url( 'admin.php?page=acps-st-forms&action=new' );
+
+		$tours = array(
+			// A gentle orientation that works on any of our screens.
+			'overview' => array(
+				'label' => __( 'Take the 2-minute tour', 'acps-site-toolkit' ),
+				'steps' => array(
+					array(
+						'title' => __( 'Welcome! 👋', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'This quick tour shows you the whole plugin in about two minutes. Use Next and Back, or your arrow keys. Press Esc any time to stop.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '#toplevel_page_acps-st',
+						'side'  => 'right',
+						'title' => __( 'Everything lives here', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'This is your menu. Feedback, Forms, Entries, Analytics, Visitors, Q&A and the Help Guide are all under it.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'title' => __( 'Build forms', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Under Forms you build forms by clicking field types — no code. You can also import a Google Form and even keep filing responses back to it.', 'acps-site-toolkit' ) . '</p><p>' . esc_html__( 'The Forms screen has its own “Show me how” button that walks you through building one.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'title' => __( 'The “Chat with us” button', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'A floating button on your site opens a contact form that emails your team. Change its look, position and icon under Settings → Feedback.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'title' => __( 'One important habit: clear the cache', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Your site is cached. After you change a setting or upload files, purge the cache (and on WP Engine, Restart PHP) so visitors see the change.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'title' => __( 'You’re set 🎉', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'The Help Guide page has step-by-step guides with pictures and more tours whenever you need them. Have fun!', 'acps-site-toolkit' ) . '</p>',
+					),
+				),
+			),
+
+			// The main event: building a form, pointing at real controls.
+			'build-form' => array(
+				'label' => __( 'Show me how to build a form', 'acps-site-toolkit' ),
+				'steps' => array(
+					array(
+						'title' => __( 'Let’s build a form together', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'I’ll point at each part of the builder. Follow along — you can add real fields as we go.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '.acps-builder-topbar',
+						'side'  => 'bottom',
+						'title' => __( '1. Name it, set its status', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Give the form a title. Leave Status as Draft while you work; switch it to Published when it’s ready to go live.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '.acps-pane--types',
+						'side'  => 'right',
+						'title' => __( '2. Add fields', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Click any field type — Short text, Email, Dropdown and so on — to add it to your form. They’re grouped so they’re easy to find.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '#acps-canvas',
+						'side'  => 'left',
+						'title' => __( '3. Your form', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Fields you add appear here. Reorder them with the ▲ ▼ buttons or the number box — no dragging needed. Click a field to edit it.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '#acps-field-settings',
+						'side'  => 'left',
+						'title' => __( '4. Edit the selected field', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Change the label, help text, whether it’s required, its options, and more. Advanced: show/hide a field based on another answer.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '#acps-preview-toggle',
+						'side'  => 'bottom',
+						'title' => __( '5. Preview', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'See how the form will look to visitors, then switch back to keep editing.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '.acps-builder-formsettings',
+						'side'  => 'top',
+						'title' => __( '6. Form settings', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Below the builder: the confirmation message, who gets notified, an auto-reply to the submitter, response limits, and access control (login, password, or a private link).', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '#acps-gforms',
+						'side'  => 'top',
+						'title' => __( '7. Google Form bridge (optional)', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Want responses to also land in a Google Form? Turn this on and paste the Google Form link. If you imported from Google, it’s already set up.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '.acps-builder-actions .button-primary',
+						'side'  => 'bottom',
+						'title' => __( '8. Save', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Set Status to Published and click Save form. That’s it — your form exists!', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'title' => __( 'Last step: put it on a page', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Copy the form’s shortcode from the Forms list (it looks like [acps_form id="12"]) and paste it into any page or post. Or use the “ACPS Form” block / Beaver module.', 'acps-site-toolkit' ) . '</p>',
+					),
+				),
+			),
+
+			// Working the feedback inbox.
+			'feedback-inbox' => array(
+				'label' => __( 'Show me the Feedback inbox', 'acps-site-toolkit' ),
+				'steps' => array(
+					array(
+						'title' => __( 'The Feedback inbox', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Every message from your forms lands here. Let me show you how to work through it.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '#acps-inbox-form',
+						'side'  => 'bottom',
+						'title' => __( 'Switch which form you’re reading', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'This inbox can show any form’s submissions — pick a form here to triage it with the same tools.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '#acps-filter-status',
+						'side'  => 'bottom',
+						'title' => __( 'Filter by status', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Narrow the list to New, In progress, Resolved, and so on.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'el'    => '.page-title-action',
+						'side'  => 'bottom',
+						'title' => __( 'Export to a spreadsheet', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Download everything as a CSV to open in Excel or Google Sheets.', 'acps-site-toolkit' ) . '</p>',
+					),
+					array(
+						'title' => __( 'Open one to reply', 'acps-site-toolkit' ),
+						'html'  => '<p>' . esc_html__( 'Click any row to read the full message, set its status (which can email the person back), assign it to a teammate, and add private notes.', 'acps-site-toolkit' ) . '</p>',
+					),
+				),
+			),
+		);
+
+		return array(
+			'tours' => $tours,
+			'i18n'  => array(
+				'next'         => __( 'Next', 'acps-site-toolkit' ),
+				'back'         => __( 'Back', 'acps-site-toolkit' ),
+				'done'         => __( 'Done', 'acps-site-toolkit' ),
+				'close'        => __( 'End tour', 'acps-site-toolkit' ),
+				'step'         => __( 'Step', 'acps-site-toolkit' ),
+				'welcomeTitle' => __( 'New to Cayden Form Manager?', 'acps-site-toolkit' ),
+				'welcomeBody'  => __( 'Take a quick guided tour and I’ll show you around — it takes about two minutes.', 'acps-site-toolkit' ),
+				'welcomeGo'    => __( 'Take the tour', 'acps-site-toolkit' ),
+				'welcomeSkip'  => __( 'Maybe later', 'acps-site-toolkit' ),
+			),
+			'forms_new_url' => $forms_new,
+		);
+	}
 }

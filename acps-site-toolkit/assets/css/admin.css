@@ -349,3 +349,87 @@
 .acps-cond-rule { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; margin: 0.4rem 0; }
 .acps-cond-rule select, .acps-cond-rule input { flex: 1 1 auto; min-width: 6rem; }
 .acps-cond-body { margin-top: 0.5rem; }
+
+/* ---- Interactive tours (admin-tour.js) ---- */
+.acps-tour-backdrop {
+	position: fixed; inset: 0; z-index: 100000;
+	background: rgba( 10, 20, 30, 0.55 );
+	animation: acps-tour-fade 0.2s ease;
+}
+.acps-tour-ring {
+	position: fixed; z-index: 100001; pointer-events: none;
+	border-radius: 8px;
+	box-shadow: 0 0 0 3px #2271b1, 0 0 0 9999px rgba( 10, 20, 30, 0.55 );
+	transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+.acps-tour-pop {
+	position: fixed; z-index: 100002;
+	width: min( 360px, calc( 100vw - 24px ) );
+	background: #fff; color: #1d2327;
+	border-radius: 12px;
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.35 );
+	padding: 1.15rem 1.25rem 1rem;
+	animation: acps-tour-fade 0.2s ease;
+}
+.acps-tour-pop:focus { outline: none; }
+.acps-tour-x {
+	position: absolute; top: 0.4rem; right: 0.5rem;
+	background: none; border: 0; cursor: pointer;
+	font-size: 1.5rem; line-height: 1; color: #787c82; padding: 0.2rem 0.4rem; border-radius: 6px;
+}
+.acps-tour-x:hover { background: #f0f0f1; color: #1d2327; }
+.acps-tour-count { margin: 0 0 0.15rem; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #2271b1; }
+.acps-tour-title { margin: 0 0 0.4rem; font-size: 1.15rem; line-height: 1.25; }
+.acps-tour-body { font-size: 0.95rem; line-height: 1.5; color: #3c434a; }
+.acps-tour-body p { margin: 0 0 0.5rem; }
+.acps-tour-body strong { color: #1d2327; }
+.acps-tour-body code { background: #f0f0f1; padding: 0.05rem 0.35rem; border-radius: 4px; }
+.acps-tour-nav { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.9rem; }
+.acps-tour-nav .button { min-height: 32px; }
+.acps-tour-next { margin-left: auto; }
+.acps-tour-dots { display: flex; gap: 0.3rem; }
+.acps-tour-dot { width: 7px; height: 7px; border-radius: 50%; background: #dcdce0; }
+.acps-tour-dot.is-on { background: #2271b1; transform: scale( 1.2 ); }
+@keyframes acps-tour-fade { from { opacity: 0; } to { opacity: 1; } }
+@media ( prefers-reduced-motion: reduce ) {
+	.acps-tour-backdrop, .acps-tour-pop { animation: none; }
+	.acps-tour-ring { transition: none; }
+}
+
+/* Tour launch panel + welcome banner */
+.acps-tours-panel { display: grid; grid-template-columns: repeat( auto-fit, minmax( 240px, 1fr ) ); gap: 0.75rem; margin: 1rem 0; }
+.acps-tour-card {
+	display: flex; flex-direction: column; gap: 0.4rem;
+	background: #fff; border: 1px solid #dcdce0; border-radius: 10px; padding: 1rem 1.1rem;
+	box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 );
+}
+.acps-tour-card h3 { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+.acps-tour-card .dashicons { color: #2271b1; }
+.acps-tour-card p { margin: 0; color: #50575e; font-size: 0.9rem; flex: 1 1 auto; }
+.acps-tour-card .button { align-self: flex-start; margin-top: 0.3rem; }
+.acps-welcome {
+	display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+	background: linear-gradient( 135deg, #eef4fb, #f6f7f7 );
+	border: 1px solid #c5d9ec; border-left: 4px solid #2271b1;
+	border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem;
+}
+.acps-welcome h2 { margin: 0 0 0.15rem; font-size: 1.15rem; }
+.acps-welcome p { margin: 0; color: #3c434a; }
+.acps-welcome .acps-welcome-actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; }
+@media ( max-width: 600px ) { .acps-welcome .acps-welcome-actions { margin-left: 0; width: 100%; } }
+
+/* Inline SVG "screenshots" in the help guide */
+.acps-shot { width: 100%; height: auto; border: 1px solid #dcdce0; border-radius: 10px; background: #fff; margin: 0.5rem 0 0.25rem; }
+.acps-steps { counter-reset: acps-step; list-style: none; margin: 0.5rem 0; padding: 0; }
+.acps-steps > li { position: relative; padding: 0 0 1rem 2.75rem; }
+.acps-steps > li::before {
+	counter-increment: acps-step; content: counter( acps-step );
+	position: absolute; left: 0; top: 0;
+	width: 1.9rem; height: 1.9rem; border-radius: 50%;
+	background: #2271b1; color: #fff; font-weight: 700;
+	display: flex; align-items: center; justify-content: center;
+}
+.acps-steps > li:not( :last-child )::after {
+	content: ""; position: absolute; left: 0.92rem; top: 1.9rem; bottom: 0.15rem; width: 2px; background: #dcdce0;
+}
+.acps-steps > li h3 { margin: 0.15rem 0 0.35rem; font-size: 1.02rem; }

@@ -32,6 +32,102 @@ $menu = admin_url( 'admin.php?page=acps-st' );
 		<p><a class="button button-primary" href="<?php echo esc_url( $help_url ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open your organisation’s help guide', 'acps-site-toolkit' ); ?> ↗</a></p>
 	<?php endif; ?>
 
+	<?php $forms_new = admin_url( 'admin.php?page=acps-st-forms&action=new' ); ?>
+
+	<!-- ============ Guided tours ============ -->
+	<h2 id="tours" style="margin-top:1rem"><span class="dashicons dashicons-video-alt3" aria-hidden="true" style="color:#2271b1"></span> <?php esc_html_e( 'Guided tours — I’ll walk you through it', 'acps-site-toolkit' ); ?></h2>
+	<p class="description"><?php esc_html_e( 'Like a video, but right here in the screen: each tour dims the page and points at the exact button to use, one step at a time. Press Esc any time to stop.', 'acps-site-toolkit' ); ?></p>
+	<div class="acps-tours-panel">
+		<div class="acps-tour-card">
+			<h3><span class="dashicons dashicons-flag" aria-hidden="true"></span> <?php esc_html_e( 'The 2-minute overview', 'acps-site-toolkit' ); ?></h3>
+			<p><?php esc_html_e( 'New here? Start with this. It shows you the whole plugin and where everything lives.', 'acps-site-toolkit' ); ?></p>
+			<button type="button" class="button button-primary" data-acps-tour="overview"><?php esc_html_e( 'Start tour', 'acps-site-toolkit' ); ?></button>
+		</div>
+		<div class="acps-tour-card">
+			<h3><span class="dashicons dashicons-forms" aria-hidden="true"></span> <?php esc_html_e( 'Build a form, step by step', 'acps-site-toolkit' ); ?></h3>
+			<p><?php esc_html_e( 'Opens the builder and walks you through adding fields, settings, and saving.', 'acps-site-toolkit' ); ?></p>
+			<a class="button button-primary" href="<?php echo esc_url( add_query_arg( 'acps_tour', 'build-form', $forms_new ) ); ?>"><?php esc_html_e( 'Start tour', 'acps-site-toolkit' ); ?></a>
+		</div>
+		<div class="acps-tour-card">
+			<h3><span class="dashicons dashicons-email-alt" aria-hidden="true"></span> <?php esc_html_e( 'Work the Feedback inbox', 'acps-site-toolkit' ); ?></h3>
+			<p><?php esc_html_e( 'Shows you how to read, filter, export, and reply to messages.', 'acps-site-toolkit' ); ?></p>
+			<a class="button button-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st&acps_tour=feedback-inbox' ) ); ?>"><?php esc_html_e( 'Start tour', 'acps-site-toolkit' ); ?></a>
+		</div>
+	</div>
+
+	<!-- ============ Illustrated: build your first form ============ -->
+	<div class="acps-card" id="first-form">
+		<h2><?php esc_html_e( 'Build your first form in 4 steps', 'acps-site-toolkit' ); ?></h2>
+		<svg class="acps-shot" viewBox="0 0 640 240" role="img" aria-labelledby="acps-shot1-t" preserveAspectRatio="xMidYMid meet">
+			<title id="acps-shot1-t"><?php esc_attr_e( 'The form builder has three columns: field types on the left, your form in the middle, and the selected field’s settings on the right.', 'acps-site-toolkit' ); ?></title>
+			<rect x="0" y="0" width="640" height="240" fill="#f6f7f7"/>
+			<rect x="12" y="12" width="616" height="34" rx="6" fill="#fff" stroke="#dcdce0"/>
+			<rect x="24" y="22" width="120" height="14" rx="3" fill="#e7f2fb"/>
+			<rect x="516" y="20" width="100" height="18" rx="4" fill="#2271b1"/>
+			<text x="566" y="33" font-family="sans-serif" font-size="11" fill="#fff" text-anchor="middle">Save form</text>
+			<!-- left: field types -->
+			<rect x="12" y="58" width="150" height="170" rx="6" fill="#fff" stroke="#dcdce0"/>
+			<text x="24" y="78" font-family="sans-serif" font-size="11" font-weight="bold" fill="#50575e">FIELD TYPES</text>
+			<rect x="24" y="88" width="126" height="22" rx="5" fill="#f0f6fb"/><text x="34" y="103" font-family="sans-serif" font-size="10" fill="#1d2327">Short text</text>
+			<rect x="24" y="116" width="126" height="22" rx="5" fill="#f0f6fb"/><text x="34" y="131" font-family="sans-serif" font-size="10" fill="#1d2327">Email</text>
+			<rect x="24" y="144" width="126" height="22" rx="5" fill="#f0f6fb"/><text x="34" y="159" font-family="sans-serif" font-size="10" fill="#1d2327">Dropdown</text>
+			<rect x="24" y="172" width="126" height="22" rx="5" fill="#f0f6fb"/><text x="34" y="187" font-family="sans-serif" font-size="10" fill="#1d2327">Checkbox</text>
+			<!-- middle: canvas -->
+			<rect x="174" y="58" width="288" height="170" rx="6" fill="#fff" stroke="#2271b1"/>
+			<text x="186" y="78" font-family="sans-serif" font-size="11" font-weight="bold" fill="#50575e">YOUR FORM</text>
+			<rect x="186" y="88" width="264" height="40" rx="6" fill="#fbfdff" stroke="#2271b1"/>
+			<circle cx="200" cy="108" r="8" fill="#2271b1"/><text x="200" y="112" font-family="sans-serif" font-size="10" fill="#fff" text-anchor="middle">1</text>
+			<rect x="216" y="98" width="150" height="9" rx="2" fill="#1d2327"/><rect x="216" y="112" width="220" height="9" rx="2" fill="#e0e0e3"/>
+			<rect x="186" y="136" width="264" height="40" rx="6" fill="#fff" stroke="#dcdce0"/>
+			<circle cx="200" cy="156" r="8" fill="#a7aaad"/><text x="200" y="160" font-family="sans-serif" font-size="10" fill="#fff" text-anchor="middle">2</text>
+			<rect x="216" y="146" width="120" height="9" rx="2" fill="#1d2327"/><rect x="216" y="160" width="220" height="9" rx="2" fill="#e0e0e3"/>
+			<!-- right: settings -->
+			<rect x="474" y="58" width="154" height="170" rx="6" fill="#fff" stroke="#dcdce0"/>
+			<text x="486" y="78" font-family="sans-serif" font-size="11" font-weight="bold" fill="#50575e">SETTINGS</text>
+			<rect x="486" y="90" width="60" height="8" rx="2" fill="#787c82"/><rect x="486" y="102" width="130" height="18" rx="4" fill="#f0f0f1"/>
+			<rect x="486" y="128" width="60" height="8" rx="2" fill="#787c82"/><rect x="486" y="140" width="130" height="18" rx="4" fill="#f0f0f1"/>
+			<rect x="486" y="166" width="90" height="8" rx="2" fill="#787c82"/><rect x="486" y="178" width="130" height="30" rx="4" fill="#f0f0f1"/>
+		</svg>
+		<ol class="acps-steps">
+			<li><h3><?php esc_html_e( 'Open the builder', 'acps-site-toolkit' ); ?></h3><p><?php printf( wp_kses_post( __( 'Go to <strong>Forms → Add New</strong>, or just <a href="%s">click here</a>.', 'acps-site-toolkit' ) ), esc_url( $forms_new ) ); ?></p></li>
+			<li><h3><?php esc_html_e( 'Add fields', 'acps-site-toolkit' ); ?></h3><p><?php esc_html_e( 'Click a field type on the left (Short text, Email, Dropdown…). It drops into the middle. Click a field to change its label, help text, or make it required on the right.', 'acps-site-toolkit' ); ?></p></li>
+			<li><h3><?php esc_html_e( 'Set it up', 'acps-site-toolkit' ); ?></h3><p><?php esc_html_e( 'Scroll below the builder for the confirmation message, notification emails, auto-reply, and access control. All optional — the defaults are sensible.', 'acps-site-toolkit' ); ?></p></li>
+			<li><h3><?php esc_html_e( 'Publish & place it', 'acps-site-toolkit' ); ?></h3><p><?php esc_html_e( 'Set Status to Published, click Save. Then copy the form’s shortcode from the Forms list and paste it into any page — or use the “ACPS Form” block.', 'acps-site-toolkit' ); ?></p></li>
+		</ol>
+		<p><a class="button button-primary" href="<?php echo esc_url( add_query_arg( 'acps_tour', 'build-form', $forms_new ) ); ?>"><span class="dashicons dashicons-welcome-learn-more" aria-hidden="true" style="vertical-align:text-bottom"></span> <?php esc_html_e( 'Show me — start the interactive tour', 'acps-site-toolkit' ); ?></a></p>
+	</div>
+
+	<!-- ============ Illustrated: Google Form bridge ============ -->
+	<div class="acps-card" id="google-bridge">
+		<h2><?php esc_html_e( 'Put your form “on top of” a Google Form', 'acps-site-toolkit' ); ?></h2>
+		<p><?php esc_html_e( 'Keep using a Google Form behind the scenes, but give people this plugin’s nicer, accessible form. Every answer is copied into your Google Form automatically.', 'acps-site-toolkit' ); ?></p>
+		<svg class="acps-shot" viewBox="0 0 640 170" role="img" aria-labelledby="acps-shot2-t" preserveAspectRatio="xMidYMid meet">
+			<title id="acps-shot2-t"><?php esc_attr_e( 'A visitor fills in your website form; the plugin copies the answers into your Google Form as a real response.', 'acps-site-toolkit' ); ?></title>
+			<rect x="0" y="0" width="640" height="170" fill="#f6f7f7"/>
+			<rect x="30" y="34" width="200" height="104" rx="8" fill="#fff" stroke="#2271b1"/>
+			<text x="130" y="26" font-family="sans-serif" font-size="12" fill="#1d2327" text-anchor="middle" font-weight="bold">Your website form</text>
+			<rect x="46" y="52" width="120" height="9" rx="2" fill="#1d2327"/><rect x="46" y="66" width="168" height="16" rx="4" fill="#f0f0f1"/>
+			<rect x="46" y="90" width="90" height="9" rx="2" fill="#1d2327"/><rect x="46" y="104" width="168" height="16" rx="4" fill="#f0f0f1"/>
+			<!-- arrow -->
+			<line x1="242" y1="86" x2="392" y2="86" stroke="#2271b1" stroke-width="3"/>
+			<polygon points="392,86 380,79 380,93" fill="#2271b1"/>
+			<text x="317" y="76" font-family="sans-serif" font-size="11" fill="#2271b1" text-anchor="middle" font-weight="bold">answers copied</text>
+			<text x="317" y="104" font-family="sans-serif" font-size="11" fill="#50575e" text-anchor="middle">automatically</text>
+			<!-- google form -->
+			<rect x="410" y="34" width="200" height="104" rx="8" fill="#fff" stroke="#673ab7"/>
+			<text x="510" y="26" font-family="sans-serif" font-size="12" fill="#1d2327" text-anchor="middle" font-weight="bold">Your Google Form</text>
+			<rect x="426" y="52" width="60" height="9" rx="2" fill="#673ab7"/><rect x="426" y="66" width="168" height="16" rx="4" fill="#f3eefb"/>
+			<rect x="426" y="90" width="60" height="9" rx="2" fill="#673ab7"/><rect x="426" y="104" width="168" height="16" rx="4" fill="#f3eefb"/>
+		</svg>
+		<p><strong><?php esc_html_e( 'Easiest way — import it:', 'acps-site-toolkit' ); ?></strong></p>
+		<ol class="acps-steps">
+			<li><h3><?php esc_html_e( 'Import the Google Form', 'acps-site-toolkit' ); ?></h3><p><?php printf( wp_kses_post( __( 'Go to <strong>Forms → Import Google Form</strong> and paste your Google Form’s share link. <a href="%s">Open the importer</a>.', 'acps-site-toolkit' ) ), esc_url( admin_url( 'admin.php?page=acps-st-forms&action=import' ) ) ); ?></p></li>
+			<li><h3><?php esc_html_e( 'It wires itself up', 'acps-site-toolkit' ); ?></h3><p><?php esc_html_e( 'A matching form is created AND the “Google Form bridge” is switched on with every field mapped to Google for you. Nothing else to do.', 'acps-site-toolkit' ); ?></p></li>
+			<li><h3><?php esc_html_e( 'Publish it', 'acps-site-toolkit' ); ?></h3><p><?php esc_html_e( 'Review the fields, set Status to Published, Save, and place it on a page. Submissions now appear in both your Entries and your Google Form’s responses.', 'acps-site-toolkit' ); ?></p></li>
+		</ol>
+		<p class="description"><?php esc_html_e( 'Building by hand instead? In the form editor open “Google Form bridge”, tick it on, paste the Google Form link, and set each field’s “Google Form field ID” (the number in entry.123456789) in that field’s settings.', 'acps-site-toolkit' ); ?></p>
+	</div>
+
 	<p class="description"><?php esc_html_e( 'Everything this plugin does and where to find it. Jump to a section:', 'acps-site-toolkit' ); ?></p>
 
 	<nav aria-label="<?php esc_attr_e( 'Help contents', 'acps-site-toolkit' ); ?>" class="acps-card">

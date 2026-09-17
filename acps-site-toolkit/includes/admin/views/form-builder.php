@@ -68,6 +68,7 @@ $settings['style'] = wp_parse_args( $settings['style'], array( 'accent' => '', '
 				</select>
 			</p>
 			<p class="acps-builder-actions">
+				<button type="button" class="button" data-acps-tour="build-form"><span class="dashicons dashicons-welcome-learn-more" aria-hidden="true" style="vertical-align:text-bottom"></span> <?php esc_html_e( 'Show me how', 'acps-site-toolkit' ); ?></button>
 				<button type="button" class="button" id="acps-preview-toggle" aria-pressed="false"><?php esc_html_e( 'Preview', 'acps-site-toolkit' ); ?></button>
 				<button type="submit" class="button button-primary"><?php esc_html_e( 'Save form', 'acps-site-toolkit' ); ?></button>
 			</p>
@@ -240,7 +241,7 @@ $settings['style'] = wp_parse_args( $settings['style'], array( 'accent' => '', '
 				}
 			}
 			?>
-			<h2><?php esc_html_e( 'Google Form bridge', 'acps-site-toolkit' ); ?></h2>
+			<h2 id="acps-gforms"><?php esc_html_e( 'Google Form bridge', 'acps-site-toolkit' ); ?></h2>
 			<p class="description"><?php esc_html_e( 'Put this form “on top of” a Google Form: when someone submits here, their answers are also filed as a real response in your Google Form. Importing a Google Form (Forms → Import) sets this up automatically — the field-to-Google mapping is filled in for you. You can also map fields by hand: each field has a “Google Form field ID” box in its settings on the left.', 'acps-site-toolkit' ); ?></p>
 			<table class="form-table" role="presentation">
 				<tr>

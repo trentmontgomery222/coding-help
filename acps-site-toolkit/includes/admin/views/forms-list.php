@@ -20,6 +20,7 @@ $forms = Form::all();
 	<h1 class="wp-heading-inline"><?php esc_html_e( 'Forms', 'acps-site-toolkit' ); ?></h1>
 	<a class="page-title-action" href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-forms&action=new' ) ); ?>"><?php esc_html_e( 'Add New', 'acps-site-toolkit' ); ?></a>
 	<a class="page-title-action" href="<?php echo esc_url( admin_url( 'admin.php?page=acps-st-forms&action=import' ) ); ?>"><?php esc_html_e( 'Import Google Form', 'acps-site-toolkit' ); ?></a>
+	<a class="page-title-action" href="<?php echo esc_url( add_query_arg( 'acps_tour', 'build-form', admin_url( 'admin.php?page=acps-st-forms&action=new' ) ) ); ?>"><span class="dashicons dashicons-welcome-learn-more" aria-hidden="true" style="vertical-align:text-bottom"></span> <?php esc_html_e( 'Show me how', 'acps-site-toolkit' ); ?></a>
 	<hr class="wp-header-end">
 
 	<table class="widefat striped acps-table">

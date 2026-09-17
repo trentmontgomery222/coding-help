@@ -313,6 +313,11 @@ class Plugin {
 				'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
 			)
 		);
+
+		// Interactive guided tours ("Show me how"). Loaded on every plugin screen
+		// so a tour launched by ?acps_tour= auto-starts wherever it lands.
+		wp_enqueue_script( 'acps-st-tour', ACPS_ST_URL . 'assets/js/admin-tour.js', array(), ACPS_ST_VERSION, true );
+		wp_localize_script( 'acps-st-tour', 'ACPS_ST_TOUR', Admin\Admin::tour_data() );
 	}
 
 	/**
