@@ -22,6 +22,15 @@ Nothing about the alert content lives in this plugin, so an alert can be re-desi
 
 If the plugin cannot find the popup post type it will say so; pick the right post type under **Site Alerts → Settings → Popup post type**. The plugin auto-detects `fl-popup`, `fl_popup`, `fl-builder-popup`, `flbuilder_popup` and Beaver Themer popup layouts (`fl-theme-layout` with a layout type of `popup`).
 
+## Learning it
+
+You should not need this file. The plugin teaches itself:
+
+- **A guided tour.** Open **Site Alerts** and click **Show me how**. It dims the screen, spotlights one real control at a time and explains it, walking you from an empty list all the way to a live alert — across screens, picking up where it left off. Escape leaves at any point; you can replay it whenever.
+- **Site Alerts → Help & Tutorials.** A setup checklist that ticks itself off as you go, illustrated guides for every setting, ready-made recipes (snow day, event, staff-only, click-to-open), troubleshooting, an FAQ and a glossary.
+- **The Help tab** at the top right of every plugin screen, with a "my alert isn't showing" checklist.
+- **A live preview** on the alert settings screen that redraws as you change position, width, severity and overlay — plus a warning if you switch off every way of closing the alert.
+
 ## Using it
 
 **Site Alerts → All Alerts** lists every Beaver Builder popup on the site with its live status, severity, schedule, targeting, trigger and priority. Each row links to the alert settings, to the Beaver Builder editor for the content, and to a one-click on/off switch.

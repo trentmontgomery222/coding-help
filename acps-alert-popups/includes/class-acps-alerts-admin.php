@@ -382,6 +382,9 @@ class ACPS_Alerts_Admin {
 		<div class="wrap acps-alerts-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Site Alerts', 'acps-alert-popups' ); ?></h1>
 			<a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-alerts-new' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Add New Alert', 'acps-alert-popups' ); ?></a>
+			<?php if ( class_exists( 'ACPS_Alerts_Help' ) ) : ?>
+				<button type="button" class="page-title-action" data-acps-tour="first-alert"><?php esc_html_e( 'Show me how', 'acps-alert-popups' ); ?></button>
+			<?php endif; ?>
 			<hr class="wp-header-end" />
 
 			<?php $this->render_message(); ?>
@@ -391,8 +394,20 @@ class ACPS_Alerts_Admin {
 			</p>
 
 			<?php if ( empty( $popups ) ) : ?>
-				<div class="notice notice-info inline">
-					<p><?php esc_html_e( 'No Beaver Builder popups found yet. Create one and it will appear here.', 'acps-alert-popups' ); ?></p>
+				<div class="acps-empty">
+					<h2><?php esc_html_e( 'No popups yet — let’s make one', 'acps-alert-popups' ); ?></h2>
+					<p><?php esc_html_e( 'An alert is a Beaver Builder popup that this plugin switches on and aims at the right people. Once you create a popup it appears here on its own.', 'acps-alert-popups' ); ?></p>
+					<ol>
+						<li><?php esc_html_e( 'Create the popup in Beaver Builder and write what it should say.', 'acps-alert-popups' ); ?></li>
+						<li><?php esc_html_e( 'Publish it.', 'acps-alert-popups' ); ?></li>
+						<li><?php esc_html_e( 'Come back here, open it, and tick "Alert is live".', 'acps-alert-popups' ); ?></li>
+					</ol>
+					<p>
+						<a class="button button-primary button-hero" href="<?php echo esc_url( admin_url( 'admin.php?page=acps-alerts-new' ) ); ?>"><?php esc_html_e( 'Make my first alert', 'acps-alert-popups' ); ?></a>
+						<?php if ( class_exists( 'ACPS_Alerts_Help' ) ) : ?>
+							<button type="button" class="button button-hero" data-acps-tour="first-alert"><?php esc_html_e( 'Take the guided tour', 'acps-alert-popups' ); ?></button>
+						<?php endif; ?>
+					</p>
 				</div>
 			<?php else : ?>
 				<table class="wp-list-table widefat fixed striped acps-alerts-table">

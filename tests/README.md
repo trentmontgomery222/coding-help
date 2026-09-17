@@ -9,10 +9,11 @@ plugin zip.
 
 ```bash
 php tests/failsafe-test.php
-for s in healthy missing-file safe-mode kill-switch; do php tests/boot-test.php "$s"; done
+php tests/help-test.php
+for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
 ```
 
-Both exit non-zero on failure, so they work as a pre-release check.
+All exit non-zero on failure, so they work as a pre-release check.
 
 ## What they cover
 
@@ -36,6 +37,22 @@ assertion):
 | Scenario | Expected |
 |---|---|
 | `healthy` | boots and loads its classes |
+| `admin-healthy` | boots as an admin request, and the help layer loads too |
 | `missing-file` | a required file is deleted mid-flight: stays dormant, no fatal, no false safe-mode |
+| `missing-help` | the optional help files are deleted: the plugin still loads fully, only the tutorials go |
 | `safe-mode` | a previous fatal was recorded: stays dormant |
 | `kill-switch` | `ACPS_ALERTS_DISABLE` is set in wp-config: never boots |
+
+`admin-healthy` is the control for `missing-help`. The help layer only loads on
+admin requests, so without it `missing-help` would pass for the wrong reason.
+
+`help-test.php` — the teaching layer:
+
+- every checklist item carries the keys the view reads, and `done` is a real
+  boolean
+- the checklist reacts to actual site state (creating a popup ticks items off)
+- every tour step has a title and body, is reachable, and uses a placement the
+  engine understands
+- every step anchored to `[data-acps-section="…"]` points at a section the
+  settings form really renders — so a renamed section breaks the test rather
+  than silently breaking the tour

@@ -1,0 +1,743 @@
+/**
+ * Help & Tutorials screen, and the inline illustrations.
+ *
+ * The illustrations are styled here rather than inside each SVG so they follow
+ * the admin palette and stay consistent across diagrams.
+ */
+
+.acps-help {
+	max-width: 1000px;
+}
+
+.acps-help__lede {
+	font-size: 15px;
+	color: #50575e;
+	max-width: 760px;
+	margin-bottom: 20px;
+}
+
+.acps-help__foot {
+	margin: 32px 0 40px;
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------- Tours */
+
+.acps-help-tours {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 320px, 1fr ) );
+	gap: 16px;
+	margin-bottom: 24px;
+}
+
+.acps-tour-card {
+	display: flex;
+	gap: 14px;
+	align-items: flex-start;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-left: 4px solid #2271b1;
+	border-radius: 6px;
+	padding: 16px 18px;
+}
+
+.acps-tour-card.is-done {
+	border-left-color: #00a32a;
+}
+
+.acps-tour-card__icon .dashicons {
+	font-size: 28px;
+	width: 28px;
+	height: 28px;
+	color: #2271b1;
+}
+
+.acps-tour-card.is-done .acps-tour-card__icon .dashicons {
+	color: #00a32a;
+}
+
+.acps-tour-card__body h2 {
+	margin: 0 0 4px;
+	font-size: 15px;
+}
+
+.acps-tour-card__body p {
+	margin: 0 0 10px;
+	color: #50575e;
+	font-size: 13px;
+}
+
+.acps-tour-card__flag {
+	color: #00a32a;
+	font-weight: 600;
+}
+
+/* ------------------------------------------------------------ Checklist */
+
+.acps-help-checklist {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	padding: 18px 20px 8px;
+	margin-bottom: 24px;
+}
+
+.acps-help-checklist__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.acps-help-checklist__head h2 {
+	margin: 0;
+	font-size: 15px;
+}
+
+.acps-help-checklist__head p {
+	margin: 0;
+	color: #50575e;
+	font-weight: 600;
+}
+
+.acps-progress {
+	height: 8px;
+	background: #f0f0f1;
+	border-radius: 4px;
+	overflow: hidden;
+	margin: 12px 0 16px;
+}
+
+.acps-progress__bar {
+	display: block;
+	height: 100%;
+	background: linear-gradient( 90deg, #2271b1, #00a32a );
+	border-radius: 4px;
+	transition: width 0.4s ease-out;
+}
+
+.acps-checklist {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	counter-reset: acps-step;
+}
+
+.acps-checklist__item {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	padding: 12px 0;
+	border-top: 1px solid #f0f0f1;
+}
+
+.acps-checklist__mark {
+	flex: 0 0 24px;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	border: 2px solid #dcdcde;
+	color: #fff;
+	text-align: center;
+	line-height: 21px;
+	font-weight: 700;
+	font-size: 13px;
+}
+
+.acps-checklist__item.is-done .acps-checklist__mark {
+	background: #00a32a;
+	border-color: #00a32a;
+}
+
+.acps-checklist__text {
+	flex: 1;
+}
+
+.acps-checklist__text strong {
+	display: block;
+}
+
+.acps-checklist__item.is-done .acps-checklist__text strong {
+	color: #50575e;
+}
+
+.acps-checklist__why,
+.acps-checklist__fix {
+	display: block;
+	font-size: 13px;
+	color: #646970;
+}
+
+.acps-checklist__fix {
+	margin: 4px 0 6px;
+	color: #8a6400;
+}
+
+/* -------------------------------------------------------------- Sections */
+
+.acps-help-section {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	padding: 18px 22px 22px;
+	margin-bottom: 20px;
+}
+
+.acps-help-section > h2 {
+	margin-top: 0;
+	font-size: 16px;
+	border-bottom: 1px solid #f0f0f1;
+	padding-bottom: 8px;
+}
+
+.acps-help-section h3 {
+	font-size: 14px;
+	margin: 18px 0 6px;
+}
+
+.acps-help-split {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 280px, 1fr ) );
+	gap: 20px;
+	margin-top: 8px;
+}
+
+.acps-help-half {
+	background: #f6f7f7;
+	border-radius: 6px;
+	padding: 4px 16px 14px;
+}
+
+.acps-callout {
+	background: #f0f6fc;
+	border-left: 4px solid #2271b1;
+	padding: 10px 14px;
+	border-radius: 0 4px 4px 0;
+	margin: 14px 0 0;
+}
+
+.acps-help-table {
+	margin-top: 8px;
+}
+
+.acps-help-list li {
+	margin-bottom: 10px;
+}
+
+.acps-help-list strong {
+	display: block;
+}
+
+/* --------------------------------------------------------- Big step list */
+
+.acps-steps-big {
+	counter-reset: acps-big;
+	list-style: none;
+	margin: 12px 0 0;
+	padding: 0;
+}
+
+.acps-steps-big > li {
+	counter-increment: acps-big;
+	position: relative;
+	padding: 0 0 20px 52px;
+	border-left: 2px solid #f0f0f1;
+	margin-left: 16px;
+}
+
+.acps-steps-big > li:last-child {
+	border-left-color: transparent;
+	padding-bottom: 0;
+}
+
+.acps-steps-big > li::before {
+	content: counter( acps-big );
+	position: absolute;
+	left: -17px;
+	top: 0;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background: #2271b1;
+	color: #fff;
+	font-weight: 700;
+	text-align: center;
+	line-height: 32px;
+}
+
+.acps-steps-big h3 {
+	margin: 4px 0 6px;
+	font-size: 15px;
+}
+
+.acps-steps-big p {
+	margin: 0 0 8px;
+	color: #50575e;
+	max-width: 680px;
+}
+
+/* ---------------------------------------------------------------- Recipes */
+
+.acps-recipes {
+	display: grid;
+	grid-template-columns: repeat( auto-fit, minmax( 300px, 1fr ) );
+	gap: 16px;
+	margin-top: 12px;
+}
+
+.acps-recipe {
+	background: #f6f7f7;
+	border-radius: 6px;
+	padding: 14px 16px;
+}
+
+.acps-recipe h3 {
+	margin: 0 0 2px;
+	font-size: 14px;
+}
+
+.acps-recipe__sub {
+	margin: 0 0 10px;
+	color: #646970;
+	font-size: 13px;
+	font-style: italic;
+}
+
+.acps-recipe dl {
+	margin: 0;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 4px 12px;
+	font-size: 13px;
+}
+
+.acps-recipe dt {
+	font-weight: 600;
+	color: #50575e;
+	white-space: nowrap;
+}
+
+.acps-recipe dd {
+	margin: 0;
+}
+
+/* -------------------------------------------------------------------- FAQ */
+
+.acps-faq__item {
+	border-bottom: 1px solid #f0f0f1;
+	padding: 10px 0;
+}
+
+.acps-faq__item summary {
+	cursor: pointer;
+	font-weight: 600;
+	padding: 2px 0;
+	list-style-position: outside;
+}
+
+.acps-faq__item summary:hover,
+.acps-faq__item summary:focus {
+	color: #2271b1;
+}
+
+.acps-faq__item p {
+	margin: 8px 0 4px 18px;
+	color: #50575e;
+	max-width: 760px;
+}
+
+.acps-glossary {
+	display: grid;
+	grid-template-columns: 180px 1fr;
+	gap: 8px 20px;
+	margin: 8px 0 0;
+}
+
+.acps-glossary dt {
+	font-weight: 600;
+}
+
+.acps-glossary dd {
+	margin: 0;
+	color: #50575e;
+}
+
+/* ---------------------------------------------------------- Illustrations */
+
+.acps-figure {
+	margin: 14px 0 0;
+	background: #fcfcfc;
+	border: 1px solid #f0f0f1;
+	border-radius: 6px;
+	padding: 12px;
+}
+
+.acps-figure figcaption {
+	margin-top: 8px;
+	font-size: 13px;
+	color: #646970;
+	text-align: center;
+}
+
+.acps-art {
+	width: 100%;
+	height: auto;
+	display: block;
+	font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.acps-art-box rect {
+	fill: #fff;
+	stroke: #c3c4c7;
+	stroke-width: 1.5;
+}
+
+.acps-art-box--accent rect {
+	stroke: #2271b1;
+	stroke-width: 2;
+}
+
+.acps-art-step {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	fill: #2271b1;
+	text-anchor: middle;
+}
+
+.acps-art-h {
+	font-size: 16px;
+	font-weight: 700;
+	fill: #1d2327;
+	text-anchor: middle;
+}
+
+.acps-art-h-sm {
+	font-size: 13px;
+	font-weight: 600;
+	fill: #1d2327;
+	text-anchor: middle;
+}
+
+.acps-art-p {
+	font-size: 12px;
+	fill: #50575e;
+	text-anchor: middle;
+}
+
+.acps-art-note {
+	font-size: 11px;
+	fill: #646970;
+}
+
+.acps-art-label {
+	font-size: 12px;
+	font-weight: 600;
+	fill: #1d2327;
+}
+
+.acps-art-rowhead {
+	font-size: 13px;
+	font-weight: 600;
+	fill: #1d2327;
+}
+
+.acps-art-colhead {
+	font-size: 11px;
+	fill: #646970;
+	text-anchor: middle;
+}
+
+.acps-art-arrow path {
+	stroke: #8c8f94;
+	stroke-width: 2;
+	fill: none;
+}
+
+.acps-art marker path {
+	fill: #8c8f94;
+}
+
+.acps-art-call path {
+	stroke: #c3c4c7;
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+	fill: none;
+}
+
+.acps-art-call circle {
+	fill: #2271b1;
+}
+
+.acps-art-page {
+	fill: #fff;
+	stroke: #dcdcde;
+}
+
+.acps-art-scrim {
+	fill: rgba( 10, 20, 30, 0.45 );
+}
+
+.acps-art-faint {
+	font-size: 11px;
+	fill: #a7aaad;
+}
+
+.acps-art-faint-bar {
+	fill: #e8e8e8;
+}
+
+.acps-art-dialog {
+	fill: #fff;
+	stroke: #c3c4c7;
+}
+
+.acps-art-stripe {
+	fill: #d63638;
+}
+
+.acps-art-close {
+	fill: #f0f0f1;
+}
+
+.acps-art-close-x {
+	stroke: #50575e;
+	stroke-width: 1.6;
+	stroke-linecap: round;
+}
+
+.acps-art-content {
+	fill: #1d2327;
+}
+
+.acps-art-content-soft {
+	fill: #dcdcde;
+}
+
+.acps-art-button {
+	fill: #2271b1;
+}
+
+.acps-art-btn-label {
+	font-size: 11px;
+	fill: #fff;
+	font-weight: 600;
+	text-anchor: middle;
+}
+
+.acps-art-on {
+	fill: #d5f5dd;
+	stroke: #00a32a;
+}
+
+.acps-art-on-label {
+	font-size: 11px;
+	font-weight: 600;
+	fill: #005c1f;
+	text-anchor: middle;
+}
+
+.acps-art-off {
+	fill: #f0f0f1;
+	stroke: #dcdcde;
+}
+
+.acps-art-off-label {
+	font-size: 11px;
+	fill: #8c8f94;
+	text-anchor: middle;
+}
+
+.acps-art-on-soft {
+	fill: #e6f4ea;
+	stroke: #00a32a;
+}
+
+.acps-art-off-soft {
+	fill: #f6f7f7;
+	stroke: #dcdcde;
+}
+
+.acps-art-block {
+	fill: #fcebeb;
+	stroke: #d63638;
+}
+
+.acps-art-block-label {
+	font-size: 11px;
+	font-weight: 600;
+	fill: #a02123;
+	text-anchor: middle;
+}
+
+.acps-art-map-label {
+	font-size: 12px;
+	fill: #1d2327;
+	text-anchor: middle;
+}
+
+.acps-art-map-label-off {
+	font-size: 12px;
+	fill: #a7aaad;
+	text-anchor: middle;
+}
+
+.acps-art-glyph {
+	stroke: #2271b1;
+	stroke-width: 2;
+	fill: none;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.acps-art-glyph-o {
+	stroke: #2271b1;
+	stroke-width: 2;
+	fill: none;
+}
+
+.acps-art-glyph-fill {
+	fill: #2271b1;
+}
+
+.acps-art-sev-box {
+	fill: #fff;
+	stroke: #c3c4c7;
+}
+
+.acps-art-sev--info {
+	fill: #2271b1;
+}
+
+.acps-art-sev--success {
+	fill: #00a32a;
+}
+
+.acps-art-sev--warning {
+	fill: #dba617;
+}
+
+.acps-art-sev--critical {
+	fill: #d63638;
+}
+
+.acps-art-screen {
+	fill: #fff;
+	stroke: #c3c4c7;
+}
+
+.acps-art-thead {
+	fill: #f6f7f7;
+}
+
+.acps-art-th {
+	font-size: 11px;
+	font-weight: 700;
+	fill: #50575e;
+}
+
+.acps-art-rule {
+	stroke: #f0f0f1;
+}
+
+.acps-art-cell {
+	font-size: 12px;
+	fill: #50575e;
+}
+
+.acps-art-cell-strong {
+	font-size: 12px;
+	font-weight: 700;
+	fill: #2271b1;
+}
+
+.acps-art-rowactions {
+	font-size: 10px;
+	fill: #a7aaad;
+}
+
+.acps-art-pill-live {
+	fill: #d5f5dd;
+}
+
+.acps-art-pill-off {
+	fill: #e8e8e8;
+}
+
+.acps-art-pill-label {
+	font-size: 10px;
+	font-weight: 700;
+	fill: #005c1f;
+	text-anchor: middle;
+}
+
+.acps-art-pill-label-off {
+	font-size: 10px;
+	font-weight: 700;
+	fill: #646970;
+	text-anchor: middle;
+}
+
+/* ------------------------------------------------------- Contents + search */
+
+.acps-toc {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	padding: 12px 18px;
+	margin-bottom: 20px;
+}
+
+.acps-toc ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+}
+
+.acps-toc a {
+	text-decoration: none;
+	font-size: 13px;
+}
+
+.acps-faq-search {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 8px;
+}
+
+.acps-faq-search input {
+	max-width: 320px;
+}
+
+.acps-faq-search__count {
+	font-size: 12px;
+	color: #646970;
+}
+
+/* ------------------------------------------------------------- Welcome */
+
+.acps-welcome {
+	border-left-color: #2271b1;
+	padding: 4px 16px 12px;
+}
+
+.acps-welcome h3 {
+	margin: 12px 0 4px;
+}
+
+@media ( max-width: 782px ) {
+	.acps-glossary {
+		grid-template-columns: 1fr;
+		gap: 2px 0;
+	}
+
+	.acps-glossary dd {
+		margin-bottom: 10px;
+	}
+}

@@ -16,6 +16,7 @@
 
 $plugin_src = dirname( __DIR__ ) . '/acps-alert-popups';
 $scenario   = isset( $argv[1] ) ? $argv[1] : 'healthy';
+$GLOBALS['acps_scenario'] = $scenario;
 $work       = sys_get_temp_dir() . '/acps-boot-' . $scenario;
 
 // ---- copy the plugin to a scratch directory -------------------------------
@@ -44,6 +45,13 @@ rcopy( $plugin_src, $work );
 if ( 'missing-file' === $scenario ) {
 	// Simulate a half-finished update / corrupt upload.
 	unlink( $work . '/includes/class-acps-alerts-frontend.php' );
+}
+
+if ( 'missing-help' === $scenario ) {
+	// The teaching layer is optional: losing it must cost the tutorials only.
+	unlink( $work . '/includes/class-acps-alerts-help.php' );
+	unlink( $work . '/includes/class-acps-alerts-art.php' );
+	unlink( $work . '/includes/views/help-page.php' );
 }
 
 // ---- minimal WordPress ----------------------------------------------------
@@ -78,7 +86,11 @@ function delete_option( $k ) { unset( $GLOBALS['options'][ $k ] ); return true; 
 function get_transient( $k ) { return false; }
 function set_transient( $k, $v, $t = 0 ) { return true; }
 function delete_transient( $k ) { return true; }
-function is_admin() { return false; }
+// The help layer only loads in the admin, so the scenarios that care about it
+// have to boot as an admin request or they would pass for the wrong reason.
+function is_admin() {
+	return in_array( $GLOBALS['acps_scenario'], array( 'admin-healthy', 'missing-help' ), true );
+}
 function current_user_can( $c ) { return false; }
 function wp_parse_args( $a, $d ) { return array_merge( $d, (array) $a ); }
 function post_type_exists( $t ) { return 'fl-popup' === $t; }
@@ -138,6 +150,17 @@ switch ( $scenario ) {
 	case 'missing-file':
 		$ok  = ! $booted && ! isset( $GLOBALS['options']['acps_alerts_safe_mode'] );
 		$why = 'plugin should stay dormant without arming safe mode';
+		break;
+	case 'admin-healthy':
+		// The control for missing-help: with the files present the help layer
+		// really does load, so the missing-help result below means something.
+		$ok  = $booted && class_exists( 'ACPS_Alerts_Help', false );
+		$why = 'plugin and help system should both load';
+		break;
+	case 'missing-help':
+		// The plugin must come up completely; only the tutorials go missing.
+		$ok  = $booted && ! class_exists( 'ACPS_Alerts_Help', false );
+		$why = 'plugin should load fully, just without the help system';
 		break;
 	case 'safe-mode':
 	case 'kill-switch':

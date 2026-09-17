@@ -34,7 +34,7 @@ class ACPS_Alerts_Fields {
 		?>
 		<div class="acps-alert-fields">
 
-			<?php self::section_open( __( 'Status', 'acps-alert-popups' ) ); ?>
+			<?php self::section_open( __( 'Status', 'acps-alert-popups' ), 'status' ); ?>
 				<?php
 				self::row(
 					__( 'Alert is live', 'acps-alert-popups' ),
@@ -65,7 +65,7 @@ class ACPS_Alerts_Fields {
 				?>
 			<?php self::section_close(); ?>
 
-			<?php self::section_open( __( 'Schedule', 'acps-alert-popups' ) ); ?>
+			<?php self::section_open( __( 'Schedule', 'acps-alert-popups' ), 'schedule' ); ?>
 				<?php
 				self::row(
 					__( 'Start', 'acps-alert-popups' ),
@@ -81,7 +81,7 @@ class ACPS_Alerts_Fields {
 				?>
 			<?php self::section_close(); ?>
 
-			<?php self::section_open( __( 'Where it shows', 'acps-alert-popups' ) ); ?>
+			<?php self::section_open( __( 'Where it shows', 'acps-alert-popups' ), 'where' ); ?>
 				<?php
 				self::row(
 					__( 'Display on', 'acps-alert-popups' ),
@@ -127,7 +127,7 @@ class ACPS_Alerts_Fields {
 				?>
 			<?php self::section_close(); ?>
 
-			<?php self::section_open( __( 'Who sees it', 'acps-alert-popups' ) ); ?>
+			<?php self::section_open( __( 'Who sees it', 'acps-alert-popups' ), 'who' ); ?>
 				<?php
 				self::row(
 					__( 'Audience', 'acps-alert-popups' ),
@@ -154,7 +154,7 @@ class ACPS_Alerts_Fields {
 				</div>
 			<?php self::section_close(); ?>
 
-			<?php self::section_open( __( 'How it opens', 'acps-alert-popups' ) ); ?>
+			<?php self::section_open( __( 'How it opens', 'acps-alert-popups' ), 'how' ); ?>
 				<?php
 				self::row(
 					__( 'Trigger', 'acps-alert-popups' ),
@@ -216,7 +216,7 @@ class ACPS_Alerts_Fields {
 				</div>
 			<?php self::section_close(); ?>
 
-			<?php self::section_open( __( 'Appearance and accessibility', 'acps-alert-popups' ) ); ?>
+			<?php self::section_open( __( 'Appearance and accessibility', 'acps-alert-popups' ), 'appearance' ); ?>
 				<?php
 				self::row(
 					__( 'Position', 'acps-alert-popups' ),
@@ -273,11 +273,12 @@ class ACPS_Alerts_Fields {
 	 * Opens a titled section.
 	 *
 	 * @param string $title Section title.
+	 * @param string $key   Stable key, used to anchor guided tour steps.
 	 * @return void
 	 */
-	protected static function section_open( $title ) {
+	protected static function section_open( $title, $key = '' ) {
 		?>
-		<div class="acps-section">
+		<div class="acps-section" data-acps-section="<?php echo esc_attr( $key ); ?>">
 			<h2 class="acps-section__title"><?php echo esc_html( $title ); ?></h2>
 			<table class="form-table" role="presentation">
 				<tbody>

@@ -48,6 +48,14 @@ class ACPS_Alerts_Plugin {
 	public $panel;
 
 	/**
+	 * Tours, guides and contextual help. Null when the optional help files are
+	 * not installed.
+	 *
+	 * @var ACPS_Alerts_Help|null
+	 */
+	public $help = null;
+
+	/**
 	 * Boots the plugin.
 	 *
 	 * @return void
@@ -74,6 +82,20 @@ class ACPS_Alerts_Plugin {
 
 		if ( is_admin() ) {
 			$subsystems['admin'] = array( $this->admin, 'init' );
+
+			// The teaching layer is loaded on demand and only in the admin. It
+			// is an optional file, so it is required by hand and skipped
+			// entirely if it is not there.
+			$help_file = ACPS_ALERTS_DIR . 'includes/class-acps-alerts-help.php';
+			$art_file  = ACPS_ALERTS_DIR . 'includes/class-acps-alerts-art.php';
+
+			if ( is_readable( $help_file ) && is_readable( $art_file ) ) {
+				require_once $art_file;
+				require_once $help_file;
+
+				$this->help          = new ACPS_Alerts_Help();
+				$subsystems['help']  = array( $this->help, 'init' );
+			}
 		}
 
 		foreach ( $subsystems as $name => $callable ) {

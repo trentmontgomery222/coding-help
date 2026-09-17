@@ -84,8 +84,17 @@ class ACPS_Alerts_Failsafe {
 			'assets/js/alerts.js',
 			'assets/css/admin.css',
 			'assets/js/admin.js',
+			'assets/css/help.css',
+			'assets/js/help.js',
+			'assets/css/tour.css',
+			'assets/js/tour.js',
 			'modules/alert-trigger/alert-trigger.php',
 			'modules/alert-trigger/includes/frontend.php',
+			// The whole teaching layer is optional on purpose: losing it costs
+			// the tutorials, never the plugin.
+			'includes/class-acps-alerts-help.php',
+			'includes/class-acps-alerts-art.php',
+			'includes/views/help-page.php',
 		);
 	}
 
