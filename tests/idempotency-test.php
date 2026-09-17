@@ -134,6 +134,62 @@ fire( 'wp_footer' );
 
 check( 'a de-duplicated wrapper still catches a throw', $threw, true );
 
+/* ---- an admin screen registered twice is still drawn once ---- */
+//
+// add_menu_page() and add_submenu_page() are deliberately called with the same
+// slug (the usual way to rename the first submenu item) and both resolve to one
+// hook. WordPress de-duplicates by callback identity, so the renderer handed to
+// each call has to be the SAME object or the screen draws twice.
+
+define( 'ACPS_ALERTS_FILE', dirname( __DIR__ ) . '/acps-alert-popups/acps-alert-popups.php' );
+
+function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
+function esc_url( $s ) { return $s; }
+function _n( $a, $b, $n, $d = '' ) { return 1 === $n ? $a : $b; }
+function apply_filters( $t, $v ) { return $v; }
+function plugin_basename( $f ) { return 'acps-alert-popups/acps-alert-popups.php'; }
+function admin_url( $p = '' ) { return 'https://example.org/wp-admin/' . $p; }
+function add_menu_page( $t, $m, $c, $slug, $cb ) { add_action( 'toplevel_page_' . $slug, $cb ); }
+function add_submenu_page( $parent, $t, $m, $c, $slug, $cb ) {
+	// Mirrors get_plugin_page_hookname(): a submenu whose slug matches its
+	// parent lands on the parent's own hook.
+	add_action( $slug === $parent ? 'toplevel_page_' . $slug : $parent . '_page_' . $slug, $cb );
+}
+
+require ACPS_ALERTS_DIR . 'includes/class-acps-alerts-admin.php';
+
+/**
+ * Exposes the protected renderer factory and counts draws.
+ */
+class AdminProbe extends ACPS_Alerts_Admin {
+	public static $drawn = 0;
+
+	public function renderer( $method ) { return $this->safe_render( $method ); }
+	public function render_probe() { self::$drawn++; echo '<div class="wrap">screen</div>'; }
+}
+
+$admin = new AdminProbe();
+
+$a = $admin->renderer( 'render_probe' );
+$b = $admin->renderer( 'render_probe' );
+
+check( 'the same screen yields the same renderer object', $a === $b, true );
+check( 'a different screen yields a different one', $a === $admin->renderer( 'render_settings' ), false );
+
+// Register it the way register_menu() does: top-level plus a same-slug submenu.
+$GLOBALS['hooks'] = array();
+add_menu_page( 'Site Alerts', 'Site Alerts', 'edit_pages', 'acps-alerts', $admin->renderer( 'render_probe' ) );
+add_submenu_page( 'acps-alerts', 'All Alerts', 'All Alerts', 'edit_pages', 'acps-alerts', $admin->renderer( 'render_probe' ) );
+
+check( 'both registrations land on one hook', count( $GLOBALS['hooks']['toplevel_page_acps-alerts'][10] ), 1 );
+
+ob_start();
+fire( 'toplevel_page_acps-alerts' );
+$screen = ob_get_clean();
+
+check( 'the screen is drawn once', AdminProbe::$drawn, 1 );
+check( 'and its markup appears once', substr_count( $screen, 'class="wrap"' ), 1 );
+
 /* ---- the main plugin file refuses to define itself twice ---- */
 $main = file_get_contents( ACPS_ALERTS_DIR . 'acps-alert-popups.php' );
 

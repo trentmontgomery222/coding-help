@@ -23,6 +23,14 @@ class ACPS_Alerts_Admin {
 	protected $updater = null;
 
 	/**
+	 * Screen renderers, one closure per method, kept so a screen registered
+	 * twice is still drawn once.
+	 *
+	 * @var callable[]
+	 */
+	protected $renderers = array();
+
+	/**
 	 * Hooks the admin up.
 	 *
 	 * @param ACPS_Alerts_Updater|null $updater Update channel.
@@ -114,7 +122,19 @@ class ACPS_Alerts_Admin {
 	 * @return callable
 	 */
 	protected function safe_render( $method ) {
-		return function () use ( $method ) {
+		// Hand back the SAME closure for a given screen every time.
+		//
+		// WordPress de-duplicates hook callbacks by identity, and a closure is
+		// only ever equal to itself. add_menu_page() and add_submenu_page() are
+		// deliberately called with the same slug below (the usual way to rename
+		// the first submenu item), and both resolve to one hook — so minting a
+		// fresh closure for each call put two callbacks on that hook and drew
+		// the whole screen twice.
+		if ( isset( $this->renderers[ $method ] ) ) {
+			return $this->renderers[ $method ];
+		}
+
+		$this->renderers[ $method ] = function () use ( $method ) {
 			$html = ACPS_Alerts_Failsafe::capture( array( $this, $method ), array(), 'admin/screen-' . $method );
 
 			if ( '' === trim( $html ) ) {
@@ -128,6 +148,8 @@ class ACPS_Alerts_Admin {
 
 			echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped inside the renderer.
 		};
+
+		return $this->renderers[ $method ];
 	}
 
 	/**

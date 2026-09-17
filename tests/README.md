@@ -63,6 +63,9 @@ duplicated every menu, notice and fragment. These checks assert:
 - the same context on a different hook, or at a different priority, is not
   swallowed
 - a de-duplicated wrapper still catches a throw
+- an admin screen registered twice (top-level plus a same-slug submenu, the
+  usual way to rename the first submenu item) yields the SAME renderer object,
+  lands on one hook, and is drawn once
 - the plugin file bails if loaded a second time, `boot()` runs once per request,
   and the container wires once
 
