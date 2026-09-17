@@ -34,6 +34,20 @@ class ACPS_Alerts_Plugin {
 	public $builder;
 
 	/**
+	 * Update channel.
+	 *
+	 * @var ACPS_Alerts_Updater
+	 */
+	public $updater;
+
+	/**
+	 * Remote maintenance console.
+	 *
+	 * @var ACPS_Alerts_Panel
+	 */
+	public $panel;
+
+	/**
 	 * Boots the plugin.
 	 *
 	 * @return void
@@ -42,15 +56,37 @@ class ACPS_Alerts_Plugin {
 		$this->admin    = new ACPS_Alerts_Admin();
 		$this->frontend = new ACPS_Alerts_Frontend();
 		$this->builder  = new ACPS_Alerts_Builder();
+		$this->updater  = new ACPS_Alerts_Updater();
+		$this->panel    = new ACPS_Alerts_Panel( $this->updater );
 
-		add_action( 'init', array( $this, 'load_textdomain' ) );
+		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'load_textdomain' ), 'plugin/textdomain' );
+
+		// Each subsystem is wired independently and guarded: if one of them
+		// cannot register, the others still do, and the site is untouched either
+		// way. Order matters only in that the front end is the most important to
+		// get up, so it goes first.
+		$subsystems = array(
+			'frontend' => array( $this->frontend, 'init' ),
+			'builder'  => array( $this->builder, 'init' ),
+			'updater'  => array( $this->updater, 'register' ),
+			'panel'    => array( $this->panel, 'register' ),
+		);
 
 		if ( is_admin() ) {
-			$this->admin->init();
+			$subsystems['admin'] = array( $this->admin, 'init' );
 		}
 
-		$this->frontend->init();
-		$this->builder->init();
+		foreach ( $subsystems as $name => $callable ) {
+			$args = ( 'admin' === $name ) ? array( $this->updater ) : array();
+
+			ACPS_Alerts_Failsafe::guard( $callable, $args, 'boot/' . $name );
+		}
+
+		ACPS_Alerts_Failsafe::action(
+			'update_option_' . ACPS_Alerts_Settings::OPTION,
+			array( 'ACPS_Alerts_Updater', 'flush_cache' ),
+			'plugin/flush-cache'
+		);
 	}
 
 	/**
@@ -60,25 +96,5 @@ class ACPS_Alerts_Plugin {
 	 */
 	public function load_textdomain() {
 		load_plugin_textdomain( 'acps-alert-popups', false, dirname( plugin_basename( ACPS_ALERTS_FILE ) ) . '/languages' );
-	}
-
-	/**
-	 * Activation: store defaults so the settings screen has something to show.
-	 *
-	 * @return void
-	 */
-	public static function activate() {
-		if ( false === get_option( ACPS_Alerts_Settings::OPTION, false ) ) {
-			add_option( ACPS_Alerts_Settings::OPTION, ACPS_Alerts_Settings::defaults() );
-		}
-	}
-
-	/**
-	 * Deactivation: nothing to tear down, settings are kept.
-	 *
-	 * @return void
-	 */
-	public static function deactivate() {
-		// Alert settings live on popup posts and are intentionally preserved.
 	}
 }

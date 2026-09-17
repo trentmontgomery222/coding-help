@@ -21,20 +21,39 @@ class ACPS_Alerts_Builder {
 	 * @return void
 	 */
 	public function init() {
-		add_action( 'init', array( $this, 'register_module' ), 20 );
+		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'register_module' ), 'builder/register', 20 );
 	}
 
 	/**
 	 * Loads the module when Beaver Builder is available.
 	 *
+	 * Registering a module depends on another plugin's class staying the shape
+	 * we expect across versions, so every precondition is checked and the whole
+	 * thing is skipped rather than risked if anything is missing.
+	 *
 	 * @return void
 	 */
 	public function register_module() {
-		if ( ! class_exists( 'FLBuilderModule' ) ) {
+		if ( ! class_exists( 'FLBuilderModule' ) || ! class_exists( 'FLBuilder' ) ) {
 			return;
 		}
 
-		require_once ACPS_ALERTS_DIR . 'modules/alert-trigger/alert-trigger.php';
+		if ( ! method_exists( 'FLBuilder', 'register_module' ) ) {
+			return;
+		}
+
+		$file = ACPS_ALERTS_DIR . 'modules/alert-trigger/alert-trigger.php';
+
+		// Optional file: a missing module costs the trigger button, not the site.
+		if ( ! is_readable( $file ) ) {
+			return;
+		}
+
+		if ( class_exists( 'ACPS_Alert_Trigger_Module' ) ) {
+			return; // Already loaded.
+		}
+
+		require_once $file;
 	}
 
 	/**

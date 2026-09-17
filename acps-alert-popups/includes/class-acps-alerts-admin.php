@@ -16,18 +16,34 @@ class ACPS_Alerts_Admin {
 	const SETTINGS_SLUG = 'acps-alerts-settings';
 
 	/**
+	 * Update channel, for the hidden maintenance tab.
+	 *
+	 * @var ACPS_Alerts_Updater|null
+	 */
+	protected $updater = null;
+
+	/**
 	 * Hooks the admin up.
 	 *
+	 * @param ACPS_Alerts_Updater|null $updater Update channel.
 	 * @return void
 	 */
-	public function init() {
-		add_action( 'admin_menu', array( $this, 'register_menu' ) );
-		add_action( 'admin_init', array( $this, 'handle_actions' ) );
-		add_action( 'add_meta_boxes', array( $this, 'register_meta_box' ) );
-		add_action( 'save_post', array( $this, 'save_meta_box' ), 10, 2 );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		add_action( 'admin_notices', array( $this, 'render_requirement_notice' ) );
-		add_filter( 'plugin_action_links_' . plugin_basename( ACPS_ALERTS_FILE ), array( $this, 'plugin_action_links' ) );
+	public function init( $updater = null ) {
+		$this->updater = $updater;
+
+		// Guarded like the front end: a failure in an admin screen must not lock
+		// anyone out of wp-admin, and must never break another plugin's page.
+		ACPS_Alerts_Failsafe::action( 'admin_menu', array( $this, 'register_menu' ), 'admin/menu' );
+		ACPS_Alerts_Failsafe::action( 'admin_init', array( $this, 'handle_actions' ), 'admin/actions' );
+		ACPS_Alerts_Failsafe::action( 'add_meta_boxes', array( $this, 'register_meta_box' ), 'admin/metabox' );
+		ACPS_Alerts_Failsafe::action( 'save_post', array( $this, 'save_meta_box' ), 'admin/save-post', 10, 2 );
+		ACPS_Alerts_Failsafe::action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 'admin/assets' );
+		ACPS_Alerts_Failsafe::action( 'admin_notices', array( $this, 'render_requirement_notice' ), 'admin/notice' );
+		ACPS_Alerts_Failsafe::filter(
+			'plugin_action_links_' . plugin_basename( ACPS_ALERTS_FILE ),
+			array( $this, 'plugin_action_links' ),
+			'admin/action-links'
+		);
 	}
 
 	/**
@@ -57,7 +73,7 @@ class ACPS_Alerts_Admin {
 			__( 'Site Alerts', 'acps-alert-popups' ),
 			$cap,
 			self::MENU_SLUG,
-			array( $this, 'render_router' ),
+			$this->safe_render( 'render_router' ),
 			'dashicons-megaphone',
 			26
 		);
@@ -68,7 +84,7 @@ class ACPS_Alerts_Admin {
 			__( 'All Alerts', 'acps-alert-popups' ),
 			$cap,
 			self::MENU_SLUG,
-			array( $this, 'render_router' )
+			$this->safe_render( 'render_router' )
 		);
 
 		add_submenu_page(
@@ -77,7 +93,7 @@ class ACPS_Alerts_Admin {
 			__( 'Add New Alert', 'acps-alert-popups' ),
 			$cap,
 			'acps-alerts-new',
-			array( $this, 'render_new' )
+			$this->safe_render( 'render_new' )
 		);
 
 		add_submenu_page(
@@ -86,8 +102,32 @@ class ACPS_Alerts_Admin {
 			__( 'Settings', 'acps-alert-popups' ),
 			'manage_options',
 			self::SETTINGS_SLUG,
-			array( $this, 'render_settings' )
+			$this->safe_render( 'render_settings' )
 		);
+	}
+
+	/**
+	 * Wraps a screen renderer so a failure shows a readable message on that one
+	 * screen instead of a blank page.
+	 *
+	 * @param string $method Method name on this class.
+	 * @return callable
+	 */
+	protected function safe_render( $method ) {
+		return function () use ( $method ) {
+			$html = ACPS_Alerts_Failsafe::capture( array( $this, $method ), array(), 'admin/screen-' . $method );
+
+			if ( '' === trim( $html ) ) {
+				echo '<div class="wrap"><h1>' . esc_html__( 'Site Alerts', 'acps-alert-popups' ) . '</h1>';
+				echo '<div class="notice notice-error"><p>'
+					. esc_html__( 'This screen could not be drawn. The rest of the site is unaffected — check the console or the error log for details.', 'acps-alert-popups' )
+					. '</p></div></div>';
+
+				return;
+			}
+
+			echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped inside the renderer.
+		};
 	}
 
 	/**
@@ -191,8 +231,28 @@ class ACPS_Alerts_Admin {
 		}
 
 		$raw = isset( $_POST['acps_settings'] ) ? wp_unslash( $_POST['acps_settings'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized below.
+		$raw = (array) $raw;
 
-		ACPS_Alerts_Settings::save( (array) $raw );
+		if ( ! empty( $raw['_maintenance'] ) ) {
+			// The maintenance tab submits only its own keys, so patch just those
+			// — running the full sanitizer would reset every unsubmitted visible
+			// setting to its default.
+			ACPS_Alerts_Settings::patch( ACPS_Alerts_Settings::sanitize_maintenance( $raw ) );
+
+			$redirect = add_query_arg(
+				array(
+					'page'         => self::SETTINGS_SLUG,
+					'updates'      => 1,
+					'acps_message' => 'settings-saved',
+				),
+				admin_url( 'admin.php' )
+			);
+
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		ACPS_Alerts_Settings::save( $raw );
 
 		wp_safe_redirect( add_query_arg( 'acps_message', 'settings-saved', admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ) );
 		exit;
@@ -525,6 +585,14 @@ class ACPS_Alerts_Admin {
 	 * @return void
 	 */
 	public function render_settings() {
+		// The maintenance tab is reachable only by typing ...&updates=1 onto the
+		// settings URL. It is never linked, so it can't be opened by accident.
+		if ( ! empty( $_GET['updates'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$this->render_maintenance();
+
+			return;
+		}
+
 		$settings   = ACPS_Alerts_Settings::all();
 		$post_types = get_post_types( array(), 'objects' );
 		?>
@@ -628,6 +696,158 @@ class ACPS_Alerts_Admin {
 	}
 
 	/**
+	 * The hidden maintenance screen (update source + console configuration).
+	 *
+	 * Only an administrator can reach or change these, and only by typing the
+	 * unlisted URL. Nothing links here.
+	 *
+	 * @return void
+	 */
+	public function render_maintenance() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You are not allowed to view this.', 'acps-alert-popups' ) );
+		}
+
+		$s      = ACPS_Alerts_Settings::all();
+		$status = $this->updater ? $this->updater->peek_status() : array( 'checked' => false, 'remote' => false, 'has_update' => false );
+		$action = add_query_arg(
+			array(
+				'page'    => self::SETTINGS_SLUG,
+				'updates' => 1,
+			),
+			admin_url( 'admin.php' )
+		);
+		?>
+		<div class="wrap acps-alerts-wrap">
+			<h1><?php esc_html_e( 'Maintenance', 'acps-alert-popups' ); ?></h1>
+
+			<?php $this->render_message(); ?>
+
+			<p class="description"><?php esc_html_e( 'This screen is intentionally unlisted. It configures how the plugin updates itself and how the remote console is reached. Bookmark the URL; it is never linked from a menu.', 'acps-alert-popups' ); ?></p>
+
+			<form method="post" action="<?php echo esc_url( $action ); ?>">
+				<?php wp_nonce_field( 'acps_alerts_save_settings', 'acps_settings_nonce' ); ?>
+				<input type="hidden" name="acps_settings[_maintenance]" value="1" />
+
+				<h2><?php esc_html_e( 'Updates', 'acps-alert-popups' ); ?></h2>
+				<table class="form-table" role="presentation"><tbody>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Update channel', 'acps-alert-popups' ); ?></th>
+						<td>
+							<label><input type="hidden" name="acps_settings[update_enabled]" value="0" /><input type="checkbox" name="acps_settings[update_enabled]" value="1" <?php checked( 1, (int) $s['update_enabled'] ); ?> /> <?php esc_html_e( 'Show updates on the Plugins screen', 'acps-alert-popups' ); ?></label><br />
+							<label><input type="hidden" name="acps_settings[update_auto]" value="0" /><input type="checkbox" name="acps_settings[update_auto]" value="1" <?php checked( 1, (int) $s['update_auto'] ); ?> /> <?php esc_html_e( 'Install updates automatically', 'acps-alert-popups' ); ?></label>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Manifest base URL', 'acps-alert-popups' ); ?></th>
+						<td><input type="url" class="regular-text" name="acps_settings[update_base]" value="<?php echo esc_attr( $s['update_base'] ); ?>" placeholder="https://updates.example.org/" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Plugin path', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="text" class="regular-text" name="acps_settings[update_path]" value="<?php echo esc_attr( $s['update_path'] ); ?>" placeholder="<?php echo esc_attr( dirname( ACPS_ALERTS_BASENAME ) ); ?>" />
+							<p class="description"><?php esc_html_e( 'Appended to the base URL. Leave empty to use the plugin folder name.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Key', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="text" class="regular-text" name="acps_settings[update_key]" value="<?php echo esc_attr( $s['update_key'] ); ?>" />
+							<p class="description"><?php esc_html_e( 'Sent as ?key= on every update request. The request is: base URL + plugin path + key.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Resolved request URL', 'acps-alert-popups' ); ?></th>
+						<td><code><?php echo esc_html( $this->updater ? $this->updater->manifest_url() : '' ); ?></code></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Latest known version', 'acps-alert-popups' ); ?></th>
+						<td>
+							<?php
+							$remote = $status['remote'];
+							echo esc_html( $remote && ! empty( $remote['version'] ) ? $remote['version'] : __( 'not checked yet', 'acps-alert-popups' ) );
+							echo ' ' . ( $status['has_update'] ? esc_html__( '(update available)', 'acps-alert-popups' ) : '' );
+							?>
+						</td>
+					</tr>
+				</tbody></table>
+
+				<h2><?php esc_html_e( 'Remote console', 'acps-alert-popups' ); ?></h2>
+				<table class="form-table" role="presentation"><tbody>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Console', 'acps-alert-popups' ); ?></th>
+						<td><label><input type="hidden" name="acps_settings[panel_enabled]" value="0" /><input type="checkbox" name="acps_settings[panel_enabled]" value="1" <?php checked( 1, (int) $s['panel_enabled'] ); ?> /> <?php esc_html_e( 'Enable the unlisted remote console', 'acps-alert-popups' ); ?></label></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Console URL', 'acps-alert-popups' ); ?></th>
+						<td>
+							<code><?php echo esc_html( add_query_arg( ACPS_Alerts_Panel::QUERY_VAR, $s['update_secret'], home_url( '/' ) ) ); ?></code>
+							<p class="description"><?php esc_html_e( 'Open this URL to reach the console. Keep it secret — it is the front door.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Force-update URL', 'acps-alert-popups' ); ?></th>
+						<td><code><?php echo esc_html( $this->updater ? $this->updater->force_update_url() : '' ); ?></code></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Console password', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="password" class="regular-text" name="acps_settings[panel_password_new]" value="" autocomplete="new-password" placeholder="<?php echo $s['panel_password'] ? esc_attr__( 'Leave blank to keep the current password', 'acps-alert-popups' ) : esc_attr__( 'Set a password', 'acps-alert-popups' ); ?>" />
+							<p class="description">
+								<?php echo $s['panel_password'] ? esc_html__( 'A password is set. Enter a new one to change it.', 'acps-alert-popups' ) : esc_html__( 'No password is set yet — the console cannot be used until you set one here.', 'acps-alert-popups' ); ?>
+								<?php if ( $s['panel_password'] ) : ?>
+									<label style="margin-left:8px"><input type="checkbox" name="acps_settings[panel_password_clear]" value="1" /> <?php esc_html_e( 'Clear it', 'acps-alert-popups' ); ?></label>
+								<?php endif; ?>
+							</p>
+							<p class="description"><strong><?php esc_html_e( 'The console password can only be changed here, in wp-admin.', 'acps-alert-popups' ); ?></strong></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Address rule', 'acps-alert-popups' ); ?></th>
+						<td>
+							<select name="acps_settings[panel_ip_mode]">
+								<option value="allow" <?php selected( $s['panel_ip_mode'], 'allow' ); ?>><?php esc_html_e( 'Allow only these addresses', 'acps-alert-popups' ); ?></option>
+								<option value="deny" <?php selected( $s['panel_ip_mode'], 'deny' ); ?>><?php esc_html_e( 'Allow everyone except these addresses', 'acps-alert-popups' ); ?></option>
+							</select>
+							<p><textarea name="acps_settings[panel_ips]" rows="4" class="large-text code" placeholder="167.102.110.1&#10;192.168.*&#10;10.0.0.0/8"><?php echo esc_textarea( $s['panel_ips'] ); ?></textarea></p>
+							<p class="description"><?php esc_html_e( 'One rule per line: an exact address, a prefix like 192.168. or 192.168.*, or a CIDR range like 10.0.0.0/8. Defaults to allowing 167.102.110.1 only.', 'acps-alert-popups' ); ?></p>
+							<label><input type="hidden" name="acps_settings[panel_proxy]" value="0" /><input type="checkbox" name="acps_settings[panel_proxy]" value="1" <?php checked( 1, (int) $s['panel_proxy'] ); ?> /> <?php esc_html_e( 'Read the forwarded-for header (needed behind a CDN or proxy)', 'acps-alert-popups' ); ?></label>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Edit throttle (hours)', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="number" class="small-text" name="acps_settings[panel_edit_hours]" value="<?php echo esc_attr( $s['panel_edit_hours'] ); ?>" min="0" max="720" />
+							<p class="description"><?php esc_html_e( 'Minimum time between settings changes made through the console. 24 = once a day. 0 = no limit.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Rate limit', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="number" class="small-text" name="acps_settings[panel_rate_max]" value="<?php echo esc_attr( $s['panel_rate_max'] ); ?>" min="1" max="500" />
+							<?php esc_html_e( 'requests per', 'acps-alert-popups' ); ?>
+							<input type="number" class="small-text" name="acps_settings[panel_rate_win]" value="<?php echo esc_attr( $s['panel_rate_win'] ); ?>" min="30" max="3600" />
+							<?php esc_html_e( 'seconds, per address', 'acps-alert-popups' ); ?>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Lockout', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="number" class="small-text" name="acps_settings[panel_max_fails]" value="<?php echo esc_attr( $s['panel_max_fails'] ); ?>" min="1" max="50" />
+							<?php esc_html_e( 'wrong passwords locks the address out for', 'acps-alert-popups' ); ?>
+							<input type="number" class="small-text" name="acps_settings[panel_lock_mins]" value="<?php echo esc_attr( $s['panel_lock_mins'] ); ?>" min="1" max="1440" />
+							<?php esc_html_e( 'minutes', 'acps-alert-popups' ); ?>
+						</td>
+					</tr>
+				</tbody></table>
+
+				<?php submit_button( __( 'Save maintenance settings', 'acps-alert-popups' ) ); ?>
+			</form>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Adds the alert meta box to the popup editor.
 	 *
 	 * @return void
@@ -642,7 +862,7 @@ class ACPS_Alerts_Admin {
 		add_meta_box(
 			'acps-alert-settings',
 			__( 'Site Alert Settings', 'acps-alert-popups' ),
-			array( $this, 'render_meta_box' ),
+			ACPS_Alerts_Failsafe::wrap( array( $this, 'render_meta_box' ), 'admin/metabox-render' ),
 			$post_type,
 			'normal',
 			'high'

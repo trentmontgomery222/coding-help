@@ -34,7 +34,24 @@ class ACPS_Alerts_Alert {
 	 * @param WP_Post|int $post Popup post or ID.
 	 */
 	public function __construct( $post ) {
-		$this->post = get_post( $post );
+		// get_post() can return null for a deleted or bogus ID, and can throw if
+		// a filter misbehaves. Either way this alert ends up simply invalid.
+		try {
+			$resolved = get_post( $post );
+		} catch ( \Throwable $e ) {
+			$resolved = null;
+		}
+
+		$this->post = ( $resolved instanceof WP_Post ) ? $resolved : null;
+	}
+
+	/**
+	 * Whether this alert resolved to a real post.
+	 *
+	 * @return bool
+	 */
+	public function is_valid() {
+		return ( $this->post instanceof WP_Post ) && $this->post->ID > 0;
 	}
 
 	/**
@@ -123,15 +140,28 @@ class ACPS_Alerts_Alert {
 
 		$settings = self::default_settings();
 
-		foreach ( array_keys( $settings ) as $key ) {
-			$stored = get_post_meta( $this->get_id(), self::META_PREFIX . $key, true );
+		// An invalid alert still answers with defaults rather than throwing, so
+		// callers never have to null-check before reading a setting.
+		if ( ! $this->is_valid() ) {
+			$this->settings = $settings;
 
-			if ( '' !== $stored && null !== $stored ) {
-				$settings[ $key ] = $stored;
-			}
+			return $this->settings;
 		}
 
-		$this->settings = self::sanitize( $settings );
+		try {
+			foreach ( array_keys( $settings ) as $key ) {
+				$stored = get_post_meta( $this->get_id(), self::META_PREFIX . $key, true );
+
+				if ( '' !== $stored && null !== $stored ) {
+					$settings[ $key ] = $stored;
+				}
+			}
+
+			$this->settings = self::sanitize( $settings );
+		} catch ( \Throwable $e ) {
+			ACPS_Alerts_Failsafe::record( 'alert/settings', $e->getMessage(), $e->getFile(), $e->getLine() );
+			$this->settings = self::default_settings();
+		}
 
 		return $this->settings;
 	}
@@ -158,8 +188,18 @@ class ACPS_Alerts_Alert {
 	public function save( array $input ) {
 		$clean = self::sanitize( $input );
 
+		if ( ! $this->is_valid() ) {
+			return $clean;
+		}
+
 		foreach ( $clean as $key => $value ) {
-			update_post_meta( $this->get_id(), self::META_PREFIX . $key, $value );
+			// One meta write failing must not abandon the rest of the save
+			// halfway through, leaving the alert in a mixed state.
+			ACPS_Alerts_Failsafe::guard(
+				'update_post_meta',
+				array( $this->get_id(), self::META_PREFIX . $key, $value ),
+				'alert/save'
+			);
 		}
 
 		$this->settings = $clean;

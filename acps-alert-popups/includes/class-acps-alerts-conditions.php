@@ -244,7 +244,10 @@ class ACPS_Alerts_Conditions {
 			if ( $has_wildcard ) {
 				$regex = '#^' . str_replace( '\*', '.*', preg_quote( $pattern, '#' ) ) . '/?$#i';
 
-				if ( preg_match( $regex, $path ) ) {
+				// The pattern comes from a text field. preg_quote makes it safe,
+				// but a malformed result must still never emit a warning or be
+				// mistaken for a match: preg_match returns false on error.
+				if ( true === (bool) @preg_match( $regex, $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors
 					return true;
 				}
 

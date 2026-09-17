@@ -32,10 +32,64 @@ class ACPS_Alerts_Frontend {
 	 * @return void
 	 */
 	public function init() {
-		add_action( 'wp', array( $this, 'collect_alerts' ) );
-		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		add_action( 'wp_footer', array( $this, 'render_alerts' ), 100 );
-		add_shortcode( 'acps_alert_trigger', array( $this, 'trigger_shortcode' ) );
+		// Every front-end hook is registered through the failsafe, so a throw in
+		// any of them is caught, recorded and turned into "no alert" rather than
+		// a broken page. Repeated failures trip a breaker and stand the whole
+		// front end down for a while.
+		ACPS_Alerts_Failsafe::action( 'wp', array( $this, 'collect_alerts' ), 'frontend/collect' );
+		ACPS_Alerts_Failsafe::action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ), 'frontend/enqueue' );
+		ACPS_Alerts_Failsafe::action( 'wp_footer', array( $this, 'render_alerts' ), 'frontend/render', 100 );
+
+		add_shortcode(
+			'acps_alert_trigger',
+			ACPS_Alerts_Failsafe::wrap( array( $this, 'trigger_shortcode' ), 'frontend/shortcode' )
+		);
+	}
+
+	/**
+	 * Whether the front end should do anything at all on this request.
+	 *
+	 * Everything that would make alert output pointless or risky is checked in
+	 * one place: a dormant plugin, a tripped breaker, a self-test loopback, an
+	 * exhausted memory budget, or a request that is not a normal page view.
+	 *
+	 * @return bool
+	 */
+	protected function should_run() {
+		if ( is_admin() || is_feed() || is_embed() ) {
+			return false;
+		}
+
+		// A REST, AJAX, cron or XML-RPC request never shows an alert.
+		if ( wp_doing_ajax() || wp_doing_cron() ) {
+			return false;
+		}
+
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return false;
+		}
+
+		if ( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST ) {
+			return false;
+		}
+
+		// The update self-test loads the home page to prove the plugin boots.
+		// Rendering alerts into it wastes work and risks muddying the result.
+		if ( isset( $_GET[ ACPS_Alerts_Updater::SELFTEST_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return false;
+		}
+
+		// Inside the Beaver Builder editor the layout is the thing being edited;
+		// an alert on top of it only gets in the way.
+		if ( class_exists( 'FLBuilderModel' ) && method_exists( 'FLBuilderModel', 'is_builder_active' ) && FLBuilderModel::is_builder_active() ) {
+			return false;
+		}
+
+		if ( ACPS_Alerts_Failsafe::breaker_tripped( 'frontend' ) ) {
+			return false;
+		}
+
+		return ACPS_Alerts_Source::is_ready();
 	}
 
 	/**
@@ -44,7 +98,7 @@ class ACPS_Alerts_Frontend {
 	 * @return void
 	 */
 	public function collect_alerts() {
-		if ( is_admin() || is_feed() || is_embed() || ! ACPS_Alerts_Source::is_ready() ) {
+		if ( ! $this->should_run() ) {
 			return;
 		}
 
@@ -60,11 +114,20 @@ class ACPS_Alerts_Frontend {
 			return;
 		}
 
-		$max     = (int) ACPS_Alerts_Settings::get( 'max_concurrent' );
-		$queue   = array();
+		$max   = max( 1, (int) ACPS_Alerts_Settings::get( 'max_concurrent' ) );
+		$queue = array();
 
 		foreach ( ACPS_Alerts_Source::get_enabled_alerts() as $alert ) {
-			if ( ! ACPS_Alerts_Conditions::passes( $alert ) ) {
+			// One bad alert must not stop the others being considered, so each
+			// rule evaluation is guarded on its own and a failure means "skip".
+			$passes = ACPS_Alerts_Failsafe::guard(
+				array( 'ACPS_Alerts_Conditions', 'passes' ),
+				array( $alert ),
+				'frontend/conditions',
+				false
+			);
+
+			if ( ! $passes ) {
 				continue;
 			}
 
@@ -110,12 +173,24 @@ class ACPS_Alerts_Frontend {
 			return;
 		}
 
-		wp_enqueue_style( 'acps-alerts', ACPS_ALERTS_URL . 'assets/css/alerts.css', array(), ACPS_ALERTS_VERSION );
+		// A missing asset file must not produce a 404-ing <script> tag, and must
+		// never stop the rest of the request. If the runtime is gone there is
+		// nothing to drive the alert, so stand down for this request.
+		if ( ! ACPS_Alerts_Failsafe::has_file( 'assets/js/alerts.js' ) ) {
+			ACPS_Alerts_Failsafe::record( 'frontend/enqueue', 'alerts.js is missing; alerts suppressed for this request' );
+			$this->queue = array();
 
-		$custom_css = (string) ACPS_Alerts_Settings::get( 'custom_css' );
-		$z_index    = (int) ACPS_Alerts_Settings::get( 'z_index' );
+			return;
+		}
 
-		wp_add_inline_style( 'acps-alerts', ':root{--acps-alert-z-index:' . $z_index . ';}' . $custom_css );
+		if ( ACPS_Alerts_Failsafe::has_file( 'assets/css/alerts.css' ) ) {
+			wp_enqueue_style( 'acps-alerts', ACPS_ALERTS_URL . 'assets/css/alerts.css', array(), ACPS_ALERTS_VERSION );
+
+			$custom_css = (string) ACPS_Alerts_Settings::get( 'custom_css' );
+			$z_index    = (int) ACPS_Alerts_Settings::get( 'z_index' );
+
+			wp_add_inline_style( 'acps-alerts', ':root{--acps-alert-z-index:' . $z_index . ';}' . $custom_css );
+		}
 
 		wp_enqueue_script( 'acps-alerts', ACPS_ALERTS_URL . 'assets/js/alerts.js', array(), ACPS_ALERTS_VERSION, true );
 
@@ -133,11 +208,20 @@ class ACPS_Alerts_Frontend {
 			)
 		);
 
-		// Let Beaver Builder load the CSS and JS each popup layout needs.
+		// Let Beaver Builder load the CSS and JS each popup layout needs. This
+		// reaches into another plugin's internals, so each call is guarded
+		// separately: if Beaver Builder throws, the alert still renders with the
+		// theme's own styling rather than taking the page down.
 		foreach ( $this->queue as $alert ) {
-			if ( method_exists( 'FLBuilder', 'enqueue_layout_styles_scripts_by_id' ) ) {
-				FLBuilder::enqueue_layout_styles_scripts_by_id( $alert->get_id() );
+			if ( ! method_exists( 'FLBuilder', 'enqueue_layout_styles_scripts_by_id' ) ) {
+				continue;
 			}
+
+			ACPS_Alerts_Failsafe::guard(
+				array( 'FLBuilder', 'enqueue_layout_styles_scripts_by_id' ),
+				array( $alert->get_id() ),
+				'frontend/bb-assets'
+			);
 		}
 	}
 
@@ -216,18 +300,39 @@ class ACPS_Alerts_Frontend {
 			return;
 		}
 
+		// Rendering a page-builder layout is the most memory-hungry thing this
+		// plugin does. If the request is already close to the limit, drop the
+		// alert rather than risk exhausting memory in the footer.
+		if ( ! ACPS_Alerts_Failsafe::memory_ok() ) {
+			ACPS_Alerts_Failsafe::record( 'frontend/render', 'skipped: not enough memory headroom' );
+
+			return;
+		}
+
 		foreach ( $this->queue as $alert ) {
-			$this->render_alert( $alert );
+			// Captured, not echoed directly: if an alert throws halfway through
+			// its own markup the partial fragment is discarded instead of
+			// landing in the page with unclosed tags.
+			$html = ACPS_Alerts_Failsafe::capture(
+				array( $this, 'render_alert' ),
+				array( $alert ),
+				'frontend/render-one'
+			);
+
+			echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped inside render_alert().
 		}
 	}
 
 	/**
 	 * Prints one alert.
 	 *
+	 * Public because the failsafe calls it through call_user_func_array from
+	 * outside this class, to capture its output.
+	 *
 	 * @param ACPS_Alerts_Alert $alert Alert to render.
 	 * @return void
 	 */
-	protected function render_alert( ACPS_Alerts_Alert $alert ) {
+	public function render_alert( ACPS_Alerts_Alert $alert ) {
 		$id       = $alert->get_id();
 		$label    = $alert->get( 'aria_label' );
 		$label    = '' !== $label ? $label : $alert->get_title();
@@ -276,8 +381,20 @@ class ACPS_Alerts_Frontend {
 	 * @return string
 	 */
 	protected function get_popup_content( $post_id ) {
+		// Beaver Builder's renderer is third-party code running inside our
+		// footer. Guard it, and fall back to the raw post content if it throws,
+		// so a builder problem costs the alert's styling, never the page.
 		if ( method_exists( 'FLBuilder', 'render_content_by_id' ) ) {
-			return (string) FLBuilder::render_content_by_id( $post_id );
+			$content = ACPS_Alerts_Failsafe::guard(
+				array( 'FLBuilder', 'render_content_by_id' ),
+				array( $post_id ),
+				'frontend/bb-render',
+				null
+			);
+
+			if ( null !== $content && '' !== $content ) {
+				return (string) $content;
+			}
 		}
 
 		$post = get_post( $post_id );
@@ -286,8 +403,16 @@ class ACPS_Alerts_Frontend {
 			return '';
 		}
 
-		/** This filter is documented in wp-includes/post-template.php */
-		return (string) apply_filters( 'the_content', $post->post_content );
+		// the_content runs every other plugin's filters; a throw in one of those
+		// is caught here rather than in the middle of the footer.
+		$filtered = ACPS_Alerts_Failsafe::guard(
+			'apply_filters',
+			array( 'the_content', $post->post_content ),
+			'frontend/the-content',
+			null
+		);
+
+		return (string) ( null !== $filtered ? $filtered : wp_kses_post( $post->post_content ) );
 	}
 
 	/**

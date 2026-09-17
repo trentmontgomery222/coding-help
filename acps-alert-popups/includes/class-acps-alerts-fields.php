@@ -25,6 +25,9 @@ class ACPS_Alerts_Fields {
 	 * @return void
 	 */
 	public static function render( ACPS_Alerts_Alert $alert ) {
+		// get_settings() always answers with a full, sanitized set — falling
+		// back to defaults rather than throwing — so every key below is safe to
+		// read without checking first.
 		$s = $alert->get_settings();
 
 		wp_nonce_field( self::NONCE_ACTION, self::NONCE_NAME );
