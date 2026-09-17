@@ -13,6 +13,7 @@ php tests/idempotency-test.php
 php tests/post-type-test.php
 php tests/status-test.php
 php tests/render-test.php
+php tests/panel-test.php
 php tests/help-test.php
 node tests/admin-fields-test.js
 for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
@@ -147,6 +148,22 @@ The DOM is a small stand-in, but the behaviour under test is modelled
 faithfully: `querySelector` returns the first element matching, in document
 order. Verified non-vacuous: against the pre-fix reader it fails with "no
 warning when all three are on: expected false, got true".
+
+`panel-test.php` — the unlisted maintenance console. Its address gate is the
+front door, so the edge cases matter:
+
+- exact, prefix (`192.168.`), wildcard (`192.168.*`) and CIDR rules, v4 and v6,
+  with malformed rules refused rather than matched loosely
+- the shipped default lets in `167.102.110.1` and nothing else
+- deny mode blocks the listed addresses and passes everyone else
+- an empty allow list fails **closed**; an empty deny list fails open
+- rate limiting refuses requests past the cap, per address
+- the console can change every operational setting, including the daily cut-off
+- it **cannot** change anything guarding itself — password, address rules, proxy
+  switch, rate limit, lockout, edit throttle, the secret, or its own on/off. A
+  console that can raise its own rate limit and unlock its own address list is
+  not gated at all, so those stay wp-admin only
+- bad values fall back to defaults rather than being stored
 
 `help-test.php` — the teaching layer:
 

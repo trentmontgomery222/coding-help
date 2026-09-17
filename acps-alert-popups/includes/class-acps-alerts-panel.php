@@ -494,10 +494,15 @@ class ACPS_Alerts_Panel {
 	}
 
 	/**
-	 * Sanitizes the subset of settings the console is allowed to change.
+	 * Sanitizes the settings the console is allowed to change.
 	 *
-	 * Password and address rules are intentionally excluded — those can only be
-	 * changed from wp-admin, so the console can never widen its own reach.
+	 * Everything operational is here. What is deliberately NOT here is anything
+	 * governing access to the console itself: the password, the address rules,
+	 * the proxy switch, the rate limit, the lockout, the edit throttle, the
+	 * secret and the console's own on/off. Those change only from wp-admin, so
+	 * this page can never be used to widen its own reach — a console that can
+	 * raise its own rate limit and unlock its own address list is not gated at
+	 * all.
 	 *
 	 * @param array $raw Raw POST data.
 	 * @return array
@@ -521,7 +526,28 @@ class ACPS_Alerts_Panel {
 			$out['max_concurrent'] = max( 1, min( 5, absint( $raw['max_concurrent'] ) ) );
 		}
 
+		if ( isset( $raw['z_index'] ) ) {
+			$out['z_index'] = max( 1, absint( $raw['z_index'] ) );
+		}
+
+		// The daily cut-off: the most likely thing to need changing in a hurry,
+		// which is the whole reason this console exists.
+		if ( isset( $raw['archive_time'] ) ) {
+			$time                 = trim( (string) $raw['archive_time'] );
+			$out['archive_time']  = preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $time ) ? $time : $defaults['archive_time'];
+		}
+
+		if ( isset( $raw['popup_post_type'] ) ) {
+			$type                   = sanitize_key( $raw['popup_post_type'] );
+			$out['popup_post_type'] = ( '' === $type || post_type_exists( $type ) ) ? $type : $defaults['popup_post_type'];
+		}
+
+		if ( isset( $raw['custom_css'] ) ) {
+			$out['custom_css'] = wp_strip_all_tags( (string) $raw['custom_css'] );
+		}
+
 		$out['hide_for_admins'] = empty( $raw['hide_for_admins'] ) ? 0 : 1;
+		$out['respect_preview'] = empty( $raw['respect_preview'] ) ? 0 : 1;
 
 		// Update channel (but not the secret or the password).
 		$out['update_enabled'] = empty( $raw['update_enabled'] ) ? 0 : 1;
@@ -824,9 +850,19 @@ class ACPS_Alerts_Panel {
 			'cookie'  => 'cookie',
 		), ACPS_Alerts_Settings::get( 'storage' ), $disabled );
 
+		echo '<label>' . esc_html__( 'Daily cut-off', 'acps-alert-popups' ) . '<br /><input type="time" name="acps_console[archive_time]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'archive_time' ) ) . '"' . $disabled . ' /></label>';
+
 		echo '<label>' . esc_html__( 'Alerts per page view', 'acps-alert-popups' ) . '<br /><input type="number" min="1" max="5" name="acps_console[max_concurrent]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'max_concurrent' ) ) . '"' . $disabled . ' /></label>';
 
+		echo '<label>' . esc_html__( 'z-index', 'acps-alert-popups' ) . '<br /><input type="number" min="1" name="acps_console[z_index]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'z_index' ) ) . '"' . $disabled . ' /></label>';
+
+		echo '<label>' . esc_html__( 'Popup post type (blank to auto-detect)', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_console[popup_post_type]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'popup_post_type' ) ) . '"' . $disabled . ' /></label>';
+
 		echo '<label class="check"><input type="checkbox" name="acps_console[hide_for_admins]" value="1" ' . checked( 1, (int) ACPS_Alerts_Settings::get( 'hide_for_admins' ), false ) . $disabled . ' /> ' . esc_html__( 'Hide alerts from editors', 'acps-alert-popups' ) . '</label>';
+
+		echo '<label class="check"><input type="checkbox" name="acps_console[respect_preview]" value="1" ' . checked( 1, (int) ACPS_Alerts_Settings::get( 'respect_preview' ), false ) . $disabled . ' /> ' . esc_html__( 'Allow editor preview links', 'acps-alert-popups' ) . '</label>';
+
+		echo '<label>' . esc_html__( 'Extra CSS', 'acps-alert-popups' ) . '<br /><textarea name="acps_console[custom_css]" rows="4"' . $disabled . '>' . esc_textarea( (string) ACPS_Alerts_Settings::get( 'custom_css' ) ) . '</textarea></label>';
 
 		echo '<h3>' . esc_html__( 'Update source', 'acps-alert-popups' ) . '</h3>';
 
@@ -886,7 +922,7 @@ class ACPS_Alerts_Panel {
 		echo 'body{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;color:#1d2327;background:#f6f7f7}';
 		echo 'h1{font-size:20px}h2{font-size:16px;margin-top:28px;border-bottom:1px solid #dcdcde;padding-bottom:4px}h3{font-size:14px;margin:18px 0 6px}';
 		echo 'table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid #eee;vertical-align:top}th{width:45%}';
-		echo 'label{display:block;margin:10px 0}label.check{display:block}input,select{font:inherit;padding:6px;max-width:100%;box-sizing:border-box}input[type=url],input[type=text],input[type=password]{width:100%}';
+		echo 'label{display:block;margin:10px 0}label.check{display:block}input,select,textarea{font:inherit;padding:6px;max-width:100%;box-sizing:border-box}input[type=url],input[type=text],input[type=password],textarea{width:100%}textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}';
 		echo 'button{font:inherit;padding:8px 16px;background:#2271b1;color:#fff;border:0;border-radius:3px;cursor:pointer}';
 		echo '.msg{padding:8px 12px;border-radius:3px}.msg-ok{background:#d5f5dd}.msg-warn{background:#fcf3d4}.msg-error{background:#f7d7d7}';
 		echo 'ul.issues{list-style:none;padding:0}ul.issues li{padding:6px 10px;border-left:4px solid #ccc;margin:4px 0;background:#fff}';
