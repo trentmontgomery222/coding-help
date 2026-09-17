@@ -11,6 +11,7 @@ plugin zip.
 php tests/failsafe-test.php
 php tests/post-type-test.php
 php tests/status-test.php
+php tests/render-test.php
 php tests/help-test.php
 for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
 ```
@@ -82,6 +83,26 @@ pinning:
   a staff-only entry, staff see it, and nobody sees a preview-only entry on the
   board
 - every level maps to a real severity and the ranks order correctly
+
+`render-test.php` — pins the "it's duplicating everything" bug. Beaver Builder
+hooks its layout renderer onto `the_content`, so asking it to render a post that
+also has editor content returned both — the whole popup appeared twice, once
+builder-styled and once theme-styled. These checks assert:
+
+- a post with a builder layout renders that layout exactly once, and its editor
+  content not at all
+- a post without a layout renders its editor content once, and no layout is
+  invented
+- a post with the builder switched off falls back to the editor even when stale
+  layout data is still in the database
+- an enabled-but-empty layout falls back rather than blanking the popup
+- something hooked on `the_content` that reaches back into the renderer cannot
+  double the body (re-entry guard)
+- the same alert queued twice prints once, and a second `wp_footer` pass prints
+  nothing more
+
+Verified non-vacuous: run against the pre-fix renderer it fails with exactly the
+reported symptom.
 
 `help-test.php` — the teaching layer:
 

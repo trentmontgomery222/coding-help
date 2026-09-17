@@ -27,6 +27,13 @@ class ACPS_Alerts_Frontend {
 	protected $is_preview = false;
 
 	/**
+	 * Alert IDs already printed this request, so none is printed twice.
+	 *
+	 * @var array
+	 */
+	protected $rendered = array();
+
+	/**
 	 * Hooks the front end up.
 	 *
 	 * @return void
@@ -85,11 +92,38 @@ class ACPS_Alerts_Frontend {
 			return false;
 		}
 
+		// The status page already shows the update as a banner. Popping the same
+		// thing up on top of it just covers the page someone came to read.
+		if ( self::is_status_page() ) {
+			return false;
+		}
+
 		if ( ACPS_Alerts_Failsafe::breaker_tripped( 'frontend' ) ) {
 			return false;
 		}
 
 		return ACPS_Alerts_Source::is_ready();
+	}
+
+	/**
+	 * Whether the page being viewed carries a status board.
+	 *
+	 * @return bool
+	 */
+	public static function is_status_page() {
+		if ( ! is_singular() ) {
+			return false;
+		}
+
+		if ( class_exists( 'ACPS_Alerts_Builder' ) && ACPS_Alerts_Builder::board_on_page() ) {
+			return true;
+		}
+
+		// Fall back to the page the board was last saved on, so this still holds
+		// if the layout cannot be inspected.
+		$board_page = (int) get_option( 'acps_alerts_board_page', 0 );
+
+		return $board_page > 0 && $board_page === (int) get_queried_object_id();
 	}
 
 	/**
@@ -310,6 +344,17 @@ class ACPS_Alerts_Frontend {
 		}
 
 		foreach ( $this->queue as $alert ) {
+			$id = $alert->get_id();
+
+			// Some themes call wp_footer more than once, and a page can hold the
+			// same alert twice over. Print each one at most once per request:
+			// two copies of the same popup is worse than none.
+			if ( isset( $this->rendered[ $id ] ) ) {
+				continue;
+			}
+
+			$this->rendered[ $id ] = true;
+
 			// Captured, not echoed directly: if an alert throws halfway through
 			// its own markup the partial fragment is discarded instead of
 			// landing in the page with unclosed tags.
@@ -381,19 +426,54 @@ class ACPS_Alerts_Frontend {
 	 * @return string
 	 */
 	protected function get_popup_content( $post_id ) {
-		// Beaver Builder's renderer is third-party code running inside our
-		// footer. Guard it, and fall back to the raw post content if it throws,
-		// so a builder problem costs the alert's styling, never the page.
-		if ( method_exists( 'FLBuilder', 'render_content_by_id' ) ) {
-			$content = ACPS_Alerts_Failsafe::guard(
-				array( 'FLBuilder', 'render_content_by_id' ),
-				array( $post_id ),
+		$post_id = (int) $post_id;
+
+		// Re-entry guard. Rendering runs the_content, and anything hooked there
+		// could reach back into this method; rendering the same popup inside
+		// itself would duplicate it and could loop.
+		static $rendering = array();
+
+		if ( isset( $rendering[ $post_id ] ) ) {
+			return '';
+		}
+
+		$rendering[ $post_id ] = true;
+
+		try {
+			$html = $this->resolve_popup_content( $post_id );
+		} finally {
+			unset( $rendering[ $post_id ] );
+		}
+
+		return $html;
+	}
+
+	/**
+	 * Picks exactly one source for a popup's body.
+	 *
+	 * This must never combine the two. Beaver Builder hooks its layout renderer
+	 * onto `the_content`, so asking it to render a post that also has editor
+	 * content returns the layout *and* that content — which shows up as the
+	 * whole popup appearing twice, once builder-styled and once theme-styled.
+	 *
+	 * So: if the post has a builder layout, render only that, through Beaver
+	 * Builder's own embed shortcode (the supported way to put one layout inside
+	 * another page). Otherwise render only the editor content.
+	 *
+	 * @param int $post_id Popup post ID.
+	 * @return string
+	 */
+	protected function resolve_popup_content( $post_id ) {
+		if ( self::has_builder_layout( $post_id ) && shortcode_exists( 'fl_builder_insert_layout' ) ) {
+			$html = ACPS_Alerts_Failsafe::guard(
+				'do_shortcode',
+				array( '[fl_builder_insert_layout id="' . $post_id . '"]' ),
 				'frontend/bb-render',
 				null
 			);
 
-			if ( null !== $content && '' !== $content ) {
-				return (string) $content;
+			if ( null !== $html && '' !== trim( (string) $html ) ) {
+				return (string) $html;
 			}
 		}
 
@@ -403,8 +483,9 @@ class ACPS_Alerts_Frontend {
 			return '';
 		}
 
-		// the_content runs every other plugin's filters; a throw in one of those
-		// is caught here rather than in the middle of the footer.
+		// No builder layout: the editor content is the whole popup. the_content
+		// runs every other plugin's filters, so a throw in one of those is
+		// caught here rather than in the middle of the footer.
 		$filtered = ACPS_Alerts_Failsafe::guard(
 			'apply_filters',
 			array( 'the_content', $post->post_content ),
@@ -413,6 +494,36 @@ class ACPS_Alerts_Frontend {
 		);
 
 		return (string) ( null !== $filtered ? $filtered : wp_kses_post( $post->post_content ) );
+	}
+
+	/**
+	 * Whether a post has a Beaver Builder layout that should be rendered.
+	 *
+	 * Checks that the builder is switched on for the post *and* that it has
+	 * actual layout data, because an empty enabled layout would otherwise
+	 * render nothing and hide the editor content behind it.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool
+	 */
+	public static function has_builder_layout( $post_id ) {
+		if ( ! class_exists( 'FLBuilder' ) ) {
+			return false;
+		}
+
+		$post_id = (int) $post_id;
+
+		// Read the stored per-post flags rather than asking Beaver Builder.
+		// FLBuilderModel::is_builder_enabled() inspects the *current* post in
+		// some versions, and in the footer that is the page being viewed, not
+		// the popup — which would wrongly veto a layout that really exists.
+		$enabled = get_post_meta( $post_id, '_fl_builder_enabled', true );
+
+		if ( '' !== $enabled && ! $enabled ) {
+			return false;
+		}
+
+		return ! empty( get_post_meta( $post_id, '_fl_builder_data', true ) );
 	}
 
 	/**
