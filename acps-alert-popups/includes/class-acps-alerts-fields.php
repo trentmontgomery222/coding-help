@@ -107,7 +107,13 @@ class ACPS_Alerts_Fields {
 				self::row(
 					__( 'Archived', 'acps-alert-popups' ),
 					self::checkbox( 'archived', $s['archived'], __( 'This update is in the archive', 'acps-alert-popups' ) ),
-					__( 'Archived updates drop off the banner and the popup, and appear in the list of past updates.', 'acps-alert-popups' )
+					__( 'Archived updates drop off the banner and the popup, and appear in the list of past updates. Tick this when writing up something that already happened.', 'acps-alert-popups' )
+				);
+
+				self::row(
+					__( 'Date it happened', 'acps-alert-popups' ),
+					self::datetime( 'posted_at_local', self::stamp_to_local( $s['posted_at'] ) ),
+					__( 'Decides where the update sits in the archive. Leave empty to use the moment it was created.', 'acps-alert-popups' )
 				);
 				?>
 			<?php self::section_close(); ?>
@@ -487,6 +493,22 @@ class ACPS_Alerts_Fields {
 			esc_attr( isset( $attrs['placeholder'] ) ? $attrs['placeholder'] : '' ),
 			esc_textarea( $value )
 		);
+	}
+
+	/**
+	 * Turns a stored timestamp into the site-local value a datetime input wants.
+	 *
+	 * @param int $stamp Unix timestamp, or 0 when unset.
+	 * @return string "Y-m-d H:i" in site time, or '' when unset.
+	 */
+	protected static function stamp_to_local( $stamp ) {
+		$stamp = (int) $stamp;
+
+		if ( $stamp <= 0 ) {
+			return '';
+		}
+
+		return gmdate( 'Y-m-d H:i', $stamp + (int) ( get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS ) );
 	}
 
 	/**

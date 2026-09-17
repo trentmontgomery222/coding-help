@@ -148,6 +148,19 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 		<p><?php esc_html_e( 'An update posted after the cut-off runs until the following day, so a 9pm closure notice does not vanish the moment you post it. Change the time in Settings.', 'acps-alert-popups' ); ?></p>
 		<p><?php esc_html_e( 'To keep something up indefinitely, choose "Keep it up until I archive it" when you post it. Nothing will take it down but you.', 'acps-alert-popups' ); ?></p>
 
+		<h3><?php esc_html_e( 'Filling in things that already happened', 'acps-alert-popups' ); ?></h3>
+		<p><?php esc_html_e( 'You can write up a past event and send it straight to the archive, so the list of past updates is complete from day one — useful when you are moving over from somewhere else.', 'acps-alert-popups' ); ?></p>
+		<ol class="acps-help-list">
+			<li><?php esc_html_e( 'Open the Status Board module as usual and fill in the headline and message.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Set "Post it as" to "Straight into the archive".', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Type the date it happened, as YYYY-MM-DD. That decides where it sits in the list.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Save. Repeat for each past event — the date box clears itself each time.', 'acps-alert-popups' ); ?></li>
+		</ol>
+		<p class="acps-callout">
+			<?php esc_html_e( 'An archived entry never pops up and never reaches the banner, whatever else is set. It is a record, not an announcement.', 'acps-alert-popups' ); ?>
+		</p>
+		<p><?php esc_html_e( 'You can also do this from Site Alerts: create an alert, tick "This update is in the archive", and set "Date it happened". The same box lets you correct the date on anything already in the archive.', 'acps-alert-popups' ); ?></p>
+
 		<h3><?php esc_html_e( 'Checking an update before anyone sees it', 'acps-alert-popups' ); ?></h3>
 		<p><?php esc_html_e( 'Set "Who can see it" to "Staff only" when you post. The update goes live on the real status page and the real popup, but only people who can manage alerts see it — everybody else sees the normal status. The board shows you a dashed "Staff preview" strip so you cannot forget it is staged.', 'acps-alert-popups' ); ?></p>
 		<p><?php esc_html_e( 'When you are happy with it, open the update in Site Alerts and set Visibility to "Live".', 'acps-alert-popups' ); ?></p>
@@ -257,10 +270,57 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 		</table>
 	</div>
 
-	<?php // ---------- Severity ---------- ?>
+	<?php // ---------- SRP ---------- ?>
 	<div class="acps-help-section">
-		<h2><?php esc_html_e( 'Severity colours', 'acps-alert-popups' ); ?></h2>
+		<h2><?php esc_html_e( 'Status levels use the Standard Response Protocol', 'acps-alert-popups' ); ?></h2>
+		<p><?php esc_html_e( 'The status levels are the five SRP actions from the "I Love U Guys" Foundation — the same vocabulary your staff and students are trained on. The website says exactly what the drill says, with the same word and the same directive underneath it.', 'acps-alert-popups' ); ?></p>
+
 		<?php echo ACPS_Alerts_Art::severity(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Authored SVG. ?>
+
+		<table class="widefat striped acps-help-table">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'Level', 'acps-alert-popups' ); ?></th>
+					<th><?php esc_html_e( 'Shows as', 'acps-alert-popups' ); ?></th>
+					<th><?php esc_html_e( 'Use it when', 'acps-alert-popups' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php
+				$acps_when = array(
+					'normal'   => __( 'Nothing is happening. This is the default when no update is live.', 'acps-alert-popups' ),
+					'info'     => __( 'A notice that is not a response action — an event, a write-up of something already resolved.', 'acps-alert-popups' ),
+					'hold'     => __( 'The hallways need to be clear. Business as usual inside the room.', 'acps-alert-popups' ),
+					'secure'   => __( 'The threat is outside. Bring everyone in and lock the outside doors.', 'acps-alert-popups' ),
+					'shelter'  => __( 'A hazard needs a specific safety strategy — tornado, hazmat, earthquake.', 'acps-alert-popups' ),
+					'evacuate' => __( 'People need to move to a location.', 'acps-alert-popups' ),
+					'lockdown' => __( 'The threat is inside. Locks, lights, out of sight.', 'acps-alert-popups' ),
+				);
+
+				foreach ( ACPS_Alerts_Status::levels() as $acps_key => $acps_level ) :
+					if ( ! empty( $acps_level['legacy'] ) ) {
+						continue;
+					}
+					?>
+					<tr>
+						<td><strong style="color:<?php echo esc_attr( $acps_level['color'] ); ?>"><?php echo esc_html( $acps_level['label'] ); ?></strong></td>
+						<td>
+							<strong><?php echo esc_html( $acps_level['banner'] ); ?></strong>
+							<?php if ( '' !== $acps_level['directive'] ) : ?>
+								<br /><em><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></em>
+							<?php endif; ?>
+						</td>
+						<td><?php echo esc_html( isset( $acps_when[ $acps_key ] ) ? $acps_when[ $acps_key ] : '' ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+
+		<p class="acps-callout">
+			<?php esc_html_e( 'Check these directives against your own district training materials before you go live. If your wording differs, a developer can adjust it with the acps_alerts_status_levels filter — do not let the website and the drill disagree.', 'acps-alert-popups' ); ?>
+		</p>
+		<p><?php esc_html_e( 'When several updates are live at once, the most urgent action becomes the banner and the rest sit beneath it. Lockdown outranks Evacuate, which outranks Shelter, Secure and Hold.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'Updates written before the move to SRP still work: their old wording keeps rendering, and you can switch them to an SRP action whenever you like.', 'acps-alert-popups' ); ?></p>
 	</div>
 
 	<?php // ---------- Screen map ---------- ?>

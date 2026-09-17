@@ -340,32 +340,69 @@ class ACPS_Alerts_Art {
 	 * @return string
 	 */
 	public static function severity() {
-		$levels = array(
-			array( 'info', __( 'Information', 'acps-alert-popups' ), __( 'A notice, nothing urgent', 'acps-alert-popups' ) ),
-			array( 'success', __( 'Good news', 'acps-alert-popups' ), __( 'Something positive', 'acps-alert-popups' ) ),
-			array( 'warning', __( 'Warning', 'acps-alert-popups' ), __( 'Heads up, plan around it', 'acps-alert-popups' ) ),
-			array( 'critical', __( 'Critical', 'acps-alert-popups' ), __( 'Closure, emergency', 'acps-alert-popups' ) ),
-		);
+		$levels = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::levels() : array();
+		$srp    = array();
 
-		$svg = '<svg viewBox="0 0 760 120" class="acps-art" role="img" aria-labelledby="acps-art-sv-t acps-art-sv-d">
-	<title id="acps-art-sv-t">' . esc_html__( 'The four severity levels', 'acps-alert-popups' ) . '</title>
-	<desc id="acps-art-sv-d">' . esc_html__( 'Information is blue, good news green, warning amber, critical red.', 'acps-alert-popups' ) . '</desc>';
+		foreach ( $levels as $key => $level ) {
+			if ( ! empty( $level['srp'] ) && empty( $level['legacy'] ) ) {
+				$srp[ $key ] = $level;
+			}
+		}
 
-		foreach ( $levels as $i => $level ) {
-			$x = 8 + $i * 188;
+		if ( empty( $srp ) ) {
+			return '';
+		}
 
-			$svg .= '<rect x="' . $x . '" y="20" width="176" height="76" rx="8" class="acps-art-sev-box"/>';
-			$svg .= '<rect x="' . $x . '" y="20" width="176" height="6" rx="3" class="acps-art-sev acps-art-sev--' . esc_attr( $level[0] ) . '"/>';
-			$svg .= '<text x="' . ( $x + 88 ) . '" y="58" class="acps-art-h-sm">' . esc_html( $level[1] ) . '</text>';
-			$svg .= '<text x="' . ( $x + 88 ) . '" y="78" class="acps-art-note">' . esc_html( $level[2] ) . '</text>';
+		$width = 760;
+		$each  = (int) floor( ( $width - 16 ) / count( $srp ) );
+
+		$svg = '<svg viewBox="0 0 ' . $width . ' 132" class="acps-art" role="img" aria-labelledby="acps-art-sv-t acps-art-sv-d">
+	<title id="acps-art-sv-t">' . esc_html__( 'The five Standard Response Protocol actions', 'acps-alert-popups' ) . '</title>
+	<desc id="acps-art-sv-d">' . esc_html__( 'Hold, Secure, Shelter, Evacuate and Lockdown, each with the directive staff and students are trained on.', 'acps-alert-popups' ) . '</desc>';
+
+		$i = 0;
+
+		foreach ( $srp as $level ) {
+			$x     = 8 + $i * $each;
+			$mid   = $x + (int) ( $each / 2 ) - 4;
+			$color = isset( $level['color'] ) ? $level['color'] : '#1b2f5e';
+
+			$svg .= '<rect x="' . $x . '" y="20" width="' . ( $each - 10 ) . '" height="92" rx="8" class="acps-art-sev-box"/>';
+			$svg .= '<rect x="' . $x . '" y="20" width="' . ( $each - 10 ) . '" height="8" rx="4" fill="' . esc_attr( $color ) . '"/>';
+			$svg .= '<text x="' . $mid . '" y="58" class="acps-art-h-sm" fill="' . esc_attr( $color ) . '">' . esc_html( $level['banner'] ) . '</text>';
+
+			// The directive is the part people are trained on, so wrap it rather
+			// than letting it run off the edge of its card.
+			$words = explode( ' ', wp_strip_all_tags( $level['directive'] ) );
+			$line  = '';
+			$lines = array();
+
+			foreach ( $words as $word ) {
+				if ( strlen( $line . ' ' . $word ) > 18 && '' !== $line ) {
+					$lines[] = $line;
+					$line    = $word;
+				} else {
+					$line = '' === $line ? $word : $line . ' ' . $word;
+				}
+			}
+
+			if ( '' !== $line ) {
+				$lines[] = $line;
+			}
+
+			foreach ( array_slice( $lines, 0, 3 ) as $n => $text ) {
+				$svg .= '<text x="' . $mid . '" y="' . ( 80 + $n * 15 ) . '" class="acps-art-note" text-anchor="middle">' . esc_html( $text ) . '</text>';
+			}
+
+			$i++;
 		}
 
 		$svg .= '</svg>';
 
 		return self::figure(
 			$svg,
-			__( 'The four severity levels', 'acps-alert-popups' ),
-			__( 'Severity only sets the colour stripe and sorts your list. It does not change who sees the alert.', 'acps-alert-popups' )
+			__( 'The five Standard Response Protocol actions', 'acps-alert-popups' ),
+			__( 'The same words your staff and students are trained on, so the website says exactly what the drill says.', 'acps-alert-popups' )
 		);
 	}
 

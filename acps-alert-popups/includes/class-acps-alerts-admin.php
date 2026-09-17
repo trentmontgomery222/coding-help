@@ -211,7 +211,43 @@ class ACPS_Alerts_Admin {
 
 		if ( 'archive' === $action || 'restore' === $action ) {
 			$this->handle_archive( $action );
+
+			return;
 		}
+
+		if ( 'tidy' === $action ) {
+			$this->handle_tidy();
+		}
+	}
+
+	/**
+	 * Archives every copy but the newest of any duplicated update.
+	 *
+	 * @return void
+	 */
+	protected function handle_tidy() {
+		$nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_tidy' ) ) {
+			wp_die( esc_html__( 'That link expired. Please reload the alerts list and try again.', 'acps-alert-popups' ) );
+		}
+
+		if ( ! current_user_can( self::capability() ) ) {
+			wp_die( esc_html__( 'You are not allowed to do this.', 'acps-alert-popups' ) );
+		}
+
+		$count = ACPS_Alerts_Status::tidy_duplicates();
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'acps_message' => 'tidied',
+					'acps_count'   => $count,
+				),
+				admin_url( 'admin.php?page=' . self::MENU_SLUG )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -392,6 +428,28 @@ class ACPS_Alerts_Admin {
 	protected function render_message() {
 		$message = isset( $_GET['acps_message'] ) ? sanitize_key( wp_unslash( $_GET['acps_message'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display only.
 
+		if ( 'tidied' === $message ) {
+			$count = isset( $_GET['acps_count'] ) ? absint( $_GET['acps_count'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display only.
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p>
+					<?php
+					if ( $count ) {
+						printf(
+							/* translators: %d: number of duplicates archived. */
+							esc_html( _n( '%d duplicate moved to the archive. Nothing was deleted — use "Bring back" on any you want to keep.', '%d duplicates moved to the archive. Nothing was deleted — use "Bring back" on any you want to keep.', $count, 'acps-alert-popups' ) ),
+							$count
+						);
+					} else {
+						esc_html_e( 'No duplicates found.', 'acps-alert-popups' );
+					}
+					?>
+				</p>
+			</div>
+			<?php
+			return;
+		}
+
 		$messages = array(
 			'saved'          => __( 'Alert settings saved.', 'acps-alert-popups' ),
 			'enabled'        => __( 'Alert is now live.', 'acps-alert-popups' ),
@@ -435,6 +493,42 @@ class ACPS_Alerts_Admin {
 				<button type="button" class="page-title-action" data-acps-tour="first-alert"><?php esc_html_e( 'Show me how', 'acps-alert-popups' ); ?></button>
 			<?php endif; ?>
 			<hr class="wp-header-end" />
+
+			<?php
+			$duplicates = ACPS_Alerts_Status::duplicate_groups();
+
+			if ( ! empty( $duplicates ) ) :
+				$extra = 0;
+
+				foreach ( $duplicates as $group ) {
+					$extra += count( $group ) - 1;
+				}
+
+				$tidy_url = wp_nonce_url(
+					add_query_arg(
+						array(
+							'page'        => self::MENU_SLUG,
+							'acps_action' => 'tidy',
+						),
+						admin_url( 'admin.php' )
+					),
+					'acps_alerts_tidy'
+				);
+				?>
+				<div class="notice notice-warning">
+					<p>
+						<?php
+						printf(
+							/* translators: %d: number of duplicate copies. */
+							esc_html( _n( 'There is %d duplicate update on this site.', 'There are %d duplicate updates on this site.', $extra, 'acps-alert-popups' ) ),
+							(int) $extra
+						);
+						?>
+						<?php esc_html_e( 'Tidying keeps the newest of each and moves the rest to the archive. Nothing is deleted.', 'acps-alert-popups' ); ?>
+					</p>
+					<p><a class="button" href="<?php echo esc_url( $tidy_url ); ?>"><?php esc_html_e( 'Tidy duplicates', 'acps-alert-popups' ); ?></a></p>
+				</div>
+			<?php endif; ?>
 
 			<?php $this->render_message(); ?>
 

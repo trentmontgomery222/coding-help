@@ -36,7 +36,19 @@ Drop the **School Status Board** module (Beaver Builder → Site Alerts group) o
 - Everything **archives itself at 5:50pm** (configurable) unless you chose "keep it up until I archive it". An update posted after the cut-off runs until the following day.
 - Set **Who can see it → Staff only** to stage an update on the live site where only people who can manage alerts see it. The board shows a dashed "Staff preview" strip so you can't forget.
 
-When several updates are live, the most serious becomes the banner and the rest appear beneath it.
+When several updates are live, the most urgent becomes the banner and the rest appear beneath it.
+
+### Status levels are SRP
+
+The levels are the five Standard Response Protocol actions from the "I Love U Guys" Foundation — **Hold**, **Secure**, **Shelter**, **Evacuate**, **Lockdown** — each with its directive and its colour, so the site says exactly what the drill says. Two everyday levels sit alongside them: **Normal** and **Information**, which are deliberately *not* marked as response actions.
+
+Urgency runs Lockdown > Evacuate > Shelter > Secure > Hold > Information, and that decides which update takes the banner.
+
+Check the directives against your own district's training materials before going live; a developer can adjust the wording with the `acps_alerts_status_levels` filter. Updates written before the move to SRP keep rendering with their old wording.
+
+### Backfilling the archive
+
+Set **Post it as → Straight into the archive** and give it a date (`YYYY-MM-DD`) to write up something that already happened. Archived entries never pop up and never reach the banner — they are records, not announcements. The same is available in Site Alerts via **This update is in the archive** plus **Date it happened**.
 
 Popup *layout* is still a Beaver Builder job: open the update in Site Alerts and use **Launch Beaver Builder**. Without a layout, the popup shows the message you typed.
 

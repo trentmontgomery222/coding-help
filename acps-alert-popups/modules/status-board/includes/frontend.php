@@ -39,16 +39,19 @@ $acps_date_format  = get_option( 'date_format' );
 			</p>
 		<?php endif; ?>
 
-		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( $acps_live, $settings ) ); ?>" style="text-align:<?php echo esc_attr( $acps_align ); ?>" role="status">
+		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( $acps_live, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( $acps_live, $settings ) ); ?>" role="status">
 			<h2 class="acps-board__title">
 				<?php
 				printf(
-					/* translators: 1: status level, e.g. CLOSED. 2: headline. */
-					esc_html__( 'School Status: %1$s', 'acps-alert-popups' ),
+					/* translators: %s: the status word, e.g. LOCKDOWN. */
+					esc_html__( 'School Status: %s', 'acps-alert-popups' ),
 					esc_html( $acps_level['banner'] )
 				);
 				?>
 			</h2>
+			<?php if ( '' !== $acps_level['directive'] ) : ?>
+				<p class="acps-board__directive"><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></p>
+			<?php endif; ?>
 			<p class="acps-board__headline"><?php echo esc_html( $acps_live->get_title() ); ?></p>
 			<?php if ( '' !== trim( $acps_msg ) ) : ?>
 				<div class="acps-board__message"><?php echo wp_kses_post( wpautop( $acps_msg ) ); ?></div>
@@ -58,7 +61,10 @@ $acps_date_format  = get_option( 'date_format' );
 		<?php foreach ( $acps_extra as $acps_other ) : ?>
 			<?php $acps_other_level = ACPS_Alerts_Status::level( $acps_other->get( 'status_level' ) ); ?>
 			<div class="acps-board__also acps-board__also--<?php echo esc_attr( sanitize_html_class( $acps_other->get( 'status_level' ) ) ); ?>">
-				<strong><?php echo esc_html( $acps_other_level['banner'] ); ?></strong>
+				<strong style="color:<?php echo esc_attr( $acps_other_level['color'] ); ?>"><?php echo esc_html( $acps_other_level['banner'] ); ?></strong>
+				<?php if ( '' !== $acps_other_level['directive'] ) : ?>
+					<em class="acps-board__also-directive"><?php echo esc_html( wp_strip_all_tags( $acps_other_level['directive'] ) ); ?></em>
+				<?php endif; ?>
 				<span><?php echo esc_html( $acps_other->get_title() ); ?></span>
 				<?php if ( '' !== trim( (string) $acps_other->get( 'status_message' ) ) ) : ?>
 					<p><?php echo esc_html( $acps_other->get( 'status_message' ) ); ?></p>
@@ -67,7 +73,7 @@ $acps_date_format  = get_option( 'date_format' );
 		<?php endforeach; ?>
 
 	<?php else : ?>
-		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( null, $settings ) ); ?>" style="text-align:<?php echo esc_attr( $acps_align ); ?>" role="status">
+		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( null, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( null, $settings ) ); ?>" role="status">
 			<h2 class="acps-board__title">
 				<?php echo esc_html( isset( $settings->normal_title ) ? $settings->normal_title : __( 'School Status: NORMAL', 'acps-alert-popups' ) ); ?>
 			</h2>
@@ -102,7 +108,15 @@ $acps_date_format  = get_option( 'date_format' );
 							<span class="acps-board__entry-mark" aria-hidden="true"></span>
 						</summary>
 						<div class="acps-board__entry-body">
-							<p class="acps-board__entry-level"><?php echo esc_html( $acps_item_level['label'] ); ?></p>
+							<p class="acps-board__entry-level" style="color:<?php echo esc_attr( $acps_item_level['color'] ); ?>">
+								<?php
+								echo esc_html( $acps_item_level['banner'] );
+
+								if ( '' !== $acps_item_level['directive'] ) {
+									echo ' — ' . esc_html( wp_strip_all_tags( $acps_item_level['directive'] ) );
+								}
+								?>
+							</p>
 							<?php if ( '' !== trim( $acps_item_msg ) ) : ?>
 								<?php echo wp_kses_post( wpautop( $acps_item_msg ) ); ?>
 							<?php else : ?>

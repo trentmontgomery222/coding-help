@@ -21,11 +21,34 @@
 	color: inherit;
 }
 
+/* The SRP directive: the line staff and students are trained on, so it sits
+   directly under the action word and stays prominent. */
+.acps-board__directive {
+	margin: 0 0 16px;
+	font-size: 1em;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: inherit;
+	opacity: 0.92;
+}
+
 .acps-board__headline {
 	margin: 0 0 12px;
 	font-size: 1.15em;
 	font-weight: 600;
 	color: inherit;
+}
+
+.acps-board__also-directive {
+	display: inline-block;
+	margin-right: 8px;
+	font-size: 0.85em;
+	font-style: normal;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	opacity: 0.85;
 }
 
 .acps-board__message {

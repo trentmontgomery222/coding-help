@@ -69,6 +69,39 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	}
 
 	/**
+	 * Inline style for a banner: alignment, plus the SRP colour when the status
+	 * is one of the response actions.
+	 *
+	 * The colour has to be inline rather than in the stylesheet, because it
+	 * comes from the level definition — which a site can change with the
+	 * acps_alerts_status_levels filter.
+	 *
+	 * @param ACPS_Alerts_Alert|null $alert    Entry, or null for the normal state.
+	 * @param object                 $settings Module settings.
+	 * @return string
+	 */
+	public static function banner_style( $alert, $settings ) {
+		$align = isset( $settings->banner_align ) ? $settings->banner_align : 'center';
+		$style = 'text-align:' . preg_replace( '/[^a-z]/', '', (string) $align ) . ';';
+
+		$by_level = ! isset( $settings->use_level_color ) || '1' === (string) $settings->use_level_color;
+
+		if ( ! $alert || ! $by_level ) {
+			return $style; // The module's own colour applies, from its stylesheet.
+		}
+
+		$level = ACPS_Alerts_Status::level( $alert->get( 'status_level' ) );
+		$color = isset( $level['color'] ) ? (string) $level['color'] : '';
+
+		// Only ever emit a colour we recognise as one.
+		if ( preg_match( '/^#[0-9a-f]{3,8}$/i', $color ) ) {
+			$style .= 'background:' . $color . ';';
+		}
+
+		return $style;
+	}
+
+	/**
 	 * Posts a status update when one has been typed into the module.
 	 *
 	 * Beaver Builder stores whatever this returns, so the compose fields are
@@ -105,24 +138,42 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 			return $settings;
 		}
 
-		$post_id = ACPS_Alerts_Status::post_entry(
-			array(
-				'title'      => $headline,
-				'level'      => isset( $settings->post_level ) ? $settings->post_level : 'advisory',
-				'message'    => isset( $settings->post_message ) ? $settings->post_message : '',
-				'expires'    => isset( $settings->post_expires ) ? $settings->post_expires : 'daily',
-				'as_popup'   => ! empty( $settings->post_as_popup ),
-				'visibility' => isset( $settings->post_visibility ) ? $settings->post_visibility : 'public',
-			)
+		$archived = isset( $settings->post_state ) && 'archive' === $settings->post_state;
+
+		$data = array(
+			'title'      => $headline,
+			'level'      => isset( $settings->post_level ) ? $settings->post_level : 'advisory',
+			'message'    => isset( $settings->post_message ) ? $settings->post_message : '',
+			'expires'    => isset( $settings->post_expires ) ? $settings->post_expires : 'daily',
+			'as_popup'   => ! empty( $settings->post_as_popup ),
+			'visibility' => isset( $settings->post_visibility ) ? $settings->post_visibility : 'public',
+			'archived'   => $archived,
+			'date'       => isset( $settings->post_date ) ? $settings->post_date : '',
 		);
 
+		// Beaver Builder calls update() on EVERY save of the layout and does not
+		// reliably keep the settings this method returns, so emptying the boxes
+		// below cannot be relied on. The fingerprint is the real guard: saving
+		// the page again without changing the wording posts nothing.
+		$node = isset( $this->node ) ? (string) $this->node : 'status-board';
+
+		if ( ACPS_Alerts_Status::already_posted( $node, $data, $archived ) ) {
+			return $settings;
+		}
+
+		$post_id = ACPS_Alerts_Status::post_entry( $data );
+
 		if ( $post_id ) {
-			// Clear the compose fields and remember what was posted, so the
-			// module can link straight to it.
-			$settings->post_headline   = '';
-			$settings->post_message    = '';
-			$settings->last_posted     = $post_id;
-			$settings->last_posted_at  = time();
+			ACPS_Alerts_Status::remember_posted( $node, $data, $post_id );
+
+			// Also clear the compose fields. This is belt and braces: it tidies
+			// the form on the Beaver Builder versions that do keep what update()
+			// returns, and costs nothing on the ones that do not.
+			$settings->post_headline  = '';
+			$settings->post_message   = '';
+			$settings->post_date      = '';
+			$settings->last_posted    = $post_id;
+			$settings->last_posted_at = time();
 		}
 
 		return $settings;
@@ -158,6 +209,27 @@ FLBuilder::register_module(
 							'default' => '',
 							'rows'    => 5,
 							'help'    => __( 'A sentence or two. Shown on the board and used for the popup unless you design one in Beaver Builder.', 'acps-alert-popups' ),
+						),
+						'post_state'      => array(
+							'type'    => 'select',
+							'label'   => __( 'Post it as', 'acps-alert-popups' ),
+							'default' => 'live',
+							'options' => array(
+								'live'    => __( 'A live update — show it now', 'acps-alert-popups' ),
+								'archive' => __( 'Straight into the archive — a past event', 'acps-alert-popups' ),
+							),
+							'help'    => __( 'Use the archive option to fill in things that already happened. They never pop up; they just appear in the list of past updates.', 'acps-alert-popups' ),
+							'toggle'  => array(
+								'live'    => array( 'fields' => array( 'post_expires', 'post_as_popup', 'post_visibility' ) ),
+								'archive' => array( 'fields' => array( 'post_date' ) ),
+							),
+						),
+						'post_date'       => array(
+							'type'        => 'text',
+							'label'       => __( 'Date it happened', 'acps-alert-popups' ),
+							'default'     => '',
+							'placeholder' => 'YYYY-MM-DD',
+							'help'        => __( 'Sets where it sits in the archive. Leave empty to use today.', 'acps-alert-popups' ),
 						),
 						'post_expires'    => array(
 							'type'    => 'select',

@@ -21,50 +21,154 @@ class ACPS_Alerts_Status {
 	const CRON_HOOK = 'acps_alerts_daily_archive';
 
 	/**
-	 * The status levels, worst last.
+	 * The status levels, least urgent first.
+	 *
+	 * The five actions are the Standard Response Protocol from the "I Love U
+	 * Guys" Foundation — the same vocabulary schools already train staff and
+	 * students on, so the website says exactly what the drill says. The
+	 * directives are the published SRP wording; check them against your own
+	 * district's training materials before going live, and adjust with the
+	 * acps_alerts_status_levels filter if your wording differs.
+	 *
+	 * Two non-SRP levels sit alongside them: Normal for business as usual, and
+	 * Information for a notice that is not a response action at all (a phishing
+	 * write-up, an open house). Marking those as SRP actions would water the
+	 * protocol down, which is the opposite of the point.
 	 *
 	 * @return array
 	 */
 	public static function levels() {
 		$levels = array(
 			'normal'    => array(
-				'label'    => __( 'Normal', 'acps-alert-popups' ),
-				'banner'   => __( 'NORMAL', 'acps-alert-popups' ),
-				'severity' => 'success',
-				'rank'     => 0,
+				'label'     => __( 'Normal', 'acps-alert-popups' ),
+				'banner'    => __( 'NORMAL', 'acps-alert-popups' ),
+				'directive' => '',
+				'color'     => '#1b2f5e',
+				'severity'  => 'success',
+				'srp'       => false,
+				'rank'      => 0,
 			),
+			'info'      => array(
+				'label'     => __( 'Information', 'acps-alert-popups' ),
+				'banner'    => __( 'INFORMATION', 'acps-alert-popups' ),
+				'directive' => '',
+				'color'     => '#1b2f5e',
+				'severity'  => 'info',
+				'srp'       => false,
+				'rank'      => 1,
+			),
+			'hold'      => array(
+				'label'     => __( 'Hold', 'acps-alert-popups' ),
+				'banner'    => __( 'HOLD', 'acps-alert-popups' ),
+				'directive' => __( 'In Your Classroom or Area', 'acps-alert-popups' ),
+				'color'     => '#7a1c82',
+				'severity'  => 'warning',
+				'srp'       => true,
+				'rank'      => 2,
+			),
+			'secure'    => array(
+				'label'     => __( 'Secure', 'acps-alert-popups' ),
+				'banner'    => __( 'SECURE', 'acps-alert-popups' ),
+				'directive' => __( 'Get Inside. Lock Outside Doors', 'acps-alert-popups' ),
+				'color'     => '#4f6fd4',
+				'severity'  => 'warning',
+				'srp'       => true,
+				'rank'      => 3,
+			),
+			'shelter'   => array(
+				'label'     => __( 'Shelter', 'acps-alert-popups' ),
+				'banner'    => __( 'SHELTER', 'acps-alert-popups' ),
+				'directive' => __( 'State Hazard &amp; Safety Strategy', 'acps-alert-popups' ),
+				'color'     => '#e8762c',
+				'severity'  => 'warning',
+				'srp'       => true,
+				'rank'      => 4,
+			),
+			'evacuate'  => array(
+				'label'     => __( 'Evacuate', 'acps-alert-popups' ),
+				'banner'    => __( 'EVACUATE', 'acps-alert-popups' ),
+				'directive' => __( 'To a Location', 'acps-alert-popups' ),
+				'color'     => '#1e8a3c',
+				'severity'  => 'critical',
+				'srp'       => true,
+				'rank'      => 5,
+			),
+			'lockdown'  => array(
+				'label'     => __( 'Lockdown', 'acps-alert-popups' ),
+				'banner'    => __( 'LOCKDOWN', 'acps-alert-popups' ),
+				'directive' => __( 'Locks, Lights, Out of Sight', 'acps-alert-popups' ),
+				'color'     => '#d81440',
+				'severity'  => 'critical',
+				'srp'       => true,
+				'rank'      => 6,
+			),
+
+			/*
+			 * Retired wording, kept so entries written before the move to SRP
+			 * still render properly. Hidden from the picker by level_choices().
+			 */
 			'advisory'  => array(
-				'label'    => __( 'Advisory', 'acps-alert-popups' ),
-				'banner'   => __( 'ADVISORY', 'acps-alert-popups' ),
-				'severity' => 'info',
-				'rank'     => 1,
+				'label'     => __( 'Advisory (old)', 'acps-alert-popups' ),
+				'banner'    => __( 'ADVISORY', 'acps-alert-popups' ),
+				'directive' => '',
+				'color'     => '#1b2f5e',
+				'severity'  => 'info',
+				'srp'       => false,
+				'rank'      => 1,
+				'legacy'    => true,
 			),
 			'warning'   => array(
-				'label'    => __( 'Warning', 'acps-alert-popups' ),
-				'banner'   => __( 'WARNING', 'acps-alert-popups' ),
-				'severity' => 'warning',
-				'rank'     => 2,
+				'label'     => __( 'Warning (old)', 'acps-alert-popups' ),
+				'banner'    => __( 'WARNING', 'acps-alert-popups' ),
+				'directive' => '',
+				'color'     => '#8a6400',
+				'severity'  => 'warning',
+				'srp'       => false,
+				'rank'      => 2,
+				'legacy'    => true,
 			),
 			'closure'   => array(
-				'label'    => __( 'Closure', 'acps-alert-popups' ),
-				'banner'   => __( 'CLOSED', 'acps-alert-popups' ),
-				'severity' => 'critical',
-				'rank'     => 3,
+				'label'     => __( 'Closure (old)', 'acps-alert-popups' ),
+				'banner'    => __( 'CLOSED', 'acps-alert-popups' ),
+				'directive' => '',
+				'color'     => '#9b1c1f',
+				'severity'  => 'critical',
+				'srp'       => false,
+				'rank'      => 5,
+				'legacy'    => true,
 			),
 			'emergency' => array(
-				'label'    => __( 'Emergency', 'acps-alert-popups' ),
-				'banner'   => __( 'EMERGENCY', 'acps-alert-popups' ),
-				'severity' => 'critical',
-				'rank'     => 4,
+				'label'     => __( 'Emergency (old)', 'acps-alert-popups' ),
+				'banner'    => __( 'EMERGENCY', 'acps-alert-popups' ),
+				'directive' => '',
+				'color'     => '#9b1c1f',
+				'severity'  => 'critical',
+				'srp'       => false,
+				'rank'      => 6,
+				'legacy'    => true,
 			),
 		);
 
 		/**
 		 * Filters the status levels.
 		 *
+		 * Use this to match your district's own training wording, or to add a
+		 * level. Each entry needs: label, banner, directive, color, severity
+		 * (info|success|warning|critical), srp (bool) and rank (higher is more
+		 * urgent, and wins the banner when several updates are live).
+		 *
 		 * @param array $levels Level definitions.
 		 */
 		return (array) apply_filters( 'acps_alerts_status_levels', $levels );
+	}
+
+	/**
+	 * Every level key, including the retired ones.
+	 *
+	 * @return string[]
+	 */
+	public static function level_keys() {
+		return array_keys( self::levels() );
 	}
 
 	/**
@@ -76,22 +180,59 @@ class ACPS_Alerts_Status {
 	public static function level( $key ) {
 		$levels = self::levels();
 
-		return isset( $levels[ $key ] ) ? $levels[ $key ] : $levels['advisory'];
+		$level = isset( $levels[ $key ] ) ? $levels[ $key ] : ( isset( $levels['info'] ) ? $levels['info'] : reset( $levels ) );
+
+		// Fill in anything a filtered level left out, so callers can read every
+		// key without checking first.
+		return array_merge(
+			array(
+				'label'     => '',
+				'banner'    => '',
+				'directive' => '',
+				'color'     => '#1b2f5e',
+				'severity'  => 'info',
+				'srp'       => false,
+				'rank'      => 0,
+				'legacy'    => false,
+			),
+			(array) $level
+		);
 	}
 
 	/**
-	 * Choices for a select control.
+	 * Choices for a select control, retired wording left out.
+	 *
+	 * The SRP actions are grouped after the everyday ones, so the picker reads
+	 * in the order someone reaches for them.
 	 *
 	 * @return array key => label.
 	 */
 	public static function level_choices() {
-		$choices = array();
+		$everyday = array();
+		$srp      = array();
 
 		foreach ( self::levels() as $key => $level ) {
-			$choices[ $key ] = $level['label'];
+			if ( ! empty( $level['legacy'] ) ) {
+				continue;
+			}
+
+			$label = isset( $level['label'] ) ? $level['label'] : $key;
+
+			if ( ! empty( $level['srp'] ) ) {
+				$directive = isset( $level['directive'] ) ? wp_strip_all_tags( $level['directive'] ) : '';
+
+				$srp[ $key ] = '' !== $directive
+					/* translators: 1: SRP action, e.g. Lockdown. 2: its directive. */
+					? sprintf( __( '%1$s — %2$s', 'acps-alert-popups' ), $label, $directive )
+					: $label;
+
+				continue;
+			}
+
+			$everyday[ $key ] = $label;
 		}
 
-		return $choices;
+		return $everyday + $srp;
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -354,6 +495,198 @@ class ACPS_Alerts_Status {
 	 * Posting and archiving.
 	 * ------------------------------------------------------------------ */
 
+	/** Option holding what each status board node last posted. */
+	const POSTED_OPTION = 'acps_alerts_posted_sigs';
+
+	/**
+	 * A fingerprint of the update someone has typed into a board.
+	 *
+	 * @param array $data Compose fields.
+	 * @return string
+	 */
+	public static function signature( array $data ) {
+		return md5(
+			wp_json_encode(
+				array(
+					isset( $data['title'] ) ? trim( (string) $data['title'] ) : '',
+					isset( $data['level'] ) ? (string) $data['level'] : '',
+					isset( $data['message'] ) ? trim( (string) $data['message'] ) : '',
+					! empty( $data['archived'] ) ? 1 : 0,
+					isset( $data['date'] ) ? (string) $data['date'] : '',
+				)
+			)
+		);
+	}
+
+	/**
+	 * Whether this board has already posted exactly this update.
+	 *
+	 * Beaver Builder calls a module's update() on every save of the layout, and
+	 * does not reliably store the settings that method hands back. So clearing
+	 * the compose fields cannot be trusted to prevent a repeat: saving the page
+	 * for any unrelated reason would post the same update again, and again.
+	 *
+	 * The fingerprint is the real guard. A live update cannot be posted twice
+	 * while it is still live, and a backfilled archive entry — a record of
+	 * something that happened once — can never be posted twice at all. Once a
+	 * live update has come down, the same wording may be posted afresh.
+	 *
+	 * @param string $node_id  The module's node id.
+	 * @param array  $data     Compose fields.
+	 * @param bool   $archived Whether this is a backfilled archive entry.
+	 * @return bool
+	 */
+	public static function already_posted( $node_id, array $data, $archived ) {
+		$record = get_option( self::POSTED_OPTION, array() );
+
+		if ( ! is_array( $record ) || empty( $record[ $node_id ] ) ) {
+			return false;
+		}
+
+		$last = $record[ $node_id ];
+
+		if ( empty( $last['sig'] ) || $last['sig'] !== self::signature( $data ) ) {
+			return false; // Something was changed: this is a new update.
+		}
+
+		$post_id = isset( $last['post'] ) ? (int) $last['post'] : 0;
+
+		if ( ! $post_id || ! get_post_status( $post_id ) ) {
+			return false; // The entry was deleted; allow it to be posted again.
+		}
+
+		// A record of a past event is never posted twice.
+		if ( $archived ) {
+			return true;
+		}
+
+		// The same wording may be posted again once the last one has come down.
+		return self::is_current( new ACPS_Alerts_Alert( $post_id ) );
+	}
+
+	/**
+	 * Remembers what a board posted, so a repeat save does not post it again.
+	 *
+	 * @param string $node_id The module's node id.
+	 * @param array  $data    Compose fields.
+	 * @param int    $post_id The entry that was created.
+	 * @return void
+	 */
+	public static function remember_posted( $node_id, array $data, $post_id ) {
+		$record = get_option( self::POSTED_OPTION, array() );
+
+		if ( ! is_array( $record ) ) {
+			$record = array();
+		}
+
+		$record[ $node_id ] = array(
+			'sig'  => self::signature( $data ),
+			'post' => (int) $post_id,
+			'time' => time(),
+		);
+
+		// Keep this small; a site has a handful of boards at most.
+		if ( count( $record ) > 20 ) {
+			$record = array_slice( $record, -20, null, true );
+		}
+
+		update_option( self::POSTED_OPTION, $record, false );
+	}
+
+	/**
+	 * Finds groups of identical entries, newest first within each group.
+	 *
+	 * Used by the tidy-up tool, for cleaning up after a run of duplicates.
+	 *
+	 * @return array[] Each value is an array of ACPS_Alerts_Alert, newest first.
+	 */
+	public static function duplicate_groups() {
+		$groups = array();
+
+		foreach ( ACPS_Alerts_Source::get_popups() as $post ) {
+			$alert = new ACPS_Alerts_Alert( $post );
+
+			if ( ! $alert->is_valid() ) {
+				continue;
+			}
+
+			$key = md5( strtolower( trim( $alert->get_title() ) ) . '|' . trim( (string) $alert->get( 'status_message' ) ) );
+
+			$groups[ $key ][] = $alert;
+		}
+
+		foreach ( $groups as $key => $group ) {
+			if ( count( $group ) < 2 ) {
+				unset( $groups[ $key ] );
+
+				continue;
+			}
+
+			usort(
+				$groups[ $key ],
+				static function ( $a, $b ) {
+					return self::posted_time( $b ) - self::posted_time( $a );
+				}
+			);
+		}
+
+		return array_values( $groups );
+	}
+
+	/**
+	 * Archives every copy but the newest in each duplicate group.
+	 *
+	 * Archiving rather than deleting, so nothing is lost and every step is
+	 * reversible with "Bring back".
+	 *
+	 * @return int How many entries were archived.
+	 */
+	public static function tidy_duplicates() {
+		$archived = 0;
+
+		foreach ( self::duplicate_groups() as $group ) {
+			// Keep index 0 — the newest — and archive the rest.
+			foreach ( array_slice( $group, 1 ) as $alert ) {
+				if ( $alert->get( 'archived' ) ) {
+					continue;
+				}
+
+				self::archive_entry( $alert->get_id() );
+				$archived++;
+			}
+		}
+
+		return $archived;
+	}
+
+	/**
+	 * Reads a date typed by a person into a timestamp.
+	 *
+	 * Used for backfilled archive entries, where the date is the whole point:
+	 * it decides where the entry sits in the list of past updates.
+	 *
+	 * A bare date is treated as midday, so converting between timezones can
+	 * never nudge it onto the day before or after.
+	 *
+	 * @param string $value Anything strtotime understands, e.g. 2026-09-04.
+	 * @return int Unix timestamp, or 0 when it cannot be read.
+	 */
+	public static function parse_date( $value ) {
+		$value = trim( (string) $value );
+
+		if ( '' === $value ) {
+			return 0;
+		}
+
+		if ( preg_match( '/^\d{4}-\d{1,2}-\d{1,2}$/', $value ) ) {
+			$value .= ' 12:00:00';
+		}
+
+		$timestamp = strtotime( $value );
+
+		return $timestamp ? (int) $timestamp : 0;
+	}
+
 	/**
 	 * Creates a status entry.
 	 *
@@ -364,6 +697,10 @@ class ACPS_Alerts_Status {
 	 *     @type string $expires  daily | keep | custom.
 	 *     @type bool   $as_popup Whether it also pops up site-wide.
 	 *     @type string $visibility public | admins | preview.
+	 *     @type bool   $archived Post it straight into the archive.
+	 *     @type int|string $date When it happened; anything parse_date() reads.
+	 *                            Defaults to now. Only meaningful for archived
+	 *                            entries, where it sets the position in the list.
 	 *     @type array  $settings Extra alert settings to merge.
 	 * }
 	 * @return int The new post ID, or 0 on failure.
@@ -377,15 +714,35 @@ class ACPS_Alerts_Status {
 
 		$message = isset( $data['message'] ) ? wp_kses_post( $data['message'] ) : '';
 
-		$post_id = wp_insert_post(
-			array(
-				'post_type'    => ACPS_Alerts_Post_Type::SLUG,
-				'post_title'   => $title,
-				'post_status'  => 'publish',
-				'post_content' => $message,
-			),
-			true
+		$archived = ! empty( $data['archived'] );
+
+		// A backfilled entry keeps the date it really happened, so it lands in
+		// the right place in the archive rather than at the top.
+		$when = 0;
+
+		if ( ! empty( $data['date'] ) ) {
+			$when = is_numeric( $data['date'] ) ? (int) $data['date'] : self::parse_date( $data['date'] );
+		}
+
+		if ( $when <= 0 ) {
+			$when = time();
+		}
+
+		$postarr = array(
+			'post_type'    => ACPS_Alerts_Post_Type::SLUG,
+			'post_title'   => $title,
+			'post_status'  => 'publish',
+			'post_content' => $message,
 		);
+
+		// Date the post itself to match, so the ordinary WordPress lists agree
+		// with the archive order.
+		if ( $archived ) {
+			$postarr['post_date']     = gmdate( 'Y-m-d H:i:s', $when + (int) ( get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS ) );
+			$postarr['post_date_gmt'] = gmdate( 'Y-m-d H:i:s', $when );
+		}
+
+		$post_id = wp_insert_post( $postarr, true );
 
 		if ( is_wp_error( $post_id ) || ! $post_id ) {
 			ACPS_Alerts_Failsafe::record( 'status/post', is_wp_error( $post_id ) ? $post_id->get_error_message() : 'insert failed' );
@@ -401,9 +758,11 @@ class ACPS_Alerts_Status {
 			'status_message' => wp_strip_all_tags( $message ),
 			'severity'       => self::level( $level )['severity'],
 			'on_board'       => 1,
-			'as_popup'       => empty( $data['as_popup'] ) ? 0 : 1,
-			'archived'       => 0,
-			'posted_at'      => time(),
+			// An entry made straight for the archive never pops up: it is a
+			// record of something that already happened.
+			'as_popup'       => ( $archived || empty( $data['as_popup'] ) ) ? 0 : 1,
+			'archived'       => $archived ? 1 : 0,
+			'posted_at'      => $when,
 			'expires_mode'   => isset( $data['expires'] ) ? sanitize_key( $data['expires'] ) : 'daily',
 			'visibility'     => isset( $data['visibility'] ) ? sanitize_key( $data['visibility'] ) : 'public',
 		);

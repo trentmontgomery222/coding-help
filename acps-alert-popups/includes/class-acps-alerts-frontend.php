@@ -394,6 +394,18 @@ class ACPS_Alerts_Frontend {
 		if ( ! $alert->get( 'show_overlay' ) ) {
 			$classes[] = 'acps-alert--no-overlay';
 		}
+
+		// Colour the popup's stripe to match the status level, so the popup and
+		// the status board say the same thing at a glance.
+		$stripe = '';
+
+		if ( class_exists( 'ACPS_Alerts_Status' ) ) {
+			$level = ACPS_Alerts_Status::level( $alert->get( 'status_level' ) );
+
+			if ( ! empty( $level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i', $level['color'] ) ) {
+				$stripe = $level['color'];
+			}
+		}
 		?>
 		<div
 			id="acps-alert-<?php echo esc_attr( $id ); ?>"
@@ -405,7 +417,7 @@ class ACPS_Alerts_Frontend {
 			hidden
 		>
 			<div class="acps-alert__overlay" data-acps-overlay></div>
-			<div class="acps-alert__dialog" style="max-width:<?php echo esc_attr( $width ); ?>px">
+			<div class="acps-alert__dialog" style="max-width:<?php echo esc_attr( $width ); ?>px<?php echo $stripe ? ';border-top-color:' . esc_attr( $stripe ) : ''; ?>">
 				<?php if ( $alert->get( 'dismissible' ) ) : ?>
 					<button type="button" class="acps-alert__close" data-acps-close aria-label="<?php esc_attr_e( 'Close alert', 'acps-alert-popups' ); ?>">
 						<span aria-hidden="true">&times;</span>

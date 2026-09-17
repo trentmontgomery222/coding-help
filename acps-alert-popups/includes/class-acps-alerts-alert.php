@@ -91,7 +91,15 @@ class ACPS_Alerts_Alert {
 			 * Status board. An alert is also a status entry: the board shows the
 			 * live one as a banner and the rest as an archive list.
 			 */
-			'status_level'     => array( 'default' => 'advisory', 'type' => 'choice', 'choices' => array( 'normal', 'advisory', 'warning', 'closure', 'emergency' ) ),
+			// Choices come from the status levels, so adding one through the
+			// acps_alerts_status_levels filter makes it saveable too.
+			'status_level'     => array(
+				'default' => 'info',
+				'type'    => 'choice',
+				'choices' => class_exists( 'ACPS_Alerts_Status' )
+					? ACPS_Alerts_Status::level_keys()
+					: array( 'normal', 'info', 'hold', 'secure', 'shelter', 'evacuate', 'lockdown', 'advisory', 'warning', 'closure', 'emergency' ),
+			),
 			'status_message'   => array( 'default' => '', 'type' => 'textarea' ),
 			'on_board'         => array( 'default' => 1, 'type' => 'bool' ),
 			'as_popup'         => array( 'default' => 1, 'type' => 'bool' ),
@@ -322,7 +330,36 @@ class ACPS_Alerts_Alert {
 			}
 		}
 
+		// The settings form edits the "date it happened" as site-local wall
+		// time, because a unix timestamp is no use to a person. Convert it back
+		// here so only one representation is ever stored.
+		if ( array_key_exists( 'posted_at_local', $input ) ) {
+			$clean['posted_at'] = self::local_to_stamp( $input['posted_at_local'] );
+		}
+
 		return $clean;
+	}
+
+	/**
+	 * Turns a site-local wall time into a stored timestamp.
+	 *
+	 * @param mixed $value Value from a datetime-local control.
+	 * @return int Unix timestamp, or 0 when empty or unreadable.
+	 */
+	public static function local_to_stamp( $value ) {
+		$local = self::sanitize_datetime( $value );
+
+		if ( '' === $local ) {
+			return 0;
+		}
+
+		$utc = strtotime( $local . ' UTC' );
+
+		if ( ! $utc ) {
+			return 0;
+		}
+
+		return (int) ( $utc - (int) ( get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS ) );
 	}
 
 	/**

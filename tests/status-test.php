@@ -14,6 +14,7 @@ define( 'MINUTE_IN_SECONDS', 60 );
 define( 'DAY_IN_SECONDS', 86400 );
 
 $GLOBALS['settings']  = array();
+$GLOBALS['options']   = array();
 $GLOBALS['gmt_offset'] = 0;
 $GLOBALS['is_staff']  = false;
 $GLOBALS['logged_in'] = false;
@@ -23,17 +24,26 @@ function add_filter() {}
 function apply_filters( $tag, $value ) { return $value; }
 function do_action() {}
 function __( $s, $d = '' ) { return $s; }
-function get_option( $k, $d = false ) { return 'gmt_offset' === $k ? $GLOBALS['gmt_offset'] : $d; }
+function get_option( $k, $d = false ) {
+	if ( 'gmt_offset' === $k ) { return $GLOBALS['gmt_offset']; }
+	return isset( $GLOBALS['options'][ $k ] ) ? $GLOBALS['options'][ $k ] : $d;
+}
+function update_option( $k, $v, $a = null ) { $GLOBALS['options'][ $k ] = $v; return true; }
+function wp_json_encode( $v ) { return json_encode( $v ); }
 function is_user_logged_in() { return $GLOBALS['logged_in']; }
 function current_user_can( $c ) { return $GLOBALS['is_staff']; }
-function get_post_status( $id ) { return 'publish'; }
+function get_post_status( $id ) { return isset( $GLOBALS['posts'][ $id ] ) || $id < 100 ? 'publish' : false; }
 function get_post_time( $f, $gmt = false, $id = 0 ) { return 0; }
 function sanitize_key( $s ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $s ) ); }
 function sanitize_text_field( $s ) { return trim( strip_tags( (string) $s ) ); }
 function wp_strip_all_tags( $s ) { return strip_tags( (string) $s ); }
 function wp_kses_post( $s ) { return $s; }
-function update_post_meta() { return true; }
-function wp_insert_post() { return 0; }
+function update_post_meta( $id, $k, $v ) { $GLOBALS['post_meta'][ $id ][ $k ] = $v; return true; }
+function wp_insert_post( $arr, $wp_error = false ) {
+	$GLOBALS['next_id'] = isset( $GLOBALS['next_id'] ) ? $GLOBALS['next_id'] + 1 : 100;
+	$GLOBALS['posts'][ $GLOBALS['next_id'] ] = $arr;
+	return $GLOBALS['next_id'];
+}
 function is_wp_error( $t ) { return false; }
 function wp_next_scheduled() { return false; }
 function wp_schedule_event() { return true; }
@@ -62,13 +72,26 @@ class ACPS_Alerts_Alert {
 	const META_PREFIX = '_acps_alert_';
 	private $data;
 	private $id;
-	public function __construct( $data = array(), $id = 1 ) { $this->data = $data; $this->id = $id; }
-	public function get( $k, $d = null ) { return array_key_exists( $k, $this->data ) ? $this->data[ $k ] : $d; }
+	public function __construct( $data = array(), $id = 1 ) {
+		// post_entry() constructs this with just an id.
+		if ( is_int( $data ) ) { $id = $data; $data = array(); }
+		$this->data = $data; $this->id = $id;
+	}
+	public function get( $k, $d = null ) {
+		if ( array_key_exists( $k, $this->data ) ) { return $this->data[ $k ]; }
+		// Fall back to whatever post_entry() saved for this id, so an alert
+		// looked up by id behaves like the real one.
+		if ( isset( $GLOBALS['saved'][ $this->id ][ $k ] ) ) { return $GLOBALS['saved'][ $this->id ][ $k ]; }
+		return $d;
+	}
+	public function get_title() { return isset( $GLOBALS['posts'][ $this->id ]['post_title'] ) ? $GLOBALS['posts'][ $this->id ]['post_title'] : ''; }
 	public function get_id() { return $this->id; }
 	public function is_valid() { return true; }
 	public static function default_settings() { return array(); }
-	public function save( $s ) { return $s; }
+	public function save( $s ) { $GLOBALS['saved'][ $this->id ] = $s; return $s; }
 }
+
+class ACPS_Alerts_Post_Type { const SLUG = 'acps_alert'; }
 
 require ACPS_ALERTS_DIR . 'includes/class-acps-alerts-status.php';
 
@@ -221,10 +244,165 @@ foreach ( $levels as $key => $level ) {
 	);
 }
 
-ok( 'closure outranks advisory', ACPS_Alerts_Status::level( 'closure' )['rank'] > ACPS_Alerts_Status::level( 'advisory' )['rank'] );
-ok( 'emergency outranks closure', ACPS_Alerts_Status::level( 'emergency' )['rank'] > ACPS_Alerts_Status::level( 'closure' )['rank'] );
-check( 'an unknown level falls back to advisory', ACPS_Alerts_Status::level( 'nonsense' ), ACPS_Alerts_Status::level( 'advisory' ) );
-check( 'level choices cover every level', count( ACPS_Alerts_Status::level_choices() ), count( $levels ) );
+/* ---- SRP: the five response actions ---- */
+foreach ( array( 'hold', 'secure', 'shelter', 'evacuate', 'lockdown' ) as $action ) {
+	$l = ACPS_Alerts_Status::level( $action );
+	ok( "'$action' is marked as an SRP action", ! empty( $l['srp'] ) );
+	ok( "'$action' carries the directive staff are trained on", '' !== $l['directive'] );
+	ok( "'$action' has its own colour", (bool) preg_match( '/^#[0-9a-f]{6}$/i', $l['color'] ) );
+}
+
+check( 'HOLD reads as the drill does', ACPS_Alerts_Status::level( 'hold' )['banner'], 'HOLD' );
+check( 'and carries its directive', ACPS_Alerts_Status::level( 'hold' )['directive'], 'In Your Classroom or Area' );
+check( 'LOCKDOWN carries its directive', ACPS_Alerts_Status::level( 'lockdown' )['directive'], 'Locks, Lights, Out of Sight' );
+check( 'SECURE carries its directive', ACPS_Alerts_Status::level( 'secure' )['directive'], 'Get Inside. Lock Outside Doors' );
+check( 'EVACUATE carries its directive', ACPS_Alerts_Status::level( 'evacuate' )['directive'], 'To a Location' );
+
+// Normal and Information are deliberately NOT response actions: calling them
+// SRP would water the protocol down.
+ok( 'normal is not an SRP action', empty( ACPS_Alerts_Status::level( 'normal' )['srp'] ) );
+ok( 'information is not an SRP action', empty( ACPS_Alerts_Status::level( 'info' )['srp'] ) );
+
+/* ---- ranking decides which update takes the banner ---- */
+ok( 'lockdown outranks evacuate', ACPS_Alerts_Status::level( 'lockdown' )['rank'] > ACPS_Alerts_Status::level( 'evacuate' )['rank'] );
+ok( 'evacuate outranks shelter', ACPS_Alerts_Status::level( 'evacuate' )['rank'] > ACPS_Alerts_Status::level( 'shelter' )['rank'] );
+ok( 'shelter outranks secure', ACPS_Alerts_Status::level( 'shelter' )['rank'] > ACPS_Alerts_Status::level( 'secure' )['rank'] );
+ok( 'secure outranks hold', ACPS_Alerts_Status::level( 'secure' )['rank'] > ACPS_Alerts_Status::level( 'hold' )['rank'] );
+ok( 'every action outranks information', ACPS_Alerts_Status::level( 'hold' )['rank'] > ACPS_Alerts_Status::level( 'info' )['rank'] );
+
+/* ---- fallbacks and the picker ---- */
+check( 'an unknown level falls back to information', ACPS_Alerts_Status::level( 'nonsense' ), ACPS_Alerts_Status::level( 'info' ) );
+
+$choices = ACPS_Alerts_Status::level_choices();
+ok( 'the picker offers every SRP action', 5 === count( array_intersect( array_keys( $choices ), array( 'hold', 'secure', 'shelter', 'evacuate', 'lockdown' ) ) ) );
+ok( 'the picker hides retired wording', ! isset( $choices['advisory'] ) && ! isset( $choices['closure'] ) );
+ok( 'an SRP choice shows its directive in the label', false !== strpos( $choices['lockdown'], 'Locks, Lights, Out of Sight' ) );
+
+/* ---- entries written before the move to SRP still render ---- */
+foreach ( array( 'advisory', 'warning', 'closure', 'emergency' ) as $old ) {
+	$l = ACPS_Alerts_Status::level( $old );
+	ok( "the retired level '$old' still resolves", '' !== $l['banner'] );
+	ok( "the retired level '$old' is flagged legacy", ! empty( $l['legacy'] ) );
+}
+
+check( 'every level key is saveable', count( ACPS_Alerts_Status::level_keys() ), count( $levels ) );
+
+/* ---- premade archive entries (backfilling past events) ---- */
+$GLOBALS['gmt_offset'] = 0;
+$GLOBALS['saved'] = array();
+
+check( 'a bare date reads as midday, so no timezone shift moves the day',
+	gmdate( 'Y-m-d H:i', ACPS_Alerts_Status::parse_date( '2026-09-04' ) ), '2026-09-04 12:00' );
+check( 'a full datetime is read as given',
+	gmdate( 'Y-m-d H:i', ACPS_Alerts_Status::parse_date( '2026-09-04 08:30' ) ), '2026-09-04 08:30' );
+check( 'an empty date reads as 0', ACPS_Alerts_Status::parse_date( '' ), 0 );
+check( 'nonsense reads as 0', ACPS_Alerts_Status::parse_date( 'not a date' ), 0 );
+
+// Backfill a past event.
+$id = ACPS_Alerts_Status::post_entry( array(
+	'title'    => 'Phishing campaign identified & contained',
+	'level'    => 'advisory',
+	'message'  => 'Handled.',
+	'archived' => true,
+	'date'     => '2026-09-04',
+	'as_popup' => true,
+) );
+
+ok( 'a backfilled entry is created', $id > 0 );
+$e = $GLOBALS['saved'][ $id ];
+check( 'it is archived on arrival', $e['archived'], 1 );
+check( 'it never pops up, even if asked', $e['as_popup'], 0 );
+check( 'it keeps the date it happened',
+	gmdate( 'Y-m-d', $e['posted_at'] ), '2026-09-04' );
+check( 'the post itself is dated to match',
+	substr( $GLOBALS['posts'][ $id ]['post_date_gmt'], 0, 10 ), '2026-09-04' );
+
+// A live entry is unaffected.
+$live_id = ACPS_Alerts_Status::post_entry( array(
+	'title' => 'Snow day', 'level' => 'closure', 'as_popup' => true,
+) );
+$l = $GLOBALS['saved'][ $live_id ];
+check( 'a live entry is not archived', $l['archived'], 0 );
+check( 'a live entry may pop up', $l['as_popup'], 1 );
+check( 'a live entry is dated now', abs( $l['posted_at'] - time() ) < 5, true );
+ok( 'a live entry does not force a post date', ! isset( $GLOBALS['posts'][ $live_id ]['post_date_gmt'] ) );
+
+// An archived entry is never "current", so it cannot reach the banner.
+$backfilled = new ACPS_Alerts_Alert( array(
+	'enabled' => 1, 'archived' => 1, 'expires_mode' => 'keep', 'posted_at' => ACPS_Alerts_Status::parse_date( '2026-09-04' ),
+) );
+check( 'a backfilled entry is never current', ACPS_Alerts_Status::is_current( $backfilled ), false );
+
+// Ordering: the archive sorts by the date it happened, not when it was typed.
+$older = new ACPS_Alerts_Alert( array( 'posted_at' => ACPS_Alerts_Status::parse_date( '2025-01-01' ) ) );
+$newer = new ACPS_Alerts_Alert( array( 'posted_at' => ACPS_Alerts_Status::parse_date( '2026-09-04' ) ) );
+ok( 'a later event sorts above an earlier one',
+	ACPS_Alerts_Status::posted_time( $newer ) > ACPS_Alerts_Status::posted_time( $older ) );
+
+/* ---- saving the page again must not post the update again ---- */
+$GLOBALS['options'] = array();
+$GLOBALS['saved']   = array();
+
+$compose = array(
+	'title'   => 'Snow Day',
+	'level'   => 'closure',
+	'message' => 'All schools closed.',
+	'expires' => 'daily',
+);
+
+check( 'nothing posted yet, so the first save goes ahead',
+	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), false );
+
+$first = ACPS_Alerts_Status::post_entry( $compose );
+ACPS_Alerts_Status::remember_posted( 'node1', $compose, $first );
+
+check( 'saving the page again does NOT post it again',
+	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), true );
+
+// Twelve more saves of an unchanged page.
+$posted_again = 0;
+for ( $i = 0; $i < 12; $i++ ) {
+	if ( ! ACPS_Alerts_Status::already_posted( 'node1', $compose, false ) ) {
+		$posted_again++;
+	}
+}
+check( 'twelve repeat saves post nothing', $posted_again, 0 );
+
+// Changing any field makes it a new update.
+$changed = array_merge( $compose, array( 'message' => 'Now reopening.' ) );
+check( 'changing the message posts a new update',
+	ACPS_Alerts_Status::already_posted( 'node1', $changed, false ), false );
+
+$changed_title = array_merge( $compose, array( 'title' => 'Snow Day 2' ) );
+check( 'changing the headline posts a new update',
+	ACPS_Alerts_Status::already_posted( 'node1', $changed_title, false ), false );
+
+$changed_level = array_merge( $compose, array( 'level' => 'warning' ) );
+check( 'changing the level posts a new update',
+	ACPS_Alerts_Status::already_posted( 'node1', $changed_level, false ), false );
+
+// A different board is independent.
+check( 'another board is not blocked by this one',
+	ACPS_Alerts_Status::already_posted( 'node2', $compose, false ), false );
+
+// Once the entry has come down, the same wording may be used again.
+$GLOBALS['saved'][ $first ]['archived'] = 1;
+check( 'the same wording may be posted again after it is archived',
+	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), false );
+
+// A backfilled record is never posted twice, archived or not.
+$GLOBALS['options'] = array();
+$back = array( 'title' => 'Phishing contained', 'level' => 'advisory', 'message' => 'Handled.', 'archived' => true, 'date' => '2026-09-04' );
+$bid  = ACPS_Alerts_Status::post_entry( $back );
+ACPS_Alerts_Status::remember_posted( 'node1', $back, $bid );
+check( 'a backfilled record is never posted twice',
+	ACPS_Alerts_Status::already_posted( 'node1', $back, true ), true );
+
+// If the entry was deleted, the same update may be posted afresh.
+$GLOBALS['options'] = array();
+ACPS_Alerts_Status::remember_posted( 'node1', $compose, 99999 );
+check( 'a deleted entry does not block a repost',
+	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), false );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All status cases passed\n";
 exit( $fails ? 1 : 0 );
