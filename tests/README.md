@@ -9,6 +9,7 @@ plugin zip.
 
 ```bash
 php tests/failsafe-test.php
+php tests/post-type-test.php
 php tests/help-test.php
 for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
 ```
@@ -45,6 +46,24 @@ assertion):
 
 `admin-healthy` is the control for `missing-help`. The help layer only loads on
 admin requests, so without it `missing-help` would pass for the wrong reason.
+
+`post-type-test.php` — pins the "there's no way to save it" bug. Alerts used to
+live on whatever post type Beaver Builder registered for popups, so whether the
+Add New screen had a title field and a Publish button was out of the plugin's
+hands — and with Beaver Themer layouts it had neither. These checks assert:
+
+- the alert post type is registered with an admin UI, and supports title,
+  editor and revisions — the things that make a screen savable
+- it is publicly queryable with a rewrite slug, because Beaver Builder edits a
+  layout on a front-end URL, but stays out of search, archives and nav menus
+- the post type is handed to Beaver Builder via its filter, preserving whatever
+  other types were already enabled
+- "Add New" points at the plugin's own type — even when a Beaver Builder popup
+  type also exists, and even when an admin has overridden the source type
+- popups that already exist on a Beaver Builder type are still listed, and
+  `is_popup()` accepts each source while rejecting ordinary pages and non-popup
+  Themer layouts
+- the plugin reports itself ready with Beaver Builder switched off
 
 `help-test.php` — the teaching layer:
 

@@ -165,9 +165,7 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
-		$message = ACPS_Alerts_Source::builder_active()
-			? __( 'ACPS Alert Popups could not find a Beaver Builder popup post type. Choose one under Site Alerts &rarr; Settings.', 'acps-alert-popups' )
-			: __( 'ACPS Alert Popups needs the Beaver Builder plugin to be active.', 'acps-alert-popups' );
+		$message = __( 'ACPS Alert Popups could not register its alert post type. Try deactivating and reactivating the plugin.', 'acps-alert-popups' );
 		?>
 		<div class="notice notice-warning">
 			<p><?php echo esc_html( $message ); ?></p>
@@ -395,12 +393,12 @@ class ACPS_Alerts_Admin {
 
 			<?php if ( empty( $popups ) ) : ?>
 				<div class="acps-empty">
-					<h2><?php esc_html_e( 'No popups yet — let’s make one', 'acps-alert-popups' ); ?></h2>
-					<p><?php esc_html_e( 'An alert is a Beaver Builder popup that this plugin switches on and aims at the right people. Once you create a popup it appears here on its own.', 'acps-alert-popups' ); ?></p>
+					<h2><?php esc_html_e( 'No alerts yet — let’s make one', 'acps-alert-popups' ); ?></h2>
+					<p><?php esc_html_e( 'An alert is a popup this plugin switches on and aims at the right people. You write it like any other WordPress page, and design it in Beaver Builder if you want to.', 'acps-alert-popups' ); ?></p>
 					<ol>
-						<li><?php esc_html_e( 'Create the popup in Beaver Builder and write what it should say.', 'acps-alert-popups' ); ?></li>
-						<li><?php esc_html_e( 'Publish it.', 'acps-alert-popups' ); ?></li>
-						<li><?php esc_html_e( 'Come back here, open it, and tick "Alert is live".', 'acps-alert-popups' ); ?></li>
+						<li><?php esc_html_e( 'Create the alert and write what it should say.', 'acps-alert-popups' ); ?></li>
+						<li><?php esc_html_e( 'Publish it — a draft never shows.', 'acps-alert-popups' ); ?></li>
+						<li><?php esc_html_e( 'Tick "Alert is live" in Site Alert Settings on the same screen.', 'acps-alert-popups' ); ?></li>
 					</ol>
 					<p>
 						<a class="button button-primary button-hero" href="<?php echo esc_url( admin_url( 'admin.php?page=acps-alerts-new' ) ); ?>"><?php esc_html_e( 'Make my first alert', 'acps-alert-popups' ); ?></a>
@@ -577,18 +575,30 @@ class ACPS_Alerts_Admin {
 
 			<?php if ( ! ACPS_Alerts_Source::is_ready() ) : ?>
 				<div class="notice notice-warning inline">
-					<p><?php esc_html_e( 'Beaver Builder popups are not available yet, so alerts cannot be created. Check Site Alerts &rarr; Settings.', 'acps-alert-popups' ); ?></p>
+					<p><?php esc_html_e( 'The alert post type could not be registered, so alerts cannot be created. Deactivate and reactivate the plugin, and check Site Alerts &rarr; Settings.', 'acps-alert-popups' ); ?></p>
 				</div>
 			<?php else : ?>
 				<ol class="acps-steps">
-					<li><?php esc_html_e( 'Create the popup in Beaver Builder and design its content there.', 'acps-alert-popups' ); ?></li>
-					<li><?php esc_html_e( 'Publish the popup.', 'acps-alert-popups' ); ?></li>
-					<li><?php esc_html_e( 'Come back to Site Alerts, open the popup and switch the alert on.', 'acps-alert-popups' ); ?></li>
+					<li><?php esc_html_e( 'Give the alert a title and write what it should say.', 'acps-alert-popups' ); ?></li>
+					<li>
+						<?php if ( ACPS_Alerts_Source::builder_active() ) : ?>
+							<?php esc_html_e( 'Publish it, then use Launch Beaver Builder if you want to design it in the builder.', 'acps-alert-popups' ); ?>
+						<?php else : ?>
+							<?php esc_html_e( 'Publish it — a draft never shows.', 'acps-alert-popups' ); ?>
+						<?php endif; ?>
+					</li>
+					<li><?php esc_html_e( 'On the same screen, scroll to Site Alert Settings and tick "Alert is live".', 'acps-alert-popups' ); ?></li>
 				</ol>
 				<p>
-					<a class="button button-primary" href="<?php echo esc_url( ACPS_Alerts_Source::new_popup_url() ); ?>"><?php esc_html_e( 'Create a Beaver Builder popup', 'acps-alert-popups' ); ?></a>
+					<a class="button button-primary button-hero" href="<?php echo esc_url( ACPS_Alerts_Source::new_popup_url() ); ?>"><?php esc_html_e( 'Create the alert', 'acps-alert-popups' ); ?></a>
 					<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::MENU_SLUG ) ); ?>"><?php esc_html_e( 'Back to all alerts', 'acps-alert-popups' ); ?></a>
 				</p>
+
+				<?php if ( ! ACPS_Alerts_Source::builder_active() ) : ?>
+					<p class="description">
+						<?php esc_html_e( 'Beaver Builder is not active. Alerts still work — you will write them in the normal WordPress editor instead of the builder.', 'acps-alert-popups' ); ?>
+					</p>
+				<?php endif; ?>
 			<?php endif; ?>
 		</div>
 		<?php
@@ -868,9 +878,9 @@ class ACPS_Alerts_Admin {
 	 * @return void
 	 */
 	public function register_meta_box() {
-		$post_type = ACPS_Alerts_Source::post_type();
+		$post_types = ACPS_Alerts_Source::source_post_types();
 
-		if ( '' === $post_type ) {
+		if ( empty( $post_types ) ) {
 			return;
 		}
 
@@ -878,7 +888,7 @@ class ACPS_Alerts_Admin {
 			'acps-alert-settings',
 			__( 'Site Alert Settings', 'acps-alert-popups' ),
 			ACPS_Alerts_Failsafe::wrap( array( $this, 'render_meta_box' ), 'admin/metabox-render' ),
-			$post_type,
+			$post_types,
 			'normal',
 			'high'
 		);
@@ -938,8 +948,8 @@ class ACPS_Alerts_Admin {
 	 */
 	public function enqueue_assets( $hook ) {
 		$screen    = get_current_screen();
-		$post_type = ACPS_Alerts_Source::post_type();
-		$is_popup  = $screen && $post_type && $screen->post_type === $post_type && in_array( $screen->base, array( 'post' ), true );
+		$types     = ACPS_Alerts_Source::source_post_types();
+		$is_popup  = $screen && in_array( (string) $screen->post_type, $types, true ) && in_array( $screen->base, array( 'post' ), true );
 		$is_plugin = false !== strpos( (string) $hook, self::MENU_SLUG );
 
 		if ( ! $is_popup && ! $is_plugin ) {

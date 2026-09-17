@@ -50,6 +50,14 @@ class ACPS_Alerts_Source {
 			return $configured;
 		}
 
+		// The plugin's own type is the one new alerts are created in, because
+		// it is the only one we can guarantee has a title field and a Publish
+		// button. Beaver Builder's own popup types are still read (see
+		// source_post_types()), they are just not where new alerts go.
+		if ( post_type_exists( ACPS_Alerts_Post_Type::SLUG ) ) {
+			return ACPS_Alerts_Post_Type::SLUG;
+		}
+
 		foreach ( self::candidates() as $slug ) {
 			if ( post_type_exists( $slug ) ) {
 				return $slug;
@@ -57,6 +65,36 @@ class ACPS_Alerts_Source {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Every post type alerts may be read from: ours, plus any Beaver Builder
+	 * popup type that exists, so popups built before this plugin still appear.
+	 *
+	 * @return string[]
+	 */
+	public static function source_post_types() {
+		$types = array();
+
+		$primary = self::post_type();
+
+		if ( '' !== $primary ) {
+			$types[] = $primary;
+		}
+
+		foreach ( self::candidates() as $slug ) {
+			// Themer layouts hold every kind of layout in one post type, so they
+			// are read separately, filtered by their layout meta.
+			if ( 'fl-theme-layout' === $slug ) {
+				continue;
+			}
+
+			if ( post_type_exists( $slug ) ) {
+				$types[] = $slug;
+			}
+		}
+
+		return array_values( array_unique( $types ) );
 	}
 
 	/**
@@ -86,7 +124,11 @@ class ACPS_Alerts_Source {
 	 * @return bool
 	 */
 	public static function is_ready() {
-		return self::builder_active() && '' !== self::post_type();
+		// Beaver Builder is no longer a hard requirement. The plugin owns its
+		// post type, so alerts can be written in the ordinary editor and shown
+		// even if the builder is switched off — losing the builder should cost
+		// the design tools, not the alerts that are already running.
+		return '' !== self::post_type();
 	}
 
 	/**
@@ -96,16 +138,16 @@ class ACPS_Alerts_Source {
 	 * @return WP_Post[]
 	 */
 	public static function get_popups( array $args = array() ) {
-		$post_type = self::post_type();
+		$post_types = self::source_post_types();
 
-		if ( '' === $post_type ) {
+		if ( empty( $post_types ) ) {
 			return array();
 		}
 
 		$query_args = wp_parse_args(
 			$args,
 			array(
-				'post_type'              => $post_type,
+				'post_type'              => $post_types,
 				'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
 				'posts_per_page'         => 200,
 				'orderby'                => 'title',
@@ -116,7 +158,11 @@ class ACPS_Alerts_Source {
 			)
 		);
 
+		// A Themer layout post type holds every kind of layout, so it can only be
+		// read with a meta filter — which would wrongly exclude posts of the
+		// other types. When Themer is the chosen source, query it on its own.
 		if ( self::is_themer_layout() ) {
+			$query_args['post_type']  = 'fl-theme-layout';
 			$query_args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 				array(
 					'key'     => '_fl_theme_layout_type',
@@ -202,17 +248,17 @@ class ACPS_Alerts_Source {
 	 * @return bool
 	 */
 	public static function is_popup( $post_id ) {
-		$post_type = self::post_type();
+		$type = get_post_type( $post_id );
 
-		if ( '' === $post_type || get_post_type( $post_id ) !== $post_type ) {
+		if ( ! $type ) {
 			return false;
 		}
 
-		if ( self::is_themer_layout() && 'popup' !== get_post_meta( $post_id, '_fl_theme_layout_type', true ) ) {
-			return false;
+		if ( 'fl-theme-layout' === $type ) {
+			return 'popup' === get_post_meta( $post_id, '_fl_theme_layout_type', true );
 		}
 
-		return true;
+		return in_array( $type, self::source_post_types(), true );
 	}
 
 	/**
@@ -253,7 +299,9 @@ class ACPS_Alerts_Source {
 	 * @return string
 	 */
 	public static function new_popup_url() {
-		$post_type = self::post_type();
+		// Always the plugin's own type: it is the one guaranteed to give an
+		// editing screen you can actually save from.
+		$post_type = post_type_exists( ACPS_Alerts_Post_Type::SLUG ) ? ACPS_Alerts_Post_Type::SLUG : self::post_type();
 
 		if ( '' === $post_type ) {
 			return admin_url( 'admin.php?page=acps-alerts-settings' );

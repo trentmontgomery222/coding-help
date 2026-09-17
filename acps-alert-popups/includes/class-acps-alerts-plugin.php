@@ -13,6 +13,13 @@ defined( 'ABSPATH' ) || exit;
 class ACPS_Alerts_Plugin {
 
 	/**
+	 * The alert post type.
+	 *
+	 * @var ACPS_Alerts_Post_Type
+	 */
+	public $post_type;
+
+	/**
 	 * Admin handler.
 	 *
 	 * @var ACPS_Alerts_Admin
@@ -61,8 +68,9 @@ class ACPS_Alerts_Plugin {
 	 * @return void
 	 */
 	public function init() {
-		$this->admin    = new ACPS_Alerts_Admin();
-		$this->frontend = new ACPS_Alerts_Frontend();
+		$this->post_type = new ACPS_Alerts_Post_Type();
+		$this->admin     = new ACPS_Alerts_Admin();
+		$this->frontend  = new ACPS_Alerts_Frontend();
 		$this->builder  = new ACPS_Alerts_Builder();
 		$this->updater  = new ACPS_Alerts_Updater();
 		$this->panel    = new ACPS_Alerts_Panel( $this->updater );
@@ -74,6 +82,8 @@ class ACPS_Alerts_Plugin {
 		// way. Order matters only in that the front end is the most important to
 		// get up, so it goes first.
 		$subsystems = array(
+			// The post type goes up first: everything else reads from it.
+			'post-type' => array( $this->post_type, 'init' ),
 			'frontend' => array( $this->frontend, 'init' ),
 			'builder'  => array( $this->builder, 'init' ),
 			'updater'  => array( $this->updater, 'register' ),

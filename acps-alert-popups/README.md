@@ -1,18 +1,18 @@
 # ACPS Alert Popups
 
-Turns Beaver Builder Popups into a managed site alert system for a single WordPress site.
+A managed site alert system for a single WordPress site, designed in Beaver Builder.
 
 The split is deliberate:
 
-- **Beaver Builder** owns what the alert *looks like*. You design the popup in the builder, exactly like any other layout.
+- **The alert content** — what it says and how it looks — is an ordinary WordPress post you can design in Beaver Builder, exactly like any other layout.
 - **wp-admin** owns *when, where and to whom* it runs — on/off, schedule, page targeting, audience, trigger and how often it comes back.
 
-Nothing about the alert content lives in this plugin, so an alert can be re-designed in the builder at any time without touching settings.
+Content and settings are stored separately, so an alert can be redesigned at any time without touching its settings.
 
 ## Requirements
 
-- WordPress 6.0+, PHP 7.4+
-- Beaver Builder with its Popups feature (single site; the plugin is not network-aware by design)
+- WordPress 6.0+, PHP 7.4+ (single site; the plugin is not network-aware by design)
+- Beaver Builder is **recommended, not required**. With it you design alerts in the builder; without it you write them in the normal WordPress editor and everything else works the same.
 
 ## Installing
 
@@ -20,7 +20,11 @@ Nothing about the alert content lives in this plugin, so an alert can be re-desi
 2. Activate **ACPS Alert Popups** in Plugins.
 3. Open **Site Alerts** in the admin menu.
 
-If the plugin cannot find the popup post type it will say so; pick the right post type under **Site Alerts → Settings → Popup post type**. The plugin auto-detects `fl-popup`, `fl_popup`, `fl-builder-popup`, `flbuilder_popup` and Beaver Themer popup layouts (`fl-theme-layout` with a layout type of `popup`).
+### Where alerts are stored
+
+The plugin registers its own `acps_alert` post type and hands it to Beaver Builder, so a new alert always opens on a normal WordPress editing screen — title, editor, Publish button — and gets a **Launch Beaver Builder** button once published.
+
+It does not rely on Beaver Builder registering a popup post type, because that feature is not in every version and its slug has changed between them. Popups you already built on a Beaver Builder popup type are still detected and listed alongside your alerts: `fl-popup`, `fl_popup`, `fl-builder-popup`, `flbuilder_popup`, and Beaver Themer popup layouts (`fl-theme-layout` with a layout type of `popup`). You can also force a specific source under **Site Alerts → Settings → Popup post type**.
 
 ## Learning it
 

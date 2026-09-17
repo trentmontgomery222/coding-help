@@ -59,6 +59,7 @@ class ACPS_Alerts_Failsafe {
 	public static function required_files() {
 		return array(
 			'includes/class-acps-alerts-settings.php',
+			'includes/class-acps-alerts-post-type.php',
 			'includes/class-acps-alerts-source.php',
 			'includes/class-acps-alerts-alert.php',
 			'includes/class-acps-alerts-conditions.php',

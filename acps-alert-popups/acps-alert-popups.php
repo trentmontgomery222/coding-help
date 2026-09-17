@@ -343,6 +343,14 @@ function acps_alerts_activate() {
 		ACPS_Alerts_Failsafe::clear_problems();
 		ACPS_Alerts_Failsafe::reset_breakers();
 	}
+
+	// Register the alert post type and rebuild permalinks now, so the builder's
+	// front-end editing URL works on the very first alert instead of 404ing.
+	if ( is_readable( ACPS_ALERTS_DIR . 'includes/class-acps-alerts-post-type.php' ) ) {
+		require_once ACPS_ALERTS_DIR . 'includes/class-acps-alerts-post-type.php';
+
+		ACPS_Alerts_Post_Type::activate();
+	}
 }
 
 /**

@@ -68,9 +68,9 @@ class ACPS_Alerts_Help {
 			return '';
 		}
 
-		$post_type = ACPS_Alerts_Source::post_type();
+		$types = ACPS_Alerts_Source::source_post_types();
 
-		if ( $post_type && $screen->post_type === $post_type && in_array( $screen->base, array( 'post', 'edit' ), true ) ) {
+		if ( in_array( (string) $screen->post_type, $types, true ) && in_array( $screen->base, array( 'post', 'edit' ), true ) ) {
 			return 'popup';
 		}
 
@@ -447,40 +447,40 @@ class ACPS_Alerts_Help {
 
 		return array(
 			array(
-				'key'   => 'builder',
-				'done'  => ACPS_Alerts_Source::builder_active(),
-				'label' => __( 'Beaver Builder is active', 'acps-alert-popups' ),
-				'why'   => __( 'Alerts are Beaver Builder popups, so the builder has to be running.', 'acps-alert-popups' ),
-				'fix'   => __( 'Activate Beaver Builder under Plugins.', 'acps-alert-popups' ),
+				'key'   => 'type',
+				'done'  => '' !== ACPS_Alerts_Source::post_type(),
+				'label' => __( 'The plugin is ready', 'acps-alert-popups' ),
+				'why'   => __( 'Its alert post type is registered, so alerts can be created and saved.', 'acps-alert-popups' ),
+				'fix'   => __( 'Deactivate and reactivate the plugin.', 'acps-alert-popups' ),
 				'url'   => admin_url( 'plugins.php' ),
 				'cta'   => __( 'Open Plugins', 'acps-alert-popups' ),
 			),
 			array(
-				'key'   => 'type',
-				'done'  => '' !== ACPS_Alerts_Source::post_type(),
-				'label' => __( 'Popups were found', 'acps-alert-popups' ),
-				'why'   => __( 'The plugin finds Beaver Builder’s popups on its own.', 'acps-alert-popups' ),
-				'fix'   => __( 'If this stays unticked, choose the popup type by hand in Settings.', 'acps-alert-popups' ),
-				'url'   => admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::SETTINGS_SLUG ),
-				'cta'   => __( 'Open Settings', 'acps-alert-popups' ),
+				'key'   => 'builder',
+				'done'  => ACPS_Alerts_Source::builder_active(),
+				'label' => __( 'Beaver Builder is active (optional)', 'acps-alert-popups' ),
+				'why'   => __( 'With it you design alerts in the builder. Without it they still work — you write them in the normal editor.', 'acps-alert-popups' ),
+				'fix'   => __( 'Activate Beaver Builder under Plugins if you want to design alerts in the builder.', 'acps-alert-popups' ),
+				'url'   => admin_url( 'plugins.php' ),
+				'cta'   => __( 'Open Plugins', 'acps-alert-popups' ),
 			),
 			array(
 				'key'   => 'created',
 				'done'  => count( $popups ) > 0,
-				'label' => __( 'You have made at least one popup', 'acps-alert-popups' ),
+				'label' => __( 'You have made at least one alert', 'acps-alert-popups' ),
 				'why'   => __( 'This is the alert itself: the words and the design.', 'acps-alert-popups' ),
-				'fix'   => __( 'Create one in Beaver Builder — it appears here by itself.', 'acps-alert-popups' ),
+				'fix'   => __( 'Create one — it appears in the list by itself.', 'acps-alert-popups' ),
 				'url'   => admin_url( 'admin.php?page=acps-alerts-new' ),
-				'cta'   => __( 'Make a popup', 'acps-alert-popups' ),
+				'cta'   => __( 'Make an alert', 'acps-alert-popups' ),
 			),
 			array(
 				'key'   => 'published',
 				'done'  => $published > 0,
-				'label' => __( 'A popup is published', 'acps-alert-popups' ),
-				'why'   => __( 'A draft popup never shows, even when the alert is switched on.', 'acps-alert-popups' ),
-				'fix'   => __( 'Open the popup and publish it.', 'acps-alert-popups' ),
+				'label' => __( 'An alert is published', 'acps-alert-popups' ),
+				'why'   => __( 'A draft never shows, even when the alert is switched on.', 'acps-alert-popups' ),
+				'fix'   => __( 'Open the alert and publish it.', 'acps-alert-popups' ),
 				'url'   => admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG ),
-				'cta'   => __( 'See my popups', 'acps-alert-popups' ),
+				'cta'   => __( 'See my alerts', 'acps-alert-popups' ),
 			),
 			array(
 				'key'   => 'enabled',

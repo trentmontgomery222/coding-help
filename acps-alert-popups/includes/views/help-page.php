@@ -133,23 +133,24 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 
 		<ol class="acps-steps-big">
 			<li>
-				<h3><?php esc_html_e( 'Create the popup in Beaver Builder', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Use the Add New Alert button. It takes you into Beaver Builder, where you write the alert exactly like any other page.', 'acps-alert-popups' ); ?></p>
+				<h3><?php esc_html_e( 'Create the alert and write it', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'Use the Add New Alert button. You get an ordinary WordPress editing screen: give it a title, write what it should say, and save.', 'acps-alert-popups' ); ?></p>
 				<p><?php esc_html_e( 'Keep it short: a heading, a sentence or two, and at most one button.', 'acps-alert-popups' ); ?></p>
 				<a class="button button-primary" href="<?php echo esc_url( $acps_new_url ); ?>"><?php esc_html_e( 'Do this now', 'acps-alert-popups' ); ?></a>
 			</li>
 			<li>
 				<h3><?php esc_html_e( 'Publish it', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'A popup left as a draft will never appear, however it is configured. This catches almost everybody once.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'An alert left as a draft will never appear, however it is configured. This catches almost everybody once.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
-				<h3><?php esc_html_e( 'Open its alert settings', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Back in Site Alerts, click the popup’s name. This is where it becomes a real alert.', 'acps-alert-popups' ); ?></p>
-				<a class="button" href="<?php echo esc_url( $acps_list_url ); ?>"><?php esc_html_e( 'Open Site Alerts', 'acps-alert-popups' ); ?></a>
+				<h3><?php esc_html_e( 'Design it in Beaver Builder (optional)', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'Once it is published, a Launch Beaver Builder button appears at the top of the alert. Use it to lay the alert out in the builder, exactly like any other page.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'If you skip this, the alert simply shows what you wrote in the normal editor.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
 				<h3><?php esc_html_e( 'Tick "Alert is live"', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'That single tick is what puts it in front of visitors. Everything else just narrows it down.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'Scroll down the same screen to Site Alert Settings. That single tick is what puts it in front of visitors — everything else just narrows it down.', 'acps-alert-popups' ); ?></p>
+				<a class="button" href="<?php echo esc_url( $acps_list_url ); ?>"><?php esc_html_e( 'Open Site Alerts', 'acps-alert-popups' ); ?></a>
 			</li>
 			<li>
 				<h3><?php esc_html_e( 'Aim it, then save', 'acps-alert-popups' ); ?></h3>

@@ -110,6 +110,49 @@
 	margin-bottom: 6px;
 }
 
+/* -------------------------------------------------- Alert editor banner */
+
+.acps-editor-banner {
+	background: #f0f6fc;
+	border: 1px solid #c5d9ed;
+	border-left: 4px solid #2271b1;
+	border-radius: 0 4px 4px 0;
+	padding: 12px 18px;
+	margin: 12px 0;
+}
+
+.acps-editor-banner__lede {
+	margin: 0 0 6px;
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.acps-editor-banner ol {
+	margin: 0 0 4px 18px;
+	color: #3c434a;
+}
+
+.acps-editor-banner li {
+	margin-bottom: 4px;
+}
+
+.acps-editor-banner__todo {
+	display: inline-block;
+	background: #fcf3d4;
+	color: #6a4c00;
+	border-radius: 9px;
+	padding: 0 8px;
+	font-size: 11px;
+	font-weight: 600;
+	margin-left: 4px;
+}
+
+.acps-editor-banner__hint {
+	margin: 6px 0 0;
+	color: #646970;
+	font-size: 13px;
+}
+
 /* ------------------------------------------------------- Live preview */
 
 .acps-preview {
