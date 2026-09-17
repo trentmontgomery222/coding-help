@@ -9,6 +9,7 @@ plugin zip.
 
 ```bash
 php tests/failsafe-test.php
+php tests/idempotency-test.php
 php tests/post-type-test.php
 php tests/status-test.php
 php tests/render-test.php
@@ -48,6 +49,25 @@ assertion):
 
 `admin-healthy` is the control for `missing-help`. The help layer only loads on
 admin requests, so without it `missing-help` would pass for the wrong reason.
+
+`idempotency-test.php` — pins the "everything is twice everywhere" bug.
+WordPress de-duplicates hook callbacks by a unique id, which is stable for
+`[$obj, 'method']` but per-object for a closure. Wrapping every hook in a
+closure quietly removed that protection, so anything that ran the wiring twice
+duplicated every menu, notice and fragment. These checks assert:
+
+- wiring the same hook + context + priority twice registers it once, and the
+  callback runs once
+- the same holds for filters
+- two genuinely different callbacks on one hook both still register
+- the same context on a different hook, or at a different priority, is not
+  swallowed
+- a de-duplicated wrapper still catches a throw
+- the plugin file bails if loaded a second time, `boot()` runs once per request,
+  and the container wires once
+
+Verified non-vacuous: with the de-duplication removed it fails with
+"registers it once: expected 1, got 2".
 
 `post-type-test.php` — pins the "there's no way to save it" bug. Alerts used to
 live on whatever post type Beaver Builder registered for popups, so whether the

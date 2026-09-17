@@ -235,6 +235,10 @@ class ACPS_Alerts_Failsafe {
 	 * @return void
 	 */
 	public static function action( $hook, $callable, $context, $priority = 10, $args = 1 ) {
+		if ( self::already_registered( 'action', $hook, $context, $priority ) ) {
+			return;
+		}
+
 		add_action( $hook, self::wrap( $callable, $context ), $priority, $args );
 	}
 
@@ -250,7 +254,46 @@ class ACPS_Alerts_Failsafe {
 	 * @return void
 	 */
 	public static function filter( $hook, $callable, $context, $priority = 10, $args = 1 ) {
+		if ( self::already_registered( 'filter', $hook, $context, $priority ) ) {
+			return;
+		}
+
 		add_filter( $hook, self::wrap( $callable, $context, 0 ), $priority, $args );
+	}
+
+	/**
+	 * Whether this hook has already been wired, and records it if not.
+	 *
+	 * WordPress normally protects you from registering the same callback twice:
+	 * add_action( $hook, array( $obj, 'method' ) ) builds a stable id, so a
+	 * second identical call is a no-op. A closure does NOT get a stable id —
+	 * every wrap() is a new object with its own hash — so wrapping every hook
+	 * quietly removed that protection, and anything that ran the wiring twice
+	 * duplicated every menu, notice and fragment the plugin prints.
+	 *
+	 * Keeping our own register of hook + context + priority puts that guarantee
+	 * back.
+	 *
+	 * @param string $kind     action | filter.
+	 * @param string $hook     Hook name.
+	 * @param string $context  Label, unique per callback.
+	 * @param int    $priority Priority.
+	 * @return bool True when it was already registered.
+	 */
+	protected static function already_registered( $kind, $hook, $context, $priority ) {
+		static $seen = array();
+
+		$key = $kind . '|' . $hook . '|' . $context . '|' . (int) $priority;
+
+		if ( isset( $seen[ $key ] ) ) {
+			self::log( 'skipped a duplicate registration of ' . $hook . ' (' . $context . ')', 'failsafe' );
+
+			return true;
+		}
+
+		$seen[ $key ] = true;
+
+		return false;
 	}
 
 	/**

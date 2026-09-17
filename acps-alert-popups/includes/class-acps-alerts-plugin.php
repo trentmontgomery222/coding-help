@@ -13,6 +13,13 @@ defined( 'ABSPATH' ) || exit;
 class ACPS_Alerts_Plugin {
 
 	/**
+	 * Whether the hooks have already been wired.
+	 *
+	 * @var bool
+	 */
+	protected $wired = false;
+
+	/**
 	 * The alert post type.
 	 *
 	 * @var ACPS_Alerts_Post_Type
@@ -75,6 +82,14 @@ class ACPS_Alerts_Plugin {
 	 * @return void
 	 */
 	public function init() {
+		// Wire once. Everything below registers hooks, so running it twice would
+		// double every menu, notice and fragment the plugin outputs.
+		if ( $this->wired ) {
+			return;
+		}
+
+		$this->wired = true;
+
 		$this->post_type = new ACPS_Alerts_Post_Type();
 		$this->status    = new ACPS_Alerts_Status();
 		$this->admin     = new ACPS_Alerts_Admin();

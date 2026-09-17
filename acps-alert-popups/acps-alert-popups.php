@@ -18,6 +18,19 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// If this file is loaded twice — a second copy of the plugin folder, or an
+// include from somewhere else — stop here. Loading it twice would wire every
+// hook twice and print every menu, notice and popup twice.
+if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
+	// Count it so the admin can be told, rather than left wondering why a
+	// plugin that looks active is doing nothing.
+	$GLOBALS['acps_alerts_duplicate_load'] = isset( $GLOBALS['acps_alerts_duplicate_load'] )
+		? (int) $GLOBALS['acps_alerts_duplicate_load'] + 1
+		: 1;
+
+	return;
+}
+
 define( 'ACPS_ALERTS_VERSION', '1.0.0' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
@@ -50,6 +63,30 @@ function acps_alerts_may_run() {
 	}
 
 	return version_compare( PHP_VERSION, ACPS_ALERTS_MIN_PHP, '>=' );
+}
+
+/**
+ * Warns when a second copy of this plugin is installed and active.
+ *
+ * Two copies is the usual reason for "everything appears twice": both get
+ * loaded, both wire their hooks, and every menu and notice prints twice. The
+ * second copy is stopped dead at the top of this file, but the admin still
+ * needs to know it is there so they can delete it.
+ *
+ * @return void
+ */
+function acps_alerts_duplicate_notice() {
+	if ( empty( $GLOBALS['acps_alerts_duplicate_load'] ) || ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
+	echo '<div class="notice notice-warning"><p><strong>'
+		. esc_html__( 'ACPS Alert Popups is installed more than once.', 'acps-alert-popups' )
+		. '</strong> '
+		. esc_html__( 'Only one copy is running; the extra copies were stopped so they could not duplicate your menus and alerts. Go to Plugins, deactivate and delete the duplicates, and keep a single copy.', 'acps-alert-popups' )
+		. '</p><p><a class="button" href="' . esc_url( admin_url( 'plugins.php?s=ACPS+Alert+Popups' ) ) . '">'
+		. esc_html__( 'Open Plugins', 'acps-alert-popups' )
+		. '</a></p></div>';
 }
 
 /**
@@ -258,6 +295,15 @@ function acps_alerts() {
  * @return void
  */
 function acps_alerts_boot() {
+	// Boot once per request, whatever fires this.
+	static $booted = false;
+
+	if ( $booted ) {
+		return;
+	}
+
+	$booted = true;
+
 	// Hard stops first: an unsupported PHP version or the wp-config kill switch
 	// means nothing else in this plugin runs at all.
 	if ( ! acps_alerts_may_run() ) {
@@ -270,6 +316,10 @@ function acps_alerts_boot() {
 
 	// The resume control must work even while dormant.
 	add_action( 'admin_post_acps_alerts_resume', 'acps_alerts_resume_from_safe_mode' );
+
+	if ( is_admin() ) {
+		add_action( 'admin_notices', 'acps_alerts_duplicate_notice' );
+	}
 
 	if ( acps_alerts_is_safe_mode() ) {
 		if ( is_admin() ) {
