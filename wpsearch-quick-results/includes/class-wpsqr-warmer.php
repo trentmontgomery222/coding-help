@@ -155,7 +155,7 @@ class WPSQR_Warmer {
 				continue;
 			}
 
-			WPSQR_Engine::search( $term, array( 'page' => 1 ) );
+			WPSQR_Engine::search( $term, array( 'page' => 1, 'internal' => true ) );
 
 			$warmed++;
 			$done[] = $term;

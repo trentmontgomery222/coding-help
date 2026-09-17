@@ -19,6 +19,7 @@ class WPSQR_Admin {
 		add_action( 'admin_post_wpsqr_warm', array( $this, 'handle_warm' ) );
 		add_action( 'admin_post_wpsqr_reindex', array( $this, 'handle_reindex' ) );
 		add_action( 'admin_post_wpsqr_updates', array( $this, 'handle_updates_save' ) );
+		add_action( 'admin_post_wpsqr_reset_stats', array( $this, 'handle_reset_stats' ) );
 		add_action( 'admin_post_wpsqr_save', array( $this, 'handle_save' ) );
 		add_action( 'admin_notices', array( $this, 'directory_notice' ) );
 	}
@@ -244,6 +245,16 @@ class WPSQR_Admin {
 				<?php submit_button( __( 'Empty the cache', 'wpsqr' ), 'delete', 'submit', false ); ?>
 				<span class="description" style="margin-inline-start:1em">
 					<?php esc_html_e( 'Happens automatically whenever a post is saved.', 'wpsqr' ); ?>
+				</span>
+			</form>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:1rem 0"
+				onsubmit="return confirm('Clear all recorded search statistics? This cannot be undone.');">
+				<?php wp_nonce_field( 'wpsqr_reset_stats' ); ?>
+				<input type="hidden" name="action" value="wpsqr_reset_stats">
+				<?php submit_button( __( 'Clear search statistics', 'wpsqr' ), 'delete', 'submit', false ); ?>
+				<span class="description" style="margin-inline-start:1em">
+					<?php esc_html_e( 'Wipes the popularity table below. Useful after a change that skewed the numbers.', 'wpsqr' ); ?>
 				</span>
 			</form>
 
@@ -1351,6 +1362,19 @@ class WPSQR_Admin {
 		WPSQR_Plugin::update( $new );
 
 		wp_safe_redirect( add_query_arg( 'updated', '1', admin_url( 'admin.php?page=wpsqr-settings' ) ) );
+		exit;
+	}
+
+	public function handle_reset_stats() {
+		check_admin_referer( 'wpsqr_reset_stats' );
+
+		if ( ! current_user_can( self::CAP ) ) {
+			wp_die( esc_html__( 'Not allowed.', 'wpsqr' ) );
+		}
+
+		WPSQR_Stats::reset();
+
+		wp_safe_redirect( add_query_arg( 'stats_reset', '1', admin_url( 'admin.php?page=wpsqr' ) ) );
 		exit;
 	}
 

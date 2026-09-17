@@ -34,6 +34,11 @@ class WPSQR_Engine {
 				'page'     => 1,
 				'per_page' => (int) WPSQR_Plugin::settings()['per_page'],
 				'engine'   => 'default',
+				// Warm-ups and other machine-run searches pass true, so they
+				// fill the cache without being counted as things people
+				// searched for. Counting them made every warmed term climb in
+				// lockstep and drowned out the real popularity signal.
+				'internal' => false,
 			)
 		);
 
@@ -77,7 +82,9 @@ class WPSQR_Engine {
 
 		if ( null !== $hit ) {
 			WPSQR_Cache::record_hit( $key );
-			WPSQR_Stats::record( $normalized, $term, $hit['total'], 0, true );
+			if ( ! $args['internal'] ) {
+				WPSQR_Stats::record( $normalized, $term, $hit['total'], 0, true );
+			}
 
 			return array(
 				'post_ids' => $hit['post_ids'],
@@ -108,7 +115,9 @@ class WPSQR_Engine {
 			)
 		);
 
-		WPSQR_Stats::record( $normalized, $term, count( $filtered ), $ms, false );
+		if ( ! $args['internal'] ) {
+			WPSQR_Stats::record( $normalized, $term, count( $filtered ), $ms, false );
+		}
 
 		return array(
 			'post_ids' => $filtered,
