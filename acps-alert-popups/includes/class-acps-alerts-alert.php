@@ -86,6 +86,30 @@ class ACPS_Alerts_Alert {
 			'show_overlay'     => array( 'default' => 1, 'type' => 'bool' ),
 			'aria_label'       => array( 'default' => '', 'type' => 'text' ),
 			'notes'            => array( 'default' => '', 'type' => 'textarea' ),
+
+			/*
+			 * Status board. An alert is also a status entry: the board shows the
+			 * live one as a banner and the rest as an archive list.
+			 */
+			'status_level'     => array( 'default' => 'advisory', 'type' => 'choice', 'choices' => array( 'normal', 'advisory', 'warning', 'closure', 'emergency' ) ),
+			'status_message'   => array( 'default' => '', 'type' => 'textarea' ),
+			'on_board'         => array( 'default' => 1, 'type' => 'bool' ),
+			'as_popup'         => array( 'default' => 1, 'type' => 'bool' ),
+			'archived'         => array( 'default' => 0, 'type' => 'bool' ),
+			'posted_at'        => array( 'default' => 0, 'type' => 'stamp' ),
+
+			/*
+			 * How the entry comes down. 'daily' is the house rule: it archives
+			 * itself at the daily cut-off. 'keep' stays until someone removes
+			 * it; 'custom' uses the start/end schedule above.
+			 */
+			'expires_mode'     => array( 'default' => 'daily', 'type' => 'choice', 'choices' => array( 'daily', 'keep', 'custom' ) ),
+
+			/*
+			 * Who may see it at all. This sits in front of the audience rules:
+			 * 'admins' is for staging an alert where only staff can check it.
+			 */
+			'visibility'       => array( 'default' => 'public', 'type' => 'choice', 'choices' => array( 'public', 'admins', 'preview' ) ),
 		);
 	}
 
@@ -247,6 +271,11 @@ class ACPS_Alerts_Alert {
 				case 'int':
 					$value         = absint( $value );
 					$clean[ $key ] = max( $field['min'], min( $field['max'], $value ) );
+					break;
+
+				case 'stamp':
+					// A unix timestamp, kept whole rather than clamped.
+					$clean[ $key ] = absint( $value );
 					break;
 
 				case 'choice':

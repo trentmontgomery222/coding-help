@@ -10,6 +10,7 @@ plugin zip.
 ```bash
 php tests/failsafe-test.php
 php tests/post-type-test.php
+php tests/status-test.php
 php tests/help-test.php
 for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
 ```
@@ -64,6 +65,23 @@ hands — and with Beaver Themer layouts it had neither. These checks assert:
   `is_popup()` accepts each source while rejecting ordinary pages and non-popup
   Themer layouts
 - the plugin reports itself ready with Beaver Builder switched off
+
+`status-test.php` — the status board. The daily cut-off is the part worth
+pinning:
+
+- the cut-off time is validated, and anything malformed falls back to 17:50
+- the deadline lands at the cut-off on the same day for a morning post, rolls to
+  the following day for an evening one, and rolls exactly one day just before
+  midnight
+- posting exactly at the cut-off runs until tomorrow, so an update is never
+  archived the instant it is posted
+- the cut-off is 17:50 in **site** time, not UTC (checked against a UTC-5 site)
+- "keep" and "custom" entries never expire on the daily sweep
+- an entry past its cut-off stops being current even if cron never fired
+- the admin-only view: a visitor and a logged-in non-staff user both fail to see
+  a staff-only entry, staff see it, and nobody sees a preview-only entry on the
+  board
+- every level maps to a real severity and the ranks order correctly
 
 `help-test.php` — the teaching layer:
 

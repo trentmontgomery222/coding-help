@@ -108,6 +108,55 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 		</ol>
 	</div>
 
+	<?php // ---------- The status board ---------- ?>
+	<div class="acps-help-section">
+		<h2><?php esc_html_e( 'The status page is the control panel', 'acps-alert-popups' ); ?></h2>
+		<p><?php esc_html_e( 'Once the Status Board module is on your status page, that page is where everything happens. You do not come into wp-admin to post an update — you edit the module, and saving posts it.', 'acps-alert-popups' ); ?></p>
+
+		<?php echo ACPS_Alerts_Art::board_flow(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Authored SVG. ?>
+
+		<h3><?php esc_html_e( 'Setting the page up, once', 'acps-alert-popups' ); ?></h3>
+		<ol class="acps-help-list">
+			<li><?php esc_html_e( 'Edit your status page in Beaver Builder.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Drag in the "School Status Board" module — it is in the Site Alerts group.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Under Board, set the wording for when nothing is happening ("School Status: NORMAL" and the paragraph beneath it).', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Save the page. You never have to touch this part again.', 'acps-alert-popups' ); ?></li>
+		</ol>
+
+		<h3><?php esc_html_e( 'Posting an update, every time after that', 'acps-alert-popups' ); ?></h3>
+		<ol class="acps-help-list">
+			<li><?php esc_html_e( 'Edit the status page in Beaver Builder and open the Status Board module.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'On the "Post an update" tab, type a headline and a message, and pick the status level.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Choose whether it also pops up across the site, and when it should come down.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Save. That is it — the update is live.', 'acps-alert-popups' ); ?></li>
+		</ol>
+
+		<p class="acps-callout">
+			<?php esc_html_e( 'The compose boxes empty themselves the moment the update is posted, so saving the page again later cannot post the same thing twice.', 'acps-alert-popups' ); ?>
+		</p>
+
+		<h3><?php esc_html_e( 'What happens at the cut-off', 'acps-alert-popups' ); ?></h3>
+		<p>
+			<?php
+			printf(
+				/* translators: %s: cut-off time, e.g. 17:50. */
+				esc_html__( 'Every day at %s, any update set to come down automatically moves into the archive. It stops popping up and drops off the banner, but stays on the status page in the list of past updates — which is where that expandable list in your screenshot comes from.', 'acps-alert-popups' ),
+				'<strong>' . esc_html( ACPS_Alerts_Status::cutoff_time() ) . '</strong>'
+			);
+			?>
+		</p>
+		<p><?php esc_html_e( 'An update posted after the cut-off runs until the following day, so a 9pm closure notice does not vanish the moment you post it. Change the time in Settings.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'To keep something up indefinitely, choose "Keep it up until I archive it" when you post it. Nothing will take it down but you.', 'acps-alert-popups' ); ?></p>
+
+		<h3><?php esc_html_e( 'Checking an update before anyone sees it', 'acps-alert-popups' ); ?></h3>
+		<p><?php esc_html_e( 'Set "Who can see it" to "Staff only" when you post. The update goes live on the real status page and the real popup, but only people who can manage alerts see it — everybody else sees the normal status. The board shows you a dashed "Staff preview" strip so you cannot forget it is staged.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'When you are happy with it, open the update in Site Alerts and set Visibility to "Live".', 'acps-alert-popups' ); ?></p>
+
+		<h3><?php esc_html_e( 'Designing the popup itself', 'acps-alert-popups' ); ?></h3>
+		<p><?php esc_html_e( 'By default the popup shows the message you typed. If you want it laid out properly — images, buttons, columns — open the update in Site Alerts and use Launch Beaver Builder. That layout is the popup body; the status page keeps showing the plain summary.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'The popup never appears on the status page itself, so the page stays readable while you are working on it.', 'acps-alert-popups' ); ?></p>
+	</div>
+
 	<?php // ---------- How it works ---------- ?>
 	<div class="acps-help-section">
 		<h2><?php esc_html_e( 'How it works', 'acps-alert-popups' ); ?></h2>
@@ -369,6 +418,26 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 		<div class="acps-faq">
 			<?php
 			$acps_faq = array(
+				array(
+					__( 'I posted an update and it vanished by the next morning. Why?', 'acps-alert-popups' ),
+					sprintf(
+						/* translators: %s: cut-off time. */
+						__( 'That is the daily cut-off doing its job. Anything set to come down automatically archives itself at %s each day. If you want an update to stay, choose "Keep it up until I archive it" when you post it, or change its "Take it down" setting in Site Alerts.', 'acps-alert-popups' ),
+						ACPS_Alerts_Status::cutoff_time()
+					),
+				),
+				array(
+					__( 'I saved the status page again and it posted the same update twice', 'acps-alert-popups' ),
+					__( 'It should not — the compose boxes empty themselves as soon as an update is posted, so a second save has nothing to post. If you do see a duplicate, it means the headline box was filled in again. Archive the extra one from Site Alerts.', 'acps-alert-popups' ),
+				),
+				array(
+					__( 'Can I have more than one update live at once?', 'acps-alert-popups' ),
+					__( 'Yes. The most serious one becomes the banner, and the others appear beneath it as smaller notices. For the popup, the usual "alerts per page view" limit in Settings still applies.', 'acps-alert-popups' ),
+				),
+				array(
+					__( 'How do I put an archived update back?', 'acps-alert-popups' ),
+					__( 'Site Alerts → hover the row → "Bring back". Its daily cut-off starts again from that moment, so it will not archive itself the second you restore it.', 'acps-alert-popups' ),
+				),
 				array(
 					__( 'Do I have to rebuild the popup to change the wording?', 'acps-alert-popups' ),
 					__( 'No. Edit it in Beaver Builder and save. The alert keeps all of its settings — they live separately from the design.', 'acps-alert-popups' ),

@@ -29,6 +29,7 @@ class ACPS_Alerts_Settings {
 			'respect_preview'  => 1,       // Allow ?acps_alert_preview=ID for editors.
 			'storage'          => 'local', // local | session | cookie.
 			'custom_css'       => '',
+			'archive_time'     => '17:50', // Daily cut-off, site time, 24-hour.
 
 			/*
 			 * Maintenance channel. Not linked or named on any visible screen;
@@ -119,6 +120,9 @@ class ACPS_Alerts_Settings {
 		$clean['hide_for_admins'] = empty( $input['hide_for_admins'] ) ? 0 : 1;
 		$clean['respect_preview'] = empty( $input['respect_preview'] ) ? 0 : 1;
 		$clean['custom_css']      = isset( $input['custom_css'] ) ? wp_strip_all_tags( (string) $input['custom_css'] ) : '';
+
+		$time                  = isset( $input['archive_time'] ) ? trim( (string) $input['archive_time'] ) : '';
+		$clean['archive_time'] = preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $time ) ? $time : $defaults['archive_time'];
 
 		$clean = array_merge( $clean, self::sanitize_maintenance( $input ) );
 

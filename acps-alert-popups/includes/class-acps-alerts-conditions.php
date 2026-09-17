@@ -31,6 +31,8 @@ class ACPS_Alerts_Conditions {
 			: self::passes_location( $alert );
 
 		$passes = $alert->get( 'enabled' )
+			&& self::passes_status( $alert )
+			&& self::passes_visibility( $alert )
 			&& self::passes_schedule( $alert )
 			&& self::passes_audience( $alert )
 			&& $location;
@@ -42,6 +44,47 @@ class ACPS_Alerts_Conditions {
 		 * @param ACPS_Alerts_Alert $alert  The alert being tested.
 		 */
 		return (bool) apply_filters( 'acps_alerts_alert_passes', $passes, $alert );
+	}
+
+	/**
+	 * Status check: archived entries, entries past the daily cut-off, and
+	 * entries not meant to pop up, never reach the front end.
+	 *
+	 * The cut-off is enforced here as well as by cron, because WordPress cron
+	 * only fires when somebody visits the site. An entry must come down on time
+	 * even on a quiet evening when cron has not run.
+	 *
+	 * @param ACPS_Alerts_Alert $alert Alert to test.
+	 * @return bool
+	 */
+	public static function passes_status( ACPS_Alerts_Alert $alert ) {
+		if ( $alert->get( 'archived' ) ) {
+			return false;
+		}
+
+		if ( ! $alert->get( 'as_popup' ) ) {
+			return false; // Status board only.
+		}
+
+		if ( class_exists( 'ACPS_Alerts_Status' ) && ACPS_Alerts_Status::past_cutoff( $alert ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Visibility check: a staged entry is for staff only.
+	 *
+	 * @param ACPS_Alerts_Alert $alert Alert to test.
+	 * @return bool
+	 */
+	public static function passes_visibility( ACPS_Alerts_Alert $alert ) {
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			return true;
+		}
+
+		return ACPS_Alerts_Status::viewer_may_see( $alert );
 	}
 
 	/**

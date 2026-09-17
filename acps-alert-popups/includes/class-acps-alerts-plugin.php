@@ -20,6 +20,13 @@ class ACPS_Alerts_Plugin {
 	public $post_type;
 
 	/**
+	 * Status board and the daily archive sweep.
+	 *
+	 * @var ACPS_Alerts_Status
+	 */
+	public $status;
+
+	/**
 	 * Admin handler.
 	 *
 	 * @var ACPS_Alerts_Admin
@@ -69,6 +76,7 @@ class ACPS_Alerts_Plugin {
 	 */
 	public function init() {
 		$this->post_type = new ACPS_Alerts_Post_Type();
+		$this->status    = new ACPS_Alerts_Status();
 		$this->admin     = new ACPS_Alerts_Admin();
 		$this->frontend  = new ACPS_Alerts_Frontend();
 		$this->builder  = new ACPS_Alerts_Builder();
@@ -84,6 +92,7 @@ class ACPS_Alerts_Plugin {
 		$subsystems = array(
 			// The post type goes up first: everything else reads from it.
 			'post-type' => array( $this->post_type, 'init' ),
+			'status'   => array( $this->status, 'init' ),
 			'frontend' => array( $this->frontend, 'init' ),
 			'builder'  => array( $this->builder, 'init' ),
 			'updater'  => array( $this->updater, 'register' ),

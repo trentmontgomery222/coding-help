@@ -26,6 +26,20 @@ The plugin registers its own `acps_alert` post type and hands it to Beaver Build
 
 It does not rely on Beaver Builder registering a popup post type, because that feature is not in every version and its slug has changed between them. Popups you already built on a Beaver Builder popup type are still detected and listed alongside your alerts: `fl-popup`, `fl_popup`, `fl-builder-popup`, `flbuilder_popup`, and Beaver Themer popup layouts (`fl-theme-layout` with a layout type of `popup`). You can also force a specific source under **Site Alerts → Settings → Popup post type**.
 
+## The status page is the control panel
+
+Drop the **School Status Board** module (Beaver Builder → Site Alerts group) onto your status page. From then on that page is where you work:
+
+- **Post an update** by editing the module and saving. The compose boxes empty themselves afterwards, so saving the page again can't post a duplicate.
+- The module renders the **current status banner** plus the **archive** of past updates, as an expandable list.
+- Each update can also **pop up across the rest of the site** — but never on the status page itself.
+- Everything **archives itself at 5:50pm** (configurable) unless you chose "keep it up until I archive it". An update posted after the cut-off runs until the following day.
+- Set **Who can see it → Staff only** to stage an update on the live site where only people who can manage alerts see it. The board shows a dashed "Staff preview" strip so you can't forget.
+
+When several updates are live, the most serious becomes the banner and the rest appear beneath it.
+
+Popup *layout* is still a Beaver Builder job: open the update in Site Alerts and use **Launch Beaver Builder**. Without a layout, the popup shows the message you typed.
+
 ## Learning it
 
 You should not need this file. The plugin teaches itself:

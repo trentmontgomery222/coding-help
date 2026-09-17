@@ -1,0 +1,228 @@
+/**
+ * The status board: the banner and the archive list.
+ *
+ * Structural only. Per-instance colours are emitted by the module itself, and
+ * the theme's own typography is left alone.
+ */
+
+.acps-board__banner {
+	padding: 40px 48px;
+	border-radius: 2px;
+	margin: 0 auto;
+	max-width: 900px;
+	background: #1b2f5e;
+	color: #fff;
+}
+
+.acps-board__title {
+	margin: 0 0 12px;
+	font-size: 1.75em;
+	line-height: 1.25;
+	color: inherit;
+}
+
+.acps-board__headline {
+	margin: 0 0 12px;
+	font-size: 1.15em;
+	font-weight: 600;
+	color: inherit;
+}
+
+.acps-board__message {
+	margin: 0;
+	color: inherit;
+	line-height: 1.6;
+}
+
+.acps-board__message p {
+	margin: 0 0 0.75em;
+	color: inherit;
+}
+
+.acps-board__message p:last-child {
+	margin-bottom: 0;
+}
+
+/* Level colours. A custom banner colour wins over these. */
+.acps-board__banner--normal {
+	background: #1b2f5e;
+}
+
+.acps-board__banner--advisory {
+	background: #1b2f5e;
+}
+
+.acps-board__banner--warning {
+	background: #8a6400;
+}
+
+.acps-board__banner--closure,
+.acps-board__banner--emergency {
+	background: #9b1c1f;
+}
+
+/* Additional live updates, below the main banner. */
+.acps-board__also {
+	max-width: 900px;
+	margin: 12px auto 0;
+	padding: 14px 20px;
+	border-left: 5px solid #1b2f5e;
+	background: #f4f6fa;
+}
+
+.acps-board__also--warning {
+	border-left-color: #8a6400;
+	background: #fdf7e7;
+}
+
+.acps-board__also--closure,
+.acps-board__also--emergency {
+	border-left-color: #9b1c1f;
+	background: #fcf0f0;
+}
+
+.acps-board__also strong {
+	display: inline-block;
+	margin-right: 8px;
+	letter-spacing: 0.04em;
+	font-size: 0.85em;
+}
+
+.acps-board__also p {
+	margin: 6px 0 0;
+}
+
+/* Staff-only staging notice. */
+.acps-board__staged {
+	max-width: 900px;
+	margin: 0 auto 10px;
+	padding: 8px 16px;
+	background: #fdf7e7;
+	border: 1px dashed #b38600;
+	color: #6a4c00;
+	font-weight: 600;
+	border-radius: 2px;
+}
+
+/* ------------------------------------------------------------- Archive */
+
+.acps-board__archive {
+	max-width: 900px;
+	margin: 36px auto 0;
+	border-top: 1px solid #e2e4e9;
+}
+
+.acps-board__entry {
+	border-bottom: 1px solid #e2e4e9;
+}
+
+.acps-board__entry > summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 18px 20px;
+	cursor: pointer;
+	list-style: none;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	font-size: 0.85em;
+	color: #1b2f5e;
+}
+
+.acps-board__entry > summary::-webkit-details-marker {
+	display: none;
+}
+
+.acps-board__entry > summary:hover,
+.acps-board__entry > summary:focus-visible {
+	background: #f7f8fa;
+}
+
+.acps-board__entry-mark {
+	position: relative;
+	flex: 0 0 14px;
+	width: 14px;
+	height: 14px;
+}
+
+.acps-board__entry-mark::before,
+.acps-board__entry-mark::after {
+	content: "";
+	position: absolute;
+	background: #56606f;
+	transition: transform 0.15s ease-out;
+}
+
+.acps-board__entry-mark::before {
+	top: 6px;
+	left: 0;
+	width: 14px;
+	height: 2px;
+}
+
+.acps-board__entry-mark::after {
+	top: 0;
+	left: 6px;
+	width: 2px;
+	height: 14px;
+}
+
+.acps-board__entry[open] .acps-board__entry-mark::after {
+	transform: scaleY( 0 );
+}
+
+.acps-board__entry-body {
+	padding: 0 20px 22px;
+	line-height: 1.6;
+}
+
+.acps-board__entry-level {
+	margin: 0 0 8px;
+	font-size: 0.8em;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: #56606f;
+}
+
+.acps-board__entry--warning .acps-board__entry-level {
+	color: #8a6400;
+}
+
+.acps-board__entry--closure .acps-board__entry-level,
+.acps-board__entry--emergency .acps-board__entry-level {
+	color: #9b1c1f;
+}
+
+/* Builder-only hint. */
+.acps-board__hint {
+	margin: 16px auto 0;
+	max-width: 900px;
+	padding: 10px 14px;
+	background: #f0f6fc;
+	border-left: 4px solid #2271b1;
+	font-size: 14px;
+	color: #3c434a;
+}
+
+@media ( max-width: 600px ) {
+	.acps-board__banner {
+		padding: 28px 22px;
+	}
+
+	.acps-board__entry > summary {
+		padding: 16px 14px;
+	}
+
+	.acps-board__entry-body {
+		padding: 0 14px 18px;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+	.acps-board__entry-mark::before,
+	.acps-board__entry-mark::after {
+		transition: none;
+	}
+}

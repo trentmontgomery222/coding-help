@@ -424,6 +424,78 @@ class ACPS_Alerts_Art {
 	}
 
 	/**
+	 * The status board loop: post it once, it appears in two places, and it
+	 * takes itself down.
+	 *
+	 * @return string
+	 */
+	public static function board_flow() {
+		$cutoff = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::cutoff_time() : '17:50';
+
+		$svg = '
+<svg viewBox="0 0 760 300" class="acps-art" role="img" aria-labelledby="acps-art-bf-t acps-art-bf-d">
+	<title id="acps-art-bf-t">' . esc_html__( 'How a status update travels', 'acps-alert-popups' ) . '</title>
+	<desc id="acps-art-bf-d">' . esc_html__( 'You type the update into the Status Board module and save. It appears on the status page and as a popup across the site, then archives itself at the daily cut-off.', 'acps-alert-popups' ) . '</desc>
+
+	<g class="acps-art-box acps-art-box--accent">
+		<rect x="8" y="30" width="220" height="110" rx="10"/>
+		<text x="118" y="58" class="acps-art-step">' . esc_html__( 'YOU DO THIS', 'acps-alert-popups' ) . '</text>
+		<text x="118" y="84" class="acps-art-h-sm">' . esc_html__( 'Edit the Status Board', 'acps-alert-popups' ) . '</text>
+		<text x="118" y="104" class="acps-art-note" text-anchor="middle">' . esc_html__( 'on the status page,', 'acps-alert-popups' ) . '</text>
+		<text x="118" y="121" class="acps-art-note" text-anchor="middle">' . esc_html__( 'in Beaver Builder', 'acps-alert-popups' ) . '</text>
+	</g>
+
+	<g class="acps-art-arrow"><path d="M236 85 L282 85" marker-end="url(#acps-arrow)"/></g>
+
+	<g class="acps-art-box">
+		<rect x="292" y="8" width="220" height="74" rx="10"/>
+		<text x="402" y="36" class="acps-art-h-sm">' . esc_html__( 'The status page', 'acps-alert-popups' ) . '</text>
+		<text x="402" y="58" class="acps-art-note" text-anchor="middle">' . esc_html__( 'banner + archive list', 'acps-alert-popups' ) . '</text>
+	</g>
+
+	<g class="acps-art-box">
+		<rect x="292" y="94" width="220" height="74" rx="10"/>
+		<text x="402" y="122" class="acps-art-h-sm">' . esc_html__( 'The rest of the site', 'acps-alert-popups' ) . '</text>
+		<text x="402" y="144" class="acps-art-note" text-anchor="middle">' . esc_html__( 'as a popup, if you asked', 'acps-alert-popups' ) . '</text>
+	</g>
+
+	<g class="acps-art-arrow">
+		<path d="M258 74 L292 45" marker-end="url(#acps-arrow)"/>
+		<path d="M258 96 L292 125" marker-end="url(#acps-arrow)"/>
+		<path d="M520 88 L566 88" marker-end="url(#acps-arrow)"/>
+	</g>
+
+	<g class="acps-art-box">
+		<rect x="576" y="30" width="176" height="110" rx="10"/>
+		<text x="664" y="58" class="acps-art-step">' . esc_html__( 'AUTOMATIC', 'acps-alert-popups' ) . '</text>
+		<text x="664" y="84" class="acps-art-h-sm">' . esc_html__( 'Archived at', 'acps-alert-popups' ) . '</text>
+		<text x="664" y="106" class="acps-art-h-sm">' . esc_html( $cutoff ) . '</text>
+		<text x="664" y="126" class="acps-art-note" text-anchor="middle">' . esc_html__( 'every day', 'acps-alert-popups' ) . '</text>
+	</g>
+
+	<g class="acps-art-arrow"><path d="M664 148 L664 196" marker-end="url(#acps-arrow)"/></g>
+
+	<g class="acps-art-map">
+		<rect x="292" y="200" width="460" height="64" rx="8" class="acps-art-off-soft"/>
+		<text x="522" y="228" class="acps-art-h-sm">' . esc_html__( 'It moves into the archive list', 'acps-alert-popups' ) . '</text>
+		<text x="522" y="250" class="acps-art-note" text-anchor="middle">' . esc_html__( 'still on the status page, no longer a popup', 'acps-alert-popups' ) . '</text>
+	</g>
+
+	<text x="8" y="212" class="acps-art-rowhead">' . esc_html__( 'Unless you said', 'acps-alert-popups' ) . '</text>
+	<text x="8" y="232" class="acps-art-note">' . esc_html__( '“keep it up until I archive it”', 'acps-alert-popups' ) . '</text>
+	<text x="8" y="252" class="acps-art-note">' . esc_html__( '— then it stays put.', 'acps-alert-popups' ) . '</text>
+
+	' . self::marker() . '
+</svg>';
+
+		return self::figure(
+			$svg,
+			__( 'How a status update travels', 'acps-alert-popups' ),
+			__( 'One thing to write. It shows in two places and takes itself down on time.', 'acps-alert-popups' )
+		);
+	}
+
+	/**
 	 * Shared arrowhead marker.
 	 *
 	 * @return string

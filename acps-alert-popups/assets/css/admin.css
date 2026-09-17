@@ -63,6 +63,17 @@
 	color: #996800;
 }
 
+.acps-badge--staged {
+	background: #fcf3d4;
+	border-radius: 9px;
+	color: #6a4c00;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 8px;
+	margin-left: 4px;
+	white-space: nowrap;
+}
+
 .acps-badge--draft {
 	background: #f0f0f1;
 	border-radius: 3px;

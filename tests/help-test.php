@@ -9,8 +9,9 @@ define( 'ACPS_ALERTS_DIR', dirname( __DIR__ ) . '/acps-alert-popups/' );
 define( 'ACPS_ALERTS_URL', 'https://example.org/wp-content/plugins/acps-alert-popups/' );
 define( 'ACPS_ALERTS_VERSION', '1.0.0' );
 
-$GLOBALS['posts'] = array();
-$GLOBALS['meta']  = array();
+$GLOBALS['posts']   = array();
+$GLOBALS['meta']    = array();
+$GLOBALS['options'] = array();
 
 function add_action() {}
 function add_filter() {}
@@ -29,6 +30,7 @@ function add_query_arg( $args, $url = '' ) {
 }
 function sanitize_key( $s ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $s ) ); }
 function get_post_status( $p ) { return is_object( $p ) && isset( $p->post_status ) ? $p->post_status : 'publish'; }
+function get_option( $k, $d = false ) { return isset( $GLOBALS['options'][ $k ] ) ? $GLOBALS['options'][ $k ] : $d; }
 function get_user_meta( $u, $k, $s = false ) { return isset( $GLOBALS['meta'][ $k ] ) ? $GLOBALS['meta'][ $k ] : ''; }
 function get_current_user_id() { return 1; }
 function get_current_screen() { return null; }
@@ -118,7 +120,14 @@ ACPS_Alerts_Source::$popups = array( $post );
 
 $after = $help->progress();
 ok( 'creating a popup ticks more items off', $after['done'] > $empty_done );
-check( 'a published, enabled, in-schedule popup completes setup', $after['done'], $after['total'] );
+ok( 'but setup is not complete until the status board is placed', $after['done'] < $after['total'] );
+
+// Placing the Status Board module records the page it lives on.
+$GLOBALS['options']['acps_alerts_board_page'] = 42;
+
+$complete = $help->progress();
+check( 'with the board placed and a live alert, setup is complete', $complete['done'], $complete['total'] );
+check( 'and that reads as 100 percent', $complete['percent'], 100 );
 
 /* ---- tours ---- */
 $tours = $help->tours();

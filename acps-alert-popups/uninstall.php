@@ -17,6 +17,11 @@ try {
 	delete_option( 'acps_alerts_safe_mode' );
 	delete_option( 'acps_alerts_panel_last_edit' );
 	delete_option( 'acps_alerts_problems' );
+	delete_option( 'acps_alerts_board_page' );
+
+	if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+		wp_clear_scheduled_hook( 'acps_alerts_daily_archive' );
+	}
 	delete_transient( 'acps_alerts_update_remote' );
 
 	global $wpdb;

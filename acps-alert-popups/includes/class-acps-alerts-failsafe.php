@@ -60,6 +60,7 @@ class ACPS_Alerts_Failsafe {
 		return array(
 			'includes/class-acps-alerts-settings.php',
 			'includes/class-acps-alerts-post-type.php',
+			'includes/class-acps-alerts-status.php',
 			'includes/class-acps-alerts-source.php',
 			'includes/class-acps-alerts-alert.php',
 			'includes/class-acps-alerts-conditions.php',
@@ -85,6 +86,9 @@ class ACPS_Alerts_Failsafe {
 			'assets/js/alerts.js',
 			'assets/css/admin.css',
 			'assets/js/admin.js',
+			'assets/css/board.css',
+			'modules/status-board/status-board.php',
+			'modules/status-board/includes/frontend.php',
 			'assets/css/help.css',
 			'assets/js/help.js',
 			'assets/css/tour.css',

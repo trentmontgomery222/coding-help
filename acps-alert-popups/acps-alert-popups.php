@@ -359,5 +359,14 @@ function acps_alerts_activate() {
  * @return void
  */
 function acps_alerts_deactivate() {
-	// Alert settings live on popup posts and are intentionally preserved.
+	// Alert settings live on the alert posts and are intentionally preserved.
+	// The daily archive sweep is not: leaving a scheduled event behind for a
+	// plugin that is switched off is just litter in wp_cron.
+	if ( is_readable( ACPS_ALERTS_DIR . 'includes/class-acps-alerts-status.php' ) ) {
+		require_once ACPS_ALERTS_DIR . 'includes/class-acps-alerts-status.php';
+
+		if ( method_exists( 'ACPS_Alerts_Status', 'unschedule' ) ) {
+			ACPS_Alerts_Status::unschedule();
+		}
+	}
 }

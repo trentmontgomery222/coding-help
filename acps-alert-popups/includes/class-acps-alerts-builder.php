@@ -22,6 +22,65 @@ class ACPS_Alerts_Builder {
 	 */
 	public function init() {
 		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'register_module' ), 'builder/register', 20 );
+		ACPS_Alerts_Failsafe::action( 'wp_enqueue_scripts', array( $this, 'enqueue_board_styles' ), 'builder/board-css' );
+	}
+
+	/**
+	 * Loads the status board styling.
+	 *
+	 * Registered always and enqueued only where a board is on the page, so a
+	 * status page gets the styling and every other page carries nothing.
+	 *
+	 * @return void
+	 */
+	public function enqueue_board_styles() {
+		if ( ! ACPS_Alerts_Failsafe::has_file( 'assets/css/board.css' ) ) {
+			return;
+		}
+
+		wp_register_style( 'acps-alerts-board', ACPS_ALERTS_URL . 'assets/css/board.css', array(), ACPS_ALERTS_VERSION );
+
+		// The module asks for this by name when it renders; registering here and
+		// enqueuing on demand keeps it off pages with no board on them.
+		if ( self::board_on_page() ) {
+			wp_enqueue_style( 'acps-alerts-board' );
+		}
+	}
+
+	/**
+	 * Whether the current post's Beaver Builder layout contains a status board.
+	 *
+	 * @return bool
+	 */
+	public static function board_on_page() {
+		if ( ! is_singular() ) {
+			return false;
+		}
+
+		$post_id = get_queried_object_id();
+
+		if ( ! $post_id ) {
+			return false;
+		}
+
+		// Beaver Builder stores its layout as post meta; a plain string search is
+		// far cheaper than parsing the layout, and a false positive only costs
+		// one small stylesheet.
+		$data = get_post_meta( $post_id, '_fl_builder_data', true );
+
+		if ( empty( $data ) ) {
+			return false;
+		}
+
+		$json = (string) wp_json_encode( $data );
+
+		foreach ( array( 'status-board', 'ACPS_Status_Board_Module' ) as $needle ) {
+			if ( false !== strpos( $json, $needle ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -42,18 +101,23 @@ class ACPS_Alerts_Builder {
 			return;
 		}
 
-		$file = ACPS_ALERTS_DIR . 'modules/alert-trigger/alert-trigger.php';
+		// Optional files: a missing module costs that module, not the site.
+		$modules = array(
+			'ACPS_Alert_Trigger_Module' => 'modules/alert-trigger/alert-trigger.php',
+			'ACPS_Status_Board_Module'  => 'modules/status-board/status-board.php',
+		);
 
-		// Optional file: a missing module costs the trigger button, not the site.
-		if ( ! is_readable( $file ) ) {
-			return;
+		foreach ( $modules as $class => $rel ) {
+			if ( class_exists( $class ) ) {
+				continue; // Already loaded.
+			}
+
+			$file = ACPS_ALERTS_DIR . $rel;
+
+			if ( is_readable( $file ) ) {
+				require_once $file;
+			}
 		}
-
-		if ( class_exists( 'ACPS_Alert_Trigger_Module' ) ) {
-			return; // Already loaded.
-		}
-
-		require_once $file;
 	}
 
 	/**

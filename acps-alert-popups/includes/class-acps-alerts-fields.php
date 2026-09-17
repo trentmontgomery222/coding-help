@@ -65,6 +65,53 @@ class ACPS_Alerts_Fields {
 				?>
 			<?php self::section_close(); ?>
 
+			<?php self::section_open( __( 'Status board', 'acps-alert-popups' ), 'board' ); ?>
+				<?php
+				self::row(
+					__( 'Status level', 'acps-alert-popups' ),
+					self::select( 'status_level', $s['status_level'], ACPS_Alerts_Status::level_choices() ),
+					__( 'Sets the wording and colour of the banner on the status page.', 'acps-alert-popups' )
+				);
+
+				self::row(
+					__( 'Summary', 'acps-alert-popups' ),
+					self::textarea( 'status_message', $s['status_message'] ),
+					__( 'Shown on the status board and in the archive. Also used for the popup unless you design one in Beaver Builder.', 'acps-alert-popups' )
+				);
+
+				self::row(
+					__( 'Where it appears', 'acps-alert-popups' ),
+					self::checkbox( 'on_board', $s['on_board'], __( 'Show on the status board', 'acps-alert-popups' ) )
+					. self::checkbox( 'as_popup', $s['as_popup'], __( 'Pop up across the site', 'acps-alert-popups' ) ),
+					__( 'An update can do both, or just one.', 'acps-alert-popups' )
+				);
+
+				self::row(
+					__( 'Take it down', 'acps-alert-popups' ),
+					self::select(
+						'expires_mode',
+						$s['expires_mode'],
+						array(
+							'daily'  => sprintf(
+								/* translators: %s: cut-off time, e.g. 17:50. */
+								__( 'Automatically, at the daily cut-off (%s)', 'acps-alert-popups' ),
+								ACPS_Alerts_Status::cutoff_time()
+							),
+							'keep'   => __( 'Keep it up until I archive it', 'acps-alert-popups' ),
+							'custom' => __( 'Use the start and end dates below', 'acps-alert-popups' ),
+						)
+					),
+					__( 'The cut-off is set in Settings. An update posted after it runs until the following day.', 'acps-alert-popups' )
+				);
+
+				self::row(
+					__( 'Archived', 'acps-alert-popups' ),
+					self::checkbox( 'archived', $s['archived'], __( 'This update is in the archive', 'acps-alert-popups' ) ),
+					__( 'Archived updates drop off the banner and the popup, and appear in the list of past updates.', 'acps-alert-popups' )
+				);
+				?>
+			<?php self::section_close(); ?>
+
 			<?php self::section_open( __( 'Schedule', 'acps-alert-popups' ), 'schedule' ); ?>
 				<?php
 				self::row(
@@ -129,6 +176,20 @@ class ACPS_Alerts_Fields {
 
 			<?php self::section_open( __( 'Who sees it', 'acps-alert-popups' ), 'who' ); ?>
 				<?php
+				self::row(
+					__( 'Visibility', 'acps-alert-popups' ),
+					self::select(
+						'visibility',
+						$s['visibility'],
+						array(
+							'public'  => __( 'Live — everybody can see it', 'acps-alert-popups' ),
+							'admins'  => __( 'Staff only — stage it before it goes out', 'acps-alert-popups' ),
+							'preview' => __( 'Hidden — only through the preview link', 'acps-alert-popups' ),
+						)
+					),
+					__( 'Staff only shows the update on the real site to people who can manage alerts, and to nobody else — on the board and in the popup. Use it to check an update before the public sees it.', 'acps-alert-popups' )
+				);
+
 				self::row(
 					__( 'Audience', 'acps-alert-popups' ),
 					self::select(

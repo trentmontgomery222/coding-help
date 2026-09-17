@@ -465,6 +465,15 @@ class ACPS_Alerts_Help {
 				'cta'   => __( 'Open Plugins', 'acps-alert-popups' ),
 			),
 			array(
+				'key'   => 'board',
+				'done'  => (bool) get_option( 'acps_alerts_board_page', 0 ),
+				'label' => __( 'The Status Board is on a page', 'acps-alert-popups' ),
+				'why'   => __( 'Drop the "School Status Board" module onto your status page. After that you post every update from there.', 'acps-alert-popups' ),
+				'fix'   => __( 'Edit your status page in Beaver Builder and add the module from the Site Alerts group.', 'acps-alert-popups' ),
+				'url'   => admin_url( 'edit.php?post_type=page' ),
+				'cta'   => __( 'Open Pages', 'acps-alert-popups' ),
+			),
+			array(
 				'key'   => 'created',
 				'done'  => count( $popups ) > 0,
 				'label' => __( 'You have made at least one alert', 'acps-alert-popups' ),

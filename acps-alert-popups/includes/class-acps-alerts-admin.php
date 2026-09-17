@@ -205,7 +205,47 @@ class ACPS_Alerts_Admin {
 
 		if ( 'save' === $action ) {
 			$this->handle_alert_save();
+
+			return;
 		}
+
+		if ( 'archive' === $action || 'restore' === $action ) {
+			$this->handle_archive( $action );
+		}
+	}
+
+	/**
+	 * Archives or restores a status entry from the list screen.
+	 *
+	 * @param string $action archive | restore.
+	 * @return void
+	 */
+	protected function handle_archive( $action ) {
+		$alert_id = isset( $_GET['alert'] ) ? absint( $_GET['alert'] ) : 0;
+		$nonce    = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+
+		if ( ! $alert_id || ! wp_verify_nonce( $nonce, 'acps_alerts_' . $action . '_' . $alert_id ) ) {
+			wp_die( esc_html__( 'That link expired. Please reload the alerts list and try again.', 'acps-alert-popups' ) );
+		}
+
+		if ( ! current_user_can( self::capability() ) || ! ACPS_Alerts_Source::is_popup( $alert_id ) ) {
+			wp_die( esc_html__( 'You are not allowed to change this alert.', 'acps-alert-popups' ) );
+		}
+
+		if ( 'archive' === $action ) {
+			ACPS_Alerts_Status::archive_entry( $alert_id );
+		} else {
+			ACPS_Alerts_Status::restore_entry( $alert_id );
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				'acps_message',
+				'archive' === $action ? 'archived' : 'restored',
+				admin_url( 'admin.php?page=' . self::MENU_SLUG )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -357,6 +397,8 @@ class ACPS_Alerts_Admin {
 			'enabled'        => __( 'Alert is now live.', 'acps-alert-popups' ),
 			'disabled'       => __( 'Alert switched off.', 'acps-alert-popups' ),
 			'settings-saved' => __( 'Settings saved.', 'acps-alert-popups' ),
+			'archived'       => __( 'Update moved to the archive.', 'acps-alert-popups' ),
+			'restored'       => __( 'Update brought back. Its daily cut-off starts again from now.', 'acps-alert-popups' ),
 		);
 
 		if ( ! isset( $messages[ $message ] ) ) {
@@ -380,6 +422,15 @@ class ACPS_Alerts_Admin {
 		<div class="wrap acps-alerts-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Site Alerts', 'acps-alert-popups' ); ?></h1>
 			<a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-alerts-new' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Add New Alert', 'acps-alert-popups' ); ?></a>
+			<?php
+			$board_page = (int) get_option( 'acps_alerts_board_page', 0 );
+
+			if ( $board_page && 'publish' === get_post_status( $board_page ) ) :
+				?>
+				<a href="<?php echo esc_url( add_query_arg( 'fl_builder', '', get_permalink( $board_page ) ) ); ?>" class="page-title-action">
+					<?php esc_html_e( 'Post an update on the status page', 'acps-alert-popups' ); ?>
+				</a>
+			<?php endif; ?>
 			<?php if ( class_exists( 'ACPS_Alerts_Help' ) ) : ?>
 				<button type="button" class="page-title-action" data-acps-tour="first-alert"><?php esc_html_e( 'Show me how', 'acps-alert-popups' ); ?></button>
 			<?php endif; ?>
@@ -438,9 +489,24 @@ class ACPS_Alerts_Admin {
 	 * @return void
 	 */
 	protected function render_list_row( ACPS_Alerts_Alert $alert ) {
-		$id      = $alert->get_id();
-		$enabled = (bool) $alert->get( 'enabled' );
-		$live    = $enabled && ACPS_Alerts_Conditions::passes_schedule( $alert ) && 'publish' === get_post_status( $id );
+		$id       = $alert->get_id();
+		$enabled  = (bool) $alert->get( 'enabled' );
+		$archived = (bool) $alert->get( 'archived' );
+		$expired  = ACPS_Alerts_Status::past_cutoff( $alert );
+		$staged   = 'public' !== $alert->get( 'visibility' );
+		$live     = ACPS_Alerts_Status::is_current( $alert );
+
+		$archive_url = wp_nonce_url(
+			add_query_arg(
+				array(
+					'page'        => self::MENU_SLUG,
+					'acps_action' => $archived ? 'restore' : 'archive',
+					'alert'       => $id,
+				),
+				admin_url( 'admin.php' )
+			),
+			'acps_alerts_' . ( $archived ? 'restore' : 'archive' ) . '_' . $id
+		);
 
 		$edit_url = add_query_arg(
 			array(
@@ -491,16 +557,27 @@ class ACPS_Alerts_Admin {
 					<span><a href="<?php echo esc_url( $edit_url ); ?>"><?php esc_html_e( 'Alert settings', 'acps-alert-popups' ); ?></a> | </span>
 					<span><a href="<?php echo esc_url( ACPS_Alerts_Source::builder_edit_url( $id ) ); ?>"><?php esc_html_e( 'Edit in Beaver Builder', 'acps-alert-popups' ); ?></a> | </span>
 					<span><a href="<?php echo esc_url( ACPS_Alerts_Source::post_edit_url( $id ) ); ?>"><?php esc_html_e( 'WordPress editor', 'acps-alert-popups' ); ?></a> | </span>
-					<span><a href="<?php echo esc_url( $toggle_url ); ?>"><?php echo $enabled ? esc_html__( 'Switch off', 'acps-alert-popups' ) : esc_html__( 'Switch on', 'acps-alert-popups' ); ?></a></span>
+					<span><a href="<?php echo esc_url( $toggle_url ); ?>"><?php echo $enabled ? esc_html__( 'Switch off', 'acps-alert-popups' ) : esc_html__( 'Switch on', 'acps-alert-popups' ); ?></a></span> |
+					<span><a href="<?php echo esc_url( $archive_url ); ?>"><?php echo $archived ? esc_html__( 'Bring back', 'acps-alert-popups' ) : esc_html__( 'Archive', 'acps-alert-popups' ); ?></a></span>
 				</div>
 			</td>
 			<td>
 				<?php if ( $live ) : ?>
 					<span class="acps-status acps-status--live"><?php esc_html_e( 'Live', 'acps-alert-popups' ); ?></span>
+				<?php elseif ( $archived ) : ?>
+					<span class="acps-status acps-status--off"><?php esc_html_e( 'Archived', 'acps-alert-popups' ); ?></span>
+				<?php elseif ( $enabled && $expired ) : ?>
+					<span class="acps-status acps-status--off"><?php esc_html_e( 'Past cut-off', 'acps-alert-popups' ); ?></span>
 				<?php elseif ( $enabled ) : ?>
 					<span class="acps-status acps-status--scheduled"><?php esc_html_e( 'On, not showing', 'acps-alert-popups' ); ?></span>
 				<?php else : ?>
 					<span class="acps-status acps-status--off"><?php esc_html_e( 'Off', 'acps-alert-popups' ); ?></span>
+				<?php endif; ?>
+
+				<?php if ( $staged ) : ?>
+					<span class="acps-badge acps-badge--staged">
+						<?php echo 'admins' === $alert->get( 'visibility' ) ? esc_html__( 'staff only', 'acps-alert-popups' ) : esc_html__( 'hidden', 'acps-alert-popups' ); ?>
+					</span>
 				<?php endif; ?>
 			</td>
 			<td><span class="acps-severity acps-severity--<?php echo esc_attr( $severity ); ?>"><?php echo esc_html( ucfirst( $severity ) ); ?></span></td>
@@ -665,6 +742,15 @@ class ACPS_Alerts_Admin {
 									<option value="modal" <?php selected( $settings['render_mode'], 'modal' ); ?>><?php esc_html_e( 'Render the layout in this plugin&rsquo;s modal', 'acps-alert-popups' ); ?></option>
 								</select>
 								<p class="description"><?php esc_html_e( 'Automatic uses Beaver Builder&rsquo;s own popup engine when it exposes one, and falls back to this plugin&rsquo;s accessible modal.', 'acps-alert-popups' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Daily cut-off', 'acps-alert-popups' ); ?></th>
+							<td>
+								<input type="time" name="acps_settings[archive_time]" value="<?php echo esc_attr( $settings['archive_time'] ); ?>" />
+								<p class="description">
+									<?php esc_html_e( 'Status updates set to come down automatically are archived at this time each day, in your site timezone. An update posted after the cut-off runs until the following day.', 'acps-alert-popups' ); ?>
+								</p>
 							</td>
 						</tr>
 						<tr>
