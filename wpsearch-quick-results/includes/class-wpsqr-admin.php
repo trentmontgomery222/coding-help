@@ -911,7 +911,12 @@ class WPSQR_Admin {
 						<th scope="row"><label for="wpsqr-manifest"><?php esc_html_e( 'Manifest URL', 'wpsqr' ); ?></label></th>
 						<td>
 							<input type="url" id="wpsqr-manifest" name="update_manifest" value="<?php echo esc_attr( $s['update_manifest'] ); ?>" class="large-text" placeholder="https://updates.example.org/wpsqr.php">
-							<p class="description"><?php esc_html_e( 'Fetched as: manifest URL + ?plugin=<slug>&site=<url>&key=<key>. Returns JSON with at least version and download_url.', 'wpsqr' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Fetched as: manifest URL + this site + your key. Returns JSON with at least version and download_url.', 'wpsqr' ); ?></p>
+							<?php if ( class_exists( 'WPSQR_Updater' ) ) : $req = ( new WPSQR_Updater() )->request_url(); ?>
+								<?php if ( '' !== $req ) : ?>
+									<p><strong><?php esc_html_e( 'Exact update-request URL:', 'wpsqr' ); ?></strong><br><code style="word-break:break-all"><?php echo esc_html( $req ); ?></code></p>
+								<?php endif; ?>
+							<?php endif; ?>
 						</td>
 					</tr>
 					<tr>

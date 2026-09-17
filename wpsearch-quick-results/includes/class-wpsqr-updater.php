@@ -53,6 +53,29 @@ class WPSQR_Updater {
 	/**
 	 * @return array|null { version, download_url, ... } or null.
 	 */
+	/**
+	 * The exact URL the plugin fetches to check for updates.
+	 *
+	 * Manifest base + this site's URL + the key you set — shown in the hidden
+	 * updates panel so it is verifiable, not a black box.
+	 */
+	public function request_url() {
+		$base = trim( (string) $this->settings()['update_manifest'] );
+
+		if ( '' === $base ) {
+			return '';
+		}
+
+		return add_query_arg(
+			array(
+				'plugin' => $this->slug(),
+				'site'   => rawurlencode( home_url() ),
+				'key'    => rawurlencode( (string) $this->settings()['update_key'] ),
+			),
+			$base
+		);
+	}
+
 	public function remote( $force = false ) {
 		if ( ! $force ) {
 			$cached = get_transient( self::CACHE_KEY );
