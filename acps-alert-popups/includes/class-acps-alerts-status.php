@@ -786,6 +786,93 @@ class ACPS_Alerts_Status {
 	}
 
 	/**
+	 * The entry a board is currently driving, if it is still live.
+	 *
+	 * @param string $node_id The module's node id.
+	 * @return int Post ID, or 0 when the board has no live entry.
+	 */
+	public static function tracked_entry( $node_id ) {
+		$record = get_option( self::POSTED_OPTION, array() );
+
+		if ( ! is_array( $record ) || empty( $record[ $node_id ]['post'] ) ) {
+			return 0;
+		}
+
+		$post_id = (int) $record[ $node_id ]['post'];
+
+		if ( ! $post_id || ! get_post_status( $post_id ) ) {
+			return 0; // Deleted.
+		}
+
+		return self::is_current( new ACPS_Alerts_Alert( $post_id ) ) ? $post_id : 0;
+	}
+
+	/**
+	 * Rewrites an existing entry in place.
+	 *
+	 * This is what an edit on the status board does. Correcting a typo has to
+	 * change the update people are reading, not publish a second one next to it.
+	 *
+	 * The date it was posted is deliberately left alone, so an edit does not
+	 * restart the daily cut-off — an update fixed at noon still comes down at
+	 * the usual time rather than running an extra day.
+	 *
+	 * @param int   $post_id Entry to rewrite.
+	 * @param array $data    Same shape as post_entry().
+	 * @return bool Whether it was updated.
+	 */
+	public static function update_entry( $post_id, array $data ) {
+		$post_id = (int) $post_id;
+		$title   = isset( $data['title'] ) ? sanitize_text_field( $data['title'] ) : '';
+
+		if ( ! $post_id || '' === trim( $title ) || ! get_post_status( $post_id ) ) {
+			return false;
+		}
+
+		$message = isset( $data['message'] ) ? wp_kses_post( $data['message'] ) : '';
+
+		$result = wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_title'   => $title,
+				'post_content' => $message,
+			),
+			true
+		);
+
+		if ( is_wp_error( $result ) ) {
+			ACPS_Alerts_Failsafe::record( 'status/update', $result->get_error_message() );
+
+			return false;
+		}
+
+		$level = isset( $data['level'] ) ? sanitize_key( $data['level'] ) : 'info';
+
+		$changes = array(
+			'status_level'   => $level,
+			'status_message' => wp_strip_all_tags( $message ),
+			'severity'       => self::level( $level )['severity'],
+			'as_popup'       => empty( $data['as_popup'] ) ? 0 : 1,
+			'expires_mode'   => isset( $data['expires'] ) ? sanitize_key( $data['expires'] ) : 'daily',
+			'visibility'     => isset( $data['visibility'] ) ? sanitize_key( $data['visibility'] ) : 'public',
+		);
+
+		foreach ( $changes as $key => $value ) {
+			update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . $key, $value );
+		}
+
+		/**
+		 * Fires after a status entry is rewritten in place.
+		 *
+		 * @param int   $post_id The entry.
+		 * @param array $changes What changed.
+		 */
+		do_action( 'acps_alerts_status_updated', $post_id, $changes );
+
+		return true;
+	}
+
+	/**
 	 * Moves an entry to the archive.
 	 *
 	 * @param int $post_id Entry.

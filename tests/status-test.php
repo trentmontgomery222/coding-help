@@ -39,6 +39,12 @@ function sanitize_text_field( $s ) { return trim( strip_tags( (string) $s ) ); }
 function wp_strip_all_tags( $s ) { return strip_tags( (string) $s ); }
 function wp_kses_post( $s ) { return $s; }
 function update_post_meta( $id, $k, $v ) { $GLOBALS['post_meta'][ $id ][ $k ] = $v; return true; }
+function wp_update_post( $arr, $wp_error = false ) {
+	$id = (int) $arr['ID'];
+	if ( ! isset( $GLOBALS['posts'][ $id ] ) ) { return 0; }
+	$GLOBALS['posts'][ $id ] = array_merge( $GLOBALS['posts'][ $id ], $arr );
+	return $id;
+}
 function wp_insert_post( $arr, $wp_error = false ) {
 	$GLOBALS['next_id'] = isset( $GLOBALS['next_id'] ) ? $GLOBALS['next_id'] + 1 : 100;
 	$GLOBALS['posts'][ $GLOBALS['next_id'] ] = $arr;
@@ -403,6 +409,66 @@ $GLOBALS['options'] = array();
 ACPS_Alerts_Status::remember_posted( 'node1', $compose, 99999 );
 check( 'a deleted entry does not block a repost',
 	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), false );
+
+/* ---- editing the wording must correct the live update, not add another ---- */
+//
+// Reported: fixing a typo on the status board published a second entry each
+// time, so one announcement became four near-identical ones.
+$GLOBALS['options'] = array();
+$GLOBALS['saved']   = array();
+$GLOBALS['posts']   = array();
+
+$before = count( $GLOBALS['posts'] );
+
+$typed = array( 'title' => 'snow day huray', 'level' => 'closure', 'message' => 'Closed.', 'expires' => 'daily' );
+$id1   = ACPS_Alerts_Status::post_entry( $typed );
+ACPS_Alerts_Status::remember_posted( 'node1', $typed, $id1 );
+
+check( 'the board is now driving that entry', ACPS_Alerts_Status::tracked_entry( 'node1' ), $id1 );
+
+// Three typo fixes, exactly as reported.
+foreach ( array( 'now day huray', 'lsnow day huray', 'snow day hooray' ) as $fixed ) {
+	$typed['title'] = $fixed;
+	$tracked = ACPS_Alerts_Status::tracked_entry( 'node1' );
+	ok( 'the board still has a live entry to correct', $tracked > 0 );
+	check( "rewriting to '$fixed' succeeds", ACPS_Alerts_Status::update_entry( $tracked, $typed ), true );
+}
+
+check( 'three wording fixes created no new entries', count( $GLOBALS['posts'] ), $before + 1 );
+check( 'and the live entry now reads the corrected wording',
+	$GLOBALS['posts'][ $id1 ]['post_title'], 'snow day hooray' );
+check( 'it is still the same entry', ACPS_Alerts_Status::tracked_entry( 'node1' ), $id1 );
+
+/* ---- an edit must not restart the daily cut-off ---- */
+$posted_at_before = $GLOBALS['saved'][ $id1 ]['posted_at'];
+ACPS_Alerts_Status::update_entry( $id1, $typed );
+check( 'editing leaves the posted time alone, so the cut-off is not pushed back',
+	isset( $GLOBALS['post_meta'][ $id1 ]['_acps_alert_posted_at'] ), false );
+check( 'the original posted time is untouched', $GLOBALS['saved'][ $id1 ]['posted_at'], $posted_at_before );
+
+/* ---- an edit does change what people read ---- */
+$typed['level']   = 'lockdown';
+$typed['message'] = 'Different now.';
+ACPS_Alerts_Status::update_entry( $id1, $typed );
+check( 'the level really changes', $GLOBALS['post_meta'][ $id1 ]['_acps_alert_status_level'], 'lockdown' );
+check( 'the summary really changes', $GLOBALS['post_meta'][ $id1 ]['_acps_alert_status_message'], 'Different now.' );
+check( 'the severity follows the level', $GLOBALS['post_meta'][ $id1 ]['_acps_alert_severity'], 'critical' );
+
+/* ---- a genuinely new update is a separate entry ---- */
+$new   = array( 'title' => 'All clear', 'level' => 'info', 'message' => 'Back to normal.' );
+$count = count( $GLOBALS['posts'] );
+$id2   = ACPS_Alerts_Status::post_entry( $new );
+check( 'posting a new update adds one entry', count( $GLOBALS['posts'] ), $count + 1 );
+ok( 'and it is a different entry', $id2 !== $id1 );
+
+/* ---- update_entry refuses what it should ---- */
+check( 'a missing entry is not updated', ACPS_Alerts_Status::update_entry( 987654, $typed ), false );
+check( 'an empty headline is not written', ACPS_Alerts_Status::update_entry( $id1, array( 'title' => '   ' ) ), false );
+check( 'a zero id is not written', ACPS_Alerts_Status::update_entry( 0, $typed ), false );
+
+/* ---- once archived, the board has nothing to correct ---- */
+$GLOBALS['saved'][ $id1 ]['archived'] = 1;
+check( 'an archived entry is no longer tracked as live', ACPS_Alerts_Status::tracked_entry( 'node1' ), 0 );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All status cases passed\n";
 exit( $fails ? 1 : 0 );

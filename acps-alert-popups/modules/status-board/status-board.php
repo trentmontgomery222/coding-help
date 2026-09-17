@@ -151,26 +151,54 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 			'date'       => isset( $settings->post_date ) ? $settings->post_date : '',
 		);
 
-		// Beaver Builder calls update() on EVERY save of the layout and does not
-		// reliably keep the settings this method returns, so emptying the boxes
-		// below cannot be relied on. The fingerprint is the real guard: saving
-		// the page again without changing the wording posts nothing.
 		$node = isset( $this->node ) ? (string) $this->node : 'status-board';
 
+		/*
+		 * These fields ARE the current status, not a blank form that posts and
+		 * empties. Beaver Builder calls update() on every save and keeps
+		 * whatever the editor typed, so the natural reading is the right one:
+		 * what is in these boxes is what the site is saying.
+		 *
+		 * So an edit rewrites the live entry in place. Fixing a typo has to
+		 * change the update people are reading, not publish a second one
+		 * underneath it. Only "Post as a new update" starts another.
+		 */
+		$tracked = ACPS_Alerts_Status::tracked_entry( $node );
+		$fresh   = isset( $settings->post_mode ) && 'new' === $settings->post_mode;
+
+		if ( ! $archived && $tracked && ! $fresh ) {
+			ACPS_Alerts_Status::update_entry( $tracked, $data );
+
+			$settings->last_posted = $tracked;
+
+			return $settings;
+		}
+
+		// A record of a past event, or a deliberate new update. The fingerprint
+		// stops a repeat save creating a second copy of either.
 		if ( ACPS_Alerts_Status::already_posted( $node, $data, $archived ) ) {
 			return $settings;
+		}
+
+		// Starting a new update retires the one it replaces, so the board never
+		// shows two versions of the same announcement.
+		if ( $fresh && $tracked && ! $archived ) {
+			ACPS_Alerts_Status::archive_entry( $tracked );
 		}
 
 		$post_id = ACPS_Alerts_Status::post_entry( $data );
 
 		if ( $post_id ) {
-			ACPS_Alerts_Status::remember_posted( $node, $data, $post_id );
+			// A backfilled record is not what the board is driving, so it must
+			// not become the entry that later edits rewrite.
+			if ( ! $archived ) {
+				ACPS_Alerts_Status::remember_posted( $node, $data, $post_id );
 
-			// Also clear the compose fields. This is belt and braces: it tidies
-			// the form on the Beaver Builder versions that do keep what update()
-			// returns, and costs nothing on the ones that do not.
-			$settings->post_headline  = '';
-			$settings->post_message   = '';
+				// Drop back to editing, so the next save corrects this update
+				// rather than starting yet another one.
+				$settings->post_mode = 'update';
+			}
+
 			$settings->post_date      = '';
 			$settings->last_posted    = $post_id;
 			$settings->last_posted_at = time();
@@ -187,9 +215,19 @@ FLBuilder::register_module(
 			'title'    => __( 'Post an update', 'acps-alert-popups' ),
 			'sections' => array(
 				'compose' => array(
-					'title'       => __( 'New status update', 'acps-alert-popups' ),
-					'description' => __( 'Fill this in and save. The update is posted the moment you save, and these boxes empty themselves so you cannot post it twice. Leave the headline empty to change nothing.', 'acps-alert-popups' ),
+					'title'       => __( 'The current status', 'acps-alert-popups' ),
+					'description' => __( 'What is in these boxes is what the site is saying. Edit and save to correct the live update — fixing a typo changes the update people are reading, it does not publish a second one. To replace it with something genuinely new, switch "When you save" below. Leave the headline empty to change nothing.', 'acps-alert-popups' ),
 					'fields'      => array(
+						'post_mode'       => array(
+							'type'    => 'select',
+							'label'   => __( 'When you save', 'acps-alert-popups' ),
+							'default' => 'update',
+							'options' => array(
+								'update' => __( 'Update the current status', 'acps-alert-popups' ),
+								'new'    => __( 'Post as a new update (archives the current one)', 'acps-alert-popups' ),
+							),
+							'help'    => __( 'Leave this on "Update" for wording fixes. It returns to "Update" on its own after a new update is posted.', 'acps-alert-popups' ),
+						),
 						'post_headline'   => array(
 							'type'        => 'text',
 							'label'       => __( 'Headline', 'acps-alert-popups' ),

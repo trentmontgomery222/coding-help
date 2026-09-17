@@ -131,8 +131,10 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 			<li><?php esc_html_e( 'Save. That is it — the update is live.', 'acps-alert-popups' ); ?></li>
 		</ol>
 
+		<h3><?php esc_html_e( 'Fixing a typo', 'acps-alert-popups' ); ?></h3>
+		<p><?php esc_html_e( 'What is in those boxes IS the current status. Correct the wording, save, and the update people are reading changes. You do not get a second copy underneath it, and the daily cut-off is not pushed back — an update fixed at lunchtime still comes down at the usual time.', 'acps-alert-popups' ); ?></p>
 		<p class="acps-callout">
-			<?php esc_html_e( 'The compose boxes empty themselves the moment the update is posted, so saving the page again later cannot post the same thing twice.', 'acps-alert-popups' ); ?>
+			<?php esc_html_e( 'To replace the current status with something genuinely new, switch "When you save" to "Post as a new update". The one it replaces is archived, and the setting returns to "Update" on its own so your next save is a correction again.', 'acps-alert-popups' ); ?>
 		</p>
 
 		<h3><?php esc_html_e( 'What happens at the cut-off', 'acps-alert-popups' ); ?></h3>
@@ -487,8 +489,8 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 					),
 				),
 				array(
-					__( 'I saved the status page again and it posted the same update twice', 'acps-alert-popups' ),
-					__( 'It should not — the compose boxes empty themselves as soon as an update is posted, so a second save has nothing to post. If you do see a duplicate, it means the headline box was filled in again. Archive the extra one from Site Alerts.', 'acps-alert-popups' ),
+					__( 'I fixed a typo and it made a second update', 'acps-alert-popups' ),
+					__( 'That was a bug and it is fixed. Editing the wording now corrects the live update in place. If you are still seeing it, the plugin has not been updated — and any extras already created can be archived from Site Alerts, or with the "Tidy duplicates" button when they are exact copies.', 'acps-alert-popups' ),
 				),
 				array(
 					__( 'Can I have more than one update live at once?', 'acps-alert-popups' ),
