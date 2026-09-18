@@ -16,6 +16,7 @@ $acps_live   = ACPS_Alerts_Status::board_entry();
 $acps_normal = ACPS_Alerts_Status::normal_alert();
 
 $acps_show_icon    = ! isset( $settings->show_icon ) || '1' === (string) $settings->show_icon;
+$acps_icon_size    = isset( $settings->icon_size ) ? absint( $settings->icon_size ) : 64;
 $acps_show_archive = ! isset( $settings->show_archive ) || '1' === (string) $settings->show_archive;
 $acps_show_dates   = ! isset( $settings->archive_dates ) || '1' === (string) $settings->archive_dates;
 $acps_count        = isset( $settings->archive_count ) ? absint( $settings->archive_count ) : 10;
@@ -41,7 +42,7 @@ $acps_date_format  = get_option( 'date_format' );
 
 		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( $acps_live, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( $acps_live, $settings ) ); ?>" role="status">
 			<?php if ( $acps_show_icon ) : ?>
-				<?php echo ACPS_Alerts_Status::level_icon( $acps_live->get( 'status_level' ), 64 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
+				<?php echo ACPS_Alerts_Status::level_icon( $acps_live->get( 'status_level' ), $acps_icon_size ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
 			<?php endif; ?>
 
 			<?php

@@ -60,22 +60,10 @@ defined( 'ABSPATH' ) || exit;
 	text-align: center;
 }
 
-/* The badge, repeated here so the preview looks right inside the builder even
-   before the board stylesheet has loaded on the page. */
+/* Spacing only. The badge's size, shape and colour are inline, so it is right
+   inside the builder before any stylesheet of ours has been rebuilt. */
 .fl-node-<?php echo esc_html( $id ); ?> .acps-level-icon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
 	margin: 0 0 18px;
-	border-radius: 50%;
-	color: #fff;
-	line-height: 0;
-}
-
-.fl-node-<?php echo esc_html( $id ); ?> .acps-level-icon svg {
-	width: 55%;
-	height: 55%;
-	display: block;
 }
 
 .fl-node-<?php echo esc_html( $id ); ?> .acps-popup-edit__cta {

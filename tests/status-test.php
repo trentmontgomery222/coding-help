@@ -389,10 +389,31 @@ ok( 'in the level colour', false !== strpos( $icon, '#d81440' ) );
 ok( 'carrying that level class', false !== strpos( $icon, 'acps-level-icon--lockdown' ) );
 ok( 'and hidden from screen readers, since the words say it too', false !== strpos( $icon, 'aria-hidden' ) );
 
+/*
+ * Pins "the icon is super big": an SVG with no width or height falls back to
+ * 300x150, and a span with no border-radius is a rectangle. The badge lands on
+ * pages that carry neither the board stylesheet nor a freshly rebuilt module
+ * stylesheet, so it has to be right with NO css whatsoever. Everything that
+ * decides its size and shape therefore has to be in the markup itself.
+ */
+$icon = ACPS_Alerts_Status::level_icon( 'hold', 56 );
+
+ok( 'the badge sizes itself inline', false !== strpos( $icon, 'width:56px' ) );
+ok( 'and is round without a stylesheet', false !== strpos( $icon, 'border-radius:50%' ) );
+ok( 'and lays its glyph out without a stylesheet', false !== strpos( $icon, 'display:inline-flex' ) );
+ok( 'the svg carries a real width attribute', (bool) preg_match( '/<svg[^>]*\swidth="\d+"/', $icon ) );
+ok( 'and a real height attribute', (bool) preg_match( '/<svg[^>]*\sheight="\d+"/', $icon ) );
+
+// The glyph has to be smaller than the disc it sits in, or it spills over the
+// edge — which is what a 300x150 default looks like on the page.
+$glyph_w = preg_match( '/<svg[^>]*\swidth="(\d+)"/', $icon, $m ) ? (int) $m[1] : 0;
+
+ok( 'the glyph fits inside the disc', $glyph_w > 0 && $glyph_w < 56 );
+
 // The size is clamped rather than trusted, because it lands in a style
 // attribute.
 ok( 'a silly size is clamped', false !== strpos( ACPS_Alerts_Status::level_icon( 'hold', 99999 ), 'width:160px' ) );
-ok( 'and so is a negative one', false !== strpos( ACPS_Alerts_Status::level_icon( 'hold', -5 ), 'width:24px' ) );
+ok( 'and so is a negative one', false !== strpos( ACPS_Alerts_Status::level_icon( 'hold', -5 ), 'width:16px' ) );
 
 // An unknown level falls back to Information rather than drawing nothing, the
 // same fallback level() itself uses.

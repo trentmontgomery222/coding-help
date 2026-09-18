@@ -54,7 +54,7 @@ The levels are the five Standard Response Protocol actions from the "I Love U Gu
 
 Urgency runs Lockdown > Evacuate > Shelter > Secure > Hold > Information.
 
-**The status level is the severity** — there is no second setting. Pick it on the Current Alert module, Popup tab → *Status level*. It decides four things: the word on the banner, the colour of the banner, the colour of the popup's stripe, and the coloured badge drawn above the heading. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
+**The status level is the severity** — there is no second setting. Pick it on the Current Alert module, Popup tab → *Status level*. It decides four things: the word on the banner, the colour of the banner, the colour of the popup's stripe, and the coloured badge drawn above the heading. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. Its size, shape and colour are written into the markup rather than a stylesheet, because the badge prints on pages that may carry neither the board stylesheet nor a freshly rebuilt module stylesheet — an SVG with no dimensions falls back to 300&times;150. Badge size is a setting on both modules (56px on the popup, 64px on the banner). There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
 
 ### The heading is your title
 

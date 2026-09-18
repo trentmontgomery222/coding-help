@@ -114,6 +114,17 @@ pinning:
   level's colour and carries its class, an unknown level falls back to
   Information rather than drawing nothing, and the size is clamped because it
   lands in a style attribute
+- the badge is right with **no stylesheet at all**: it sizes itself, rounds
+  itself and lays its glyph out from inline styles, the `<svg>` carries real
+  width and height attributes, and the glyph is smaller than the disc it sits
+  in. This pins "the icon is super big" — an SVG with no dimensions falls back
+  to 300x150 and a span with no border-radius is a rectangle, which is exactly
+  what a giant coloured block on the page looks like. The badge prints on pages
+  that carry neither the board stylesheet nor a freshly rebuilt module
+  stylesheet, so nothing about its geometry may depend on CSS.
+
+  Verified non-vacuous: strip the inline geometry and the SVG dimensions and it
+  fails with "the svg carries a real width attribute" and five more.
 - no shipped glyph contains a quote or angle bracket, since the path data goes
   straight into an attribute
 

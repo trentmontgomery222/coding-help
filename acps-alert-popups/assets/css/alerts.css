@@ -150,22 +150,11 @@ body.acps-alert-is-open {
 	text-align: center;
 }
 
+/* The badge describes its own size, shape and colour inline, because it is
+   printed on pages that may not carry this stylesheet at all. Only spacing
+   belongs here. */
 .acps-alert__content .acps-level-icon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 64px;
-	height: 64px;
 	margin: 4px 0 18px;
-	border-radius: 50%;
-	color: #fff;
-	line-height: 0;
-}
-
-.acps-alert__content .acps-level-icon svg {
-	width: 55%;
-	height: 55%;
-	display: block;
 }
 
 .acps-alert__level {

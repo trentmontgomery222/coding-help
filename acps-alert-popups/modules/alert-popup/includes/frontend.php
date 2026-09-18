@@ -38,7 +38,8 @@ $acps_color = isset( $acps_level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i'
 	: '#1b2f5e';
 
 $acps_key      = isset( $settings->level ) ? (string) $settings->level : 'info';
-$acps_icon     = ! isset( $settings->show_icon ) || '1' === (string) $settings->show_icon;
+$acps_icon      = ! isset( $settings->show_icon ) || '1' === (string) $settings->show_icon;
+$acps_icon_size = isset( $settings->icon_size ) ? absint( $settings->icon_size ) : 56;
 $acps_word     = isset( $settings->show_word ) && '1' === (string) $settings->show_word;
 $acps_cta      = isset( $settings->cta_text ) ? trim( (string) $settings->cta_text ) : '';
 
@@ -63,7 +64,7 @@ if ( '' === trim( $acps_heading ) ) {
 			<span class="acps-popup-edit__close" aria-hidden="true">&times;</span>
 
 			<?php if ( $acps_icon && class_exists( 'ACPS_Alerts_Status' ) ) : ?>
-				<?php echo ACPS_Alerts_Status::level_icon( $acps_key, 64 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
+				<?php echo ACPS_Alerts_Status::level_icon( $acps_key, $acps_icon_size ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
 			<?php endif; ?>
 
 			<?php if ( $acps_word && '' !== (string) $acps_level['banner'] ) : ?>

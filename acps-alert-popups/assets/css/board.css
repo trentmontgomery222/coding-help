@@ -272,21 +272,13 @@
 
 /* ---------------------------------------------------------------------------
  * The level badge. Shared by the banner, the popup and the builder preview, so
- * one level looks the same wherever it is drawn.
+ * one level looks the same wherever it is drawn. Its geometry is inline; see
+ * ACPS_Alerts_Status::level_icon().
  * ------------------------------------------------------------------------ */
 
+/* The badge carries its own size, shape and colour as inline styles, so it is
+   right on a page that never loads this file. Nothing structural here: an
+   override would only make the two disagree. */
 .acps-level-icon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	border-radius: 50%;
-	color: #fff;
-	line-height: 0;
-	vertical-align: middle;
-}
-
-.acps-level-icon svg {
-	width: 55%;
-	height: 55%;
-	display: block;
+	flex-shrink: 0;
 }

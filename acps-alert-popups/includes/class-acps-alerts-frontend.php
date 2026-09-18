@@ -440,7 +440,7 @@ class ACPS_Alerts_Frontend {
 				<div class="acps-alert__content">
 					<?php if ( $furniture ) : ?>
 						<?php if ( $alert->get( 'show_icon' ) ) : ?>
-							<?php echo ACPS_Alerts_Status::level_icon( $alert->get( 'status_level' ), 64 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
+							<?php echo ACPS_Alerts_Status::level_icon( $alert->get( 'status_level' ), $alert->get( 'icon_size' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
 						<?php endif; ?>
 
 						<?php if ( $alert->get( 'show_word' ) && '' !== (string) $level['banner'] ) : ?>

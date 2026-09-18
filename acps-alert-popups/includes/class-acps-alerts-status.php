@@ -232,15 +232,36 @@ class ACPS_Alerts_Status {
 			? (string) $level['color']
 			: '#1b2f5e';
 
-		$size = max( 24, min( 160, (int) $size ) );
+		$size  = max( 16, min( 160, (int) $size ) );
+		$glyph = (int) round( $size * 0.55 );
+
+		/*
+		 * The whole box is described inline, and the SVG is given real width and
+		 * height attributes rather than being left to CSS.
+		 *
+		 * An SVG with no dimensions falls back to 300x150, so a badge that loses
+		 * its stylesheet does not come out slightly wrong — it comes out as a
+		 * giant square block of colour across the page. The badge is printed on
+		 * pages that may carry neither the board stylesheet nor a freshly built
+		 * module stylesheet, so it has to stand up with no CSS at all.
+		 */
+		$style = sprintf(
+			'display:inline-flex;align-items:center;justify-content:center;'
+				. 'box-sizing:border-box;width:%1$dpx;height:%1$dpx;max-width:100%%;'
+				. 'border-radius:50%%;background:%2$s;color:#fff;line-height:0;flex:0 0 auto;vertical-align:middle',
+			$size,
+			$color
+		);
 
 		return sprintf(
-			'<span class="acps-level-icon acps-level-icon--%1$s" style="background:%2$s;width:%3$dpx;height:%3$dpx" aria-hidden="true">'
-				. '<svg viewBox="0 0 24 24" focusable="false"><path d="%4$s" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>'
+			'<span class="acps-level-icon acps-level-icon--%1$s" style="%2$s" aria-hidden="true">'
+				. '<svg width="%3$d" height="%3$d" viewBox="0 0 24 24" focusable="false" style="display:block;width:%3$dpx;height:%3$dpx">'
+				. '<path d="%4$s" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />'
+				. '</svg>'
 			. '</span>',
 			esc_attr( sanitize_html_class( $key ) ),
-			esc_attr( $color ),
-			$size,
+			esc_attr( $style ),
+			$glyph,
 			esc_attr( $path )
 		);
 	}

@@ -224,6 +224,13 @@ FLBuilder::register_module(
 							),
 							'help'    => __( 'The heading underneath it is always the alert\'s own title.', 'acps-alert-popups' ),
 						),
+						'icon_size' => array(
+							'type'    => 'unit',
+							'label'   => __( 'Badge size', 'acps-alert-popups' ),
+							'default' => '64',
+							'units'   => array( 'px' ),
+							'slider'  => array( 'min' => 16, 'max' => 160, 'step' => 4 ),
+						),
 					),
 				),
 				'normal'  => array(

@@ -211,6 +211,7 @@ class ACPS_Alert_Popup_Module extends FLBuilderModule {
 			'cta_text'       => $get( 'cta_text', '' ),
 			'cta_url'        => $get( 'cta_url', '' ),
 			'show_icon'      => '1' === (string) $get( 'show_icon', '1' ) ? 1 : 0,
+			'icon_size'      => $get( 'icon_size', 56 ),
 			'show_word'      => '1' === (string) $get( 'show_word', '0' ) ? 1 : 0,
 
 			// Not edited here, and a complete save would otherwise reset them to
@@ -332,6 +333,13 @@ FLBuilder::register_module(
 								'1' => __( 'Yes — the coloured disc above the heading', 'acps-alert-popups' ),
 								'0' => __( 'No', 'acps-alert-popups' ),
 							),
+						),
+						'icon_size' => array(
+							'type'    => 'unit',
+							'label'   => __( 'Badge size', 'acps-alert-popups' ),
+							'default' => '56',
+							'units'   => array( 'px' ),
+							'slider'  => array( 'min' => 16, 'max' => 160, 'step' => 4 ),
 						),
 						'show_word' => array(
 							'type'    => 'select',

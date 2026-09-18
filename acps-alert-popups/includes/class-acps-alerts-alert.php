@@ -86,6 +86,7 @@ class ACPS_Alerts_Alert {
 			'cta_text'         => array( 'default' => '', 'type' => 'text' ),
 			'cta_url'          => array( 'default' => '', 'type' => 'url' ),
 			'show_icon'        => array( 'default' => 1, 'type' => 'bool' ),
+			'icon_size'        => array( 'default' => 56, 'type' => 'int', 'min' => 16, 'max' => 160 ),
 			'show_word'        => array( 'default' => 0, 'type' => 'bool' ),
 			'notes'            => array( 'default' => '', 'type' => 'textarea' ),
 

@@ -175,7 +175,7 @@ $expected = array(
 	'trigger', 'trigger_delay', 'trigger_scroll', 'frequency', 'frequency_days',
 	'position', 'width', 'show_overlay', 'dismissible', 'overlay_close', 'esc_close',
 	'aria_label', 'notes',
-	'cta_text', 'cta_url', 'show_icon', 'show_word',
+	'cta_text', 'cta_url', 'show_icon', 'show_word', 'icon_size',
 );
 
 foreach ( $expected as $key ) {
