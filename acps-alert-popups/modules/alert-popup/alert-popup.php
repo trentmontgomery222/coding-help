@@ -208,6 +208,10 @@ class ACPS_Alert_Popup_Module extends FLBuilderModule {
 			'esc_close'      => '1' === (string) $get( 'esc_close', '1' ) ? 1 : 0,
 			'aria_label'     => $get( 'aria_label', '' ),
 			'notes'          => $get( 'notes', '' ),
+			'cta_text'       => $get( 'cta_text', '' ),
+			'cta_url'        => $get( 'cta_url', '' ),
+			'show_icon'      => '1' === (string) $get( 'show_icon', '1' ) ? 1 : 0,
+			'show_word'      => '1' === (string) $get( 'show_word', '0' ) ? 1 : 0,
 
 			// Not edited here, and a complete save would otherwise reset them to
 			// their defaults: when the alert went up, and whether it has already
@@ -294,17 +298,50 @@ FLBuilder::register_module(
 							'media_buttons' => false,
 							'rows'    => 8,
 						),
+						'cta_text' => array(
+							'type'        => 'text',
+							'label'       => __( 'Link text', 'acps-alert-popups' ),
+							'default'     => __( 'View updates', 'acps-alert-popups' ),
+							'placeholder' => __( 'View updates', 'acps-alert-popups' ),
+							'help'        => __( 'The link under the message. Leave empty for no link.', 'acps-alert-popups' ),
+						),
+						'cta_url'  => array(
+							'type'        => 'link',
+							'label'       => __( 'Link goes to', 'acps-alert-popups' ),
+							'default'     => '',
+							'help'        => __( 'Leave empty to send people to the status page.', 'acps-alert-popups' ),
+						),
 					),
 				),
 				'status'  => array(
-					'title'  => __( 'Status level', 'acps-alert-popups' ),
-					'fields' => array(
-						'level' => array(
+					'title'       => __( 'Status level', 'acps-alert-popups' ),
+					'description' => __( 'This is the severity. It sets the word on the banner, the colour of the banner and the popup stripe, and the badge above the heading. It is the only urgency setting there is.', 'acps-alert-popups' ),
+					'fields'      => array(
+						'level'     => array(
 							'type'    => 'select',
 							'label'   => __( 'Status level', 'acps-alert-popups' ),
 							'default' => 'info',
 							'options' => ACPS_Alerts_Status::level_choices(),
-							'help'    => __( 'Picks the wording and the colour of the banner and the popup stripe. The response actions are the SRP ones your staff are trained on.', 'acps-alert-popups' ),
+							'help'    => __( 'The response actions are the SRP ones your staff and students are trained on.', 'acps-alert-popups' ),
+						),
+						'show_icon' => array(
+							'type'    => 'select',
+							'label'   => __( 'Show the level badge', 'acps-alert-popups' ),
+							'default' => '1',
+							'options' => array(
+								'1' => __( 'Yes — the coloured disc above the heading', 'acps-alert-popups' ),
+								'0' => __( 'No', 'acps-alert-popups' ),
+							),
+						),
+						'show_word' => array(
+							'type'    => 'select',
+							'label'   => __( 'Show the level word', 'acps-alert-popups' ),
+							'default' => '0',
+							'options' => array(
+								'1' => __( 'Yes — HOLD, LOCKDOWN and so on', 'acps-alert-popups' ),
+								'0' => __( 'No — the heading speaks for itself', 'acps-alert-popups' ),
+							),
+							'help'    => __( 'The heading is always your own title; this only adds the level word above it.', 'acps-alert-popups' ),
 						),
 					),
 				),

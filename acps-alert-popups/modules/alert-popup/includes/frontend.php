@@ -37,6 +37,11 @@ $acps_color = isset( $acps_level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i'
 	? (string) $acps_level['color']
 	: '#1b2f5e';
 
+$acps_key      = isset( $settings->level ) ? (string) $settings->level : 'info';
+$acps_icon     = ! isset( $settings->show_icon ) || '1' === (string) $settings->show_icon;
+$acps_word     = isset( $settings->show_word ) && '1' === (string) $settings->show_word;
+$acps_cta      = isset( $settings->cta_text ) ? trim( (string) $settings->cta_text ) : '';
+
 if ( '' === trim( $acps_heading ) ) {
 	$acps_heading = __( 'Your alert heading goes here', 'acps-alert-popups' );
 }
@@ -57,7 +62,11 @@ if ( '' === trim( $acps_heading ) ) {
 		<div class="acps-popup-edit__dialog" style="border-top-color:<?php echo esc_attr( $acps_color ); ?>">
 			<span class="acps-popup-edit__close" aria-hidden="true">&times;</span>
 
-			<?php if ( '' !== (string) $acps_level['banner'] ) : ?>
+			<?php if ( $acps_icon && class_exists( 'ACPS_Alerts_Status' ) ) : ?>
+				<?php echo ACPS_Alerts_Status::level_icon( $acps_key, 64 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
+			<?php endif; ?>
+
+			<?php if ( $acps_word && '' !== (string) $acps_level['banner'] ) : ?>
 				<p class="acps-popup-edit__level" style="color:<?php echo esc_attr( $acps_color ); ?>">
 					<?php echo esc_html( $acps_level['banner'] ); ?>
 				</p>
@@ -70,6 +79,12 @@ if ( '' === trim( $acps_heading ) ) {
 			<?php else : ?>
 				<p class="acps-popup-edit__text acps-popup-edit__text--empty">
 					<?php esc_html_e( 'Add the text of the alert on the Popup tab.', 'acps-alert-popups' ); ?>
+				</p>
+			<?php endif; ?>
+
+			<?php if ( '' !== $acps_cta ) : ?>
+				<p class="acps-popup-edit__cta" style="color:<?php echo esc_attr( $acps_color ); ?>">
+					<?php echo esc_html( $acps_cta ); ?> &rarr;
 				</p>
 			<?php endif; ?>
 		</div>

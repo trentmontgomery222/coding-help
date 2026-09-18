@@ -110,6 +110,12 @@ pinning:
   a staff-only entry, staff see it, and nobody sees a preview-only entry on the
   board
 - every level maps to a real severity and the ranks order correctly
+- every level offered in the picker ships a glyph, the badge comes out in that
+  level's colour and carries its class, an unknown level falls back to
+  Information rather than drawing nothing, and the size is clamped because it
+  lands in a style attribute
+- no shipped glyph contains a quote or angle bracket, since the path data goes
+  straight into an attribute
 
 `render-test.php` — pins the "it's duplicating everything" bug. Beaver Builder
 hooks its layout renderer onto `the_content`, so asking it to render a post that
@@ -127,6 +133,11 @@ builder-styled and once theme-styled. These checks assert:
   double the body (re-entry guard)
 - the same alert queued twice prints once, and a second `wp_footer` pass prints
   nothing more
+- the popup's own furniture: the badge is drawn, the heading is the alert's
+  **title** (not the words "School Status"), the link falls back to the status
+  page when no destination is given, and the level word is off unless asked for
+- a popup with a Beaver Builder layout gets none of that furniture, so a
+  designed popup never ends up with two headings
 
 Verified non-vacuous: run against the pre-fix renderer it fails with exactly the
 reported symptom.
@@ -194,6 +205,8 @@ whole set at once, so the risks are the ones a complete save creates:
   and the complete save carries the old timestamp through rather than resetting
   it to the schema default
 - start and end dates apply on the custom schedule and are ignored on the others
+- the link text, the link itself, the badge toggle and the level-word toggle all
+  reach the alert, and switching a toggle off really clears it
 - a user without the capability saves nothing
 
 Verified non-vacuous: drop `posted_at` from the saved set and it fails with

@@ -401,6 +401,25 @@ class ACPS_Alerts_Frontend {
 		if ( ! empty( $level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i', $level['color'] ) ) {
 			$stripe = $level['color'];
 		}
+
+		// The badge, the heading and the link below it are only drawn for an
+		// alert whose body is plain content. A popup designed in Beaver Builder
+		// already has its own heading and buttons, and adding ours on top would
+		// give it two of each.
+		$furniture = ! self::has_builder_layout( $id );
+
+		$cta_text = trim( (string) $alert->get( 'cta_text' ) );
+		$cta_url  = trim( (string) $alert->get( 'cta_url' ) );
+
+		// An empty link box means "the status page", which is where a visitor
+		// wants to go from an alert nine times in ten.
+		if ( '' !== $cta_text && '' === $cta_url && class_exists( 'ACPS_Alerts_Status' ) ) {
+			$board = ACPS_Alerts_Status::board_page();
+
+			if ( $board ) {
+				$cta_url = (string) get_permalink( $board );
+			}
+		}
 		?>
 		<div
 			id="acps-alert-<?php echo esc_attr( $id ); ?>"
@@ -419,7 +438,33 @@ class ACPS_Alerts_Frontend {
 					</button>
 				<?php endif; ?>
 				<div class="acps-alert__content">
+					<?php if ( $furniture ) : ?>
+						<?php if ( $alert->get( 'show_icon' ) ) : ?>
+							<?php echo ACPS_Alerts_Status::level_icon( $alert->get( 'status_level' ), 64 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
+						<?php endif; ?>
+
+						<?php if ( $alert->get( 'show_word' ) && '' !== (string) $level['banner'] ) : ?>
+							<p class="acps-alert__level"<?php echo $stripe ? ' style="color:' . esc_attr( $stripe ) . '"' : ''; ?>>
+								<?php echo esc_html( $level['banner'] ); ?>
+								<?php if ( '' !== (string) $level['directive'] ) : ?>
+									<span class="acps-alert__directive"><?php echo esc_html( wp_strip_all_tags( $level['directive'] ) ); ?></span>
+								<?php endif; ?>
+							</p>
+						<?php endif; ?>
+
+						<h2 class="acps-alert__heading"><?php echo esc_html( $alert->get_title() ); ?></h2>
+					<?php endif; ?>
+
 					<?php echo $this->get_popup_content( $id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Rendered page-builder layout. ?>
+
+					<?php if ( $furniture && '' !== $cta_text && '' !== $cta_url ) : ?>
+						<p class="acps-alert__cta">
+							<a href="<?php echo esc_url( $cta_url ); ?>"<?php echo $stripe ? ' style="color:' . esc_attr( $stripe ) . '"' : ''; ?>>
+								<?php echo esc_html( $cta_text ); ?>
+								<span class="acps-alert__cta-arrow" aria-hidden="true">&rarr;</span>
+							</a>
+						</p>
+					<?php endif; ?>
 				</div>
 			</div>
 		</div>

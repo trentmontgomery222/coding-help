@@ -130,7 +130,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		<h3><?php esc_html_e( 'Posting an update, every time after that', 'acps-alert-popups' ); ?></h3>
 		<ol class="acps-help-list">
 			<li><?php esc_html_e( 'Edit the status page in Beaver Builder and open the Current Alert module.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'On the Popup tab, rewrite the heading and the text, and pick the status level.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'On the Popup tab, rewrite the heading and the text, and pick the status level — that is the severity.', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'On the On/off tab, set "Show this alert now" to "Yes — it is live".', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'Save. That is it — under a minute, start to finish.', 'acps-alert-popups' ); ?></li>
 		</ol>
@@ -176,7 +176,9 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		<p><?php esc_html_e( 'When you are happy with it, set "Who can see it" back to "Everybody" and save.', 'acps-alert-popups' ); ?></p>
 
 		<h3><?php esc_html_e( 'Designing the popup itself', 'acps-alert-popups' ); ?></h3>
-		<p><?php esc_html_e( 'The Current Alert module is the popup, so what you see in the builder is what visitors get: the heading, the text, and a stripe in the colour of the status level. Its Style tab decides where the box sits, how wide it is, whether the page dims behind it, and how it can be closed.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'The Current Alert module is the popup, so what you see in the builder is what visitors get: a coloured badge for the status level, your heading, your text, and a link underneath. Its Style tab decides where the box sits, how wide it is, whether the page dims behind it, and how it can be closed.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'The heading is always the title you typed, never the words "School Status". The level shows as the badge above it, and as a small label if you switch "Show the level word" on. The same is true of the banner on the status page.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'The link under the message defaults to "View updates" and goes to the status page unless you give it somewhere else. Clear the link text to drop it.', 'acps-alert-popups' ); ?></p>
 		<p><?php esc_html_e( 'The popup never appears on the status page itself, so the page stays readable while you are working on it. Everywhere else, it is what visitors see.', 'acps-alert-popups' ); ?></p>
 	</div>
 
@@ -284,6 +286,9 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	<?php // ---------- SRP ---------- ?>
 	<div class="acps-help-section">
 		<h2><?php esc_html_e( 'Status levels use the Standard Response Protocol', 'acps-alert-popups' ); ?></h2>
+		<p class="acps-callout">
+			<?php esc_html_e( 'The status level IS the severity — there is no second setting. You pick it on the Current Alert module, on its Popup tab under "Status level". It sets the word on the banner, the colour of the banner and the popup stripe, and the coloured badge above the heading.', 'acps-alert-popups' ); ?>
+		</p>
 		<p><?php esc_html_e( 'The status levels are the five SRP actions from the "I Love U Guys" Foundation — the same vocabulary your staff and students are trained on. The website says exactly what the drill says, with the same word and the same directive underneath it.', 'acps-alert-popups' ); ?></p>
 
 		<?php echo ACPS_Alerts_Art::severity(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Authored SVG. ?>

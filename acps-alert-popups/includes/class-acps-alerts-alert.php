@@ -83,6 +83,10 @@ class ACPS_Alerts_Alert {
 			'esc_close'        => array( 'default' => 1, 'type' => 'bool' ),
 			'show_overlay'     => array( 'default' => 1, 'type' => 'bool' ),
 			'aria_label'       => array( 'default' => '', 'type' => 'text' ),
+			'cta_text'         => array( 'default' => '', 'type' => 'text' ),
+			'cta_url'          => array( 'default' => '', 'type' => 'url' ),
+			'show_icon'        => array( 'default' => 1, 'type' => 'bool' ),
+			'show_word'        => array( 'default' => 0, 'type' => 'bool' ),
 			'notes'            => array( 'default' => '', 'type' => 'textarea' ),
 
 			/*
@@ -315,6 +319,16 @@ class ACPS_Alerts_Alert {
 
 				case 'patterns':
 					$clean[ $key ] = self::sanitize_patterns( $value );
+					break;
+
+				case 'url':
+					// Beaver Builder's link field can hand back an array when a
+					// post is picked rather than a URL typed in.
+					if ( is_array( $value ) ) {
+						$value = isset( $value['url'] ) ? $value['url'] : '';
+					}
+
+					$clean[ $key ] = esc_url_raw( trim( (string) $value ) );
 					break;
 
 				case 'textarea':

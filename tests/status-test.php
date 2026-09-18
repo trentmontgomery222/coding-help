@@ -37,6 +37,8 @@ function current_user_can( $c ) { return $GLOBALS['is_staff']; }
 function get_post_status( $id ) { return isset( $GLOBALS['posts'][ $id ] ) || $id < 100 ? 'publish' : false; }
 function get_post_time( $f, $gmt = false, $id = 0 ) { return 0; }
 function sanitize_key( $s ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $s ) ); }
+function sanitize_html_class( $s ) { return preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $s ); }
+function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
 function sanitize_text_field( $s ) { return trim( strip_tags( (string) $s ) ); }
 function wp_strip_all_tags( $s ) { return strip_tags( (string) $s ); }
 function wp_kses_post( $s ) { return $s; }
@@ -367,6 +369,58 @@ check( 'a second sweep archives nothing', ACPS_Alerts_Status::run_daily_archive(
 /* ---- "keep" opts out of the sweep ---- */
 $GLOBALS['saved'][50] = array( 'enabled' => 1, 'expires_mode' => 'keep', 'posted_at' => time() - 30 * DAY_IN_SECONDS, 'archived' => 0 );
 check( 'a kept alert is never swept', ACPS_Alerts_Status::run_daily_archive(), 0 );
+
+/* ---- the level badge ---- */
+
+foreach ( ACPS_Alerts_Status::level_keys() as $acps_key ) {
+	$level = ACPS_Alerts_Status::level( $acps_key );
+
+	// Every level that is offered in the picker needs a glyph, or its banner
+	// and popup come out looking unfinished next to the others.
+	if ( empty( $level['legacy'] ) ) {
+		ok( "level '$acps_key' has a glyph", '' !== (string) $level['icon'] );
+	}
+}
+
+$icon = ACPS_Alerts_Status::level_icon( 'lockdown' );
+
+ok( 'the badge is an svg', false !== strpos( $icon, '<svg' ) );
+ok( 'in the level colour', false !== strpos( $icon, '#d81440' ) );
+ok( 'carrying that level class', false !== strpos( $icon, 'acps-level-icon--lockdown' ) );
+ok( 'and hidden from screen readers, since the words say it too', false !== strpos( $icon, 'aria-hidden' ) );
+
+// The size is clamped rather than trusted, because it lands in a style
+// attribute.
+ok( 'a silly size is clamped', false !== strpos( ACPS_Alerts_Status::level_icon( 'hold', 99999 ), 'width:160px' ) );
+ok( 'and so is a negative one', false !== strpos( ACPS_Alerts_Status::level_icon( 'hold', -5 ), 'width:24px' ) );
+
+// An unknown level falls back to Information rather than drawing nothing, the
+// same fallback level() itself uses.
+ok(
+	'an unknown level still gets a badge, via the Information fallback',
+	false !== strpos( ACPS_Alerts_Status::level_icon( 'no_such_level' ), '<svg' )
+);
+
+// The glyph lands in an attribute, so level_icon() only emits path data that
+// looks like path data. Every glyph the plugin ships has to survive that check,
+// or it would silently stop drawing.
+foreach ( ACPS_Alerts_Status::level_keys() as $acps_key ) {
+	$level = ACPS_Alerts_Status::level( $acps_key );
+
+	if ( '' === (string) $level['icon'] ) {
+		continue;
+	}
+
+	ok(
+		"the shipped glyph for '$acps_key' survives the path-data check",
+		false !== strpos( ACPS_Alerts_Status::level_icon( $acps_key ), $level['icon'] )
+	);
+
+	ok(
+		"and carries nothing that could break out of the attribute: '$acps_key'",
+		! preg_match( '/["\'<>]/', (string) $level['icon'] )
+	);
+}
 
 echo $fails ? "\n$fails failing case(s)\n" : "All status cases passed\n";
 exit( $fails ? 1 : 0 );

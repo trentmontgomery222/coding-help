@@ -22,6 +22,7 @@ $GLOBALS['inserted']   = 0;
 function __( $s, $d = '' ) { return $s; }
 function esc_html( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
 function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
+function esc_url_raw( $s ) { return (string) $s; }
 function sanitize_key( $s ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $s ) ); }
 function sanitize_text_field( $s ) { return trim( strip_tags( (string) $s ) ); }
 function sanitize_textarea_field( $s ) { return trim( strip_tags( (string) $s ) ); }
@@ -174,6 +175,7 @@ $expected = array(
 	'trigger', 'trigger_delay', 'trigger_scroll', 'frequency', 'frequency_days',
 	'position', 'width', 'show_overlay', 'dismissible', 'overlay_close', 'esc_close',
 	'aria_label', 'notes',
+	'cta_text', 'cta_url', 'show_icon', 'show_word',
 );
 
 foreach ( $expected as $key ) {
@@ -252,6 +254,26 @@ ACPS_Alert_Popup_Module::apply( $alert, settings( array( 'expires' => 'custom', 
 
 check( 'on a custom schedule the start date is used', $alert->get( 'start' ), '2026-01-01 08:00' );
 check( 'and so is the end date', $alert->get( 'end' ), '2026-01-02 08:00' );
+
+/* ---- the badge, the level word and the link ---- */
+
+$alert            = new ACPS_Alerts_Alert( 50 );
+$GLOBALS['alert'] = $alert;
+
+ACPS_Alert_Popup_Module::apply(
+	$alert,
+	settings( array( 'cta_text' => 'View updates', 'cta_url' => 'https://example.org/status/', 'show_icon' => '1', 'show_word' => '1' ) )
+);
+
+check( 'the link text reaches the alert', $alert->get( 'cta_text' ), 'View updates' );
+check( 'and the link itself', $alert->get( 'cta_url' ), 'https://example.org/status/' );
+check( 'the badge is on', $alert->get( 'show_icon' ), 1 );
+check( 'the level word is on', $alert->get( 'show_word' ), 1 );
+
+ACPS_Alert_Popup_Module::apply( $alert, settings( array( 'show_icon' => '0', 'show_word' => '0' ) ) );
+
+check( 'switching the badge off really clears it', $alert->get( 'show_icon' ), 0 );
+check( 'and so does switching the level word off', $alert->get( 'show_word' ), 0 );
 
 /* ---- somebody who may not manage alerts changes nothing ---- */
 

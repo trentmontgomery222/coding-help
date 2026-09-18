@@ -9,7 +9,7 @@ There are exactly **two alerts**, always, and neither can be created or deleted:
 
 The split is deliberate:
 
-- **The Current Alert module** is the alert. It is a popup you place on the status page and edit there: its heading and text are what the popup says, and its tabs hold every setting the alert has — on/off, level, when it comes down, which pages show it, who sees it, how it opens, how it looks.
+- **The Current Alert module** is the alert. It is a popup you place on the status page and edit there: its heading, text and link are what the popup says, and its tabs hold every setting the alert has — on/off, level, when it comes down, which pages show it, who sees it, how it opens, how it looks.
 - **The Status Board module** is the template. It turns that heading and text into the status page banner, in the colour of the status level, and lists past updates underneath.
 - **wp-admin** is for checking state and for the Normal Alert. You do not post from there.
 
@@ -52,7 +52,15 @@ Archived updates are stored as records in their own list, not as posts, so the a
 
 The levels are the five Standard Response Protocol actions from the "I Love U Guys" Foundation — **Hold**, **Secure**, **Shelter**, **Evacuate**, **Lockdown** — each with its directive and its colour, so the site says exactly what the drill says. Two everyday levels sit alongside them: **Normal** and **Information**, which are deliberately *not* marked as response actions.
 
-Urgency runs Lockdown > Evacuate > Shelter > Secure > Hold > Information. The level is the *only* urgency setting: it decides the banner wording, the banner colour and the popup's stripe. There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
+Urgency runs Lockdown > Evacuate > Shelter > Secure > Hold > Information.
+
+**The status level is the severity** — there is no second setting. Pick it on the Current Alert module, Popup tab → *Status level*. It decides four things: the word on the banner, the colour of the banner, the colour of the popup's stripe, and the coloured badge drawn above the heading. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
+
+### The heading is your title
+
+Both the popup and the status page banner use **the title you typed** as the heading. The level appears as the badge above it, and — if you switch *Show the level word* on — as a small label line with its SRP directive. Under the message the popup shows a link, "View updates" by default, pointing at the status page unless you give it another destination; clear the link text to drop it.
+
+A popup you have designed in Beaver Builder gets none of this furniture, because it already has a heading and buttons of its own.
 
 Check the directives against your own district's training materials before going live; a developer can adjust the wording with the `acps_alerts_status_levels` filter. Updates written before the move to SRP keep rendering with their old wording.
 
@@ -79,7 +87,7 @@ Settings, whether on the Current Alert module's tabs or the Normal Alert's admin
 
 | Group | What it controls |
 | --- | --- |
-| Status | Live on/off, status level (the SRP actions plus Normal and Information) |
+| Status | Live on/off, status level (the SRP actions plus Normal and Information), whether to show the badge and the level word |
 | Schedule | Start and end date/time in the site timezone; leave either empty for open-ended |
 | Where it shows | Entire site, front page, or selected post types / post IDs / URL paths, plus a never-show list |
 | Who sees it | Everyone, logged out, logged in, or specific roles |

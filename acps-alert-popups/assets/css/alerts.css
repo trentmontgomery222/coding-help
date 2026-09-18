@@ -139,3 +139,90 @@ body.acps-alert-is-open {
 		}
 	}
 }
+
+/* ---------------------------------------------------------------------------
+ * The plain-content popup: badge, heading, body, link. Only drawn for an alert
+ * with no Beaver Builder layout of its own, so a designed popup is never given
+ * a second heading on top of the one it already has.
+ * ------------------------------------------------------------------------ */
+
+.acps-alert__content {
+	text-align: center;
+}
+
+.acps-alert__content .acps-level-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 64px;
+	height: 64px;
+	margin: 4px 0 18px;
+	border-radius: 50%;
+	color: #fff;
+	line-height: 0;
+}
+
+.acps-alert__content .acps-level-icon svg {
+	width: 55%;
+	height: 55%;
+	display: block;
+}
+
+.acps-alert__level {
+	margin: 0 0 10px;
+	font-size: 0.78em;
+	font-weight: 800;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.acps-alert__directive {
+	display: block;
+	margin-top: 3px;
+	font-size: 0.95em;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	opacity: 0.85;
+}
+
+.acps-alert__heading {
+	margin: 0 0 14px;
+	font-size: 2em;
+	line-height: 1.2;
+}
+
+.acps-alert__content > p:last-of-type {
+	margin-bottom: 0;
+}
+
+.acps-alert__cta {
+	margin: 22px 0 0;
+}
+
+.acps-alert__cta a {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 0.85em;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	text-decoration: none;
+}
+
+.acps-alert__cta a:hover,
+.acps-alert__cta a:focus {
+	text-decoration: underline;
+}
+
+.acps-alert__cta-arrow {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.5em;
+	height: 1.5em;
+	border: 2px solid currentColor;
+	border-radius: 50%;
+	font-size: 0.9em;
+	line-height: 1;
+}

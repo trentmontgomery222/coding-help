@@ -15,6 +15,7 @@ if ( ! isset( $settings ) || ! is_object( $settings ) || ! class_exists( 'ACPS_A
 $acps_live   = ACPS_Alerts_Status::board_entry();
 $acps_normal = ACPS_Alerts_Status::normal_alert();
 
+$acps_show_icon    = ! isset( $settings->show_icon ) || '1' === (string) $settings->show_icon;
 $acps_show_archive = ! isset( $settings->show_archive ) || '1' === (string) $settings->show_archive;
 $acps_show_dates   = ! isset( $settings->archive_dates ) || '1' === (string) $settings->archive_dates;
 $acps_count        = isset( $settings->archive_count ) ? absint( $settings->archive_count ) : 10;
@@ -39,19 +40,24 @@ $acps_date_format  = get_option( 'date_format' );
 		<?php endif; ?>
 
 		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( $acps_live, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( $acps_live, $settings ) ); ?>" role="status">
-			<h2 class="acps-board__title">
-				<?php
-				printf(
-					/* translators: %s: the status word, e.g. LOCKDOWN. */
-					esc_html__( 'School Status: %s', 'acps-alert-popups' ),
-					esc_html( $acps_level['banner'] )
-				);
-				?>
-			</h2>
-			<?php if ( '' !== $acps_level['directive'] ) : ?>
-				<p class="acps-board__directive"><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></p>
+			<?php if ( $acps_show_icon ) : ?>
+				<?php echo ACPS_Alerts_Status::level_icon( $acps_live->get( 'status_level' ), 64 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
 			<?php endif; ?>
-			<p class="acps-board__headline"><?php echo esc_html( $acps_live->get_title() ); ?></p>
+
+			<?php
+			// The level word sits above the heading as a small label. The
+			// heading itself is whatever was typed, because that is the thing
+			// a visitor came to read — not the word "School Status".
+			?>
+			<p class="acps-board__level">
+				<?php echo esc_html( $acps_level['banner'] ); ?>
+				<?php if ( '' !== $acps_level['directive'] ) : ?>
+					<span class="acps-board__directive"><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></span>
+				<?php endif; ?>
+			</p>
+
+			<h2 class="acps-board__title"><?php echo esc_html( $acps_live->get_title() ); ?></h2>
+
 			<?php if ( '' !== trim( $acps_msg ) ) : ?>
 				<div class="acps-board__message"><?php echo wp_kses_post( wpautop( $acps_msg ) ); ?></div>
 			<?php endif; ?>

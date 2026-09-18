@@ -211,6 +211,21 @@ FLBuilder::register_module(
 		'board' => array(
 			'title'    => __( 'Board', 'acps-alert-popups' ),
 			'sections' => array(
+				'banner'  => array(
+					'title'  => __( 'The banner', 'acps-alert-popups' ),
+					'fields' => array(
+						'show_icon' => array(
+							'type'    => 'select',
+							'label'   => __( 'Show the level badge', 'acps-alert-popups' ),
+							'default' => '1',
+							'options' => array(
+								'1' => __( 'Yes — the coloured disc above the heading', 'acps-alert-popups' ),
+								'0' => __( 'No', 'acps-alert-popups' ),
+							),
+							'help'    => __( 'The heading underneath it is always the alert\'s own title.', 'acps-alert-popups' ),
+						),
+					),
+				),
 				'normal'  => array(
 					'title'  => __( 'When nothing is happening', 'acps-alert-popups' ),
 					'fields' => array(

@@ -52,12 +52,38 @@ defined( 'ABSPATH' ) || exit;
 	position: relative;
 	max-width: 520px;
 	margin: 0 auto;
-	padding: 26px 30px;
+	padding: 34px 30px 30px;
 	border-top: 6px solid #1b2f5e;
 	border-radius: 6px;
 	background: #fff;
 	box-shadow: 0 18px 40px rgba(0, 0, 0, .25);
-	text-align: left;
+	text-align: center;
+}
+
+/* The badge, repeated here so the preview looks right inside the builder even
+   before the board stylesheet has loaded on the page. */
+.fl-node-<?php echo esc_html( $id ); ?> .acps-level-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0 0 18px;
+	border-radius: 50%;
+	color: #fff;
+	line-height: 0;
+}
+
+.fl-node-<?php echo esc_html( $id ); ?> .acps-level-icon svg {
+	width: 55%;
+	height: 55%;
+	display: block;
+}
+
+.fl-node-<?php echo esc_html( $id ); ?> .acps-popup-edit__cta {
+	margin: 22px 0 0;
+	font-size: 13px;
+	font-weight: 800;
+	letter-spacing: .1em;
+	text-transform: uppercase;
 }
 
 .fl-node-<?php echo esc_html( $id ); ?> .acps-popup-edit__close {
@@ -84,7 +110,8 @@ defined( 'ABSPATH' ) || exit;
 }
 
 .fl-node-<?php echo esc_html( $id ); ?> .acps-popup-edit__text {
-	margin: 0;
+	margin: 0 auto;
+	max-width: 42ch;
 	font-size: 16px;
 	line-height: 1.55;
 }

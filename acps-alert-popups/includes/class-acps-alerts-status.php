@@ -45,6 +45,7 @@ class ACPS_Alerts_Status {
 				'directive' => '',
 				'color'     => '#1b2f5e',
 				'severity'  => 'success',
+				'icon'      => 'M4 12.5l5 5L20 6.5',
 				'srp'       => false,
 				'rank'      => 0,
 			),
@@ -54,6 +55,7 @@ class ACPS_Alerts_Status {
 				'directive' => '',
 				'color'     => '#1b2f5e',
 				'severity'  => 'info',
+				'icon'      => 'M12 7.5v.01M12 11v6.5',
 				'srp'       => false,
 				'rank'      => 1,
 			),
@@ -63,6 +65,7 @@ class ACPS_Alerts_Status {
 				'directive' => __( 'In Your Classroom or Area', 'acps-alert-popups' ),
 				'color'     => '#7a1c82',
 				'severity'  => 'warning',
+				'icon'      => 'M7 11.5V6a1.5 1.5 0 0 1 3 0v5M10 11V4.5a1.5 1.5 0 0 1 3 0V11M13 11.5V6.5a1.5 1.5 0 0 1 3 0V13M16 12.5v-1a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1.4a5 5 0 0 1-3.9-1.9l-3.2-4.1a1.6 1.6 0 0 1 2.4-2.1L7 14.4',
 				'srp'       => true,
 				'rank'      => 2,
 			),
@@ -72,6 +75,7 @@ class ACPS_Alerts_Status {
 				'directive' => __( 'Get Inside. Lock Outside Doors', 'acps-alert-popups' ),
 				'color'     => '#4f6fd4',
 				'severity'  => 'warning',
+				'icon'      => 'M12 3l7.5 3v5.2c0 4.6-3.1 8.5-7.5 10.3-4.4-1.8-7.5-5.7-7.5-10.3V6z',
 				'srp'       => true,
 				'rank'      => 3,
 			),
@@ -81,6 +85,7 @@ class ACPS_Alerts_Status {
 				'directive' => __( 'State Hazard &amp; Safety Strategy', 'acps-alert-popups' ),
 				'color'     => '#e8762c',
 				'severity'  => 'warning',
+				'icon'      => 'M3 11.5L12 4l9 7.5M5.8 12.6V20h12.4v-7.4',
 				'srp'       => true,
 				'rank'      => 4,
 			),
@@ -90,6 +95,7 @@ class ACPS_Alerts_Status {
 				'directive' => __( 'To a Location', 'acps-alert-popups' ),
 				'color'     => '#1e8a3c',
 				'severity'  => 'critical',
+				'icon'      => 'M9.5 4h-5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M14 8.2l4 3.8-4 3.8M18 12H8.5',
 				'srp'       => true,
 				'rank'      => 5,
 			),
@@ -99,6 +105,7 @@ class ACPS_Alerts_Status {
 				'directive' => __( 'Locks, Lights, Out of Sight', 'acps-alert-popups' ),
 				'color'     => '#d81440',
 				'severity'  => 'critical',
+				'icon'      => 'M6.2 11h11.6a1 1 0 0 1 1 1v7.8a1 1 0 0 1-1 1H6.2a1 1 0 0 1-1-1V12a1 1 0 0 1 1-1zM8.4 11V7.4a3.6 3.6 0 0 1 7.2 0V11',
 				'srp'       => true,
 				'rank'      => 6,
 			),
@@ -191,11 +198,50 @@ class ACPS_Alerts_Status {
 				'directive' => '',
 				'color'     => '#1b2f5e',
 				'severity'  => 'info',
+				'icon'      => '',
 				'srp'       => false,
 				'rank'      => 0,
 				'legacy'    => false,
 			),
 			(array) $level
+		);
+	}
+
+	/**
+	 * The badge for a status level: its glyph in a disc of its own colour.
+	 *
+	 * Drawn inline rather than loaded as an image so it cannot 404, cannot be
+	 * blocked, and takes the level's colour without a second request. A level a
+	 * site has filtered in without a glyph simply gets no badge.
+	 *
+	 * @param string $key  Level key.
+	 * @param int    $size Disc size in pixels.
+	 * @return string Markup, or an empty string when the level has no glyph.
+	 */
+	public static function level_icon( $key, $size = 64 ) {
+		$level = self::level( $key );
+		$path  = isset( $level['icon'] ) ? (string) $level['icon'] : '';
+
+		// Only ever emit path data that looks like path data, since it is
+		// printed into an attribute unescaped-looking markup would break.
+		if ( '' === $path || ! preg_match( '/^[0-9A-Za-z\s.,\-]+$/', $path ) ) {
+			return '';
+		}
+
+		$color = isset( $level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i', (string) $level['color'] )
+			? (string) $level['color']
+			: '#1b2f5e';
+
+		$size = max( 24, min( 160, (int) $size ) );
+
+		return sprintf(
+			'<span class="acps-level-icon acps-level-icon--%1$s" style="background:%2$s;width:%3$dpx;height:%3$dpx" aria-hidden="true">'
+				. '<svg viewBox="0 0 24 24" focusable="false"><path d="%4$s" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>'
+			. '</span>',
+			esc_attr( sanitize_html_class( $key ) ),
+			esc_attr( $color ),
+			$size,
+			esc_attr( $path )
 		);
 	}
 
