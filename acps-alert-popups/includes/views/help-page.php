@@ -14,7 +14,6 @@ $acps_progress  = $this->progress();
 $acps_checklist = $this->checklist();
 $acps_tours     = $this->tours();
 $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
-$acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 ?>
 <div class="wrap acps-help">
 
@@ -126,15 +125,18 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 		<h3><?php esc_html_e( 'Posting an update, every time after that', 'acps-alert-popups' ); ?></h3>
 		<ol class="acps-help-list">
 			<li><?php esc_html_e( 'Edit the status page in Beaver Builder and open the Status Board module.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'On the "Post an update" tab, type a headline and a message, and pick the status level.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'On the "Current Alert" tab, rewrite the headline and message, and pick the status level.', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'Choose whether it also pops up across the site, and when it should come down.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'Save. That is it — the update is live.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Set "Show this alert now" to "Yes — it is live", and save. That is it.', 'acps-alert-popups' ); ?></li>
 		</ol>
+		<p class="acps-callout">
+			<?php esc_html_e( 'There is only ever one Current Alert. You are always modifying it, never making another one — it is there on a quiet day too, just switched off.', 'acps-alert-popups' ); ?>
+		</p>
 
 		<h3><?php esc_html_e( 'Fixing a typo', 'acps-alert-popups' ); ?></h3>
 		<p><?php esc_html_e( 'What is in those boxes IS the current status. Correct the wording, save, and the update people are reading changes. You do not get a second copy underneath it, and the daily cut-off is not pushed back — an update fixed at lunchtime still comes down at the usual time.', 'acps-alert-popups' ); ?></p>
 		<p class="acps-callout">
-			<?php esc_html_e( 'To replace the current status with something genuinely new, switch "When you save" to "Post as a new update". The one it replaces is archived, and the setting returns to "Update" on its own so your next save is a correction again.', 'acps-alert-popups' ); ?>
+			<?php esc_html_e( 'To replace it with something genuinely new, just rewrite the boxes. The previous wording is filed into the archive at the cut-off, or you can file a record of it yourself from the archive tab.', 'acps-alert-popups' ); ?>
 		</p>
 
 		<h3><?php esc_html_e( 'What happens at the cut-off', 'acps-alert-popups' ); ?></h3>
@@ -142,33 +144,35 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 			<?php
 			printf(
 				/* translators: %s: cut-off time, e.g. 17:50. */
-				esc_html__( 'Every day at %s, any update set to come down automatically moves into the archive. It stops popping up and drops off the banner, but stays on the status page in the list of past updates — which is where that expandable list in your screenshot comes from.', 'acps-alert-popups' ),
+				esc_html__( 'Every day at %s, a Current Alert set to come down automatically is filed into the archive and switched off. It stops popping up and drops off the banner, but stays on the status page in the list of past updates. Its wording is left alone, ready for you to rewrite next time.', 'acps-alert-popups' ),
 				'<strong>' . esc_html( ACPS_Alerts_Status::cutoff_time() ) . '</strong>'
 			);
 			?>
 		</p>
 		<p><?php esc_html_e( 'An update posted after the cut-off runs until the following day, so a 9pm closure notice does not vanish the moment you post it. Change the time in Settings.', 'acps-alert-popups' ); ?></p>
-		<p><?php esc_html_e( 'To keep something up indefinitely, choose "Keep it up until I archive it" when you post it. Nothing will take it down but you.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'To keep something up indefinitely, set "Take it down" to "Keep it up until I switch it off". Nothing will take it down but you.', 'acps-alert-popups' ); ?></p>
 
 		<h3><?php esc_html_e( 'Filling in things that already happened', 'acps-alert-popups' ); ?></h3>
 		<p><?php esc_html_e( 'You can write up a past event and send it straight to the archive, so the list of past updates is complete from day one — useful when you are moving over from somewhere else.', 'acps-alert-popups' ); ?></p>
 		<ol class="acps-help-list">
-			<li><?php esc_html_e( 'Open the Status Board module as usual and fill in the headline and message.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'Set "Post it as" to "Straight into the archive".', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Open the Status Board module as usual.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Fill in the headline, message and status level for the past event.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Use the "Add a past event to the archive" section, not the Current Alert section.', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'Type the date it happened, as YYYY-MM-DD. That decides where it sits in the list.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'Save. Repeat for each past event — the date box clears itself each time.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Save. Repeat for each past event — the boxes clear themselves each time.', 'acps-alert-popups' ); ?></li>
 		</ol>
 		<p class="acps-callout">
 			<?php esc_html_e( 'An archived entry never pops up and never reaches the banner, whatever else is set. It is a record, not an announcement.', 'acps-alert-popups' ); ?>
 		</p>
-		<p><?php esc_html_e( 'You can also do this from Site Alerts: create an alert, tick "This update is in the archive", and set "Date it happened". The same box lets you correct the date on anything already in the archive.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'Archived entries are records, not alerts. They live in a list of their own, so filing one never touches the Current Alert or the Normal Alert.', 'acps-alert-popups' ); ?></p>
 
 		<h3><?php esc_html_e( 'Checking an update before anyone sees it', 'acps-alert-popups' ); ?></h3>
 		<p><?php esc_html_e( 'Set "Who can see it" to "Staff only" when you post. The update goes live on the real status page and the real popup, but only people who can manage alerts see it — everybody else sees the normal status. The board shows you a dashed "Staff preview" strip so you cannot forget it is staged.', 'acps-alert-popups' ); ?></p>
-		<p><?php esc_html_e( 'When you are happy with it, open the update in Site Alerts and set Visibility to "Live".', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'When you are happy with it, set "Who can see it" back to "Everybody" and save.', 'acps-alert-popups' ); ?></p>
 
 		<h3><?php esc_html_e( 'Designing the popup itself', 'acps-alert-popups' ); ?></h3>
-		<p><?php esc_html_e( 'By default the popup shows the message you typed. If you want it laid out properly — images, buttons, columns — open the update in Site Alerts and use Launch Beaver Builder. That layout is the popup body; the status page keeps showing the plain summary.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'By default the popup shows the message you typed. If you want it laid out properly — images, buttons, columns — open the Current Alert from Site Alerts and use Launch Beaver Builder. That layout is the popup body; the status page keeps showing the plain summary.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'There are only two things to design in Beaver Builder, ever: the Current Alert and the Normal Alert. Design them once and they are reused for every update.', 'acps-alert-popups' ); ?></p>
 		<p><?php esc_html_e( 'The popup never appears on the status page itself, so the page stays readable while you are working on it.', 'acps-alert-popups' ); ?></p>
 	</div>
 
@@ -192,37 +196,37 @@ $acps_new_url   = admin_url( 'admin.php?page=acps-alerts-new' );
 
 	<?php // ---------- Step by step ---------- ?>
 	<div class="acps-help-section">
-		<h2><?php esc_html_e( 'Make an alert, step by step', 'acps-alert-popups' ); ?></h2>
+		<h2><?php esc_html_e( 'Put out an alert, step by step', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'Follow these in order the first time. After that it takes about a minute.', 'acps-alert-popups' ); ?></p>
 
 		<ol class="acps-steps-big">
 			<li>
-				<h3><?php esc_html_e( 'Create the alert and write it', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Use the Add New Alert button. You get an ordinary WordPress editing screen: give it a title, write what it should say, and save.', 'acps-alert-popups' ); ?></p>
-				<p><?php esc_html_e( 'Keep it short: a heading, a sentence or two, and at most one button.', 'acps-alert-popups' ); ?></p>
-				<a class="button button-primary" href="<?php echo esc_url( $acps_new_url ); ?>"><?php esc_html_e( 'Do this now', 'acps-alert-popups' ); ?></a>
+				<h3><?php esc_html_e( 'Open the status page in Beaver Builder', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'This is the page with the School Status Board module on it. Everything is done from there — you do not create anything in wp-admin.', 'acps-alert-popups' ); ?></p>
+				<a class="button button-primary" href="<?php echo esc_url( admin_url( 'edit.php?post_type=page' ) ); ?>"><?php esc_html_e( 'Open Pages', 'acps-alert-popups' ); ?></a>
 			</li>
 			<li>
-				<h3><?php esc_html_e( 'Publish it', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'An alert left as a draft will never appear, however it is configured. This catches almost everybody once.', 'acps-alert-popups' ); ?></p>
+				<h3><?php esc_html_e( 'Edit the Current Alert', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'Open the module and go to the Current Alert tab. Rewrite the headline and message, and pick the status level — Hold, Secure, Lockdown, Evacuate, Shelter, or one of the everyday levels.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'Keep it short: a heading and a sentence or two. There is only one Current Alert, so you are always editing it, never adding another.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
-				<h3><?php esc_html_e( 'Design it in Beaver Builder (optional)', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Once it is published, a Launch Beaver Builder button appears at the top of the alert. Use it to lay the alert out in the builder, exactly like any other page.', 'acps-alert-popups' ); ?></p>
-				<p><?php esc_html_e( 'If you skip this, the alert simply shows what you wrote in the normal editor.', 'acps-alert-popups' ); ?></p>
+				<h3><?php esc_html_e( 'Decide how far it goes', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( '"Also pop up across the site" puts it in front of everyone on every page. Leave it off and the update stays on the status page only.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'Set "Who can see it" to "Staff only" if you want to check it first — it goes live for people who can manage alerts and nobody else.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
-				<h3><?php esc_html_e( 'Tick "Alert is live"', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Scroll down the same screen to Site Alert Settings. That single tick is what puts it in front of visitors — everything else just narrows it down.', 'acps-alert-popups' ); ?></p>
+				<h3><?php esc_html_e( 'Switch it on and save', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'Set "Show this alert now" to "Yes — it is live" and save the page. That single choice is what puts it in front of visitors.', 'acps-alert-popups' ); ?></p>
+			</li>
+			<li>
+				<h3><?php esc_html_e( 'Leave it to come down on its own', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'At the daily cut-off it files itself into the archive and switches itself off. Choose "Keep it up until I switch it off" if it needs to outlast the day.', 'acps-alert-popups' ); ?></p>
+			</li>
+			<li>
+				<h3><?php esc_html_e( 'Design the popup once (optional)', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'Open the Current Alert from Site Alerts and use Launch Beaver Builder to lay out the popup properly. You only ever do this once — the layout is reused for every update.', 'acps-alert-popups' ); ?></p>
 				<a class="button" href="<?php echo esc_url( $acps_list_url ); ?>"><?php esc_html_e( 'Open Site Alerts', 'acps-alert-popups' ); ?></a>
-			</li>
-			<li>
-				<h3><?php esc_html_e( 'Aim it, then save', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Choose where it shows, who sees it, when it starts and stops, and how often it comes back. Save, and it is running.', 'acps-alert-popups' ); ?></p>
-			</li>
-			<li>
-				<h3><?php esc_html_e( 'Check it on the live site', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Every alert settings screen has a preview link that shows you the alert on the real site, ignoring its schedule and targeting, without anyone else seeing it.', 'acps-alert-popups' ); ?></p>
 			</li>
 		</ol>
 	</div>

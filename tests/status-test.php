@@ -18,6 +18,8 @@ $GLOBALS['options']   = array();
 $GLOBALS['gmt_offset'] = 0;
 $GLOBALS['is_staff']  = false;
 $GLOBALS['logged_in'] = false;
+$GLOBALS['posts']     = array();
+$GLOBALS['post_meta'] = array();
 
 function add_action() {}
 function add_filter() {}
@@ -79,13 +81,13 @@ class ACPS_Alerts_Alert {
 	private $data;
 	private $id;
 	public function __construct( $data = array(), $id = 1 ) {
-		// post_entry() constructs this with just an id.
+		// update_entry() constructs this with just an id.
 		if ( is_int( $data ) ) { $id = $data; $data = array(); }
 		$this->data = $data; $this->id = $id;
 	}
 	public function get( $k, $d = null ) {
 		if ( array_key_exists( $k, $this->data ) ) { return $this->data[ $k ]; }
-		// Fall back to whatever post_entry() saved for this id, so an alert
+		// Fall back to whatever update_entry() saved for this id, so an alert
 		// looked up by id behaves like the real one.
 		if ( isset( $GLOBALS['saved'][ $this->id ][ $k ] ) ) { return $GLOBALS['saved'][ $this->id ][ $k ]; }
 		return $d;
@@ -97,7 +99,14 @@ class ACPS_Alerts_Alert {
 	public function save( $s ) { $GLOBALS['saved'][ $this->id ] = $s; return $s; }
 }
 
-class ACPS_Alerts_Post_Type { const SLUG = 'acps_alert'; }
+class ACPS_Alerts_Post_Type {
+	const SLUG        = 'acps_alert';
+	const ROLE_META   = '_acps_alert_role';
+	const ROLE_NORMAL = 'normal';
+	const ROLE_CURRENT = 'current';
+	public static function roles() { return array( 'normal' => 'Normal Alert', 'current' => 'Current Alert' ); }
+	public static function get_alert( $role ) { return 'current' === $role ? 50 : 51; }
+}
 
 require ACPS_ALERTS_DIR . 'includes/class-acps-alerts-status.php';
 
@@ -293,182 +302,71 @@ foreach ( array( 'advisory', 'warning', 'closure', 'emergency' ) as $old ) {
 
 check( 'every level key is saveable', count( ACPS_Alerts_Status::level_keys() ), count( $levels ) );
 
-/* ---- premade archive entries (backfilling past events) ---- */
-$GLOBALS['gmt_offset'] = 0;
-$GLOBALS['saved'] = array();
+/* ---- the two fixed alerts ---- */
+check( 'there are exactly two alert roles', count( ACPS_Alerts_Post_Type::roles() ), 2 );
+ok( 'one of them is the Current Alert', array_key_exists( 'current', ACPS_Alerts_Post_Type::roles() ) );
+ok( 'the other is the Normal Alert', array_key_exists( 'normal', ACPS_Alerts_Post_Type::roles() ) );
 
-check( 'a bare date reads as midday, so no timezone shift moves the day',
-	gmdate( 'Y-m-d H:i', ACPS_Alerts_Status::parse_date( '2026-09-04' ) ), '2026-09-04 12:00' );
-check( 'a full datetime is read as given',
-	gmdate( 'Y-m-d H:i', ACPS_Alerts_Status::parse_date( '2026-09-04 08:30' ) ), '2026-09-04 08:30' );
-check( 'an empty date reads as 0', ACPS_Alerts_Status::parse_date( '' ), 0 );
-check( 'nonsense reads as 0', ACPS_Alerts_Status::parse_date( 'not a date' ), 0 );
+/* ---- the archive is records, not posts ---- */
+$GLOBALS['options'] = array();
 
-// Backfill a past event.
-$id = ACPS_Alerts_Status::post_entry( array(
-	'title'    => 'Phishing campaign identified & contained',
-	'level'    => 'advisory',
-	'message'  => 'Handled.',
-	'archived' => true,
-	'date'     => '2026-09-04',
-	'as_popup' => true,
+check( 'the archive starts empty', ACPS_Alerts_Status::archive(), array() );
+
+$id1 = ACPS_Alerts_Status::add_archive_record( array(
+	'title' => 'Phishing campaign contained', 'level' => 'info', 'message' => 'Handled.', 'date' => '2026-09-04',
+) );
+$id2 = ACPS_Alerts_Status::add_archive_record( array(
+	'title' => 'Snow day', 'level' => 'closure', 'message' => 'Closed.', 'date' => '2026-01-05',
 ) );
 
-ok( 'a backfilled entry is created', $id > 0 );
-$e = $GLOBALS['saved'][ $id ];
-check( 'it is archived on arrival', $e['archived'], 1 );
-check( 'it never pops up, even if asked', $e['as_popup'], 0 );
-check( 'it keeps the date it happened',
-	gmdate( 'Y-m-d', $e['posted_at'] ), '2026-09-04' );
-check( 'the post itself is dated to match',
-	substr( $GLOBALS['posts'][ $id ]['post_date_gmt'], 0, 10 ), '2026-09-04' );
+ok( 'a record is filed', '' !== $id1 );
+check( 'both records are in the archive', count( ACPS_Alerts_Status::archive( 50 ) ), 2 );
 
-// A live entry is unaffected.
-$live_id = ACPS_Alerts_Status::post_entry( array(
-	'title' => 'Snow day', 'level' => 'closure', 'as_popup' => true,
-) );
-$l = $GLOBALS['saved'][ $live_id ];
-check( 'a live entry is not archived', $l['archived'], 0 );
-check( 'a live entry may pop up', $l['as_popup'], 1 );
-check( 'a live entry is dated now', abs( $l['posted_at'] - time() ) < 5, true );
-ok( 'a live entry does not force a post date', ! isset( $GLOBALS['posts'][ $live_id ]['post_date_gmt'] ) );
+$archive = ACPS_Alerts_Status::archive( 50 );
+check( 'the archive is newest first', $archive[0]['title'], 'Phishing campaign contained' );
+check( 'a record keeps the date it happened', gmdate( 'Y-m-d', $archive[0]['date'] ), '2026-09-04' );
 
-// An archived entry is never "current", so it cannot reach the banner.
-$backfilled = new ACPS_Alerts_Alert( array(
-	'enabled' => 1, 'archived' => 1, 'expires_mode' => 'keep', 'posted_at' => ACPS_Alerts_Status::parse_date( '2026-09-04' ),
-) );
-check( 'a backfilled entry is never current', ACPS_Alerts_Status::is_current( $backfilled ), false );
+check( 'a record with no headline is refused', ACPS_Alerts_Status::add_archive_record( array( 'title' => '  ' ) ), '' );
+check( 'the archive respects its limit', count( ACPS_Alerts_Status::archive( 1 ) ), 1 );
 
-// Ordering: the archive sorts by the date it happened, not when it was typed.
-$older = new ACPS_Alerts_Alert( array( 'posted_at' => ACPS_Alerts_Status::parse_date( '2025-01-01' ) ) );
-$newer = new ACPS_Alerts_Alert( array( 'posted_at' => ACPS_Alerts_Status::parse_date( '2026-09-04' ) ) );
-ok( 'a later event sorts above an earlier one',
-	ACPS_Alerts_Status::posted_time( $newer ) > ACPS_Alerts_Status::posted_time( $older ) );
+check( 'a record can be removed', ACPS_Alerts_Status::delete_archive_record( $id2 ), true );
+check( 'and is gone', count( ACPS_Alerts_Status::archive( 50 ) ), 1 );
+check( 'removing an unknown record reports nothing removed', ACPS_Alerts_Status::delete_archive_record( 'nope' ), false );
 
-/* ---- saving the page again must not post the update again ---- */
+// No post was created for any of that: archive records are not posts.
+check( 'filing archive records creates no posts', count( $GLOBALS['posts'] ), 0 );
+
+/* ---- editing the Current Alert never creates another ---- */
+$GLOBALS['posts']   = array( 50 => array( 'post_title' => 'Current Alert' ) );
+$GLOBALS['saved']   = array( 50 => array( 'enabled' => 1, 'expires_mode' => 'daily', 'posted_at' => time(), 'archived' => 0 ) );
 $GLOBALS['options'] = array();
-$GLOBALS['saved']   = array();
 
-$compose = array(
-	'title'   => 'Snow Day',
-	'level'   => 'closure',
-	'message' => 'All schools closed.',
-	'expires' => 'daily',
-);
-
-check( 'nothing posted yet, so the first save goes ahead',
-	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), false );
-
-$first = ACPS_Alerts_Status::post_entry( $compose );
-ACPS_Alerts_Status::remember_posted( 'node1', $compose, $first );
-
-check( 'saving the page again does NOT post it again',
-	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), true );
-
-// Twelve more saves of an unchanged page.
-$posted_again = 0;
-for ( $i = 0; $i < 12; $i++ ) {
-	if ( ! ACPS_Alerts_Status::already_posted( 'node1', $compose, false ) ) {
-		$posted_again++;
-	}
-}
-check( 'twelve repeat saves post nothing', $posted_again, 0 );
-
-// Changing any field makes it a new update.
-$changed = array_merge( $compose, array( 'message' => 'Now reopening.' ) );
-check( 'changing the message posts a new update',
-	ACPS_Alerts_Status::already_posted( 'node1', $changed, false ), false );
-
-$changed_title = array_merge( $compose, array( 'title' => 'Snow Day 2' ) );
-check( 'changing the headline posts a new update',
-	ACPS_Alerts_Status::already_posted( 'node1', $changed_title, false ), false );
-
-$changed_level = array_merge( $compose, array( 'level' => 'warning' ) );
-check( 'changing the level posts a new update',
-	ACPS_Alerts_Status::already_posted( 'node1', $changed_level, false ), false );
-
-// A different board is independent.
-check( 'another board is not blocked by this one',
-	ACPS_Alerts_Status::already_posted( 'node2', $compose, false ), false );
-
-// Once the entry has come down, the same wording may be used again.
-$GLOBALS['saved'][ $first ]['archived'] = 1;
-check( 'the same wording may be posted again after it is archived',
-	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), false );
-
-// A backfilled record is never posted twice, archived or not.
-$GLOBALS['options'] = array();
-$back = array( 'title' => 'Phishing contained', 'level' => 'advisory', 'message' => 'Handled.', 'archived' => true, 'date' => '2026-09-04' );
-$bid  = ACPS_Alerts_Status::post_entry( $back );
-ACPS_Alerts_Status::remember_posted( 'node1', $back, $bid );
-check( 'a backfilled record is never posted twice',
-	ACPS_Alerts_Status::already_posted( 'node1', $back, true ), true );
-
-// If the entry was deleted, the same update may be posted afresh.
-$GLOBALS['options'] = array();
-ACPS_Alerts_Status::remember_posted( 'node1', $compose, 99999 );
-check( 'a deleted entry does not block a repost',
-	ACPS_Alerts_Status::already_posted( 'node1', $compose, false ), false );
-
-/* ---- editing the wording must correct the live update, not add another ---- */
-//
-// Reported: fixing a typo on the status board published a second entry each
-// time, so one announcement became four near-identical ones.
-$GLOBALS['options'] = array();
-$GLOBALS['saved']   = array();
-$GLOBALS['posts']   = array();
-
-$before = count( $GLOBALS['posts'] );
-
-$typed = array( 'title' => 'snow day huray', 'level' => 'closure', 'message' => 'Closed.', 'expires' => 'daily' );
-$id1   = ACPS_Alerts_Status::post_entry( $typed );
-ACPS_Alerts_Status::remember_posted( 'node1', $typed, $id1 );
-
-check( 'the board is now driving that entry', ACPS_Alerts_Status::tracked_entry( 'node1' ), $id1 );
-
-// Three typo fixes, exactly as reported.
 foreach ( array( 'now day huray', 'lsnow day huray', 'snow day hooray' ) as $fixed ) {
-	$typed['title'] = $fixed;
-	$tracked = ACPS_Alerts_Status::tracked_entry( 'node1' );
-	ok( 'the board still has a live entry to correct', $tracked > 0 );
-	check( "rewriting to '$fixed' succeeds", ACPS_Alerts_Status::update_entry( $tracked, $typed ), true );
+	check( "rewriting to '$fixed' succeeds", ACPS_Alerts_Status::update_entry( 50, array(
+		'title' => $fixed, 'level' => 'closure', 'message' => 'Closed.',
+	) ), true );
 }
 
-check( 'three wording fixes created no new entries', count( $GLOBALS['posts'] ), $before + 1 );
-check( 'and the live entry now reads the corrected wording',
-	$GLOBALS['posts'][ $id1 ]['post_title'], 'snow day hooray' );
-check( 'it is still the same entry', ACPS_Alerts_Status::tracked_entry( 'node1' ), $id1 );
+check( 'three wording fixes created no new posts', count( $GLOBALS['posts'] ), 1 );
+check( 'the alert reads the corrected wording', $GLOBALS['posts'][50]['post_title'], 'snow day hooray' );
 
-/* ---- an edit must not restart the daily cut-off ---- */
-$posted_at_before = $GLOBALS['saved'][ $id1 ]['posted_at'];
-ACPS_Alerts_Status::update_entry( $id1, $typed );
-check( 'editing leaves the posted time alone, so the cut-off is not pushed back',
-	isset( $GLOBALS['post_meta'][ $id1 ]['_acps_alert_posted_at'] ), false );
-check( 'the original posted time is untouched', $GLOBALS['saved'][ $id1 ]['posted_at'], $posted_at_before );
+/* ---- the daily sweep files it and switches it off, never deletes it ---- */
+$GLOBALS['saved'][50]['posted_at'] = time() - 3 * DAY_IN_SECONDS;
+$GLOBALS['archived_ids'] = array();
 
-/* ---- an edit does change what people read ---- */
-$typed['level']   = 'lockdown';
-$typed['message'] = 'Different now.';
-ACPS_Alerts_Status::update_entry( $id1, $typed );
-check( 'the level really changes', $GLOBALS['post_meta'][ $id1 ]['_acps_alert_status_level'], 'lockdown' );
-check( 'the summary really changes', $GLOBALS['post_meta'][ $id1 ]['_acps_alert_status_message'], 'Different now.' );
-check( 'the severity follows the level', $GLOBALS['post_meta'][ $id1 ]['_acps_alert_severity'], 'critical' );
+check( 'the sweep archives the stale alert', ACPS_Alerts_Status::run_daily_archive(), 1 );
+check( 'a record was filed for it', count( ACPS_Alerts_Status::archive( 50 ) ), 1 );
+check( 'the alert itself still exists', isset( $GLOBALS['posts'][50] ), true );
+check( 'and it was switched off', $GLOBALS['post_meta'][50]['_acps_alert_enabled'], 0 );
+check( 'its wording was left alone for next time', $GLOBALS['posts'][50]['post_title'], 'snow day hooray' );
 
-/* ---- a genuinely new update is a separate entry ---- */
-$new   = array( 'title' => 'All clear', 'level' => 'info', 'message' => 'Back to normal.' );
-$count = count( $GLOBALS['posts'] );
-$id2   = ACPS_Alerts_Status::post_entry( $new );
-check( 'posting a new update adds one entry', count( $GLOBALS['posts'] ), $count + 1 );
-ok( 'and it is a different entry', $id2 !== $id1 );
+// Running again does nothing: it is already off.
+$GLOBALS['saved'][50]['enabled'] = 0;
+check( 'a second sweep archives nothing', ACPS_Alerts_Status::run_daily_archive(), 0 );
 
-/* ---- update_entry refuses what it should ---- */
-check( 'a missing entry is not updated', ACPS_Alerts_Status::update_entry( 987654, $typed ), false );
-check( 'an empty headline is not written', ACPS_Alerts_Status::update_entry( $id1, array( 'title' => '   ' ) ), false );
-check( 'a zero id is not written', ACPS_Alerts_Status::update_entry( 0, $typed ), false );
-
-/* ---- once archived, the board has nothing to correct ---- */
-$GLOBALS['saved'][ $id1 ]['archived'] = 1;
-check( 'an archived entry is no longer tracked as live', ACPS_Alerts_Status::tracked_entry( 'node1' ), 0 );
+/* ---- "keep" opts out of the sweep ---- */
+$GLOBALS['saved'][50] = array( 'enabled' => 1, 'expires_mode' => 'keep', 'posted_at' => time() - 30 * DAY_IN_SECONDS, 'archived' => 0 );
+check( 'a kept alert is never swept', ACPS_Alerts_Status::run_daily_archive(), 0 );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All status cases passed\n";
 exit( $fails ? 1 : 0 );

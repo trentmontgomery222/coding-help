@@ -3,14 +3,13 @@
  * The Status Board module for Beaver Builder.
  *
  * This is the control surface. You drop it on the status page, and from then on
- * everything happens in one place: type the update into the module, save, and
- * the plugin posts it as a status entry — which the board shows as a banner and
- * (if you asked for it) the rest of the site shows as a popup.
+ * everything happens in one place.
  *
- * The posting happens in update(), which Beaver Builder calls when the module's
- * settings are saved. It returns the settings it wants stored, so the compose
- * fields are cleared afterwards and saving the layout again cannot post the
- * same update twice.
+ * The site has exactly two alerts, and nothing here creates a third. The
+ * Current Alert is always there — editing these fields modifies it, and a
+ * switch decides whether it is showing. The Normal Alert is the resting state
+ * the board falls back to. Both are designed in Beaver Builder on their own
+ * popup; only their wording and settings are edited here.
  *
  * @package ACPS_Alert_Popups
  */
@@ -102,11 +101,7 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	}
 
 	/**
-	 * Posts a status update when one has been typed into the module.
-	 *
-	 * Beaver Builder stores whatever this returns, so the compose fields are
-	 * emptied once the entry exists. That is what stops a second save of the
-	 * same layout posting a duplicate.
+	 * Applies the module's fields to the Current Alert.
 	 *
 	 * @param object $settings Submitted module settings.
 	 * @return object Settings to store.
@@ -126,119 +121,131 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 			}
 		}
 
-		$headline = isset( $settings->post_headline ) ? trim( (string) $settings->post_headline ) : '';
-
-		if ( '' === $headline ) {
-			return $settings;
-		}
-
-		// Only someone who may manage alerts can publish one from here, even
+		// Only someone who may manage alerts changes the status from here, even
 		// though Beaver Builder already gates who can edit the layout.
 		if ( ! current_user_can( ACPS_Alerts_Admin::capability() ) ) {
 			return $settings;
 		}
 
-		$archived = isset( $settings->post_state ) && 'archive' === $settings->post_state;
-
-		$data = array(
-			'title'      => $headline,
-			'level'      => isset( $settings->post_level ) ? $settings->post_level : 'advisory',
-			'message'    => isset( $settings->post_message ) ? $settings->post_message : '',
-			'expires'    => isset( $settings->post_expires ) ? $settings->post_expires : 'daily',
-			'as_popup'   => ! empty( $settings->post_as_popup ),
-			'visibility' => isset( $settings->post_visibility ) ? $settings->post_visibility : 'public',
-			'archived'   => $archived,
-			'date'       => isset( $settings->post_date ) ? $settings->post_date : '',
-		);
-
-		$node = isset( $this->node ) ? (string) $this->node : 'status-board';
-
-		/*
-		 * These fields ARE the current status, not a blank form that posts and
-		 * empties. Beaver Builder calls update() on every save and keeps
-		 * whatever the editor typed, so the natural reading is the right one:
-		 * what is in these boxes is what the site is saying.
-		 *
-		 * So an edit rewrites the live entry in place. Fixing a typo has to
-		 * change the update people are reading, not publish a second one
-		 * underneath it. Only "Post as a new update" starts another.
-		 */
-		$tracked = ACPS_Alerts_Status::tracked_entry( $node );
-		$fresh   = isset( $settings->post_mode ) && 'new' === $settings->post_mode;
-
-		if ( ! $archived && $tracked && ! $fresh ) {
-			ACPS_Alerts_Status::update_entry( $tracked, $data );
-
-			$settings->last_posted = $tracked;
-
-			return $settings;
-		}
-
-		// A record of a past event, or a deliberate new update. The fingerprint
-		// stops a repeat save creating a second copy of either.
-		if ( ACPS_Alerts_Status::already_posted( $node, $data, $archived ) ) {
-			return $settings;
-		}
-
-		// Starting a new update retires the one it replaces, so the board never
-		// shows two versions of the same announcement.
-		if ( $fresh && $tracked && ! $archived ) {
-			ACPS_Alerts_Status::archive_entry( $tracked );
-		}
-
-		$post_id = ACPS_Alerts_Status::post_entry( $data );
-
-		if ( $post_id ) {
-			// A backfilled record is not what the board is driving, so it must
-			// not become the entry that later edits rewrite.
-			if ( ! $archived ) {
-				ACPS_Alerts_Status::remember_posted( $node, $data, $post_id );
-
-				// Drop back to editing, so the next save corrects this update
-				// rather than starting yet another one.
-				$settings->post_mode = 'update';
-			}
-
-			$settings->post_date      = '';
-			$settings->last_posted    = $post_id;
-			$settings->last_posted_at = time();
-		}
+		$this->maybe_add_archive_record( $settings );
+		$this->sync_current_alert( $settings );
 
 		return $settings;
 	}
+
+	/**
+	 * Writes these fields onto the Current Alert.
+	 *
+	 * There is one Current Alert and it always exists. Editing here modifies
+	 * it; nothing ever creates a second. Saving the page with the headline
+	 * unchanged simply writes the same values back, so a repeat save is a
+	 * no-op rather than a duplicate.
+	 *
+	 * @param object $settings Module settings.
+	 * @return void
+	 */
+	protected function sync_current_alert( $settings ) {
+		$alert = ACPS_Alerts_Status::current_alert();
+
+		if ( ! $alert ) {
+			return;
+		}
+
+		$headline = isset( $settings->post_headline ) ? trim( (string) $settings->post_headline ) : '';
+
+		if ( '' === $headline ) {
+			return; // Nothing typed: leave the alert exactly as it is.
+		}
+
+		$active = ! isset( $settings->post_active ) || '1' === (string) $settings->post_active;
+
+		ACPS_Alerts_Status::update_entry(
+			$alert->get_id(),
+			array(
+				'title'      => $headline,
+				'level'      => isset( $settings->post_level ) ? $settings->post_level : 'info',
+				'message'    => isset( $settings->post_message ) ? $settings->post_message : '',
+				'expires'    => isset( $settings->post_expires ) ? $settings->post_expires : 'daily',
+				'as_popup'   => ! isset( $settings->post_as_popup ) || '1' === (string) $settings->post_as_popup,
+				'visibility' => isset( $settings->post_visibility ) ? $settings->post_visibility : 'public',
+			)
+		);
+
+		$was_active = (bool) $alert->get( 'enabled' );
+
+		update_post_meta( $alert->get_id(), ACPS_Alerts_Alert::META_PREFIX . 'enabled', $active ? 1 : 0 );
+
+		// Switching it on starts its clock, so the daily cut-off measures from
+		// when it went up rather than from whenever it was last edited.
+		if ( $active && ! $was_active ) {
+			update_post_meta( $alert->get_id(), ACPS_Alerts_Alert::META_PREFIX . 'posted_at', time() );
+			update_post_meta( $alert->get_id(), ACPS_Alerts_Alert::META_PREFIX . 'archived', 0 );
+		}
+	}
+
+	/**
+	 * Adds a past event to the archive, when one has been typed in.
+	 *
+	 * Records are not alerts: they never pop up and never reach the banner.
+	 * The date box is cleared afterwards so a repeat save cannot file it twice.
+	 *
+	 * @param object $settings Module settings.
+	 * @return void
+	 */
+	protected function maybe_add_archive_record( $settings ) {
+		$title = isset( $settings->archive_title ) ? trim( (string) $settings->archive_title ) : '';
+
+		if ( '' === $title ) {
+			return;
+		}
+
+		ACPS_Alerts_Status::add_archive_record(
+			array(
+				'title'   => $title,
+				'level'   => isset( $settings->archive_level ) ? $settings->archive_level : 'info',
+				'message' => isset( $settings->archive_message ) ? $settings->archive_message : '',
+				'date'    => isset( $settings->archive_date ) ? $settings->archive_date : '',
+			)
+		);
+
+		$settings->archive_title   = '';
+		$settings->archive_message = '';
+		$settings->archive_date    = '';
+	}
+
 }
 
 FLBuilder::register_module(
 	'ACPS_Status_Board_Module',
 	array(
 		'post'  => array(
-			'title'    => __( 'Post an update', 'acps-alert-popups' ),
+			'title'    => __( 'Current Alert', 'acps-alert-popups' ),
 			'sections' => array(
 				'compose' => array(
-					'title'       => __( 'The current status', 'acps-alert-popups' ),
-					'description' => __( 'What is in these boxes is what the site is saying. Edit and save to correct the live update — fixing a typo changes the update people are reading, it does not publish a second one. To replace it with something genuinely new, switch "When you save" below. Leave the headline empty to change nothing.', 'acps-alert-popups' ),
+					'title'       => __( 'The current alert', 'acps-alert-popups' ),
+					'description' => __( 'This site has one Current Alert and it is always here. These fields are its wording — edit them and save to change what it says. The switch below decides whether anybody is seeing it. Nothing here ever creates a second alert.', 'acps-alert-popups' ),
 					'fields'      => array(
-						'post_mode'       => array(
+						'post_active'     => array(
 							'type'    => 'select',
-							'label'   => __( 'When you save', 'acps-alert-popups' ),
-							'default' => 'update',
+							'label'   => __( 'Show this alert now', 'acps-alert-popups' ),
+							'default' => '0',
 							'options' => array(
-								'update' => __( 'Update the current status', 'acps-alert-popups' ),
-								'new'    => __( 'Post as a new update (archives the current one)', 'acps-alert-popups' ),
+								'1' => __( 'Yes — it is live', 'acps-alert-popups' ),
+								'0' => __( 'No — off', 'acps-alert-popups' ),
 							),
-							'help'    => __( 'Leave this on "Update" for wording fixes. It returns to "Update" on its own after a new update is posted.', 'acps-alert-popups' ),
+							'help'    => __( 'Switching it on starts its clock for the daily cut-off. It switches itself off at the cut-off and files a copy in the archive; the wording stays for next time.', 'acps-alert-popups' ),
 						),
 						'post_headline'   => array(
 							'type'        => 'text',
 							'label'       => __( 'Headline', 'acps-alert-popups' ),
 							'default'     => '',
 							'placeholder' => __( 'Snow Day — All Schools Closed', 'acps-alert-popups' ),
-							'help'        => __( 'This is the title people see on the board and in the archive.', 'acps-alert-popups' ),
+							'help'        => __( 'Leave empty to change nothing about the alert.', 'acps-alert-popups' ),
 						),
 						'post_level'      => array(
 							'type'    => 'select',
 							'label'   => __( 'Status level', 'acps-alert-popups' ),
-							'default' => 'advisory',
+							'default' => 'info',
 							'options' => ACPS_Alerts_Status::level_choices(),
 						),
 						'post_message'    => array(
@@ -246,28 +253,7 @@ FLBuilder::register_module(
 							'label'   => __( 'Message', 'acps-alert-popups' ),
 							'default' => '',
 							'rows'    => 5,
-							'help'    => __( 'A sentence or two. Shown on the board and used for the popup unless you design one in Beaver Builder.', 'acps-alert-popups' ),
-						),
-						'post_state'      => array(
-							'type'    => 'select',
-							'label'   => __( 'Post it as', 'acps-alert-popups' ),
-							'default' => 'live',
-							'options' => array(
-								'live'    => __( 'A live update — show it now', 'acps-alert-popups' ),
-								'archive' => __( 'Straight into the archive — a past event', 'acps-alert-popups' ),
-							),
-							'help'    => __( 'Use the archive option to fill in things that already happened. They never pop up; they just appear in the list of past updates.', 'acps-alert-popups' ),
-							'toggle'  => array(
-								'live'    => array( 'fields' => array( 'post_expires', 'post_as_popup', 'post_visibility' ) ),
-								'archive' => array( 'fields' => array( 'post_date' ) ),
-							),
-						),
-						'post_date'       => array(
-							'type'        => 'text',
-							'label'       => __( 'Date it happened', 'acps-alert-popups' ),
-							'default'     => '',
-							'placeholder' => 'YYYY-MM-DD',
-							'help'        => __( 'Sets where it sits in the archive. Leave empty to use today.', 'acps-alert-popups' ),
+							'help'    => __( 'Shown on the board and used for the popup unless you design one in Beaver Builder on the Current Alert itself.', 'acps-alert-popups' ),
 						),
 						'post_expires'    => array(
 							'type'    => 'select',
@@ -275,10 +261,9 @@ FLBuilder::register_module(
 							'default' => 'daily',
 							'options' => array(
 								'daily'  => __( 'Automatically, at the daily cut-off', 'acps-alert-popups' ),
-								'keep'   => __( 'Keep it up until I archive it', 'acps-alert-popups' ),
+								'keep'   => __( 'Keep it up until I switch it off', 'acps-alert-popups' ),
 								'custom' => __( 'On its own schedule (set in Site Alerts)', 'acps-alert-popups' ),
 							),
-							'help'    => __( 'The cut-off is set in Site Alerts → Settings. It defaults to 5:50pm.', 'acps-alert-popups' ),
 						),
 						'post_as_popup'   => array(
 							'type'    => 'select',
@@ -297,7 +282,37 @@ FLBuilder::register_module(
 								'public' => __( 'Everybody', 'acps-alert-popups' ),
 								'admins' => __( 'Staff only — stage it before it goes out', 'acps-alert-popups' ),
 							),
-							'help'    => __( 'Staff only lets you check it on the real site. Nobody else sees it, on the board or in the popup.', 'acps-alert-popups' ),
+						),
+					),
+				),
+				'archive' => array(
+					'title'       => __( 'Add a past event to the archive', 'acps-alert-popups' ),
+					'description' => __( 'For writing up something that already happened. These become records in the list of past updates — they never pop up and never reach the banner. The boxes empty themselves once filed.', 'acps-alert-popups' ),
+					'fields'      => array(
+						'archive_title'   => array(
+							'type'        => 'text',
+							'label'       => __( 'Headline', 'acps-alert-popups' ),
+							'default'     => '',
+							'placeholder' => __( 'Phishing campaign identified &amp; contained', 'acps-alert-popups' ),
+						),
+						'archive_level'   => array(
+							'type'    => 'select',
+							'label'   => __( 'Status level', 'acps-alert-popups' ),
+							'default' => 'info',
+							'options' => ACPS_Alerts_Status::level_choices(),
+						),
+						'archive_message' => array(
+							'type'    => 'textarea',
+							'label'   => __( 'Message', 'acps-alert-popups' ),
+							'default' => '',
+							'rows'    => 4,
+						),
+						'archive_date'    => array(
+							'type'        => 'text',
+							'label'       => __( 'Date it happened', 'acps-alert-popups' ),
+							'default'     => '',
+							'placeholder' => 'YYYY-MM-DD',
+							'help'        => __( 'Decides where it sits in the archive. Leave empty to use today.', 'acps-alert-popups' ),
 						),
 					),
 				),

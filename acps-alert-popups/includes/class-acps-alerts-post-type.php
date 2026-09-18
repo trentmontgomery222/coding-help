@@ -27,6 +27,137 @@ class ACPS_Alerts_Post_Type {
 
 	const SLUG = 'acps_alert';
 
+	/** Meta marking which of the two fixed alerts a post is. */
+	const ROLE_META = '_acps_alert_role';
+
+	/** The resting state shown when nothing is happening. */
+	const ROLE_NORMAL = 'normal';
+
+	/** The one alert that gets switched on, edited and archived. */
+	const ROLE_CURRENT = 'current';
+
+	/**
+	 * The two alerts this site will ever have, and their starting titles.
+	 *
+	 * There are exactly two on purpose. Everything that happens — switching on,
+	 * editing the wording, the daily archive — happens to the Current Alert.
+	 * Nothing creates a third.
+	 *
+	 * @return array role => title.
+	 */
+	public static function roles() {
+		return array(
+			self::ROLE_NORMAL  => __( 'Normal Alert', 'acps-alert-popups' ),
+			self::ROLE_CURRENT => __( 'Current Alert', 'acps-alert-popups' ),
+		);
+	}
+
+	/**
+	 * The post id for one of the two alerts, creating it if it is not there.
+	 *
+	 * @param string $role normal | current.
+	 * @return int Post ID, or 0 if it could not be created.
+	 */
+	public static function get_alert( $role ) {
+		$roles = self::roles();
+
+		if ( ! isset( $roles[ $role ] ) ) {
+			return 0;
+		}
+
+		$found = get_posts(
+			array(
+				'post_type'        => self::SLUG,
+				'post_status'      => array( 'publish', 'draft', 'pending', 'private' ),
+				'posts_per_page'   => 1,
+				'meta_key'         => self::ROLE_META, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'       => $role, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				'fields'           => 'ids',
+				'no_found_rows'    => true,
+				'suppress_filters' => false,
+			)
+		);
+
+		if ( ! empty( $found[0] ) ) {
+			return (int) $found[0];
+		}
+
+		return self::create_alert( $role );
+	}
+
+	/**
+	 * Creates one of the two alerts.
+	 *
+	 * @param string $role normal | current.
+	 * @return int
+	 */
+	protected static function create_alert( $role ) {
+		$roles = self::roles();
+
+		if ( ! isset( $roles[ $role ] ) ) {
+			return 0;
+		}
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'    => self::SLUG,
+				'post_title'   => $roles[ $role ],
+				'post_status'  => 'publish',
+				'post_content' => '',
+			),
+			true
+		);
+
+		if ( is_wp_error( $post_id ) || ! $post_id ) {
+			return 0;
+		}
+
+		update_post_meta( $post_id, self::ROLE_META, $role );
+
+		// The resting state is never a popup — nothing is wrong, so there is
+		// nothing to interrupt anybody with. It only fills the board.
+		if ( self::ROLE_NORMAL === $role ) {
+			update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'as_popup', 0 );
+			update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'status_level', 'normal' );
+			update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'enabled', 0 );
+		} else {
+			// The current alert exists from day one; it simply starts switched
+			// off, waiting to be filled in.
+			update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'enabled', 0 );
+			update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'as_popup', 1 );
+			update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'expires_mode', 'daily' );
+		}
+
+		return (int) $post_id;
+	}
+
+	/**
+	 * Makes sure both alerts exist. Cheap enough to call on every admin load.
+	 *
+	 * @return array role => post id.
+	 */
+	public static function ensure_alerts() {
+		$ids = array();
+
+		foreach ( array_keys( self::roles() ) as $role ) {
+			$ids[ $role ] = self::get_alert( $role );
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Which of the two an existing post is, if either.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string normal | current | ''.
+	 */
+	public static function role_of( $post_id ) {
+		$role = get_post_meta( (int) $post_id, self::ROLE_META, true );
+
+		return isset( self::roles()[ $role ] ) ? $role : '';
+	}
+
 	/**
 	 * Hooks registration up.
 	 *
@@ -34,6 +165,13 @@ class ACPS_Alerts_Post_Type {
 	 */
 	public function init() {
 		ACPS_Alerts_Failsafe::action( 'init', array( __CLASS__, 'register' ), 'cpt/register', 5 );
+
+		// Both alerts exist from the moment the plugin runs, so the status page
+		// and the admin always have something real to point at.
+		ACPS_Alerts_Failsafe::action( 'init', array( __CLASS__, 'ensure_alerts' ), 'cpt/ensure', 6 );
+
+		// Neither alert may be deleted — losing one would break the board.
+		ACPS_Alerts_Failsafe::filter( 'map_meta_cap', array( __CLASS__, 'protect_from_deletion' ), 'cpt/protect', 10, 4 );
 
 		// Tell Beaver Builder it may edit this post type. This is what puts the
 		// "Launch Beaver Builder" button on the alert, and it means the site
@@ -183,6 +321,32 @@ class ACPS_Alerts_Post_Type {
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Refuses deletion of either fixed alert.
+	 *
+	 * There are meant to be exactly two, for the lifetime of the site. Deleting
+	 * one would leave the board with nothing to show, and the next request would
+	 * quietly create a replacement with none of the design work in it — which
+	 * looks like the content vanished.
+	 *
+	 * @param array  $caps    Required capabilities.
+	 * @param string $cap     Capability being checked.
+	 * @param int    $user_id User.
+	 * @param array  $args    Context; args[0] is the post id.
+	 * @return array
+	 */
+	public static function protect_from_deletion( $caps, $cap, $user_id, $args ) {
+		if ( 'delete_post' !== $cap || empty( $args[0] ) ) {
+			return $caps;
+		}
+
+		if ( '' !== self::role_of( $args[0] ) ) {
+			return array( 'do_not_allow' );
+		}
+
+		return $caps;
 	}
 
 	/**

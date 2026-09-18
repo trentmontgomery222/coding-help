@@ -2,10 +2,16 @@
 
 A managed site alert system for a single WordPress site, designed in Beaver Builder.
 
+There are exactly **two alerts**, always, and neither can be created or deleted:
+
+- **Normal Alert** — the resting state. What the site says when nothing is happening.
+- **Current Alert** — the one you switch on, edit and archive. It is always there; on a quiet day it is simply off.
+
 The split is deliberate:
 
-- **The alert content** — what it says and how it looks — is an ordinary WordPress post you can design in Beaver Builder, exactly like any other layout.
-- **wp-admin** owns *when, where and to whom* it runs — on/off, schedule, page targeting, audience, trigger and how often it comes back.
+- **The alert content** — what it says and how it looks — is an ordinary WordPress post you design in Beaver Builder, exactly like any other layout. You design the two alerts once.
+- **The Status Board module** on your status page owns the day-to-day wording, the level, and the on/off switch for the Current Alert.
+- **wp-admin** owns the fine-grained rules — schedule, page targeting, audience, trigger and how often it comes back.
 
 Content and settings are stored separately, so an alert can be redesigned at any time without touching its settings.
 
@@ -22,7 +28,7 @@ Content and settings are stored separately, so an alert can be redesigned at any
 
 ### Where alerts are stored
 
-The plugin registers its own `acps_alert` post type and hands it to Beaver Builder, so a new alert always opens on a normal WordPress editing screen — title, editor, Publish button — and gets a **Launch Beaver Builder** button once published.
+The plugin registers its own `acps_alert` post type and hands it to Beaver Builder. On activation it creates the two alerts — Normal Alert and Current Alert — and protects them from deletion. Each opens on a normal WordPress editing screen with a **Launch Beaver Builder** button, which is where you design the popup body.
 
 It does not rely on Beaver Builder registering a popup post type, because that feature is not in every version and its slug has changed between them. Popups you already built on a Beaver Builder popup type are still detected and listed alongside your alerts: `fl-popup`, `fl_popup`, `fl-builder-popup`, `flbuilder_popup`, and Beaver Themer popup layouts (`fl-theme-layout` with a layout type of `popup`). You can also force a specific source under **Site Alerts → Settings → Popup post type**.
 
@@ -30,13 +36,14 @@ It does not rely on Beaver Builder registering a popup post type, because that f
 
 Drop the **School Status Board** module (Beaver Builder → Site Alerts group) onto your status page. From then on that page is where you work:
 
-- **The module's fields ARE the current status.** Edit them and save to correct the live update — fixing a typo changes the update people are reading, it does not publish a second one. To replace it with something new, switch **When you save → Post as a new update**; the current one is archived and the setting returns to "Update" on its own.
-- The module renders the **current status banner** plus the **archive** of past updates, as an expandable list.
-- Each update can also **pop up across the rest of the site** — but never on the status page itself.
-- Everything **archives itself at 5:50pm** (configurable) unless you chose "keep it up until I archive it". An update posted after the cut-off runs until the following day.
+- **The module's fields ARE the Current Alert.** Edit them and save and the alert changes in place — it never creates a second one. There is nothing to create and nothing to delete; you only ever modify the one that is already there.
+- **Show this alert now** is the switch. On means visitors see it; off means the wording sits there ready for next time.
+- The module renders the **current status banner** plus the **archive** of past updates, as an expandable list. With the Current Alert off, the banner shows the Normal Alert wording.
+- The Current Alert can also **pop up across the rest of the site** — but never on the status page itself.
+- It **archives itself and switches itself off at 5:50pm** (configurable) unless you chose "Keep it up until I switch it off". The archive entry is a separate record; the alert's own wording is left intact. An update posted after the cut-off runs until the following day.
 - Set **Who can see it → Staff only** to stage an update on the live site where only people who can manage alerts see it. The board shows a dashed "Staff preview" strip so you can't forget.
 
-When several updates are live, the most urgent becomes the banner and the rest appear beneath it.
+Archived updates are stored as records in their own list, not as posts, so the archive can grow without the site ever gaining a third alert.
 
 ### Status levels are SRP
 
@@ -48,9 +55,9 @@ Check the directives against your own district's training materials before going
 
 ### Backfilling the archive
 
-Set **Post it as → Straight into the archive** and give it a date (`YYYY-MM-DD`) to write up something that already happened. Archived entries never pop up and never reach the banner — they are records, not announcements. The same is available in Site Alerts via **This update is in the archive** plus **Date it happened**.
+Use the module's **Add a past event to the archive** section — headline, message, level and a date (`YYYY-MM-DD`) — to write up something that already happened. The boxes empty themselves once filed. Archived entries never pop up and never reach the banner, and filing one never touches either alert.
 
-Popup *layout* is still a Beaver Builder job: open the update in Site Alerts and use **Launch Beaver Builder**. Without a layout, the popup shows the message you typed.
+Popup *layout* is still a Beaver Builder job: open the Current Alert in Site Alerts and use **Launch Beaver Builder**. Without a layout, the popup shows the message you typed.
 
 ## Learning it
 
@@ -63,15 +70,13 @@ You should not need this file. The plugin teaches itself:
 
 ## Using it
 
-**Site Alerts → All Alerts** lists every Beaver Builder popup on the site with its live status, severity, schedule, targeting, trigger and priority. Each row links to the alert settings, to the Beaver Builder editor for the content, and to a one-click on/off switch.
+**Site Alerts → All Alerts** lists the two alerts with their live status, level, schedule, targeting, trigger and priority. Each row links to the alert settings, to the Beaver Builder editor for the content, and to a one-click on/off switch. There is no "Add New" — the list never grows.
 
-**Site Alerts → Add New Alert** walks through creating the popup in Beaver Builder, then coming back to switch it on.
-
-Per-alert settings (also available as a meta box on the popup's own edit screen):
+Per-alert settings (also available as a meta box on the alert's own edit screen):
 
 | Group | What it controls |
 | --- | --- |
-| Status | Live on/off, severity (info, good news, warning, critical), priority |
+| Status | Live on/off, status level (the SRP actions plus Normal and Information), priority |
 | Schedule | Start and end date/time in the site timezone; leave either empty for open-ended |
 | Where it shows | Entire site, front page, or selected post types / post IDs / URL paths, plus a never-show list |
 | Who sees it | Everyone, logged out, logged in, or specific roles |

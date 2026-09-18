@@ -341,92 +341,236 @@ class ACPS_Alerts_Status {
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * Every entry that is live right now, worst and highest priority first.
+	 * The Current Alert: the one entry that is switched on, edited and archived.
 	 *
-	 * @param bool $for_board Only entries flagged to show on the board.
-	 * @return ACPS_Alerts_Alert[]
+	 * @return ACPS_Alerts_Alert|null
 	 */
-	public static function current_entries( $for_board = true ) {
-		$entries = array();
+	public static function current_alert() {
+		$id = ACPS_Alerts_Post_Type::get_alert( ACPS_Alerts_Post_Type::ROLE_CURRENT );
 
-		foreach ( ACPS_Alerts_Source::get_enabled_alerts() as $alert ) {
-			if ( ! self::is_current( $alert ) ) {
-				continue;
-			}
-
-			if ( $for_board && ! $alert->get( 'on_board' ) ) {
-				continue;
-			}
-
-			if ( ! self::viewer_may_see( $alert ) ) {
-				continue;
-			}
-
-			$entries[] = $alert;
+		if ( ! $id ) {
+			return null;
 		}
 
-		usort(
-			$entries,
-			static function ( $a, $b ) {
-				$rank = self::level( $b->get( 'status_level' ) )['rank'] - self::level( $a->get( 'status_level' ) )['rank'];
+		$alert = new ACPS_Alerts_Alert( $id );
 
-				if ( 0 !== $rank ) {
-					return $rank;
-				}
-
-				return (int) $b->get( 'priority' ) - (int) $a->get( 'priority' );
-			}
-		);
-
-		return $entries;
+		return $alert->is_valid() ? $alert : null;
 	}
 
 	/**
-	 * Past entries, newest first.
+	 * The Normal Alert: the resting state, shown when nothing is happening.
+	 *
+	 * @return ACPS_Alerts_Alert|null
+	 */
+	public static function normal_alert() {
+		$id = ACPS_Alerts_Post_Type::get_alert( ACPS_Alerts_Post_Type::ROLE_NORMAL );
+
+		if ( ! $id ) {
+			return null;
+		}
+
+		$alert = new ACPS_Alerts_Alert( $id );
+
+		return $alert->is_valid() ? $alert : null;
+	}
+
+	/**
+	 * Whether the Current Alert is showing right now.
+	 *
+	 * @return bool
+	 */
+	public static function current_is_active() {
+		$alert = self::current_alert();
+
+		if ( ! $alert ) {
+			return false;
+		}
+
+		return self::is_current( $alert ) && self::viewer_may_see( $alert );
+	}
+
+	/**
+	 * The entry the board should show as its banner, or null for the resting
+	 * state.
+	 *
+	 * @return ACPS_Alerts_Alert|null
+	 */
+	public static function board_entry() {
+		return self::current_is_active() ? self::current_alert() : null;
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * The archive.
+	 *
+	 * Past updates are stored as records rather than posts. With only two
+	 * alerts on the site, a year of closures cannot be a year of posts — and a
+	 * record is all the board needs to list one.
+	 * ------------------------------------------------------------------ */
+
+	/** Option holding the archive records, oldest first. */
+	const ARCHIVE_OPTION = 'acps_alerts_archive';
+
+	/** How many records to keep. */
+	const ARCHIVE_MAX = 200;
+
+	/**
+	 * The archive, newest first.
 	 *
 	 * @param int $limit How many.
-	 * @return ACPS_Alerts_Alert[]
+	 * @return array[] Each { id, title, level, message, date }.
 	 */
 	public static function archive( $limit = 10 ) {
-		$archive = array();
+		$records = get_option( self::ARCHIVE_OPTION, array() );
 
-		foreach ( ACPS_Alerts_Source::get_popups() as $post ) {
-			$alert = new ACPS_Alerts_Alert( $post );
-
-			if ( ! $alert->is_valid() || ! $alert->get( 'on_board' ) ) {
-				continue;
-			}
-
-			if ( 'publish' !== get_post_status( $post ) ) {
-				continue;
-			}
-
-			// Anything no longer current belongs in the archive — whether it was
-			// archived by hand, by the daily cut-off, or by its own end date.
-			if ( self::is_current( $alert ) ) {
-				continue;
-			}
-
-			// Staged entries never reach the archive for ordinary visitors.
-			if ( ! self::viewer_may_see( $alert ) ) {
-				continue;
-			}
-
-			$archive[] = $alert;
+		if ( ! is_array( $records ) || empty( $records ) ) {
+			return array();
 		}
 
 		usort(
-			$archive,
+			$records,
 			static function ( $a, $b ) {
-				return self::posted_time( $b ) - self::posted_time( $a );
+				$a_date = isset( $a['date'] ) ? (int) $a['date'] : 0;
+				$b_date = isset( $b['date'] ) ? (int) $b['date'] : 0;
+
+				return $b_date - $a_date;
 			}
 		);
 
-		return array_slice( $archive, 0, max( 1, (int) $limit ) );
+		return array_slice( $records, 0, max( 1, (int) $limit ) );
 	}
 
 	/**
-	 * When an entry was posted, falling back to the post date.
+	 * Adds a record to the archive.
+	 *
+	 * @param array $data { title, level, message, date }.
+	 * @return string The new record id, or '' when there was nothing to store.
+	 */
+	public static function add_archive_record( array $data ) {
+		$title = isset( $data['title'] ) ? sanitize_text_field( $data['title'] ) : '';
+
+		if ( '' === trim( $title ) ) {
+			return '';
+		}
+
+		$records = get_option( self::ARCHIVE_OPTION, array() );
+
+		if ( ! is_array( $records ) ) {
+			$records = array();
+		}
+
+		$date = 0;
+
+		if ( ! empty( $data['date'] ) ) {
+			$date = is_numeric( $data['date'] ) ? (int) $data['date'] : self::parse_date( $data['date'] );
+		}
+
+		if ( $date <= 0 ) {
+			$date = time();
+		}
+
+		$level = isset( $data['level'] ) ? sanitize_key( $data['level'] ) : 'info';
+
+		$record = array(
+			'id'      => uniqid( 'acps', true ),
+			'title'   => $title,
+			'level'   => $level,
+			'message' => isset( $data['message'] ) ? wp_strip_all_tags( (string) $data['message'] ) : '',
+			'date'    => $date,
+		);
+
+		$records[] = $record;
+
+		// Keep the newest, so a long-running site cannot grow this without end.
+		if ( count( $records ) > self::ARCHIVE_MAX ) {
+			usort(
+				$records,
+				static function ( $a, $b ) {
+					return ( isset( $a['date'] ) ? (int) $a['date'] : 0 ) - ( isset( $b['date'] ) ? (int) $b['date'] : 0 );
+				}
+			);
+
+			$records = array_slice( $records, -self::ARCHIVE_MAX );
+		}
+
+		update_option( self::ARCHIVE_OPTION, $records, false );
+
+		/**
+		 * Fires after an entry is written to the archive.
+		 *
+		 * @param array $record The stored record.
+		 */
+		do_action( 'acps_alerts_archived_record', $record );
+
+		return $record['id'];
+	}
+
+	/**
+	 * Removes one archive record.
+	 *
+	 * @param string $id Record id.
+	 * @return bool
+	 */
+	public static function delete_archive_record( $id ) {
+		$records = get_option( self::ARCHIVE_OPTION, array() );
+
+		if ( ! is_array( $records ) ) {
+			return false;
+		}
+
+		$before = count( $records );
+
+		$records = array_values(
+			array_filter(
+				$records,
+				static function ( $record ) use ( $id ) {
+					return ! isset( $record['id'] ) || $record['id'] !== $id;
+				}
+			)
+		);
+
+		if ( count( $records ) === $before ) {
+			return false;
+		}
+
+		update_option( self::ARCHIVE_OPTION, $records, false );
+
+		return true;
+	}
+
+	/**
+	 * Files the Current Alert in the archive and switches it off.
+	 *
+	 * The alert itself is never replaced or emptied — only deactivated. Its
+	 * wording stays put so whoever comes in next starts from what was last said
+	 * rather than a blank box.
+	 *
+	 * @return bool Whether anything was archived.
+	 */
+	public static function archive_current() {
+		$alert = self::current_alert();
+
+		if ( ! $alert || ! $alert->get( 'enabled' ) ) {
+			return false;
+		}
+
+		self::add_archive_record(
+			array(
+				'title'   => $alert->get_title(),
+				'level'   => $alert->get( 'status_level' ),
+				'message' => $alert->get( 'status_message' ),
+				'date'    => self::posted_time( $alert ),
+			)
+		);
+
+		update_post_meta( $alert->get_id(), ACPS_Alerts_Alert::META_PREFIX . 'enabled', 0 );
+
+		do_action( 'acps_alerts_current_archived', $alert->get_id() );
+
+		return true;
+	}
+
+	/**
+	 * When an alert was posted, falling back to the post date.
 	 *
 	 * @param ACPS_Alerts_Alert $alert Alert.
 	 * @return int
@@ -495,170 +639,6 @@ class ACPS_Alerts_Status {
 	 * Posting and archiving.
 	 * ------------------------------------------------------------------ */
 
-	/** Option holding what each status board node last posted. */
-	const POSTED_OPTION = 'acps_alerts_posted_sigs';
-
-	/**
-	 * A fingerprint of the update someone has typed into a board.
-	 *
-	 * @param array $data Compose fields.
-	 * @return string
-	 */
-	public static function signature( array $data ) {
-		return md5(
-			wp_json_encode(
-				array(
-					isset( $data['title'] ) ? trim( (string) $data['title'] ) : '',
-					isset( $data['level'] ) ? (string) $data['level'] : '',
-					isset( $data['message'] ) ? trim( (string) $data['message'] ) : '',
-					! empty( $data['archived'] ) ? 1 : 0,
-					isset( $data['date'] ) ? (string) $data['date'] : '',
-				)
-			)
-		);
-	}
-
-	/**
-	 * Whether this board has already posted exactly this update.
-	 *
-	 * Beaver Builder calls a module's update() on every save of the layout, and
-	 * does not reliably store the settings that method hands back. So clearing
-	 * the compose fields cannot be trusted to prevent a repeat: saving the page
-	 * for any unrelated reason would post the same update again, and again.
-	 *
-	 * The fingerprint is the real guard. A live update cannot be posted twice
-	 * while it is still live, and a backfilled archive entry — a record of
-	 * something that happened once — can never be posted twice at all. Once a
-	 * live update has come down, the same wording may be posted afresh.
-	 *
-	 * @param string $node_id  The module's node id.
-	 * @param array  $data     Compose fields.
-	 * @param bool   $archived Whether this is a backfilled archive entry.
-	 * @return bool
-	 */
-	public static function already_posted( $node_id, array $data, $archived ) {
-		$record = get_option( self::POSTED_OPTION, array() );
-
-		if ( ! is_array( $record ) || empty( $record[ $node_id ] ) ) {
-			return false;
-		}
-
-		$last = $record[ $node_id ];
-
-		if ( empty( $last['sig'] ) || $last['sig'] !== self::signature( $data ) ) {
-			return false; // Something was changed: this is a new update.
-		}
-
-		$post_id = isset( $last['post'] ) ? (int) $last['post'] : 0;
-
-		if ( ! $post_id || ! get_post_status( $post_id ) ) {
-			return false; // The entry was deleted; allow it to be posted again.
-		}
-
-		// A record of a past event is never posted twice.
-		if ( $archived ) {
-			return true;
-		}
-
-		// The same wording may be posted again once the last one has come down.
-		return self::is_current( new ACPS_Alerts_Alert( $post_id ) );
-	}
-
-	/**
-	 * Remembers what a board posted, so a repeat save does not post it again.
-	 *
-	 * @param string $node_id The module's node id.
-	 * @param array  $data    Compose fields.
-	 * @param int    $post_id The entry that was created.
-	 * @return void
-	 */
-	public static function remember_posted( $node_id, array $data, $post_id ) {
-		$record = get_option( self::POSTED_OPTION, array() );
-
-		if ( ! is_array( $record ) ) {
-			$record = array();
-		}
-
-		$record[ $node_id ] = array(
-			'sig'  => self::signature( $data ),
-			'post' => (int) $post_id,
-			'time' => time(),
-		);
-
-		// Keep this small; a site has a handful of boards at most.
-		if ( count( $record ) > 20 ) {
-			$record = array_slice( $record, -20, null, true );
-		}
-
-		update_option( self::POSTED_OPTION, $record, false );
-	}
-
-	/**
-	 * Finds groups of identical entries, newest first within each group.
-	 *
-	 * Used by the tidy-up tool, for cleaning up after a run of duplicates.
-	 *
-	 * @return array[] Each value is an array of ACPS_Alerts_Alert, newest first.
-	 */
-	public static function duplicate_groups() {
-		$groups = array();
-
-		foreach ( ACPS_Alerts_Source::get_popups() as $post ) {
-			$alert = new ACPS_Alerts_Alert( $post );
-
-			if ( ! $alert->is_valid() ) {
-				continue;
-			}
-
-			$key = md5( strtolower( trim( $alert->get_title() ) ) . '|' . trim( (string) $alert->get( 'status_message' ) ) );
-
-			$groups[ $key ][] = $alert;
-		}
-
-		foreach ( $groups as $key => $group ) {
-			if ( count( $group ) < 2 ) {
-				unset( $groups[ $key ] );
-
-				continue;
-			}
-
-			usort(
-				$groups[ $key ],
-				static function ( $a, $b ) {
-					return self::posted_time( $b ) - self::posted_time( $a );
-				}
-			);
-		}
-
-		return array_values( $groups );
-	}
-
-	/**
-	 * Archives every copy but the newest in each duplicate group.
-	 *
-	 * Archiving rather than deleting, so nothing is lost and every step is
-	 * reversible with "Bring back".
-	 *
-	 * @return int How many entries were archived.
-	 */
-	public static function tidy_duplicates() {
-		$archived = 0;
-
-		foreach ( self::duplicate_groups() as $group ) {
-			// Keep index 0 — the newest — and archive the rest.
-			foreach ( array_slice( $group, 1 ) as $alert ) {
-				if ( $alert->get( 'archived' ) ) {
-					continue;
-				}
-
-				self::archive_entry( $alert->get_id() );
-				$archived++;
-			}
-		}
-
-		return $archived;
-	}
-
 	/**
 	 * Reads a date typed by a person into a timestamp.
 	 *
@@ -688,126 +668,6 @@ class ACPS_Alerts_Status {
 	}
 
 	/**
-	 * Creates a status entry.
-	 *
-	 * @param array $data {
-	 *     @type string $title    Headline.
-	 *     @type string $level    Status level key.
-	 *     @type string $message  Plain text summary.
-	 *     @type string $expires  daily | keep | custom.
-	 *     @type bool   $as_popup Whether it also pops up site-wide.
-	 *     @type string $visibility public | admins | preview.
-	 *     @type bool   $archived Post it straight into the archive.
-	 *     @type int|string $date When it happened; anything parse_date() reads.
-	 *                            Defaults to now. Only meaningful for archived
-	 *                            entries, where it sets the position in the list.
-	 *     @type array  $settings Extra alert settings to merge.
-	 * }
-	 * @return int The new post ID, or 0 on failure.
-	 */
-	public static function post_entry( array $data ) {
-		$title = isset( $data['title'] ) ? sanitize_text_field( $data['title'] ) : '';
-
-		if ( '' === trim( $title ) ) {
-			return 0;
-		}
-
-		$message = isset( $data['message'] ) ? wp_kses_post( $data['message'] ) : '';
-
-		$archived = ! empty( $data['archived'] );
-
-		// A backfilled entry keeps the date it really happened, so it lands in
-		// the right place in the archive rather than at the top.
-		$when = 0;
-
-		if ( ! empty( $data['date'] ) ) {
-			$when = is_numeric( $data['date'] ) ? (int) $data['date'] : self::parse_date( $data['date'] );
-		}
-
-		if ( $when <= 0 ) {
-			$when = time();
-		}
-
-		$postarr = array(
-			'post_type'    => ACPS_Alerts_Post_Type::SLUG,
-			'post_title'   => $title,
-			'post_status'  => 'publish',
-			'post_content' => $message,
-		);
-
-		// Date the post itself to match, so the ordinary WordPress lists agree
-		// with the archive order.
-		if ( $archived ) {
-			$postarr['post_date']     = gmdate( 'Y-m-d H:i:s', $when + (int) ( get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS ) );
-			$postarr['post_date_gmt'] = gmdate( 'Y-m-d H:i:s', $when );
-		}
-
-		$post_id = wp_insert_post( $postarr, true );
-
-		if ( is_wp_error( $post_id ) || ! $post_id ) {
-			ACPS_Alerts_Failsafe::record( 'status/post', is_wp_error( $post_id ) ? $post_id->get_error_message() : 'insert failed' );
-
-			return 0;
-		}
-
-		$level = isset( $data['level'] ) ? sanitize_key( $data['level'] ) : 'advisory';
-
-		$settings = array(
-			'enabled'        => 1,
-			'status_level'   => $level,
-			'status_message' => wp_strip_all_tags( $message ),
-			'severity'       => self::level( $level )['severity'],
-			'on_board'       => 1,
-			// An entry made straight for the archive never pops up: it is a
-			// record of something that already happened.
-			'as_popup'       => ( $archived || empty( $data['as_popup'] ) ) ? 0 : 1,
-			'archived'       => $archived ? 1 : 0,
-			'posted_at'      => $when,
-			'expires_mode'   => isset( $data['expires'] ) ? sanitize_key( $data['expires'] ) : 'daily',
-			'visibility'     => isset( $data['visibility'] ) ? sanitize_key( $data['visibility'] ) : 'public',
-		);
-
-		if ( ! empty( $data['settings'] ) && is_array( $data['settings'] ) ) {
-			$settings = array_merge( $settings, $data['settings'] );
-		}
-
-		$alert = new ACPS_Alerts_Alert( $post_id );
-		$alert->save( array_merge( ACPS_Alerts_Alert::default_settings(), $settings ) );
-
-		/**
-		 * Fires after a status entry is posted.
-		 *
-		 * @param int   $post_id  The entry.
-		 * @param array $settings Its settings.
-		 */
-		do_action( 'acps_alerts_status_posted', $post_id, $settings );
-
-		return (int) $post_id;
-	}
-
-	/**
-	 * The entry a board is currently driving, if it is still live.
-	 *
-	 * @param string $node_id The module's node id.
-	 * @return int Post ID, or 0 when the board has no live entry.
-	 */
-	public static function tracked_entry( $node_id ) {
-		$record = get_option( self::POSTED_OPTION, array() );
-
-		if ( ! is_array( $record ) || empty( $record[ $node_id ]['post'] ) ) {
-			return 0;
-		}
-
-		$post_id = (int) $record[ $node_id ]['post'];
-
-		if ( ! $post_id || ! get_post_status( $post_id ) ) {
-			return 0; // Deleted.
-		}
-
-		return self::is_current( new ACPS_Alerts_Alert( $post_id ) ) ? $post_id : 0;
-	}
-
-	/**
 	 * Rewrites an existing entry in place.
 	 *
 	 * This is what an edit on the status board does. Correcting a typo has to
@@ -818,7 +678,7 @@ class ACPS_Alerts_Status {
 	 * the usual time rather than running an extra day.
 	 *
 	 * @param int   $post_id Entry to rewrite.
-	 * @param array $data    Same shape as post_entry().
+	 * @param array $data    Same shape as update_entry().
 	 * @return bool Whether it was updated.
 	 */
 	public static function update_entry( $post_id, array $data ) {
@@ -890,26 +750,6 @@ class ACPS_Alerts_Status {
 		do_action( 'acps_alerts_status_archived', (int) $post_id );
 	}
 
-	/**
-	 * Brings an archived entry back.
-	 *
-	 * @param int $post_id Entry.
-	 * @return void
-	 */
-	public static function restore_entry( $post_id ) {
-		$alert = new ACPS_Alerts_Alert( $post_id );
-
-		if ( ! $alert->is_valid() ) {
-			return;
-		}
-
-		update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'archived', 0 );
-
-		// Restoring resets the clock, or a daily entry would archive itself
-		// again on the next request.
-		update_post_meta( $post_id, ACPS_Alerts_Alert::META_PREFIX . 'posted_at', time() );
-	}
-
 	/* ------------------------------------------------------------------ *
 	 * The daily sweep.
 	 * ------------------------------------------------------------------ */
@@ -962,32 +802,29 @@ class ACPS_Alerts_Status {
 	}
 
 	/**
-	 * Archives everything that has passed the cut-off.
+	 * The daily sweep: files the Current Alert and switches it off.
 	 *
-	 * @return int How many entries were archived.
+	 * Only ever touches the Current Alert. Its wording is left exactly as it
+	 * was, so tomorrow starts from what was last said rather than a blank box.
+	 *
+	 * @return int How many entries were archived (0 or 1).
 	 */
 	public static function run_daily_archive() {
-		$count = 0;
+		$alert = self::current_alert();
 
-		foreach ( ACPS_Alerts_Source::get_popups() as $post ) {
-			$alert = new ACPS_Alerts_Alert( $post );
-
-			if ( ! $alert->is_valid() || $alert->get( 'archived' ) ) {
-				continue;
-			}
-
-			if ( 'daily' !== $alert->get( 'expires_mode' ) ) {
-				continue; // Kept on purpose, or on its own schedule.
-			}
-
-			if ( ! self::past_cutoff( $alert ) ) {
-				continue;
-			}
-
-			self::archive_entry( $alert->get_id() );
-			$count++;
+		if ( ! $alert || ! $alert->get( 'enabled' ) ) {
+			return 0;
 		}
 
-		return $count;
+		// "Keep it up until I archive it" opts out of the daily sweep entirely.
+		if ( 'daily' !== $alert->get( 'expires_mode' ) ) {
+			return 0;
+		}
+
+		if ( ! self::past_cutoff( $alert ) ) {
+			return 0;
+		}
+
+		return self::archive_current() ? 1 : 0;
 	}
 }

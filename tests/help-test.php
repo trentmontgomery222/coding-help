@@ -113,13 +113,19 @@ ok( 'progress percent is within range', $progress['percent'] >= 0 && $progress['
 /* ---- checklist reacts to real state ---- */
 $empty_done = $progress['done'];
 
-$post = new WP_Post();
-$post->ID = 12;
-$post->post_title = 'Snow Day';
-ACPS_Alerts_Source::$popups = array( $post );
+// The site has exactly two alerts: Current and Normal.
+$current = new WP_Post();
+$current->ID = 12;
+$current->post_title = 'Current Alert';
+
+$normal = new WP_Post();
+$normal->ID = 13;
+$normal->post_title = 'Normal Alert';
+
+ACPS_Alerts_Source::$popups = array( $current, $normal );
 
 $after = $help->progress();
-ok( 'creating a popup ticks more items off', $after['done'] > $empty_done );
+ok( 'the two alerts existing ticks more items off', $after['done'] > $empty_done );
 ok( 'but setup is not complete until the status board is placed', $after['done'] < $after['total'] );
 
 // Placing the Status Board module records the page it lives on.

@@ -97,15 +97,6 @@ class ACPS_Alerts_Admin {
 
 		add_submenu_page(
 			self::MENU_SLUG,
-			__( 'Add New Alert', 'acps-alert-popups' ),
-			__( 'Add New Alert', 'acps-alert-popups' ),
-			$cap,
-			'acps-alerts-new',
-			$this->safe_render( 'render_new' )
-		);
-
-		add_submenu_page(
-			self::MENU_SLUG,
 			__( 'Alert Settings', 'acps-alert-popups' ),
 			__( 'Settings', 'acps-alert-popups' ),
 			'manage_options',
@@ -237,192 +228,6 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
-		if ( 'tidy' === $action ) {
-			$this->handle_tidy();
-		}
-	}
-
-	/**
-	 * Archives every copy but the newest of any duplicated update.
-	 *
-	 * @return void
-	 */
-	protected function handle_tidy() {
-		$nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
-
-		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_tidy' ) ) {
-			wp_die( esc_html__( 'That link expired. Please reload the alerts list and try again.', 'acps-alert-popups' ) );
-		}
-
-		if ( ! current_user_can( self::capability() ) ) {
-			wp_die( esc_html__( 'You are not allowed to do this.', 'acps-alert-popups' ) );
-		}
-
-		$count = ACPS_Alerts_Status::tidy_duplicates();
-
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'acps_message' => 'tidied',
-					'acps_count'   => $count,
-				),
-				admin_url( 'admin.php?page=' . self::MENU_SLUG )
-			)
-		);
-		exit;
-	}
-
-	/**
-	 * Archives or restores a status entry from the list screen.
-	 *
-	 * @param string $action archive | restore.
-	 * @return void
-	 */
-	protected function handle_archive( $action ) {
-		$alert_id = isset( $_GET['alert'] ) ? absint( $_GET['alert'] ) : 0;
-		$nonce    = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
-
-		if ( ! $alert_id || ! wp_verify_nonce( $nonce, 'acps_alerts_' . $action . '_' . $alert_id ) ) {
-			wp_die( esc_html__( 'That link expired. Please reload the alerts list and try again.', 'acps-alert-popups' ) );
-		}
-
-		if ( ! current_user_can( self::capability() ) || ! ACPS_Alerts_Source::is_popup( $alert_id ) ) {
-			wp_die( esc_html__( 'You are not allowed to change this alert.', 'acps-alert-popups' ) );
-		}
-
-		if ( 'archive' === $action ) {
-			ACPS_Alerts_Status::archive_entry( $alert_id );
-		} else {
-			ACPS_Alerts_Status::restore_entry( $alert_id );
-		}
-
-		wp_safe_redirect(
-			add_query_arg(
-				'acps_message',
-				'archive' === $action ? 'archived' : 'restored',
-				admin_url( 'admin.php?page=' . self::MENU_SLUG )
-			)
-		);
-		exit;
-	}
-
-	/**
-	 * Saves the global settings form.
-	 *
-	 * @return void
-	 */
-	protected function handle_settings_save() {
-		if ( ! isset( $_POST['acps_settings_nonce'] ) ) {
-			return;
-		}
-
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You are not allowed to change these settings.', 'acps-alert-popups' ) );
-		}
-
-		$nonce = sanitize_text_field( wp_unslash( $_POST['acps_settings_nonce'] ) );
-
-		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_save_settings' ) ) {
-			wp_die( esc_html__( 'The settings form expired. Please try again.', 'acps-alert-popups' ) );
-		}
-
-		$raw = isset( $_POST['acps_settings'] ) ? wp_unslash( $_POST['acps_settings'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized below.
-		$raw = (array) $raw;
-
-		if ( ! empty( $raw['_maintenance'] ) ) {
-			// The maintenance tab submits only its own keys, so patch just those
-			// — running the full sanitizer would reset every unsubmitted visible
-			// setting to its default.
-			ACPS_Alerts_Settings::patch( ACPS_Alerts_Settings::sanitize_maintenance( $raw ) );
-
-			$redirect = add_query_arg(
-				array(
-					'page'         => self::SETTINGS_SLUG,
-					'updates'      => 1,
-					'acps_message' => 'settings-saved',
-				),
-				admin_url( 'admin.php' )
-			);
-
-			wp_safe_redirect( $redirect );
-			exit;
-		}
-
-		ACPS_Alerts_Settings::save( $raw );
-
-		wp_safe_redirect( add_query_arg( 'acps_message', 'settings-saved', admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ) );
-		exit;
-	}
-
-	/**
-	 * Flips an alert on or off from the list screen.
-	 *
-	 * @return void
-	 */
-	protected function handle_toggle() {
-		$alert_id = isset( $_GET['alert'] ) ? absint( $_GET['alert'] ) : 0;
-		$nonce    = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
-
-		if ( ! $alert_id || ! wp_verify_nonce( $nonce, 'acps_alerts_toggle_' . $alert_id ) ) {
-			wp_die( esc_html__( 'That link expired. Please reload the alerts list and try again.', 'acps-alert-popups' ) );
-		}
-
-		if ( ! current_user_can( self::capability() ) || ! ACPS_Alerts_Source::is_popup( $alert_id ) ) {
-			wp_die( esc_html__( 'You are not allowed to change this alert.', 'acps-alert-popups' ) );
-		}
-
-		$alert   = new ACPS_Alerts_Alert( $alert_id );
-		$enabled = ! $alert->get( 'enabled' );
-
-		$alert->set_enabled( $enabled );
-
-		wp_safe_redirect(
-			add_query_arg(
-				'acps_message',
-				$enabled ? 'enabled' : 'disabled',
-				admin_url( 'admin.php?page=' . self::MENU_SLUG )
-			)
-		);
-		exit;
-	}
-
-	/**
-	 * Saves the per-alert settings form.
-	 *
-	 * @return void
-	 */
-	protected function handle_alert_save() {
-		$alert_id = isset( $_REQUEST['alert'] ) ? absint( $_REQUEST['alert'] ) : 0;
-
-		if ( ! $alert_id || ! ACPS_Alerts_Source::is_popup( $alert_id ) ) {
-			return;
-		}
-
-		if ( ! current_user_can( self::capability() ) || ! current_user_can( 'edit_post', $alert_id ) ) {
-			wp_die( esc_html__( 'You are not allowed to edit this alert.', 'acps-alert-popups' ) );
-		}
-
-		$settings = ACPS_Alerts_Fields::read_submission();
-
-		if ( null === $settings ) {
-			wp_die( esc_html__( 'The alert form expired. Please try again.', 'acps-alert-popups' ) );
-		}
-
-		$alert = new ACPS_Alerts_Alert( $alert_id );
-		$alert->save( $settings );
-
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'page'         => self::MENU_SLUG,
-					'acps_view'    => 'edit',
-					'alert'        => $alert_id,
-					'acps_message' => 'saved',
-				),
-				admin_url( 'admin.php' )
-			)
-		);
-		exit;
 	}
 
 	/**
@@ -450,35 +255,13 @@ class ACPS_Alerts_Admin {
 	protected function render_message() {
 		$message = isset( $_GET['acps_message'] ) ? sanitize_key( wp_unslash( $_GET['acps_message'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display only.
 
-		if ( 'tidied' === $message ) {
-			$count = isset( $_GET['acps_count'] ) ? absint( $_GET['acps_count'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Display only.
-			?>
-			<div class="notice notice-success is-dismissible">
-				<p>
-					<?php
-					if ( $count ) {
-						printf(
-							/* translators: %d: number of duplicates archived. */
-							esc_html( _n( '%d duplicate moved to the archive. Nothing was deleted — use "Bring back" on any you want to keep.', '%d duplicates moved to the archive. Nothing was deleted — use "Bring back" on any you want to keep.', $count, 'acps-alert-popups' ) ),
-							$count
-						);
-					} else {
-						esc_html_e( 'No duplicates found.', 'acps-alert-popups' );
-					}
-					?>
-				</p>
-			</div>
-			<?php
-			return;
-		}
-
 		$messages = array(
 			'saved'          => __( 'Alert settings saved.', 'acps-alert-popups' ),
 			'enabled'        => __( 'Alert is now live.', 'acps-alert-popups' ),
 			'disabled'       => __( 'Alert switched off.', 'acps-alert-popups' ),
 			'settings-saved' => __( 'Settings saved.', 'acps-alert-popups' ),
-			'archived'       => __( 'Update moved to the archive.', 'acps-alert-popups' ),
-			'restored'       => __( 'Update brought back. Its daily cut-off starts again from now.', 'acps-alert-popups' ),
+			'archived'       => __( 'Filed in the archive and switched off. The alert itself is unchanged.', 'acps-alert-popups' ),
+			'restored'       => __( 'Switched back on. Its daily cut-off starts again from now.', 'acps-alert-popups' ),
 		);
 
 		if ( ! isset( $messages[ $message ] ) ) {
@@ -501,56 +284,7 @@ class ACPS_Alerts_Admin {
 		?>
 		<div class="wrap acps-alerts-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Site Alerts', 'acps-alert-popups' ); ?></h1>
-			<a href="<?php echo esc_url( admin_url( 'admin.php?page=acps-alerts-new' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Add New Alert', 'acps-alert-popups' ); ?></a>
-			<?php
-			$board_page = (int) get_option( 'acps_alerts_board_page', 0 );
-
-			if ( $board_page && 'publish' === get_post_status( $board_page ) ) :
-				?>
-				<a href="<?php echo esc_url( add_query_arg( 'fl_builder', '', get_permalink( $board_page ) ) ); ?>" class="page-title-action">
-					<?php esc_html_e( 'Post an update on the status page', 'acps-alert-popups' ); ?>
-				</a>
-			<?php endif; ?>
-			<?php if ( class_exists( 'ACPS_Alerts_Help' ) ) : ?>
-				<button type="button" class="page-title-action" data-acps-tour="first-alert"><?php esc_html_e( 'Show me how', 'acps-alert-popups' ); ?></button>
-			<?php endif; ?>
 			<hr class="wp-header-end" />
-
-			<?php
-			$duplicates = ACPS_Alerts_Status::duplicate_groups();
-
-			if ( ! empty( $duplicates ) ) :
-				$extra = 0;
-
-				foreach ( $duplicates as $group ) {
-					$extra += count( $group ) - 1;
-				}
-
-				$tidy_url = wp_nonce_url(
-					add_query_arg(
-						array(
-							'page'        => self::MENU_SLUG,
-							'acps_action' => 'tidy',
-						),
-						admin_url( 'admin.php' )
-					),
-					'acps_alerts_tidy'
-				);
-				?>
-				<div class="notice notice-warning">
-					<p>
-						<?php
-						printf(
-							/* translators: %d: number of duplicate copies. */
-							esc_html( _n( 'There is %d duplicate update on this site.', 'There are %d duplicate updates on this site.', $extra, 'acps-alert-popups' ) ),
-							(int) $extra
-						);
-						?>
-						<?php esc_html_e( 'Tidying keeps the newest of each and moves the rest to the archive. Nothing is deleted.', 'acps-alert-popups' ); ?>
-					</p>
-					<p><a class="button" href="<?php echo esc_url( $tidy_url ); ?>"><?php esc_html_e( 'Tidy duplicates', 'acps-alert-popups' ); ?></a></p>
-				</div>
-			<?php endif; ?>
 
 			<?php $this->render_message(); ?>
 
@@ -560,19 +294,10 @@ class ACPS_Alerts_Admin {
 
 			<?php if ( empty( $popups ) ) : ?>
 				<div class="acps-empty">
-					<h2><?php esc_html_e( 'No alerts yet — let’s make one', 'acps-alert-popups' ); ?></h2>
-					<p><?php esc_html_e( 'An alert is a popup this plugin switches on and aims at the right people. You write it like any other WordPress page, and design it in Beaver Builder if you want to.', 'acps-alert-popups' ); ?></p>
-					<ol>
-						<li><?php esc_html_e( 'Create the alert and write what it should say.', 'acps-alert-popups' ); ?></li>
-						<li><?php esc_html_e( 'Publish it — a draft never shows.', 'acps-alert-popups' ); ?></li>
-						<li><?php esc_html_e( 'Tick "Alert is live" in Site Alert Settings on the same screen.', 'acps-alert-popups' ); ?></li>
-					</ol>
-					<p>
-						<a class="button button-primary button-hero" href="<?php echo esc_url( admin_url( 'admin.php?page=acps-alerts-new' ) ); ?>"><?php esc_html_e( 'Make my first alert', 'acps-alert-popups' ); ?></a>
-						<?php if ( class_exists( 'ACPS_Alerts_Help' ) ) : ?>
-							<button type="button" class="button button-hero" data-acps-tour="first-alert"><?php esc_html_e( 'Take the guided tour', 'acps-alert-popups' ); ?></button>
-						<?php endif; ?>
-					</p>
+					<h2><?php esc_html_e( 'Setting up', 'acps-alert-popups' ); ?></h2>
+					<p><?php esc_html_e( 'This site has exactly two alerts: the Current Alert, which is the one you switch on and edit, and the Normal Alert, which is the resting state. They are created automatically — if you are seeing this, they have not been created yet.', 'acps-alert-popups' ); ?></p>
+					<p><?php esc_html_e( 'Deactivate and reactivate the plugin to create them.', 'acps-alert-popups' ); ?></p>
+					<p><a class="button" href="<?php echo esc_url( admin_url( 'plugins.php' ) ); ?>"><?php esc_html_e( 'Open Plugins', 'acps-alert-popups' ); ?></a></p>
 				</div>
 			<?php else : ?>
 				<table class="wp-list-table widefat fixed striped acps-alerts-table">
@@ -752,47 +477,6 @@ class ACPS_Alerts_Admin {
 					</p>
 				<?php endif; ?>
 			</div>
-		</div>
-		<?php
-	}
-
-	/**
-	 * The "Add New Alert" screen.
-	 *
-	 * @return void
-	 */
-	public function render_new() {
-		?>
-		<div class="wrap acps-alerts-wrap">
-			<h1><?php esc_html_e( 'Add New Alert', 'acps-alert-popups' ); ?></h1>
-
-			<?php if ( ! ACPS_Alerts_Source::is_ready() ) : ?>
-				<div class="notice notice-warning inline">
-					<p><?php esc_html_e( 'The alert post type could not be registered, so alerts cannot be created. Deactivate and reactivate the plugin, and check Site Alerts &rarr; Settings.', 'acps-alert-popups' ); ?></p>
-				</div>
-			<?php else : ?>
-				<ol class="acps-steps">
-					<li><?php esc_html_e( 'Give the alert a title and write what it should say.', 'acps-alert-popups' ); ?></li>
-					<li>
-						<?php if ( ACPS_Alerts_Source::builder_active() ) : ?>
-							<?php esc_html_e( 'Publish it, then use Launch Beaver Builder if you want to design it in the builder.', 'acps-alert-popups' ); ?>
-						<?php else : ?>
-							<?php esc_html_e( 'Publish it — a draft never shows.', 'acps-alert-popups' ); ?>
-						<?php endif; ?>
-					</li>
-					<li><?php esc_html_e( 'On the same screen, scroll to Site Alert Settings and tick "Alert is live".', 'acps-alert-popups' ); ?></li>
-				</ol>
-				<p>
-					<a class="button button-primary button-hero" href="<?php echo esc_url( ACPS_Alerts_Source::new_popup_url() ); ?>"><?php esc_html_e( 'Create the alert', 'acps-alert-popups' ); ?></a>
-					<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::MENU_SLUG ) ); ?>"><?php esc_html_e( 'Back to all alerts', 'acps-alert-popups' ); ?></a>
-				</p>
-
-				<?php if ( ! ACPS_Alerts_Source::builder_active() ) : ?>
-					<p class="description">
-						<?php esc_html_e( 'Beaver Builder is not active. Alerts still work — you will write them in the normal WordPress editor instead of the builder.', 'acps-alert-popups' ); ?>
-					</p>
-				<?php endif; ?>
-			<?php endif; ?>
 		</div>
 		<?php
 	}

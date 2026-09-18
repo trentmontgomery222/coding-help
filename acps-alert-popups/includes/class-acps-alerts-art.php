@@ -415,13 +415,10 @@ class ACPS_Alerts_Art {
 		$svg = '
 <svg viewBox="0 0 760 250" class="acps-art" role="img" aria-labelledby="acps-art-sl-t acps-art-sl-d">
 	<title id="acps-art-sl-t">' . esc_html__( 'The All Alerts screen', 'acps-alert-popups' ) . '</title>
-	<desc id="acps-art-sl-d">' . esc_html__( 'A table with one row per popup, showing its name, whether it is live, its severity, schedule, where it shows and how it opens.', 'acps-alert-popups' ) . '</desc>
+	<desc id="acps-art-sl-d">' . esc_html__( 'A table with exactly two rows — the Current Alert and the Normal Alert — showing whether each is live, its level, schedule and where it shows.', 'acps-alert-popups' ) . '</desc>
 
 	<rect x="8" y="8" width="744" height="234" rx="8" class="acps-art-screen"/>
 	<text x="28" y="40" class="acps-art-h">' . esc_html__( 'Site Alerts', 'acps-alert-popups' ) . '</text>
-	<rect x="150" y="24" width="112" height="24" rx="4" class="acps-art-button"/>
-	<text x="206" y="41" class="acps-art-btn-label">' . esc_html__( 'Add New Alert', 'acps-alert-popups' ) . '</text>
-
 	<rect x="28" y="62" width="704" height="30" class="acps-art-thead"/>
 	<text x="44" y="82" class="acps-art-th">' . esc_html__( 'Popup', 'acps-alert-popups' ) . '</text>
 	<text x="264" y="82" class="acps-art-th">' . esc_html__( 'Status', 'acps-alert-popups' ) . '</text>
@@ -430,33 +427,33 @@ class ACPS_Alerts_Art {
 	<text x="634" y="82" class="acps-art-th">' . esc_html__( 'Where', 'acps-alert-popups' ) . '</text>
 
 	<line x1="28" y1="92" x2="732" y2="92" class="acps-art-rule"/>
-	<text x="44" y="118" class="acps-art-cell-strong">' . esc_html__( 'Snow Day Closure', 'acps-alert-popups' ) . '</text>
+	<text x="44" y="118" class="acps-art-cell-strong">' . esc_html__( 'Current Alert', 'acps-alert-popups' ) . '</text>
 	<rect x="264" y="104" width="46" height="18" rx="9" class="acps-art-pill-live"/>
 	<text x="287" y="117" class="acps-art-pill-label">' . esc_html__( 'Live', 'acps-alert-popups' ) . '</text>
-	<text x="384" y="118" class="acps-art-cell">' . esc_html__( 'Critical', 'acps-alert-popups' ) . '</text>
-	<text x="494" y="118" class="acps-art-cell">' . esc_html__( 'Always', 'acps-alert-popups' ) . '</text>
+	<text x="384" y="118" class="acps-art-cell">' . esc_html__( 'Lockdown', 'acps-alert-popups' ) . '</text>
+	<text x="494" y="118" class="acps-art-cell">' . esc_html__( 'Until the cut-off', 'acps-alert-popups' ) . '</text>
 	<text x="634" y="118" class="acps-art-cell">' . esc_html__( 'Entire site', 'acps-alert-popups' ) . '</text>
 	<text x="44" y="136" class="acps-art-rowactions">' . esc_html__( 'Alert settings | Edit in Beaver Builder | Switch off', 'acps-alert-popups' ) . '</text>
 
 	<line x1="28" y1="148" x2="732" y2="148" class="acps-art-rule"/>
-	<text x="44" y="174" class="acps-art-cell-strong">' . esc_html__( 'Open House Reminder', 'acps-alert-popups' ) . '</text>
+	<text x="44" y="174" class="acps-art-cell-strong">' . esc_html__( 'Normal Alert', 'acps-alert-popups' ) . '</text>
 	<rect x="264" y="160" width="46" height="18" rx="9" class="acps-art-pill-off"/>
 	<text x="287" y="173" class="acps-art-pill-label-off">' . esc_html__( 'Off', 'acps-alert-popups' ) . '</text>
-	<text x="384" y="174" class="acps-art-cell">' . esc_html__( 'Information', 'acps-alert-popups' ) . '</text>
-	<text x="494" y="174" class="acps-art-cell">' . esc_html__( 'From 1 Oct', 'acps-alert-popups' ) . '</text>
-	<text x="634" y="174" class="acps-art-cell">' . esc_html__( 'Front page', 'acps-alert-popups' ) . '</text>
+	<text x="384" y="174" class="acps-art-cell">' . esc_html__( 'Normal', 'acps-alert-popups' ) . '</text>
+	<text x="494" y="174" class="acps-art-cell">' . esc_html__( 'Resting state', 'acps-alert-popups' ) . '</text>
+	<text x="634" y="174" class="acps-art-cell">' . esc_html__( 'Status page', 'acps-alert-popups' ) . '</text>
 
 	<g class="acps-art-call">
 		<path d="M287 128 L287 206"/>
 		<circle cx="287" cy="206" r="3"/>
-		<text x="298" y="210" class="acps-art-note">' . esc_html__( 'Click "Switch on" here to make an alert live. That is the only switch that matters.', 'acps-alert-popups' ) . '</text>
+		<text x="298" y="210" class="acps-art-note">' . esc_html__( 'These two rows are all there will ever be. Neither can be deleted.', 'acps-alert-popups' ) . '</text>
 	</g>
 </svg>';
 
 		return self::figure(
 			$svg,
 			__( 'The All Alerts screen', 'acps-alert-popups' ),
-			__( 'Every Beaver Builder popup on the site appears here automatically. You do not have to import anything.', 'acps-alert-popups' )
+			__( 'Two alerts, always: the Current Alert you switch on and edit, and the Normal Alert that is the resting state.', 'acps-alert-popups' )
 		);
 	}
 

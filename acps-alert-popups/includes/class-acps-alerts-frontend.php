@@ -148,29 +148,22 @@ class ACPS_Alerts_Frontend {
 			return;
 		}
 
-		$max   = max( 1, (int) ACPS_Alerts_Settings::get( 'max_concurrent' ) );
-		$queue = array();
+		// There is exactly one alert that can pop up: the Current Alert. The
+		// Normal Alert is the board's resting state and never interrupts anyone.
+		$alert = ACPS_Alerts_Status::current_alert();
 
-		foreach ( ACPS_Alerts_Source::get_enabled_alerts() as $alert ) {
-			// One bad alert must not stop the others being considered, so each
-			// rule evaluation is guarded on its own and a failure means "skip".
-			$passes = ACPS_Alerts_Failsafe::guard(
-				array( 'ACPS_Alerts_Conditions', 'passes' ),
-				array( $alert ),
-				'frontend/conditions',
-				false
-			);
-
-			if ( ! $passes ) {
-				continue;
-			}
-
-			$queue[] = $alert;
-
-			if ( count( $queue ) >= $max ) {
-				break;
-			}
+		if ( ! $alert ) {
+			return;
 		}
+
+		$passes = ACPS_Alerts_Failsafe::guard(
+			array( 'ACPS_Alerts_Conditions', 'passes' ),
+			array( $alert ),
+			'frontend/conditions',
+			false
+		);
+
+		$queue = $passes ? array( $alert ) : array();
 
 		$this->queue = $queue;
 	}
