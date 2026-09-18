@@ -111,12 +111,24 @@
 			return true;
 		}
 
-		// A republished popup is treated as a new alert.
-		if ( record.version && config.version && record.version !== config.version ) {
+		// "Once, then never again" has to mean exactly that, so it is settled
+		// before the version is looked at. Everything else treats a changed
+		// alert as a new one worth showing.
+		if ( 'once' === config.frequency ) {
+			return false;
+		}
+
+		// A record written before versioning has no version at all, which counts
+		// as changed rather than as a match — otherwise those visitors would
+		// never be shown the alert again.
+		var changed = !! config.version && record.version !== config.version;
+
+		if ( changed ) {
 			return true;
 		}
 
-		if ( 'once' === config.frequency ) {
+		// "Once, until I change it": seen, and nothing has changed since.
+		if ( 'edit' === config.frequency ) {
 			return false;
 		}
 

@@ -558,13 +558,14 @@ FLBuilder::register_module(
 							'options' => array(
 								'always'  => __( 'Every page view', 'acps-alert-popups' ),
 								'session' => __( 'Once per browser session', 'acps-alert-popups' ),
+								'edit'    => __( 'Once, until I change this alert', 'acps-alert-popups' ),
 								'days'    => __( 'Once every X days', 'acps-alert-popups' ),
 								'once'    => __( 'Once, then never again', 'acps-alert-popups' ),
 							),
 							'toggle'  => array(
 								'days' => array( 'fields' => array( 'frequency_days' ) ),
 							),
-							'help'    => __( '"Once per browser session" is right nearly every time. "Every page view" is for genuine emergencies.', 'acps-alert-popups' ),
+							'help'    => __( '"Once per browser session" is right nearly every time. "Once, until I change this alert" shows it once and then leaves people alone until you edit the wording or any setting here — then everybody sees it again. "Every page view" is for genuine emergencies.', 'acps-alert-popups' ),
 						),
 						'frequency_days' => array(
 							'type'    => 'unit',

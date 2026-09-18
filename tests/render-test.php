@@ -61,8 +61,11 @@ function esc_html__( $s, $d = '' ) { return $s; }
 function esc_url( $s ) { return (string) $s; }
 function wp_strip_all_tags( $s ) { return trim( strip_tags( (string) $s ) ); }
 function get_permalink( $id ) { return 'https://example.org/school-status/'; }
+function get_post_modified_time( $f = 'U', $gmt = false, $id = 0 ) { return $GLOBALS['modified']; }
 
 $GLOBALS['alert_over'] = array();
+$GLOBALS['revision']   = 1;
+$GLOBALS['modified']   = 1700000000;
 
 class ACPS_Alerts_Failsafe {
 	public static function action() {}
@@ -97,6 +100,7 @@ class ACPS_Alerts_Alert {
 	public function get_id() { return $this->id; }
 	public function get_title() { return 'Alert ' . $this->id; }
 	public function is_valid() { return true; }
+	public function revision() { return (int) $GLOBALS['revision']; }
 	public function get( $k, $d = null ) {
 		$map = array_merge(
 			array(
@@ -183,6 +187,7 @@ class Probe extends ACPS_Alerts_Frontend {
 		return $this->get_popup_content( $id );
 	}
 	public function queue_alerts( array $alerts ) { $this->queue = $alerts; }
+	public function config() { return $this->get_js_config(); }
 }
 
 $fails = 0;
@@ -324,6 +329,42 @@ check( 'a builder layout still renders', substr_count( $out, 'BUILDER_LAYOUT' ),
 check( 'but gets no heading of ours on top of its own', substr_count( $out, 'acps-alert__heading' ), 0 );
 check( 'and no badge', substr_count( $out, 'acps-level-icon' ), 0 );
 check( 'and no link of ours', substr_count( $out, 'View updates' ), 0 );
+
+/* ---- the version stamp the "once, until I change it" rule runs on ---- */
+
+$GLOBALS['alert_over'][40] = array( 'frequency' => 'edit' );
+$probe->queue_alerts( array( new ACPS_Alerts_Alert( 40 ) ) );
+
+$first = $probe->config();
+
+ok( 'the config carries a version', ! empty( $first[0]['version'] ) );
+
+// Editing only SETTINGS moves the revision counter and nothing else. This is
+// the case post_modified misses: most of an alert is post meta, so a level or
+// targeting change would otherwise look identical to a browser that has already
+// dismissed it, and "once, until I change it" would never reset.
+$GLOBALS['revision'] = 2;
+
+$after_setting = $probe->config();
+
+ok(
+	'a settings-only edit changes the version',
+	$first[0]['version'] !== $after_setting[0]['version']
+);
+
+// Editing the wording moves the modified time instead.
+$GLOBALS['modified'] = 1700009999;
+
+$after_content = $probe->config();
+
+ok(
+	'and so does a wording edit',
+	$after_setting[0]['version'] !== $after_content[0]['version']
+);
+
+// Nothing changing must leave it alone, or every visitor would be shown every
+// alert on every page view.
+ok( 'an unchanged alert keeps its version', $probe->config()[0]['version'] === $after_content[0]['version'] );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All render cases passed\n";
 exit( $fails ? 1 : 0 );

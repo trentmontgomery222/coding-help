@@ -67,7 +67,7 @@ class ACPS_Alerts_Alert {
 			'trigger'          => array( 'default' => 'load', 'type' => 'choice', 'choices' => array( 'load', 'delay', 'scroll', 'exit', 'click' ) ),
 			'trigger_delay'    => array( 'default' => 3, 'type' => 'int', 'min' => 0, 'max' => 600 ),
 			'trigger_scroll'   => array( 'default' => 40, 'type' => 'int', 'min' => 1, 'max' => 100 ),
-			'frequency'        => array( 'default' => 'session', 'type' => 'choice', 'choices' => array( 'always', 'session', 'days', 'once' ) ),
+			'frequency'        => array( 'default' => 'session', 'type' => 'choice', 'choices' => array( 'always', 'session', 'days', 'edit', 'once' ) ),
 			'frequency_days'   => array( 'default' => 7, 'type' => 'int', 'min' => 1, 'max' => 365 ),
 			'audience'         => array( 'default' => 'all', 'type' => 'choice', 'choices' => array( 'all', 'logged_in', 'logged_out', 'roles' ) ),
 			'roles'            => array( 'default' => array(), 'type' => 'roles' ),
@@ -239,6 +239,10 @@ class ACPS_Alerts_Alert {
 
 		$this->settings = $clean;
 
+		// Every write counts as a change, so a visitor who has already seen this
+		// alert gets shown the new version.
+		$this->touch();
+
 		/**
 		 * Fires after an alert's settings are saved.
 		 *
@@ -259,7 +263,41 @@ class ACPS_Alerts_Alert {
 	public function set_enabled( $enabled ) {
 		update_post_meta( $this->get_id(), self::META_PREFIX . 'enabled', $enabled ? 1 : 0 );
 
+		$this->touch();
+
 		$this->settings = null;
+	}
+
+	/**
+	 * The alert's revision: a counter bumped every time anything changes.
+	 *
+	 * WordPress already stamps a post when its *content* changes, but most of
+	 * an alert is post meta — the level, the targeting, when it comes down —
+	 * and none of that moves post_modified. A visitor who has already dismissed
+	 * an alert set to "once, until I change it" therefore has to be told apart
+	 * by something that moves on a settings-only edit, which is this.
+	 *
+	 * @return int
+	 */
+	public function revision() {
+		return (int) get_post_meta( $this->get_id(), self::META_PREFIX . 'revision', true );
+	}
+
+	/**
+	 * Records that this alert has changed.
+	 *
+	 * Deliberately not part of the settings schema: save() writes every key in
+	 * the schema, so a revision that lived there would be reset to its default
+	 * by the very call that is supposed to advance it.
+	 *
+	 * @return int The new revision.
+	 */
+	public function touch() {
+		$next = $this->revision() + 1;
+
+		update_post_meta( $this->get_id(), self::META_PREFIX . 'revision', $next );
+
+		return $next;
 	}
 
 	/**

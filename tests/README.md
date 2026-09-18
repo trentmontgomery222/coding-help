@@ -18,6 +18,7 @@ php tests/help-test.php
 php tests/popup-module-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
+node tests/frequency-test.js
 for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
 ```
 
@@ -246,3 +247,28 @@ whole plugin is checked at once without booting WordPress.
 
 Verified non-vacuous: delete `handle_toggle()` and it fails with
 "ACPS_Alerts_Admin calls handle_toggle(), which nothing declares".
+
+`frequency-test.js` — how often a visitor is shown the same alert, with
+`mayShow()` loaded out of the real script rather than restated. The rule needing
+the most pinning is "Once, until I change this alert": shown once, then nobody
+is bothered again until the alert is edited, at which point everybody sees it.
+That rests on two things, neither obvious from one file:
+
+- the version stamp has to move on a **settings-only** edit. WordPress stamps a
+  post when its content changes, but most of an alert is post meta, so
+  `post_modified` alone would sit still while the level, the targeting and the
+  schedule all changed
+- "Once, then never again" has to be settled **before** the version is looked
+  at, or the two options do the same thing and plain "once" quietly stops
+  meaning once
+
+Also covered: a first visit always shows, a new browser session does not reset
+"until I change it", a record stored before versioning counts as stale rather
+than as a match, session/days/always still behave, and a preview ignores all of
+it.
+
+Verified non-vacuous twice. Move the version gate above the "once" branch and it
+fails with "once: still never, even after the alert is rewritten". Drop the
+revision counter from the version stamp in `get_js_config()` and
+`render-test.php` fails with "a settings-only edit changes the version" — the
+PHP half of the same rule.

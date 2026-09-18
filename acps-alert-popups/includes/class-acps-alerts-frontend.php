@@ -272,7 +272,10 @@ class ACPS_Alerts_Frontend {
 				'overlayClose'  => (bool) $alert->get( 'overlay_close' ),
 				'escClose'      => (bool) $alert->get( 'esc_close' ),
 				'native'        => $this->use_native_rendering(),
-				'version'       => (string) get_post_modified_time( 'U', true, $alert->get_id() ),
+				// Two halves, because either can move on its own: the revision
+				// counter catches a settings-only edit, and the modified time
+				// catches content edited outside the plugin's own screens.
+				'version'       => $alert->revision() . '-' . (string) get_post_modified_time( 'U', true, $alert->get_id() ),
 			);
 		}
 

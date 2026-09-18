@@ -92,6 +92,10 @@ Settings, whether on the Current Alert module's tabs or the Normal Alert's admin
 | Where it shows | Entire site, front page, or selected post types / post IDs / URL paths, plus a never-show list |
 | Who sees it | Everyone, logged out, logged in, or specific roles |
 | How it opens | Page load, delay, scroll depth, exit intent, or click-only; and how often it may reappear |
+
+**"Once, until I change this alert"** is worth calling out. The visitor sees it once and is then left alone — not for a day, not for a session, but until you edit the alert. Any change counts: the wording, the level, the targeting, when it comes down. The moment you save, everybody who dismissed it sees it again.
+
+It works off a revision counter bumped on every write, paired with the post's modified time, because most of an alert is post meta and `post_modified` sits still while the level or the schedule changes underneath it. **"Once, then never again"** is deliberately exempt from that reset — otherwise the two options would be the same thing.
 | Appearance | Position, max width, overlay, close button, overlay click, Escape key, screen reader label |
 
 **Site Alerts → Settings** holds the site-wide options: popup post type, rendering mode, the daily cut-off time, where dismissals are remembered (local storage, session storage or a cookie), z-index, whether editors see alerts, preview links, and extra CSS.

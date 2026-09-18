@@ -245,12 +245,13 @@ class ACPS_Alerts_Fields {
 						array(
 							'always'  => __( 'Every page view', 'acps-alert-popups' ),
 							'session' => __( 'Once per browser session', 'acps-alert-popups' ),
+							'edit'    => __( 'Once, until I change this alert', 'acps-alert-popups' ),
 							'days'    => __( 'Once every X days', 'acps-alert-popups' ),
 							'once'    => __( 'Once, then never again', 'acps-alert-popups' ),
 						),
 						array( 'class' => 'acps-frequency-mode' )
 					),
-					__( 'Counted per browser, after the visitor closes the alert.', 'acps-alert-popups' )
+					__( 'Counted per browser, after the visitor closes the alert. "Once, until I change this alert" resets for everybody the moment you edit its wording or any of its settings.', 'acps-alert-popups' )
 				);
 				?>
 				<div class="acps-frequency-days-only">
