@@ -56,6 +56,7 @@ function acps_sitemap_required_files() {
 		'includes/class-acps-sitemap-xml.php',
 		'includes/class-acps-sitemap-html.php',
 		'includes/class-acps-sitemap-updater.php',
+		'includes/class-acps-sitemap-remote.php',
 		'includes/class-acps-sitemap-admin.php',
 	);
 }
@@ -145,9 +146,11 @@ register_shutdown_function( 'acps_sitemap_shutdown_guard' );
  * Load and construct the plugin, guarded at every step.
  */
 function acps_sitemap_boot() {
-	// Already parked: load only the recovery notice, nothing else.
+	// Already parked: load only the recovery notice plus, if possible, the
+	// secret recovery URL — so a bad release can't lock you out of recovery.
 	if ( acps_sitemap_is_safe_mode() ) {
 		add_action( 'admin_notices', 'acps_sitemap_safe_mode_notice' );
+		acps_sitemap_load_recovery();
 		return;
 	}
 
@@ -188,6 +191,38 @@ function acps_sitemap_boot() {
 	}
 }
 add_action( 'plugins_loaded', 'acps_sitemap_boot' );
+
+/**
+ * While parked in safe mode, still try to bring up ONLY the secret recovery URL
+ * (the remote control panel in reduced mode) so an operator can check status,
+ * clear safe mode, or force an update from outside wp-admin. Fully guarded: if
+ * the files needed for recovery are themselves missing/broken, it simply does
+ * nothing and the wp-admin "Resume" notice remains the fallback.
+ */
+function acps_sitemap_load_recovery() {
+	try {
+		$needed = array(
+			'includes/class-acps-sitemap.php',
+			'includes/class-acps-sitemap-updater.php',
+			'includes/class-acps-sitemap-remote.php',
+		);
+		foreach ( $needed as $rel ) {
+			if ( ! is_readable( ACPS_SITEMAP_DIR . $rel ) ) {
+				return;
+			}
+			require_once ACPS_SITEMAP_DIR . $rel;
+		}
+		if ( class_exists( 'ACPS_Sitemap_Remote' ) ) {
+			$remote = new ACPS_Sitemap_Remote( true ); // Recovery mode.
+			$remote->hooks();
+		}
+	} catch ( \Throwable $e ) {
+		// Recovery is best-effort; never let it add to the problem.
+		if ( function_exists( 'acps_sitemap_arm_safe_mode' ) ) {
+			acps_sitemap_arm_safe_mode( get_option( ACPS_SITEMAP_SAFE_MODE_OPT ) );
+		}
+	}
+}
 
 // The resume handler is always available so the plugin can be recovered.
 add_action( 'admin_post_acps_sitemap_resume', 'acps_sitemap_resume_from_safe_mode' );

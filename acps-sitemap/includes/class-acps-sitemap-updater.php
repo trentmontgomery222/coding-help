@@ -63,7 +63,8 @@ class ACPS_Sitemap_Updater {
 		// release zips) installs over the SAME directory instead of a new one —
 		// which is what otherwise leaves the plugin "disabled" after an update.
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
-		add_action( 'init', array( $this, 'maybe_handle_force_update' ) );
+		// The secret URL is owned by ACPS_Sitemap_Remote (which can install an
+		// update as one of its actions); the updater no longer handles it here.
 		// Early self-test responder used by the post-update crash check.
 		add_action( 'init', array( $this, 'maybe_handle_selftest' ), 1 );
 		add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
@@ -461,6 +462,32 @@ class ACPS_Sitemap_Updater {
 				require_once ABSPATH . 'wp-admin/includes/plugin.php';
 			}
 
+			// Guard the updater's own machinery: a bad release must not silently
+			// wipe the secret that the recovery URL depends on. If it went
+			// missing, put it back so the control panel/URL keeps working.
+			$settings = get_option( ACPS_Sitemap::OPTION );
+			if ( is_array( $settings ) && empty( $settings['update_trigger'] ) ) {
+				$settings['update_trigger'] = sanitize_title( wp_generate_password( 24, false, false ) );
+				update_option( ACPS_Sitemap::OPTION, $settings );
+				self::log_error( 'verify_after_upgrade: update secret was missing after upgrade; reseeded it.' );
+			}
+
+			// A release that shipped incomplete (missing files) is a broken
+			// update even if it does not fatal outright — treat it as a crash.
+			if ( function_exists( 'acps_sitemap_missing_files' ) ) {
+				$missing = acps_sitemap_missing_files();
+				if ( ! empty( $missing ) ) {
+					deactivate_plugins( ACPS_SITEMAP_BASENAME, true );
+					update_option(
+						'acps_sitemap_update_failed',
+						array( 'when' => current_time( 'mysql' ), 'version' => ACPS_SITEMAP_VERSION, 'reason' => 'missing files: ' . implode( ', ', $missing ) ),
+						false
+					);
+					self::log_error( 'verify_after_upgrade: update left files missing (' . implode( ', ', $missing ) . '); deactivated to protect the site.' );
+					return;
+				}
+			}
+
 			// Ensure it's marked active so the loopback loads the new code.
 			// Silent activation just sets the option — it does NOT re-include the
 			// plugin in this request (which would fatal on "cannot redeclare").
@@ -574,94 +601,72 @@ class ACPS_Sitemap_Updater {
 	}
 
 	/* ------------------------------------------------------------------ *
-	 * Secret force-update URL (spec §A6).
+	 * Update installer (invoked by the remote control panel).
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * On every front-end/admin request, check whether this is a hit on the
-	 * secret force-update URL and, if so, run the install and exit. The
-	 * secret is the only guard, so it must be non-trivial — see
-	 * Settings::sanitize() / Activator for how it's generated.
+	 * Force a fresh check and, if a newer version exists, install it now.
+	 * Returns a structured result instead of printing, so the caller controls
+	 * output. Never throws.
+	 *
+	 * @return array {
+	 *     @type bool     $ok       Whether an install ran and succeeded.
+	 *     @type string   $from     Installed version.
+	 *     @type string   $to       Latest available version (or '').
+	 *     @type string[] $messages Human-readable status lines.
+	 * }
 	 */
-	public function maybe_handle_force_update() {
+	public function run_update() {
+		$out = array(
+			'ok'       => false,
+			'from'     => ACPS_SITEMAP_VERSION,
+			'to'       => '',
+			'messages' => array(),
+		);
+
 		try {
-			$trigger = trim( (string) ACPS_Sitemap::get_setting( 'update_trigger' ) );
-			if ( '' === $trigger ) {
-				return; // Not configured — nothing to match against.
+			self::flush_cache();
+			$remote = $this->remote( true );
+
+			if ( ! $remote ) {
+				$out['messages'][] = 'Could not reach the configured update source.';
+				return $out;
 			}
 
-			$matched = false;
+			$out['to'] = $remote['version'];
 
-			if ( isset( $_GET[ self::QUERY_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				$given = sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				if ( hash_equals( $trigger, $given ) ) {
-					$matched = true;
-				}
+			if ( ! version_compare( $remote['version'], ACPS_SITEMAP_VERSION, '>' ) ) {
+				$out['ok']         = true;
+				$out['messages'][] = 'Already up to date.';
+				return $out;
+			}
+			if ( ! $this->rollout_allows( $remote['version'] ) ) {
+				$out['messages'][] = 'Update held by staged rollout (dev site has not verified this version).';
+				return $out;
 			}
 
-			if ( ! $matched && isset( $_SERVER['REQUEST_URI'] ) ) {
-				$path = (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-				$path = trim( $path, '/' );
-				if ( '' !== $path && hash_equals( $trigger, $path ) ) {
-					$matched = true;
-				}
-			}
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/misc.php';
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
-			if ( $matched ) {
-				$this->run_force_update();
+			delete_site_transient( 'update_plugins' );
+			wp_update_plugins();
+
+			$skin     = new \Automatic_Upgrader_Skin();
+			$upgrader = new \Plugin_Upgrader( $skin );
+			$result   = $upgrader->upgrade( ACPS_SITEMAP_BASENAME );
+
+			foreach ( (array) $skin->get_upgrade_messages() as $m ) {
+				$out['messages'][] = wp_strip_all_tags( $m );
 			}
+			$out['ok'] = ( ! is_wp_error( $result ) && $result );
 		} catch ( \Throwable $e ) {
-			self::log_error( 'maybe_handle_force_update: ' . $e->getMessage() );
-		}
-	}
-
-	/**
-	 * Force a fresh check and, if newer, install it now. Prints a plain-text
-	 * status page and exits — this is meant to be hit by curl/cron/a browser,
-	 * not rendered as part of a normal page.
-	 */
-	private function run_force_update() {
-		if ( ! headers_sent() ) {
-			nocache_headers();
-			header( 'Content-Type: text/plain; charset=utf-8' );
+			self::log_error( 'run_update: ' . $e->getMessage() );
+			$out['messages'][] = 'Update error: ' . $e->getMessage();
 		}
 
-		self::flush_cache();
-		$remote = $this->remote( true );
-
-		if ( ! $remote ) {
-			echo "Could not reach the configured update source.\n";
-			exit;
-		}
-
-		echo 'Installed version: ' . ACPS_SITEMAP_VERSION . "\n";
-		echo 'Latest version:    ' . $remote['version'] . "\n";
-
-		if ( ! version_compare( $remote['version'], ACPS_SITEMAP_VERSION, '>' ) ) {
-			echo "Already up to date.\n";
-			exit;
-		}
-
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/misc.php';
-		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-
-		// Make sure WordPress' own transient agrees before we ask it to upgrade.
-		delete_site_transient( 'update_plugins' );
-		wp_update_plugins();
-
-		$skin     = new \Automatic_Upgrader_Skin();
-		$upgrader = new \Plugin_Upgrader( $skin );
-		$result   = $upgrader->upgrade( ACPS_SITEMAP_BASENAME );
-
-		$messages = $skin->get_upgrade_messages();
-		if ( $messages ) {
-			echo "\n" . implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) . "\n";
-		}
-
-		echo "\n" . ( ( ! is_wp_error( $result ) && $result ) ? 'SUCCESS' : 'FAILED' ) . "\n";
-		exit;
+		return $out;
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -747,10 +752,19 @@ class ACPS_Sitemap_Updater {
 				return false;
 			}
 
+			// Build the request URL: manifest URL + this site (plugin) URL +
+			// the set key, so the manifest host can identify and authorize the
+			// requesting site. The endpoint is expected to be public (no login).
+			$args = array(
+				'site'    => rawurlencode( home_url( '/' ) ),
+				'plugin'  => rawurlencode( ACPS_SITEMAP_BASENAME ),
+				'version' => rawurlencode( ACPS_SITEMAP_VERSION ),
+			);
 			$key = trim( (string) ACPS_Sitemap::get_setting( 'update_manifest_key' ) );
 			if ( '' !== $key ) {
-				$manifest = add_query_arg( 'key', rawurlencode( $key ), $manifest );
+				$args['key'] = rawurlencode( $key );
 			}
+			$manifest = add_query_arg( $args, $manifest );
 
 			$resp = wp_remote_get( $manifest, array( 'timeout' => 15 ) );
 			if ( is_wp_error( $resp ) ) {

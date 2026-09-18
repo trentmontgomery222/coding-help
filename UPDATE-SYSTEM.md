@@ -15,10 +15,10 @@ with this plugin’s option names and URLs.
 
 There is **no visible link, tab, menu item, or mention** of the update settings
 anywhere in the WordPress admin. The panel renders only when you type its URL
-directly — the settings page with `&acps_updates=1` appended:
+directly — the settings page with `&updates=1` appended:
 
 ```
-/wp-admin/options-general.php?page=acps-sitemap&acps_updates=1
+/wp-admin/options-general.php?page=acps-sitemap&updates=1
 ```
 
 Without that query flag, **Settings → ACPS Sitemap** shows only the sitemap
@@ -32,10 +32,11 @@ it is out of sight.
 | File | Role |
 |---|---|
 | `acps-sitemap.php` | Bootstrap + crash-safe “safe mode” (`acps_sitemap_boot()`, `acps_sitemap_shutdown_guard()`) |
-| `includes/class-acps-sitemap-updater.php` | The whole updater |
-| `includes/class-acps-sitemap.php` | `update_*` settings defaults + activation seeding of the force-update secret |
-| `includes/class-acps-sitemap-admin.php` | The **Updates** panel UI + “Check for updates now” |
-| `uninstall.php` | Removes the update options/transients |
+| `includes/class-acps-sitemap-updater.php` | The whole updater (`run_update()` installs on demand) |
+| `includes/class-acps-sitemap-remote.php` | The secret out-of-band control panel (IP + password + rate limit) |
+| `includes/class-acps-sitemap.php` | Settings defaults, the shared `apply_settings()` sanitizer, the issue log, activation seeding of the secret |
+| `includes/class-acps-sitemap-admin.php` | The hidden **Updates** panel UI, “Check for updates now”, remote-password setter |
+| `uninstall.php` | Removes the update/remote options + transients |
 
 ## Settings (stored inside `acps_sitemap_settings`)
 
@@ -48,14 +49,22 @@ it is out of sight.
 | `update_manifest` / `update_manifest_key` | JSON manifest URL + optional `?key=` |
 | `update_role` | `standalone` \| `dev` \| `production` (staged rollout) |
 | `verify_status_url` / `verify_status_key` | Production → dev verification link |
-| `update_trigger` | Secret for the force-update URL **and** the crash-test marker (seeded on activation) |
+| `update_trigger` | Secret for the control-panel URL **and** the crash-test marker (seeded on activation) |
+| `remote_enabled` | Master switch for the secret control panel |
+| `remote_ip_mode` / `remote_ip_list` | `allow`/`deny` + the rules (exact / prefix / CIDR) |
+| `remote_ip_source` | `remote_addr` or `x_forwarded_for` |
+| `remote_rate_max` | Max control-panel requests per 5 min per IP |
 
 Options/transients outside the settings array:
 `acps_sitemap_update_remote` (cached lookup, 6 h ok / 15 min fail),
 `acps_sitemap_devstatus` (cached dev status, 10 min),
 `acps_sitemap_verified` (`{version,time}` a dev install published),
 `acps_sitemap_update_failed` (`{when,version}` after a rollback),
-`acps_sitemap_safe_mode` (`{msg,file,line,time}` — plugin parked after a fatal).
+`acps_sitemap_safe_mode` (`{...}` — plugin parked after a fatal / missing files),
+`acps_sitemap_issues` (capped ring buffer shown on the panel),
+`acps_sitemap_remote_pw` (hashed control-panel password; set only in wp-admin),
+`acps_sitemap_remote_last_edit` (once-a-day edit stamp),
+`acps_sitemap_remote_{sess,rl,fail}_*` transients (session / rate limit / lockout).
 
 ## Two sources
 
@@ -83,7 +92,15 @@ Host a file that returns HTTP 200. Only `version` + `download_url` are required:
 }
 ```
 
-If you set a manifest key it is sent as `?key=<value>` — have your host require it.
+The request URL the plugin builds is **manifest URL + this site + the key**:
+
+```
+<manifest_url>?site=<home_url>&plugin=<basename>&version=<installed>&key=<manifest_key>
+```
+
+so the manifest host can identify and authorize the requesting site. The
+endpoint is expected to be **public** (no WordPress login), because the check
+also runs from WP-Cron and logged-out contexts.
 
 ## Crash protection
 
@@ -96,13 +113,42 @@ If you set a manifest key it is sent as `?key=<value>` — have your host requir
 * **Safe mode**: if the plugin fatals in one of its own files, the next request
   loads only a “Resume plugin” admin notice and returns, so the theme and other
   plugins keep working. Fix the problem, then click **Resume**.
+* **File integrity**: before loading anything, the bootstrap checks all plugin
+  files exist. `verify_after_upgrade()` re-checks after an update — a release
+  that shipped incomplete (missing files) is rolled back like any other crash,
+  and if the update secret went missing it is reseeded so the recovery URL keeps
+  working.
+* **Recovery URL in safe mode**: even while parked in safe mode, the bootstrap
+  brings up ONLY the secret control panel (in reduced mode) if its files are
+  intact, so a bad release cannot lock you out of the recovery URL. From there
+  you can clear safe mode or force an update.
 
-## Force-update URL
+## Secret control panel (the update URL)
 
-Activation seeds a random secret (`update_trigger`). The **Updates** panel shows
-a URL of the form `https://your-site/?acps_sitemap_update=<secret>`. Loading it
-(from curl, cron, or a deploy hook) forces an immediate check + install. Keep it
-secret — it is the only guard.
+Activation seeds a random secret (`update_trigger`). The URL
+`https://your-site/?acps_sitemap_update=<secret>` opens a self-contained,
+logged-out control panel (`class-acps-sitemap-remote.php`). It is **not** linked
+anywhere. Before it shows anything it passes, in order:
+
+1. **`remote_enabled`** master switch.
+2. **IP gate** — `remote_ip_mode` (`allow`/`deny`) against `remote_ip_list`
+   (exact IP, prefix/wildcard `196.168.*`, or CIDR `10.0.0.0/8`), reading the IP
+   from `remote_ip_source` (`remote_addr` or `x_forwarded_for` for sites behind a
+   proxy/CDN). Default: allow only `167.102.110.1`. A blocked IP gets a plain 404.
+3. **Rate limit** — `remote_rate_max` requests per 5 minutes per IP (429 over).
+4. **Password** — stored **hashed** in `acps_sitemap_remote_pw`, set ONLY from
+   wp-admin (hidden Updates panel). 5 wrong tries per IP = 15-minute lockout.
+   A short-lived, IP-bound session cookie avoids re-entering it each request.
+
+Once in, it shows **diagnostics** (versions, peak memory, request time, file
+integrity, safe-mode, update status, recent issues), can **check/install an
+update** or **clear safe mode**, and can **edit every setting** — but only **once
+per 24 hours** (`acps_sitemap_remote_last_edit`). State-changing POSTs carry a
+CSRF token tied to the session.
+
+> Security note: this is a real attack surface — an unauthenticated endpoint
+> that edits settings and installs code. Keep the IP list tight, use a long
+> password, and prefer `x_forwarded_for` only when you trust the proxy.
 
 ## Staged rollout (optional)
 

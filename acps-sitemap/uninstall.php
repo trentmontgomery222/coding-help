@@ -15,15 +15,20 @@ delete_option( 'acps_sitemap_cache_buster' );
 delete_option( 'acps_sitemap_verified' );
 delete_option( 'acps_sitemap_update_failed' );
 delete_option( 'acps_sitemap_safe_mode' );
+delete_option( 'acps_sitemap_issues' );
+delete_option( 'acps_sitemap_remote_pw' );
+delete_option( 'acps_sitemap_remote_last_edit' );
 
 // Update-lookup transients.
 delete_transient( 'acps_sitemap_update_remote' );
 delete_transient( 'acps_sitemap_devstatus' );
 
-// Remove any leftover sitemap cache transients.
+// Remove any leftover sitemap cache + remote session/rate transients.
 global $wpdb;
 $wpdb->query(
 	"DELETE FROM {$wpdb->options}
 	 WHERE option_name LIKE '\_transient\_acps_sm\_%'
-	    OR option_name LIKE '\_transient\_timeout\_acps_sm\_%'"
+	    OR option_name LIKE '\_transient\_timeout\_acps_sm\_%'
+	    OR option_name LIKE '\_transient\_acps_sitemap_remote\_%'
+	    OR option_name LIKE '\_transient\_timeout\_acps_sitemap_remote\_%'"
 );

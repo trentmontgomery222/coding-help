@@ -27,11 +27,44 @@ class ACPS_Sitemap_Admin {
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_post_acps_sitemap_create_page', array( $this, 'handle_create_page' ) );
 		add_action( 'admin_post_acps_sitemap_check_updates', array( $this, 'handle_check_updates' ) );
+		add_action( 'admin_post_acps_sitemap_set_remote_pw', array( $this, 'handle_set_remote_pw' ) );
 		add_filter(
 			'plugin_action_links_' . plugin_basename( ACPS_SITEMAP_FILE ),
 			array( $this, 'action_links' )
 		);
 		add_action( 'admin_notices', array( $this, 'maybe_notice' ) );
+	}
+
+	/**
+	 * Set (or clear) the remote control-panel password. Hashed on save; this is
+	 * the only place it can be changed. wp-admin, manage_options only.
+	 */
+	public function handle_set_remote_pw() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'acps-sitemap' ) );
+		}
+		check_admin_referer( 'acps_sitemap_set_remote_pw' );
+
+		$pw = isset( $_POST['acps_remote_pw'] ) ? (string) wp_unslash( $_POST['acps_remote_pw'] ) : '';
+		if ( '' === $pw ) {
+			delete_option( ACPS_Sitemap_Remote::PW_OPTION );
+			$result = 'pw_cleared';
+		} else {
+			update_option( ACPS_Sitemap_Remote::PW_OPTION, wp_hash_password( $pw ), false );
+			$result = 'pw_set';
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'    => self::PAGE,
+					'updates' => '1',
+					'acps_pw' => $result,
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -89,13 +122,14 @@ class ACPS_Sitemap_Admin {
 	 */
 	public function sanitize( $input ) {
 		$input = is_array( $input ) ? $input : array();
-		$clean = ACPS_Sitemap::get_settings(); // Start from current values.
+		$base  = ACPS_Sitemap::get_settings(); // Start from current values.
 		$form  = isset( $input['_form'] ) ? sanitize_key( $input['_form'] ) : 'general';
 
 		if ( 'updates' === $form ) {
-			$this->sanitize_updates( $input, $clean );
+			// The hidden panel carries both the update and remote-access fields.
+			$clean = ACPS_Sitemap::apply_settings( $input, $base, array( 'updates', 'remote' ) );
 		} else {
-			$this->sanitize_general( $input, $clean );
+			$clean = ACPS_Sitemap::apply_settings( $input, $base, array( 'general' ) );
 			// Content selection changed: rebuild rewrite rules and clear cache.
 			ACPS_Sitemap_XML::add_rewrite_rules();
 			flush_rewrite_rules();
@@ -104,65 +138,6 @@ class ACPS_Sitemap_Admin {
 
 		unset( $clean['_form'] );
 		return $clean;
-	}
-
-	/**
-	 * Sanitize the sitemap-options section into $clean (by reference).
-	 *
-	 * @param array $input Raw input.
-	 * @param array $clean Settings being built.
-	 */
-	private function sanitize_general( $input, &$clean ) {
-		$defaults = ACPS_Sitemap::defaults();
-
-		$clean['enable_xml']           = empty( $input['enable_xml'] ) ? 0 : 1;
-		$clean['disable_core_sitemap'] = empty( $input['disable_core_sitemap'] ) ? 0 : 1;
-		$clean['add_to_robots']        = empty( $input['add_to_robots'] ) ? 0 : 1;
-
-		$valid_pts           = get_post_types( array( 'public' => true ) );
-		$submitted_pts       = isset( $input['post_types'] ) ? (array) $input['post_types'] : array();
-		$clean['post_types'] = array_values( array_intersect( $valid_pts, array_map( 'sanitize_key', $submitted_pts ) ) );
-
-		$valid_tax           = get_taxonomies( array( 'public' => true ) );
-		$submitted_tax       = isset( $input['taxonomies'] ) ? (array) $input['taxonomies'] : array();
-		$clean['taxonomies'] = array_values( array_intersect( $valid_tax, array_map( 'sanitize_key', $submitted_tax ) ) );
-
-		$raw_ids = isset( $input['exclude_ids'] ) ? (string) $input['exclude_ids'] : '';
-		preg_match_all( '/\d+/', $raw_ids, $matches );
-		$clean['exclude_ids'] = array_values( array_unique( array_map( 'intval', $matches[0] ) ) );
-
-		$max                      = isset( $input['max_per_sitemap'] ) ? (int) $input['max_per_sitemap'] : $defaults['max_per_sitemap'];
-		$clean['max_per_sitemap'] = max( 1, min( 50000, $max ) );
-	}
-
-	/**
-	 * Sanitize the updates section into $clean (by reference). Note: the
-	 * force-update secret (update_trigger) is not editable here, so it is
-	 * carried over untouched.
-	 *
-	 * @param array $input Raw input.
-	 * @param array $clean Settings being built.
-	 */
-	private function sanitize_updates( $input, &$clean ) {
-		$clean['update_enabled'] = empty( $input['update_enabled'] ) ? 0 : 1;
-		$clean['update_auto']    = empty( $input['update_auto'] ) ? 0 : 1;
-
-		$source                 = isset( $input['update_source'] ) ? sanitize_key( $input['update_source'] ) : 'github';
-		$clean['update_source'] = in_array( $source, array( 'url', 'github' ), true ) ? $source : 'github';
-
-		$clean['update_manifest']     = isset( $input['update_manifest'] ) ? esc_url_raw( trim( (string) $input['update_manifest'] ) ) : '';
-		$clean['update_manifest_key'] = isset( $input['update_manifest_key'] ) ? sanitize_text_field( $input['update_manifest_key'] ) : '';
-
-		$clean['gh_owner'] = isset( $input['gh_owner'] ) ? sanitize_text_field( $input['gh_owner'] ) : '';
-		$clean['gh_repo']  = isset( $input['gh_repo'] ) ? sanitize_text_field( $input['gh_repo'] ) : '';
-		$clean['gh_asset'] = isset( $input['gh_asset'] ) ? sanitize_file_name( $input['gh_asset'] ) : 'acps-sitemap.zip';
-		$clean['gh_token'] = isset( $input['gh_token'] ) ? trim( sanitize_text_field( $input['gh_token'] ) ) : '';
-
-		$role                 = isset( $input['update_role'] ) ? sanitize_key( $input['update_role'] ) : 'standalone';
-		$clean['update_role'] = in_array( $role, array( 'standalone', 'dev', 'production' ), true ) ? $role : 'standalone';
-
-		$clean['verify_status_url'] = isset( $input['verify_status_url'] ) ? esc_url_raw( trim( (string) $input['verify_status_url'] ) ) : '';
-		$clean['verify_status_key'] = isset( $input['verify_status_key'] ) ? sanitize_text_field( $input['verify_status_key'] ) : '';
 	}
 
 	/* --------------------------------------------------------------------- *
@@ -225,7 +200,7 @@ class ACPS_Sitemap_Admin {
 		$redirect = add_query_arg(
 			array(
 				'page'         => self::PAGE,
-				'acps_updates' => '1', // Stay on the hidden Updates view.
+				'updates'      => '1', // Stay on the hidden Updates view.
 				'acps_checked' => '1',
 			),
 			admin_url( 'options-general.php' )
@@ -280,6 +255,15 @@ class ACPS_Sitemap_Admin {
 				echo '<div class="notice notice-error is-dismissible"><p>'
 					. esc_html__( 'Could not reach the configured update source. Check the source settings below.', 'acps-sitemap' )
 					. '</p></div>';
+			}
+		}
+
+		if ( ! empty( $_GET['acps_pw'] ) ) {
+			$pw = sanitize_key( wp_unslash( $_GET['acps_pw'] ) );
+			if ( 'pw_set' === $pw ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Control panel password saved.', 'acps-sitemap' ) . '</p></div>';
+			} elseif ( 'pw_cleared' === $pw ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Control panel password removed. The panel cannot be signed into until a new one is set.', 'acps-sitemap' ) . '</p></div>';
 			}
 		}
 	}
@@ -466,9 +450,9 @@ class ACPS_Sitemap_Admin {
 
 			<?php
 			// The Updates panel is intentionally hidden. It renders only when the
-			// URL carries ?acps_updates=1, so there is no visible link or mention
-			// of it anywhere in the admin; reach it by typing that URL directly.
-			if ( isset( $_GET['acps_updates'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			// URL carries &updates=1, so there is no visible link or mention of it
+			// anywhere in the admin; reach it by typing that URL directly.
+			if ( isset( $_GET['updates'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				?>
 				<hr />
 				<?php $this->render_updates_section( $settings ); ?>
@@ -650,19 +634,82 @@ class ACPS_Sitemap_Admin {
 					</td>
 				</tr>
 
-				<?php if ( '' !== $force_url ) : ?>
 				<tr>
-					<th scope="row"><?php esc_html_e( 'Force-update URL', 'acps-sitemap' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'Remote control panel', 'acps-sitemap' ); ?></th>
 					<td>
-						<input type="text" class="large-text code" readonly onclick="this.select();" value="<?php echo esc_attr( $force_url ); ?>" />
-						<p class="description"><?php esc_html_e( 'Keep this secret. Loading it (from curl, cron, or a deploy hook) forces an immediate check and install.', 'acps-sitemap' ); ?></p>
+						<label style="display:block;margin-bottom:6px;">
+							<input type="checkbox" name="<?php echo $opt; ?>[remote_enabled]" value="1" <?php checked( $settings['remote_enabled'], 1 ); ?> />
+							<?php esc_html_e( 'Enable the secret out-of-band control panel (served from the URL below)', 'acps-sitemap' ); ?>
+						</label>
+						<?php if ( '' !== $force_url ) : ?>
+							<input type="text" class="large-text code" readonly onclick="this.select();" value="<?php echo esc_attr( $force_url ); ?>" />
+							<p class="description"><?php esc_html_e( 'Keep this URL secret. It is IP-restricted, password-protected and rate-limited. Loading it opens the panel (diagnostics, updates, and once-a-day settings editing).', 'acps-sitemap' ); ?></p>
+						<?php endif; ?>
 					</td>
 				</tr>
-				<?php endif; ?>
+
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Control panel access (IP)', 'acps-sitemap' ); ?></th>
+					<td>
+						<p style="margin:0 0 6px;">
+							<select name="<?php echo $opt; ?>[remote_ip_mode]">
+								<option value="allow" <?php selected( $settings['remote_ip_mode'], 'allow' ); ?>><?php esc_html_e( 'Allow only the IPs listed below', 'acps-sitemap' ); ?></option>
+								<option value="deny" <?php selected( $settings['remote_ip_mode'], 'deny' ); ?>><?php esc_html_e( 'Block the IPs listed below (allow everyone else)', 'acps-sitemap' ); ?></option>
+							</select>
+							<select name="<?php echo $opt; ?>[remote_ip_source]">
+								<option value="remote_addr" <?php selected( $settings['remote_ip_source'], 'remote_addr' ); ?>>REMOTE_ADDR</option>
+								<option value="x_forwarded_for" <?php selected( $settings['remote_ip_source'], 'x_forwarded_for' ); ?>>X-Forwarded-For</option>
+							</select>
+						</p>
+						<p style="margin:0 0 6px;">
+							<textarea name="<?php echo $opt; ?>[remote_ip_list]" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", (array) $settings['remote_ip_list'] ) ); ?></textarea>
+						</p>
+						<p class="description"><?php esc_html_e( 'One rule per line: an exact IP (167.102.110.1), a prefix/wildcard (196.168.*), or a CIDR range (10.0.0.0/8). If your site is behind a proxy/CDN, choose X-Forwarded-For.', 'acps-sitemap' ); ?></p>
+						<p style="margin:6px 0 0;">
+							<label><?php esc_html_e( 'Max requests per 5 minutes', 'acps-sitemap' ); ?>
+								<input type="number" min="1" max="100000" name="<?php echo $opt; ?>[remote_rate_max]" value="<?php echo esc_attr( (int) $settings['remote_rate_max'] ); ?>" />
+							</label>
+						</p>
+					</td>
+				</tr>
 				</tbody>
 			</table>
 
 			<?php submit_button( __( 'Save update settings', 'acps-sitemap' ) ); ?>
+		</form>
+
+		<?php $this->render_remote_password_form(); ?>
+		<?php
+	}
+
+	/**
+	 * A separate form (its own admin-post handler) to set the remote-panel
+	 * password. Kept out of the settings array and hashed on save; this is the
+	 * only place the password can be changed.
+	 */
+	private function render_remote_password_form() {
+		$has_pw   = (bool) get_option( ACPS_Sitemap_Remote::PW_OPTION );
+		$post_url = wp_nonce_url( admin_url( 'admin-post.php?action=acps_sitemap_set_remote_pw' ), 'acps_sitemap_set_remote_pw' );
+		?>
+		<h2><?php esc_html_e( 'Control panel password', 'acps-sitemap' ); ?></h2>
+		<p class="description" style="max-width:46em;">
+			<?php
+			echo $has_pw
+				? esc_html__( 'A password is set. Enter a new one to change it, or leave blank and save to remove it (which disables sign-in to the panel).', 'acps-sitemap' )
+				: esc_html__( 'No password is set yet. The control panel cannot be used until you set one here.', 'acps-sitemap' );
+			?>
+		</p>
+		<form action="<?php echo esc_url( $post_url ); ?>" method="post">
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="acps-remote-pw"><?php esc_html_e( 'New password', 'acps-sitemap' ); ?></label></th>
+					<td>
+						<input type="password" id="acps-remote-pw" name="acps_remote_pw" class="regular-text" autocomplete="new-password" />
+						<p class="description"><?php esc_html_e( 'Stored hashed. Use a long, unique password.', 'acps-sitemap' ); ?></p>
+					</td>
+				</tr>
+			</table>
+			<?php submit_button( __( 'Save password', 'acps-sitemap' ), 'secondary' ); ?>
 		</form>
 		<?php
 	}

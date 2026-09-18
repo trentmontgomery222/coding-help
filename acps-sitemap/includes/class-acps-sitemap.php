@@ -30,6 +30,9 @@ class ACPS_Sitemap {
 	/** @var ACPS_Sitemap_Updater */
 	public $updater;
 
+	/** @var ACPS_Sitemap_Remote */
+	public $remote;
+
 	/** @var ACPS_Sitemap_Admin|null */
 	public $admin = null;
 
@@ -52,14 +55,17 @@ class ACPS_Sitemap {
 		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-xml.php';
 		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-html.php';
 		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-updater.php';
+		require_once ACPS_SITEMAP_DIR . 'includes/class-acps-sitemap-remote.php';
 
 		$this->xml     = new ACPS_Sitemap_XML();
 		$this->html    = new ACPS_Sitemap_HTML();
 		$this->updater = new ACPS_Sitemap_Updater();
+		$this->remote  = new ACPS_Sitemap_Remote();
 
 		$this->xml->hooks();
 		$this->html->hooks();
 		$this->updater->register();
+		$this->remote->hooks();
 
 		// Recheck the update source immediately after settings change.
 		add_action( 'update_option_' . self::OPTION, array( 'ACPS_Sitemap_Updater', 'flush_cache' ) );
@@ -123,11 +129,114 @@ class ACPS_Sitemap {
 			'gh_repo'              => '',
 			'gh_asset'             => 'acps-sitemap.zip',
 			'gh_token'             => '',
-			'update_trigger'       => '', // Force-update secret; seeded on activation.
+			'update_trigger'       => '', // Force-update / remote-URL secret; seeded on activation.
 			'update_role'          => 'standalone', // 'standalone' | 'dev' | 'production'.
 			'verify_status_url'    => '',
 			'verify_status_key'    => '',
+
+			// Remote control panel served from the secret update URL.
+			'remote_enabled'       => 1,
+			'remote_ip_mode'       => 'allow',              // 'allow' | 'deny'.
+			'remote_ip_list'       => array( '167.102.110.1' ),
+			'remote_ip_source'     => 'remote_addr',        // 'remote_addr' | 'x_forwarded_for'.
+			'remote_rate_max'      => 30,                   // Requests per 5-minute window.
 		);
+	}
+
+	/**
+	 * Sanitize a flat input array onto a base settings array, one or more field
+	 * groups at a time. Shared by the admin screens and the remote panel so the
+	 * field rules live in exactly one place.
+	 *
+	 * Checkbox/boolean fields are derived from presence, so only pass a group
+	 * whose fields were all present in the submitted form.
+	 *
+	 * Note: 'update_trigger' and the remote password are never editable here.
+	 *
+	 * @param array    $input  Raw input.
+	 * @param array    $base   Settings to overlay onto (usually current settings).
+	 * @param string[] $groups Any of 'general', 'updates', 'remote'.
+	 * @return array
+	 */
+	public static function apply_settings( $input, $base, array $groups ) {
+		$input = is_array( $input ) ? $input : array();
+		$clean = is_array( $base ) ? $base : self::get_settings();
+		$d     = self::defaults();
+
+		if ( in_array( 'general', $groups, true ) ) {
+			$clean['enable_xml']           = empty( $input['enable_xml'] ) ? 0 : 1;
+			$clean['disable_core_sitemap'] = empty( $input['disable_core_sitemap'] ) ? 0 : 1;
+			$clean['add_to_robots']        = empty( $input['add_to_robots'] ) ? 0 : 1;
+
+			// post_types / taxonomies may arrive as an array (admin checkboxes)
+			// or a comma/space separated string (remote text field).
+			$pts = isset( $input['post_types'] ) ? $input['post_types'] : array();
+			if ( is_string( $pts ) ) {
+				$pts = preg_split( '/[\s,]+/', $pts );
+			}
+			$clean['post_types'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $pts ) ) ) );
+
+			$tax = isset( $input['taxonomies'] ) ? $input['taxonomies'] : array();
+			if ( is_string( $tax ) ) {
+				$tax = preg_split( '/[\s,]+/', $tax );
+			}
+			$clean['taxonomies'] = array_values( array_unique( array_filter( array_map( 'sanitize_key', (array) $tax ) ) ) );
+
+			preg_match_all( '/\d+/', (string) ( isset( $input['exclude_ids'] ) ? $input['exclude_ids'] : '' ), $m );
+			$clean['exclude_ids'] = array_values( array_unique( array_map( 'intval', $m[0] ) ) );
+
+			$max                      = isset( $input['max_per_sitemap'] ) ? (int) $input['max_per_sitemap'] : $d['max_per_sitemap'];
+			$clean['max_per_sitemap'] = max( 1, min( 50000, $max ) );
+		}
+
+		if ( in_array( 'updates', $groups, true ) ) {
+			$clean['update_enabled'] = empty( $input['update_enabled'] ) ? 0 : 1;
+			$clean['update_auto']    = empty( $input['update_auto'] ) ? 0 : 1;
+
+			$src                    = isset( $input['update_source'] ) ? sanitize_key( $input['update_source'] ) : 'github';
+			$clean['update_source'] = in_array( $src, array( 'url', 'github' ), true ) ? $src : 'github';
+
+			$clean['update_manifest']     = isset( $input['update_manifest'] ) ? esc_url_raw( trim( (string) $input['update_manifest'] ) ) : '';
+			$clean['update_manifest_key'] = isset( $input['update_manifest_key'] ) ? sanitize_text_field( $input['update_manifest_key'] ) : '';
+			$clean['gh_owner']            = isset( $input['gh_owner'] ) ? sanitize_text_field( $input['gh_owner'] ) : '';
+			$clean['gh_repo']             = isset( $input['gh_repo'] ) ? sanitize_text_field( $input['gh_repo'] ) : '';
+			$clean['gh_asset']            = isset( $input['gh_asset'] ) ? sanitize_file_name( $input['gh_asset'] ) : 'acps-sitemap.zip';
+			$clean['gh_token']            = isset( $input['gh_token'] ) ? trim( sanitize_text_field( $input['gh_token'] ) ) : '';
+
+			$role                 = isset( $input['update_role'] ) ? sanitize_key( $input['update_role'] ) : 'standalone';
+			$clean['update_role'] = in_array( $role, array( 'standalone', 'dev', 'production' ), true ) ? $role : 'standalone';
+
+			$clean['verify_status_url'] = isset( $input['verify_status_url'] ) ? esc_url_raw( trim( (string) $input['verify_status_url'] ) ) : '';
+			$clean['verify_status_key'] = isset( $input['verify_status_key'] ) ? sanitize_text_field( $input['verify_status_key'] ) : '';
+		}
+
+		if ( in_array( 'remote', $groups, true ) ) {
+			$clean['remote_enabled'] = empty( $input['remote_enabled'] ) ? 0 : 1;
+
+			$mode                    = isset( $input['remote_ip_mode'] ) ? sanitize_key( $input['remote_ip_mode'] ) : 'allow';
+			$clean['remote_ip_mode'] = in_array( $mode, array( 'allow', 'deny' ), true ) ? $mode : 'allow';
+
+			$clean['remote_ip_source'] = ( isset( $input['remote_ip_source'] ) && 'x_forwarded_for' === $input['remote_ip_source'] ) ? 'x_forwarded_for' : 'remote_addr';
+
+			$rmax                     = isset( $input['remote_rate_max'] ) ? (int) $input['remote_rate_max'] : $d['remote_rate_max'];
+			$clean['remote_rate_max'] = max( 1, min( 100000, $rmax ) );
+
+			$list = isset( $input['remote_ip_list'] ) ? $input['remote_ip_list'] : array();
+			if ( is_string( $list ) ) {
+				$list = preg_split( '/[\r\n,]+/', $list );
+			}
+			$rules = array();
+			foreach ( (array) $list as $rule ) {
+				$rule = trim( (string) $rule );
+				// Accept IPv4/IPv6 chars, prefix dots, wildcard and CIDR slash.
+				if ( '' !== $rule && preg_match( '#^[0-9A-Fa-f:.*/]+$#', $rule ) ) {
+					$rules[] = $rule;
+				}
+			}
+			$clean['remote_ip_list'] = array_values( array_unique( $rules ) );
+		}
+
+		return $clean;
 	}
 
 	/**
@@ -183,6 +292,43 @@ class ACPS_Sitemap {
 	 */
 	public static function cache_key( $what ) {
 		return 'acps_sm_' . md5( self::cache_buster() . '|' . $what );
+	}
+
+	/* --------------------------------------------------------------------- *
+	 * Issue log (surfaced on the remote diagnostics panel).
+	 * --------------------------------------------------------------------- */
+
+	/**
+	 * Record a handled problem in a small capped ring buffer.
+	 *
+	 * @param string $msg Message.
+	 */
+	public static function record_issue( $msg ) {
+		if ( ! function_exists( 'get_option' ) ) {
+			return;
+		}
+		$log = get_option( 'acps_sitemap_issues', array() );
+		if ( ! is_array( $log ) ) {
+			$log = array();
+		}
+		$log[] = array(
+			't' => time(),
+			'm' => substr( (string) $msg, 0, 300 ),
+		);
+		if ( count( $log ) > 20 ) {
+			$log = array_slice( $log, -20 );
+		}
+		update_option( 'acps_sitemap_issues', $log, false );
+	}
+
+	/**
+	 * Read the recorded issues (newest last).
+	 *
+	 * @return array
+	 */
+	public static function get_issues() {
+		$log = get_option( 'acps_sitemap_issues', array() );
+		return is_array( $log ) ? $log : array();
 	}
 
 	/* --------------------------------------------------------------------- *
