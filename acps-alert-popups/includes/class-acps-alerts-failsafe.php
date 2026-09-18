@@ -89,6 +89,8 @@ class ACPS_Alerts_Failsafe {
 			'assets/css/board.css',
 			'modules/status-board/status-board.php',
 			'modules/status-board/includes/frontend.php',
+			'modules/alert-popup/alert-popup.php',
+			'modules/alert-popup/includes/frontend.php',
 			'assets/css/help.css',
 			'assets/js/help.js',
 			'assets/css/tour.css',

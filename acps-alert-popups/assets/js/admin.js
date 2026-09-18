@@ -125,11 +125,14 @@
 		var close = box.querySelector( '.acps-preview__close' );
 
 		var position = value( root, 'position' ) || 'center';
-		var severity = value( root, 'severity' ) || 'info';
 		var width = parseInt( value( root, 'width' ), 10 ) || 640;
 
+		// There is no separate severity any more: how urgent the popup looks
+		// follows the status level, so the preview cannot disagree with it.
+		var level = value( root, 'status_level' ) || 'info';
+
 		stage.className = 'acps-preview__stage is-' + position;
-		dialog.className = 'acps-preview__dialog sev-' + severity;
+		dialog.className = 'acps-preview__dialog lvl-' + level;
 
 		// Map the real pixel width onto the small stage proportionally.
 		var pct = Math.max( 24, Math.min( 92, ( width / 1200 ) * 100 ) );

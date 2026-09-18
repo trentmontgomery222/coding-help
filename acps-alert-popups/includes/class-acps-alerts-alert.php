@@ -62,8 +62,6 @@ class ACPS_Alerts_Alert {
 	public static function schema() {
 		return array(
 			'enabled'          => array( 'default' => 0, 'type' => 'bool' ),
-			'severity'         => array( 'default' => 'info', 'type' => 'choice', 'choices' => array( 'info', 'success', 'warning', 'critical' ) ),
-			'priority'         => array( 'default' => 10, 'type' => 'int', 'min' => 0, 'max' => 100 ),
 			'start'            => array( 'default' => '', 'type' => 'datetime' ),
 			'end'              => array( 'default' => '', 'type' => 'datetime' ),
 			'trigger'          => array( 'default' => 'load', 'type' => 'choice', 'choices' => array( 'load', 'delay', 'scroll', 'exit', 'click' ) ),

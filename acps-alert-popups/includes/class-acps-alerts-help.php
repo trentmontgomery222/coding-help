@@ -190,7 +190,7 @@ class ACPS_Alerts_Help {
 			array(
 				'title' => __( 'Welcome — this takes about two minutes', 'acps-alert-popups' ),
 				'html'  => '<p>' . esc_html__( 'This site has exactly two alerts, and it always will: the Normal Alert, which is the resting state, and the Current Alert, which is the one you switch on when something is happening.', 'acps-alert-popups' ) . '</p>'
-					. '<p>' . esc_html__( 'You never create or delete either of them. You edit the Current Alert from the Status Board on your status page, and design how it looks in Beaver Builder.', 'acps-alert-popups' ) . '</p>'
+					. '<p>' . esc_html__( 'You never create or delete either of them. The Current Alert is a popup module sitting on your status page: you open it in Beaver Builder, write the alert, and switch it on. Everything about it is on that one module.', 'acps-alert-popups' ) . '</p>'
 					. '<p class="acps-tour-tip">' . esc_html__( 'You can leave at any time with the Escape key, and pick the tour up again from Help & Tutorials.', 'acps-alert-popups' ) . '</p>',
 			),
 			array(
@@ -206,8 +206,8 @@ class ACPS_Alerts_Help {
 				'screen'   => 'list',
 				'selector' => '.acps-alerts-table, .wrap h1',
 				'title'    => __( 'Where you actually write an update', 'acps-alert-popups' ),
-				'html'     => '<p>' . esc_html__( 'Open your status page in Beaver Builder and edit the School Status Board module. What you type there is the Current Alert.', 'acps-alert-popups' ) . '</p>'
-					. '<p>' . esc_html__( 'Editing it changes the update in place — it never creates a second one. Switching it on in that module is what puts it in front of visitors.', 'acps-alert-popups' ) . '</p>'
+				'html'     => '<p>' . esc_html__( 'Open your status page in Beaver Builder and edit the Current Alert module. It looks like a popup, because it is one: what you type there is the alert the whole site sees.', 'acps-alert-popups' ) . '</p>'
+					. '<p>' . esc_html__( 'Its tabs hold every setting the alert has — when it comes down, which pages show it, who sees it, how it opens and how it looks. There is nothing to set in wp-admin.', 'acps-alert-popups' ) . '</p>'
 					. '<p class="acps-tour-tip">' . esc_html__( 'At the daily cut-off the Current Alert files itself into the archive and switches itself off. The words stay, ready to be rewritten next time.', 'acps-alert-popups' ) . '</p>',
 			),
 			array(
@@ -236,8 +236,8 @@ class ACPS_Alerts_Help {
 				'goLabel'   => __( 'Open an alert with me', 'acps-alert-popups' ),
 				'selector'  => '[data-acps-section="status"]',
 				'title'     => __( 'Switching it on', 'acps-alert-popups' ),
-				'html'      => '<p>' . esc_html__( 'This first box is the important one. Tick "Alert is live" and the alert starts working as soon as you save.', 'acps-alert-popups' ) . '</p>'
-					. '<p>' . esc_html__( 'Severity only sets the colour of the stripe along the top. Priority decides who wins if two alerts qualify at once.', 'acps-alert-popups' ) . '</p>',
+				'html'      => '<p>' . esc_html__( 'This is the Normal Alert, so you can see the controls without touching anything live. The Current Alert has these same controls, on its module on the status page.', 'acps-alert-popups' ) . '</p>'
+					. '<p>' . esc_html__( 'The tick is the important one: it is what puts an alert in front of visitors.', 'acps-alert-popups' ) . '</p>',
 			);
 
 			$steps[] = array(
@@ -301,7 +301,7 @@ class ACPS_Alerts_Help {
 						'url'      => $edit_url,
 						'selector' => '[data-acps-section="status"]',
 						'title'    => __( 'Status', 'acps-alert-popups' ),
-						'html'     => '<p>' . esc_html__( 'Live on or off, the colour of the stripe, and which alert wins when two qualify at once.', 'acps-alert-popups' ) . '</p>',
+						'html'     => '<p>' . esc_html__( 'Whether the alert is live. On the Current Alert this same switch is the first thing on its module, labelled "Show this alert now".', 'acps-alert-popups' ) . '</p>',
 					),
 					array(
 						'screen'   => 'edit',
@@ -338,7 +338,8 @@ class ACPS_Alerts_Help {
 						'screen'   => 'edit',
 						'selector' => '.submit .button-primary, p.submit',
 						'title'    => __( 'Save, and you are done', 'acps-alert-popups' ),
-						'html'     => '<p>' . esc_html__( 'Changes take effect immediately. Use the preview link further down to check it on the live site before anyone else sees it.', 'acps-alert-popups' ) . '</p>',
+						'html'     => '<p>' . esc_html__( 'Changes take effect immediately. Use the preview link further down to check it on the live site before anyone else sees it.', 'acps-alert-popups' ) . '</p>'
+							. '<p class="acps-tour-tip">' . esc_html__( 'Every one of these settings is on the Current Alert module too, so for a real alert you never have to come in here at all.', 'acps-alert-popups' ) . '</p>',
 					),
 				),
 			);
@@ -353,18 +354,21 @@ class ACPS_Alerts_Help {
 	}
 
 	/**
-	 * The most useful popup to demonstrate on, if there is one.
+	 * The alert whose settings screen the tours can demonstrate on.
+	 *
+	 * The Current Alert is deliberately *not* it: that one is edited on the
+	 * status page, so its admin screen is a signpost rather than a form, and a
+	 * tour pointing at controls there would find nothing. The Normal Alert
+	 * still has the full form, and every control on it is the same control.
 	 *
 	 * @return int
 	 */
 	protected function first_popup_id() {
-		// There are only ever two alerts, and the Current Alert is the one
-		// people actually work with, so demonstrate on that.
 		if ( class_exists( 'ACPS_Alerts_Post_Type' ) ) {
-			$current = ACPS_Alerts_Post_Type::get_alert( ACPS_Alerts_Post_Type::ROLE_CURRENT );
+			$normal = ACPS_Alerts_Post_Type::get_alert( ACPS_Alerts_Post_Type::ROLE_NORMAL );
 
-			if ( $current ) {
-				return (int) $current;
+			if ( $normal ) {
+				return (int) $normal;
 			}
 		}
 
@@ -468,9 +472,9 @@ class ACPS_Alerts_Help {
 			array(
 				'key'   => 'board',
 				'done'  => (bool) get_option( 'acps_alerts_board_page', 0 ),
-				'label' => __( 'The Status Board is on a page', 'acps-alert-popups' ),
-				'why'   => __( 'Drop the "School Status Board" module onto your status page. After that you post every update from there.', 'acps-alert-popups' ),
-				'fix'   => __( 'Edit your status page in Beaver Builder and add the module from the Site Alerts group.', 'acps-alert-popups' ),
+				'label' => __( 'The status page is set up', 'acps-alert-popups' ),
+				'why'   => __( 'Two modules go on it, both in the Site Alerts group: "Current Alert", which is the popup you write and switch on, and "School Status Board", which draws the banner and the archive.', 'acps-alert-popups' ),
+				'fix'   => __( 'Edit your status page in Beaver Builder and add both modules from the Site Alerts group.', 'acps-alert-popups' ),
 				'url'   => admin_url( 'edit.php?post_type=page' ),
 				'cta'   => __( 'Open Pages', 'acps-alert-popups' ),
 			),
@@ -478,7 +482,7 @@ class ACPS_Alerts_Help {
 				'key'   => 'alerts',
 				'done'  => count( $popups ) >= 2,
 				'label' => __( 'The two alerts exist', 'acps-alert-popups' ),
-				'why'   => __( 'This site has exactly two: the Current Alert you switch on and edit, and the Normal Alert that is the resting state. They are created for you.', 'acps-alert-popups' ),
+				'why'   => __( 'This site has exactly two: the Current Alert you write and switch on from the status page, and the Normal Alert that is the resting state. They are created for you.', 'acps-alert-popups' ),
 				'fix'   => __( 'Deactivate and reactivate the plugin to create them.', 'acps-alert-popups' ),
 				'url'   => admin_url( 'plugins.php' ),
 				'cta'   => __( 'Open Plugins', 'acps-alert-popups' ),
@@ -488,7 +492,7 @@ class ACPS_Alerts_Help {
 				'done'  => $enabled > 0 || (int) get_option( 'acps_alerts_used_once', 0 ) > 0,
 				'label' => __( 'You have used the Current Alert once', 'acps-alert-popups' ),
 				'why'   => __( 'Worth doing on a quiet day, so the whole path is proven before you need it in a hurry.', 'acps-alert-popups' ),
-				'fix'   => __( 'Open the Status Board on your status page, write something, switch it on, then switch it off again.', 'acps-alert-popups' ),
+				'fix'   => __( 'Open the Current Alert module on your status page, write something, switch it on, then switch it off again.', 'acps-alert-popups' ),
 				'url'   => admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG ),
 				'cta'   => __( 'See the alerts', 'acps-alert-popups' ),
 			),

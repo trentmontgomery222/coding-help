@@ -132,7 +132,9 @@ $acps_date_format  = get_option( 'date_format' );
 	if ( class_exists( 'FLBuilderModel' ) && FLBuilderModel::is_builder_active() ) :
 		?>
 		<p class="acps-board__hint">
-			<?php esc_html_e( 'Status Board: edit this module to change the Current Alert. There are only ever two alerts — the Current one and the Normal one — and editing here never creates another.', 'acps-alert-popups' ); ?>
+			<?php esc_html_e( 'Status Board: this is only the template. It draws whatever the Current Alert says, in the colour of its status level.', 'acps-alert-popups' ); ?>
+			<br />
+			<?php esc_html_e( 'To change the alert, edit the Current Alert popup module on this page. This module only holds the normal-day wording, the archive, and the board colours.', 'acps-alert-popups' ); ?>
 			<?php if ( $acps_live ) : ?>
 				<br /><?php esc_html_e( 'The Current Alert is showing now.', 'acps-alert-popups' ); ?>
 			<?php else : ?>

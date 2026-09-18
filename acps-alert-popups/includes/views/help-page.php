@@ -110,31 +110,36 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	<?php // ---------- The status board ---------- ?>
 	<div class="acps-help-section">
 		<h2><?php esc_html_e( 'The status page is the control panel', 'acps-alert-popups' ); ?></h2>
-		<p><?php esc_html_e( 'Once the Status Board module is on your status page, that page is where everything happens. You do not come into wp-admin to post an update — you edit the module, and saving posts it.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'Two modules go on your status page, and between them they are the whole system. You never come into wp-admin to post an update.', 'acps-alert-popups' ); ?></p>
+		<ul class="acps-help-list">
+			<li><strong><?php esc_html_e( 'Current Alert', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the popup itself. You write the alert here and switch it on here, and every setting it has is on its tabs. It only shows in the builder; visitors see it as a popup on every other page.', 'acps-alert-popups' ); ?></li>
+			<li><strong><?php esc_html_e( 'School Status Board', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the template. It turns the alert\'s heading and text into the banner, in the colour of its status level, and lists the past updates underneath.', 'acps-alert-popups' ); ?></li>
+		</ul>
 
 		<?php echo ACPS_Alerts_Art::board_flow(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Authored SVG. ?>
 
 		<h3><?php esc_html_e( 'Setting the page up, once', 'acps-alert-popups' ); ?></h3>
 		<ol class="acps-help-list">
 			<li><?php esc_html_e( 'Edit your status page in Beaver Builder.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'Drag in the "School Status Board" module — it is in the Site Alerts group.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Drag in the "Current Alert" module — it is in the Site Alerts group. This is the popup.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Drag in the "School Status Board" module underneath it.', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'Under Board, set the wording for when nothing is happening ("School Status: NORMAL" and the paragraph beneath it).', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'Save the page. You never have to touch this part again.', 'acps-alert-popups' ); ?></li>
 		</ol>
 
 		<h3><?php esc_html_e( 'Posting an update, every time after that', 'acps-alert-popups' ); ?></h3>
 		<ol class="acps-help-list">
-			<li><?php esc_html_e( 'Edit the status page in Beaver Builder and open the Status Board module.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'On the "Current Alert" tab, rewrite the headline and message, and pick the status level.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'Choose whether it also pops up across the site, and when it should come down.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'Set "Show this alert now" to "Yes — it is live", and save. That is it.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Edit the status page in Beaver Builder and open the Current Alert module.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'On the Popup tab, rewrite the heading and the text, and pick the status level.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'On the On/off tab, set "Show this alert now" to "Yes — it is live".', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Save. That is it — under a minute, start to finish.', 'acps-alert-popups' ); ?></li>
 		</ol>
 		<p class="acps-callout">
 			<?php esc_html_e( 'There is only ever one Current Alert. You are always modifying it, never making another one — it is there on a quiet day too, just switched off.', 'acps-alert-popups' ); ?>
 		</p>
 
 		<h3><?php esc_html_e( 'Fixing a typo', 'acps-alert-popups' ); ?></h3>
-		<p><?php esc_html_e( 'What is in those boxes IS the current status. Correct the wording, save, and the update people are reading changes. You do not get a second copy underneath it, and the daily cut-off is not pushed back — an update fixed at lunchtime still comes down at the usual time.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'What is in that module IS the current status. Correct the wording, save, and the update people are reading changes. You do not get a second copy underneath it, and the daily cut-off is not pushed back — an update fixed at lunchtime still comes down at the usual time.', 'acps-alert-popups' ); ?></p>
 		<p class="acps-callout">
 			<?php esc_html_e( 'To replace it with something genuinely new, just rewrite the boxes. The previous wording is filed into the archive at the cut-off, or you can file a record of it yourself from the archive tab.', 'acps-alert-popups' ); ?>
 		</p>
@@ -167,13 +172,12 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		<p><?php esc_html_e( 'Archived entries are records, not alerts. They live in a list of their own, so filing one never touches the Current Alert or the Normal Alert.', 'acps-alert-popups' ); ?></p>
 
 		<h3><?php esc_html_e( 'Checking an update before anyone sees it', 'acps-alert-popups' ); ?></h3>
-		<p><?php esc_html_e( 'Set "Who can see it" to "Staff only" when you post. The update goes live on the real status page and the real popup, but only people who can manage alerts see it — everybody else sees the normal status. The board shows you a dashed "Staff preview" strip so you cannot forget it is staged.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'On the On/off tab, set "Who can see it" to "Staff only". The update goes live on the real status page and the real popup, but only people who can manage alerts see it — everybody else sees the normal status. The board shows you a dashed "Staff preview" strip so you cannot forget it is staged.', 'acps-alert-popups' ); ?></p>
 		<p><?php esc_html_e( 'When you are happy with it, set "Who can see it" back to "Everybody" and save.', 'acps-alert-popups' ); ?></p>
 
 		<h3><?php esc_html_e( 'Designing the popup itself', 'acps-alert-popups' ); ?></h3>
-		<p><?php esc_html_e( 'By default the popup shows the message you typed. If you want it laid out properly — images, buttons, columns — open the Current Alert from Site Alerts and use Launch Beaver Builder. That layout is the popup body; the status page keeps showing the plain summary.', 'acps-alert-popups' ); ?></p>
-		<p><?php esc_html_e( 'There are only two things to design in Beaver Builder, ever: the Current Alert and the Normal Alert. Design them once and they are reused for every update.', 'acps-alert-popups' ); ?></p>
-		<p><?php esc_html_e( 'The popup never appears on the status page itself, so the page stays readable while you are working on it.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'The Current Alert module is the popup, so what you see in the builder is what visitors get: the heading, the text, and a stripe in the colour of the status level. Its Style tab decides where the box sits, how wide it is, whether the page dims behind it, and how it can be closed.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'The popup never appears on the status page itself, so the page stays readable while you are working on it. Everywhere else, it is what visitors see.', 'acps-alert-popups' ); ?></p>
 	</div>
 
 	<?php // ---------- How it works ---------- ?>
@@ -206,13 +210,13 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 				<a class="button button-primary" href="<?php echo esc_url( admin_url( 'edit.php?post_type=page' ) ); ?>"><?php esc_html_e( 'Open Pages', 'acps-alert-popups' ); ?></a>
 			</li>
 			<li>
-				<h3><?php esc_html_e( 'Edit the Current Alert', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Open the module and go to the Current Alert tab. Rewrite the headline and message, and pick the status level — Hold, Secure, Lockdown, Evacuate, Shelter, or one of the everyday levels.', 'acps-alert-popups' ); ?></p>
+				<h3><?php esc_html_e( 'Edit the Current Alert module', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'It is the popup on the page. On its Popup tab, rewrite the heading and the text, and pick the status level — Hold, Secure, Lockdown, Evacuate, Shelter, or one of the everyday levels.', 'acps-alert-popups' ); ?></p>
 				<p><?php esc_html_e( 'Keep it short: a heading and a sentence or two. There is only one Current Alert, so you are always editing it, never adding another.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
 				<h3><?php esc_html_e( 'Decide how far it goes', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( '"Also pop up across the site" puts it in front of everyone on every page. Leave it off and the update stays on the status page only.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'On the On/off tab, "Pop up across the site" puts it in front of everyone on every page. Leave it off and the update stays on the status page banner only.', 'acps-alert-popups' ); ?></p>
 				<p><?php esc_html_e( 'Set "Who can see it" to "Staff only" if you want to check it first — it goes live for people who can manage alerts and nobody else.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
@@ -224,8 +228,9 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 				<p><?php esc_html_e( 'At the daily cut-off it files itself into the archive and switches itself off. Choose "Keep it up until I switch it off" if it needs to outlast the day.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
-				<h3><?php esc_html_e( 'Design the popup once (optional)', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Open the Current Alert from Site Alerts and use Launch Beaver Builder to lay out the popup properly. You only ever do this once — the layout is reused for every update.', 'acps-alert-popups' ); ?></p>
+				<h3><?php esc_html_e( 'Everything else is on the same module', 'acps-alert-popups' ); ?></h3>
+				<p><?php esc_html_e( 'Which pages show it, who sees it, how it opens and how often it comes back, where the box sits and how it closes — all of it is on the Current Alert module\'s tabs. There is nothing to set in wp-admin.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'Site Alerts in wp-admin is there to check state and to edit the Normal Alert; it is not where you post.', 'acps-alert-popups' ); ?></p>
 				<a class="button" href="<?php echo esc_url( $acps_list_url ); ?>"><?php esc_html_e( 'Open Site Alerts', 'acps-alert-popups' ); ?></a>
 			</li>
 		</ol>
@@ -347,7 +352,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 					'title'    => __( 'Snow day / emergency closure', 'acps-alert-popups' ),
 					'subtitle' => __( 'Everyone needs to see this, today.', 'acps-alert-popups' ),
 					'settings' => array(
-						__( 'Severity', 'acps-alert-popups' )    => __( 'Critical', 'acps-alert-popups' ),
+						__( 'Status level', 'acps-alert-popups' ) => __( 'Lockdown, or one of the other SRP actions', 'acps-alert-popups' ),
 						__( 'Where', 'acps-alert-popups' )       => __( 'Entire site', 'acps-alert-popups' ),
 						__( 'Trigger', 'acps-alert-popups' )     => __( 'As soon as the page loads', 'acps-alert-popups' ),
 						__( 'Show again', 'acps-alert-popups' )  => __( 'Once per browser session', 'acps-alert-popups' ),
@@ -358,7 +363,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 					'title'    => __( 'Upcoming event', 'acps-alert-popups' ),
 					'subtitle' => __( 'Useful, but not urgent.', 'acps-alert-popups' ),
 					'settings' => array(
-						__( 'Severity', 'acps-alert-popups' )   => __( 'Information', 'acps-alert-popups' ),
+						__( 'Status level', 'acps-alert-popups' ) => __( 'Information', 'acps-alert-popups' ),
 						__( 'Where', 'acps-alert-popups' )      => __( 'Front page only', 'acps-alert-popups' ),
 						__( 'Trigger', 'acps-alert-popups' )    => __( 'After a delay of 5 seconds', 'acps-alert-popups' ),
 						__( 'Show again', 'acps-alert-popups' ) => __( 'Once every 7 days', 'acps-alert-popups' ),
@@ -510,7 +515,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 				),
 				array(
 					__( 'Can I show two alerts at once?', 'acps-alert-popups' ),
-					__( 'By default only one shows per page view, and the one with the highest priority wins. You can raise that limit in Settings, but two popups at once is a lot to ask of a visitor.', 'acps-alert-popups' ),
+					__( 'Only the Current Alert can pop up, so a visitor never gets two at once. The Normal Alert is the board&rsquo;s resting state and never interrupts anybody.', 'acps-alert-popups' ),
 				),
 				array(
 					__( 'Will it show on mobile?', 'acps-alert-popups' ),
@@ -567,11 +572,11 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 			<dt><?php esc_html_e( 'Targeting', 'acps-alert-popups' ); ?></dt>
 			<dd><?php esc_html_e( 'The rules for which pages an alert may appear on.', 'acps-alert-popups' ); ?></dd>
 
-			<dt><?php esc_html_e( 'Severity', 'acps-alert-popups' ); ?></dt>
-			<dd><?php esc_html_e( 'How serious the alert is. Sets the colour stripe; does not change who sees it.', 'acps-alert-popups' ); ?></dd>
+			<dt><?php esc_html_e( 'Status level', 'acps-alert-popups' ); ?></dt>
+			<dd><?php esc_html_e( 'What is happening, in SRP words — Hold, Secure, Shelter, Evacuate, Lockdown, plus Normal and Information. It sets the banner wording and the colour of both the banner and the popup stripe. It is the only urgency setting there is.', 'acps-alert-popups' ); ?></dd>
 
-			<dt><?php esc_html_e( 'Priority', 'acps-alert-popups' ); ?></dt>
-			<dd><?php esc_html_e( 'The tie-breaker when more alerts qualify than the site is allowed to show at once. Higher wins.', 'acps-alert-popups' ); ?></dd>
+			<dt><?php esc_html_e( 'Current Alert', 'acps-alert-popups' ); ?></dt>
+			<dd><?php esc_html_e( 'The one alert you write and switch on. It is the popup module on the status page, and it is always there — on a quiet day it is simply off.', 'acps-alert-popups' ); ?></dd>
 
 			<dt><?php esc_html_e( 'Session', 'acps-alert-popups' ); ?></dt>
 			<dd><?php esc_html_e( 'One visit in one browser. It ends when the visitor closes the browser.', 'acps-alert-popups' ); ?></dd>

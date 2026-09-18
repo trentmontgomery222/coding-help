@@ -390,6 +390,44 @@ class ACPS_Alerts_Status {
 	}
 
 	/**
+	 * The page the status board and the Current Alert live on.
+	 *
+	 * @return int Post ID, or 0 when the board has never been placed.
+	 */
+	public static function board_page() {
+		return (int) get_option( 'acps_alerts_board_page', 0 );
+	}
+
+	/**
+	 * Where to send somebody who wants to change the Current Alert.
+	 *
+	 * The Current Alert is edited on the status page and nowhere else, so every
+	 * link that used to open an admin form points here instead. Falls back to
+	 * the plain WordPress editor when Beaver Builder is not available, and to
+	 * an empty string when the board has not been placed at all — callers are
+	 * expected to check.
+	 *
+	 * @return string
+	 */
+	public static function board_edit_url() {
+		$page_id = self::board_page();
+
+		if ( ! $page_id || ! get_post_status( $page_id ) ) {
+			return '';
+		}
+
+		if ( class_exists( 'ACPS_Alerts_Source' ) && method_exists( 'ACPS_Alerts_Source', 'builder_edit_url' ) ) {
+			$url = (string) ACPS_Alerts_Source::builder_edit_url( $page_id );
+
+			if ( '' !== $url ) {
+				return $url;
+			}
+		}
+
+		return (string) get_edit_post_link( $page_id, 'raw' );
+	}
+
+	/**
 	 * The entry the board should show as its banner, or null for the resting
 	 * state.
 	 *
@@ -711,7 +749,6 @@ class ACPS_Alerts_Status {
 		$changes = array(
 			'status_level'   => $level,
 			'status_message' => wp_strip_all_tags( $message ),
-			'severity'       => self::level( $level )['severity'],
 			'as_popup'       => empty( $data['as_popup'] ) ? 0 : 1,
 			'expires_mode'   => isset( $data['expires'] ) ? sanitize_key( $data['expires'] ) : 'daily',
 			'visibility'     => isset( $data['visibility'] ) ? sanitize_key( $data['visibility'] ) : 'public',

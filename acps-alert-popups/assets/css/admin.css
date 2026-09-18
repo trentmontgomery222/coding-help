@@ -259,15 +259,40 @@
 	background: #2271b1;
 }
 
-.acps-preview__dialog.sev-success .acps-preview__stripe {
-	background: #00a32a;
+/* The stripe follows the status level, matching the colours the status board
+   and the live popup use, so the preview is never a different colour from the
+   thing it is previewing. */
+.acps-preview__dialog.lvl-normal .acps-preview__stripe {
+	background: #1e8a3c;
 }
 
-.acps-preview__dialog.sev-warning .acps-preview__stripe {
+.acps-preview__dialog.lvl-hold .acps-preview__stripe {
+	background: #7a1c82;
+}
+
+.acps-preview__dialog.lvl-secure .acps-preview__stripe {
+	background: #4f6fd4;
+}
+
+.acps-preview__dialog.lvl-shelter .acps-preview__stripe {
+	background: #e8762c;
+}
+
+.acps-preview__dialog.lvl-evacuate .acps-preview__stripe {
+	background: #1e8a3c;
+}
+
+.acps-preview__dialog.lvl-lockdown .acps-preview__stripe {
+	background: #d81440;
+}
+
+.acps-preview__dialog.lvl-advisory .acps-preview__stripe,
+.acps-preview__dialog.lvl-warning .acps-preview__stripe {
 	background: #dba617;
 }
 
-.acps-preview__dialog.sev-critical .acps-preview__stripe {
+.acps-preview__dialog.lvl-closure .acps-preview__stripe,
+.acps-preview__dialog.lvl-emergency .acps-preview__stripe {
 	background: #d63638;
 }
 

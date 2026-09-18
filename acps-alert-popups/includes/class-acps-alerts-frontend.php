@@ -375,8 +375,14 @@ class ACPS_Alerts_Frontend {
 		$label    = $alert->get( 'aria_label' );
 		$label    = '' !== $label ? $label : $alert->get_title();
 		$position = $alert->get( 'position' );
-		$severity = $alert->get( 'severity' );
 		$width    = (int) $alert->get( 'width' );
+
+		// How urgent the popup looks follows the status level, so the popup and
+		// the status board can never disagree about how serious this is.
+		$level    = class_exists( 'ACPS_Alerts_Status' )
+			? ACPS_Alerts_Status::level( $alert->get( 'status_level' ) )
+			: array();
+		$severity = isset( $level['severity'] ) ? (string) $level['severity'] : 'info';
 
 		$classes = array(
 			'acps-alert',
@@ -392,12 +398,8 @@ class ACPS_Alerts_Frontend {
 		// the status board say the same thing at a glance.
 		$stripe = '';
 
-		if ( class_exists( 'ACPS_Alerts_Status' ) ) {
-			$level = ACPS_Alerts_Status::level( $alert->get( 'status_level' ) );
-
-			if ( ! empty( $level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i', $level['color'] ) ) {
-				$stripe = $level['color'];
-			}
+		if ( ! empty( $level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i', $level['color'] ) ) {
+			$stripe = $level['color'];
 		}
 		?>
 		<div
@@ -469,7 +471,14 @@ class ACPS_Alerts_Frontend {
 	 * @return string
 	 */
 	protected function resolve_popup_content( $post_id ) {
-		if ( self::has_builder_layout( $post_id ) && shortcode_exists( 'fl_builder_insert_layout' ) ) {
+		// The Current Alert is written in the Current Alert module on the status
+		// page, and that module stores what it says as this post's content. A
+		// builder layout left on the post from before would silently win over
+		// what the module now says, so it is never consulted for this one.
+		$from_module = class_exists( 'ACPS_Alerts_Post_Type' )
+			&& ACPS_Alerts_Post_Type::ROLE_CURRENT === ACPS_Alerts_Post_Type::role_of( $post_id );
+
+		if ( ! $from_module && self::has_builder_layout( $post_id ) && shortcode_exists( 'fl_builder_insert_layout' ) ) {
 			$html = ACPS_Alerts_Failsafe::guard(
 				'do_shortcode',
 				array( '[fl_builder_insert_layout id="' . $post_id . '"]' ),

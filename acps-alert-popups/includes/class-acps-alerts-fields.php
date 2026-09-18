@@ -42,26 +42,6 @@ class ACPS_Alerts_Fields {
 					__( 'Design the popup in Beaver Builder; this switch controls whether visitors see it.', 'acps-alert-popups' )
 				);
 
-				self::row(
-					__( 'Severity', 'acps-alert-popups' ),
-					self::select(
-						'severity',
-						$s['severity'],
-						array(
-							'info'     => __( 'Information', 'acps-alert-popups' ),
-							'success'  => __( 'Good news', 'acps-alert-popups' ),
-							'warning'  => __( 'Warning', 'acps-alert-popups' ),
-							'critical' => __( 'Critical / emergency', 'acps-alert-popups' ),
-						)
-					),
-					__( 'Adds a CSS class so you can colour-code alerts, and sorts the admin list.', 'acps-alert-popups' )
-				);
-
-				self::row(
-					__( 'Priority', 'acps-alert-popups' ),
-					self::number( 'priority', $s['priority'], 0, 100 ),
-					__( 'Higher numbers win when more alerts qualify than the site is allowed to show at once.', 'acps-alert-popups' )
-				);
 				?>
 			<?php self::section_close(); ?>
 

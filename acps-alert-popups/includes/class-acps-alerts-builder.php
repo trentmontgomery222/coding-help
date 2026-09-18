@@ -48,7 +48,12 @@ class ACPS_Alerts_Builder {
 	}
 
 	/**
-	 * Whether the current post's Beaver Builder layout contains a status board.
+	 * Whether the current post's Beaver Builder layout carries the status page.
+	 *
+	 * True for either of the two modules that make up the status page: the
+	 * board, and the Current Alert popup that is edited beside it. The popup
+	 * must never open on the page it is edited on, so this is what the front
+	 * end asks before deciding to render.
 	 *
 	 * @return bool
 	 */
@@ -74,7 +79,14 @@ class ACPS_Alerts_Builder {
 
 		$json = (string) wp_json_encode( $data );
 
-		foreach ( array( 'status-board', 'ACPS_Status_Board_Module' ) as $needle ) {
+		$needles = array(
+			'status-board',
+			'ACPS_Status_Board_Module',
+			'alert-popup',
+			'ACPS_Alert_Popup_Module',
+		);
+
+		foreach ( $needles as $needle ) {
 			if ( false !== strpos( $json, $needle ) ) {
 				return true;
 			}
@@ -105,6 +117,7 @@ class ACPS_Alerts_Builder {
 		$modules = array(
 			'ACPS_Alert_Trigger_Module' => 'modules/alert-trigger/alert-trigger.php',
 			'ACPS_Status_Board_Module'  => 'modules/status-board/status-board.php',
+			'ACPS_Alert_Popup_Module'   => 'modules/alert-popup/alert-popup.php',
 		);
 
 		foreach ( $modules as $class => $rel ) {

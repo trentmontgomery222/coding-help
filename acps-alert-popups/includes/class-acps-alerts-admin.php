@@ -231,6 +231,191 @@ class ACPS_Alerts_Admin {
 	}
 
 	/**
+	 * Sends the user back to a plugin screen with a one-word result.
+	 *
+	 * @param string $message Message key understood by render_message().
+	 * @param array  $args    Extra query args.
+	 * @return void
+	 */
+	protected function redirect_back( $message, array $args = array() ) {
+		$url = add_query_arg(
+			array_merge(
+				array(
+					'page'         => self::MENU_SLUG,
+					'acps_message' => $message,
+				),
+				$args
+			),
+			admin_url( 'admin.php' )
+		);
+
+		wp_safe_redirect( $url );
+		exit;
+	}
+
+	/**
+	 * Reads the alert an action was aimed at, once it is safe to act on it.
+	 *
+	 * Returns 0 rather than dying when anything is wrong: a stale nonce on a
+	 * bookmarked link is a mistake, not an attack worth a white screen.
+	 *
+	 * @param string $action Action name, which is also part of the nonce.
+	 * @return int Alert post ID, or 0.
+	 */
+	protected function requested_alert( $action ) {
+		$alert_id = isset( $_REQUEST['alert'] ) ? absint( $_REQUEST['alert'] ) : 0;
+
+		if ( ! $alert_id || ! current_user_can( self::capability() ) ) {
+			return 0;
+		}
+
+		$nonce = isset( $_REQUEST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_' . $action . '_' . $alert_id ) ) {
+			return 0;
+		}
+
+		return ACPS_Alerts_Source::is_popup( $alert_id ) ? $alert_id : 0;
+	}
+
+	/**
+	 * The one-click on/off switch on the list screen.
+	 *
+	 * @return void
+	 */
+	protected function handle_toggle() {
+		$alert_id = $this->requested_alert( 'toggle' );
+
+		if ( ! $alert_id ) {
+			return;
+		}
+
+		$alert   = new ACPS_Alerts_Alert( $alert_id );
+		$enabled = ! $alert->get( 'enabled' );
+
+		$alert->set_enabled( $enabled );
+
+		// Switching it on here starts its clock, exactly as switching it on from
+		// the status page does, so the daily cut-off measures from now.
+		if ( $enabled ) {
+			update_post_meta( $alert_id, ACPS_Alerts_Alert::META_PREFIX . 'posted_at', time() );
+			update_post_meta( $alert_id, ACPS_Alerts_Alert::META_PREFIX . 'archived', 0 );
+		}
+
+		$this->redirect_back( $enabled ? 'enabled' : 'disabled' );
+	}
+
+	/**
+	 * Files the current alert into the archive, or brings it back.
+	 *
+	 * @param string $action Either 'archive' or 'restore'.
+	 * @return void
+	 */
+	protected function handle_archive( $action ) {
+		$alert_id = $this->requested_alert( $action );
+
+		if ( ! $alert_id ) {
+			return;
+		}
+
+		if ( 'archive' === $action ) {
+			// Files a record and switches the alert off. The alert's own wording
+			// is deliberately left alone, so whoever posts next starts from what
+			// was last said rather than an empty box.
+			ACPS_Alerts_Status::archive_current();
+
+			$this->redirect_back( 'archived' );
+
+			return;
+		}
+
+		$alert = new ACPS_Alerts_Alert( $alert_id );
+		$alert->set_enabled( true );
+
+		update_post_meta( $alert_id, ACPS_Alerts_Alert::META_PREFIX . 'archived', 0 );
+		update_post_meta( $alert_id, ACPS_Alerts_Alert::META_PREFIX . 'posted_at', time() );
+
+		$this->redirect_back( 'restored' );
+	}
+
+	/**
+	 * Saves the per-alert settings form.
+	 *
+	 * @return void
+	 */
+	protected function handle_alert_save() {
+		$alert_id = isset( $_REQUEST['alert'] ) ? absint( $_REQUEST['alert'] ) : 0;
+
+		if ( ! $alert_id || ! current_user_can( self::capability() ) || ! ACPS_Alerts_Source::is_popup( $alert_id ) ) {
+			return;
+		}
+
+		// The Current Alert has no form on this screen. A post aimed at it would
+		// be a stale bookmark or a hand-built request; either way, writing an
+		// empty submission over it would undo the status page.
+		if ( self::edited_on_page( $alert_id ) ) {
+			return;
+		}
+
+		$clean = ACPS_Alerts_Fields::read_submission();
+
+		if ( null === $clean ) {
+			return; // Missing or expired nonce.
+		}
+
+		$alert = new ACPS_Alerts_Alert( $alert_id );
+		$alert->save( $clean );
+
+		$this->redirect_back(
+			'saved',
+			array(
+				'acps_view' => 'edit',
+				'alert'     => $alert_id,
+			)
+		);
+	}
+
+	/**
+	 * Saves the site-wide settings form, and the unlisted maintenance form.
+	 *
+	 * @return void
+	 */
+	protected function handle_settings_save() {
+		if ( ! isset( $_POST['acps_settings_nonce'] ) || ! current_user_can( self::capability() ) ) {
+			return;
+		}
+
+		$nonce = sanitize_text_field( wp_unslash( $_POST['acps_settings_nonce'] ) );
+
+		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_save_settings' ) ) {
+			return;
+		}
+
+		$raw = isset( $_POST['acps_settings'] ) ? wp_unslash( $_POST['acps_settings'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized by ACPS_Alerts_Settings.
+		$raw = (array) $raw;
+
+		// The maintenance screen is the only one that posts the maintenance
+		// keys, and it marks itself so an ordinary save cannot blank them.
+		$maintenance = ! empty( $raw['_maintenance'] );
+
+		ACPS_Alerts_Settings::save( $raw );
+
+		$url = add_query_arg(
+			array_merge(
+				array(
+					'page'         => self::SETTINGS_SLUG,
+					'acps_message' => 'settings-saved',
+				),
+				$maintenance ? array( 'updates' => 1 ) : array()
+			),
+			admin_url( 'admin.php' )
+		);
+
+		wp_safe_redirect( $url );
+		exit;
+	}
+
+	/**
 	 * Picks the list or edit screen.
 	 *
 	 * @return void
@@ -305,11 +490,10 @@ class ACPS_Alerts_Admin {
 						<tr>
 							<th scope="col" class="column-primary"><?php esc_html_e( 'Popup', 'acps-alert-popups' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Status', 'acps-alert-popups' ); ?></th>
-							<th scope="col"><?php esc_html_e( 'Severity', 'acps-alert-popups' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Level', 'acps-alert-popups' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Schedule', 'acps-alert-popups' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Where', 'acps-alert-popups' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Trigger', 'acps-alert-popups' ); ?></th>
-							<th scope="col"><?php esc_html_e( 'Priority', 'acps-alert-popups' ); ?></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -384,9 +568,15 @@ class ACPS_Alerts_Admin {
 			'selected' => __( 'Selected locations', 'acps-alert-popups' ),
 		);
 
-		$severity = $alert->get( 'severity' );
-		$trigger  = $alert->get( 'trigger' );
-		$display  = $alert->get( 'display' );
+		$trigger = $alert->get( 'trigger' );
+		$display = $alert->get( 'display' );
+		$level   = ACPS_Alerts_Status::level( $alert->get( 'status_level' ) );
+
+		// The Current Alert is edited on the status page and nowhere else, so
+		// its row links there instead of at an admin form it no longer has.
+		$on_page = class_exists( 'ACPS_Alerts_Post_Type' )
+			&& ACPS_Alerts_Post_Type::ROLE_CURRENT === ACPS_Alerts_Post_Type::role_of( $id );
+		$page_url = $on_page ? ACPS_Alerts_Status::board_edit_url() : '';
 		?>
 		<tr>
 			<td class="column-primary">
@@ -395,9 +585,17 @@ class ACPS_Alerts_Admin {
 					<span class="acps-badge acps-badge--draft"><?php echo esc_html( get_post_status( $id ) ); ?></span>
 				<?php endif; ?>
 				<div class="row-actions">
-					<span><a href="<?php echo esc_url( $edit_url ); ?>"><?php esc_html_e( 'Alert settings', 'acps-alert-popups' ); ?></a> | </span>
-					<span><a href="<?php echo esc_url( ACPS_Alerts_Source::builder_edit_url( $id ) ); ?>"><?php esc_html_e( 'Edit in Beaver Builder', 'acps-alert-popups' ); ?></a> | </span>
-					<span><a href="<?php echo esc_url( ACPS_Alerts_Source::post_edit_url( $id ) ); ?>"><?php esc_html_e( 'WordPress editor', 'acps-alert-popups' ); ?></a> | </span>
+					<?php if ( $on_page ) : ?>
+						<?php if ( '' !== $page_url ) : ?>
+							<span><a href="<?php echo esc_url( $page_url ); ?>"><?php esc_html_e( 'Edit on the status page', 'acps-alert-popups' ); ?></a> | </span>
+						<?php else : ?>
+							<span><?php esc_html_e( 'Edited on the status page — place the Current Alert module there first.', 'acps-alert-popups' ); ?> | </span>
+						<?php endif; ?>
+					<?php else : ?>
+						<span><a href="<?php echo esc_url( $edit_url ); ?>"><?php esc_html_e( 'Alert settings', 'acps-alert-popups' ); ?></a> | </span>
+						<span><a href="<?php echo esc_url( ACPS_Alerts_Source::builder_edit_url( $id ) ); ?>"><?php esc_html_e( 'Edit in Beaver Builder', 'acps-alert-popups' ); ?></a> | </span>
+						<span><a href="<?php echo esc_url( ACPS_Alerts_Source::post_edit_url( $id ) ); ?>"><?php esc_html_e( 'WordPress editor', 'acps-alert-popups' ); ?></a> | </span>
+					<?php endif; ?>
 					<span><a href="<?php echo esc_url( $toggle_url ); ?>"><?php echo $enabled ? esc_html__( 'Switch off', 'acps-alert-popups' ) : esc_html__( 'Switch on', 'acps-alert-popups' ); ?></a></span> |
 					<span><a href="<?php echo esc_url( $archive_url ); ?>"><?php echo $archived ? esc_html__( 'Bring back', 'acps-alert-popups' ) : esc_html__( 'Archive', 'acps-alert-popups' ); ?></a></span>
 				</div>
@@ -421,12 +619,64 @@ class ACPS_Alerts_Admin {
 					</span>
 				<?php endif; ?>
 			</td>
-			<td><span class="acps-severity acps-severity--<?php echo esc_attr( $severity ); ?>"><?php echo esc_html( ucfirst( $severity ) ); ?></span></td>
+			<td><span class="acps-severity acps-severity--<?php echo esc_attr( $level['severity'] ); ?>"><?php echo esc_html( $level['label'] ); ?></span></td>
 			<td><?php echo esc_html( $alert->get_schedule_label() ); ?></td>
 			<td><?php echo esc_html( isset( $places[ $display ] ) ? $places[ $display ] : $display ); ?></td>
 			<td><?php echo esc_html( isset( $triggers[ $trigger ] ) ? $triggers[ $trigger ] : $trigger ); ?></td>
-			<td><?php echo esc_html( $alert->get( 'priority' ) ); ?></td>
 		</tr>
+		<?php
+	}
+
+	/**
+	 * Whether an alert is edited on the status page rather than in here.
+	 *
+	 * The Current Alert is. Everything about it — its wording and every one of
+	 * its settings — lives on the Current Alert module on the status page, so
+	 * that posting an alert is one job in one place. Two editing surfaces for
+	 * one alert is how they drift apart.
+	 *
+	 * @param int $post_id Alert post ID.
+	 * @return bool
+	 */
+	public static function edited_on_page( $post_id ) {
+		if ( ! class_exists( 'ACPS_Alerts_Post_Type' ) ) {
+			return false;
+		}
+
+		return ACPS_Alerts_Post_Type::ROLE_CURRENT === ACPS_Alerts_Post_Type::role_of( $post_id );
+	}
+
+	/**
+	 * The "edit this on the status page" panel, shown wherever the admin used
+	 * to offer a form for the Current Alert.
+	 *
+	 * @return void
+	 */
+	public static function render_page_pointer() {
+		$url = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::board_edit_url() : '';
+		?>
+		<div class="notice notice-info inline acps-locked">
+			<h3><?php esc_html_e( 'This alert is edited on the status page', 'acps-alert-popups' ); ?></h3>
+			<p>
+				<?php esc_html_e( 'The Current Alert is the popup on your status page. Its wording and every one of its settings are on that module, so everything is in one place and posting an alert takes a minute.', 'acps-alert-popups' ); ?>
+			</p>
+			<?php if ( '' !== $url ) : ?>
+				<p>
+					<a class="button button-primary" href="<?php echo esc_url( $url ); ?>">
+						<?php esc_html_e( 'Edit it on the status page', 'acps-alert-popups' ); ?>
+					</a>
+				</p>
+			<?php else : ?>
+				<p>
+					<?php esc_html_e( 'Place the "Current Alert" module on your status page in Beaver Builder, and this will link straight to it.', 'acps-alert-popups' ); ?>
+				</p>
+				<p>
+					<a class="button" href="<?php echo esc_url( admin_url( 'edit.php?post_type=page' ) ); ?>">
+						<?php esc_html_e( 'Open Pages', 'acps-alert-popups' ); ?>
+					</a>
+				</p>
+			<?php endif; ?>
+		</div>
 		<?php
 	}
 
@@ -454,16 +704,22 @@ class ACPS_Alerts_Admin {
 		?>
 		<div class="wrap acps-alerts-wrap">
 			<h1 class="wp-heading-inline"><?php echo esc_html( $alert->get_title() ); ?></h1>
-			<a href="<?php echo esc_url( ACPS_Alerts_Source::builder_edit_url( $alert_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit content in Beaver Builder', 'acps-alert-popups' ); ?></a>
+			<?php if ( ! self::edited_on_page( $alert_id ) ) : ?>
+				<a href="<?php echo esc_url( ACPS_Alerts_Source::builder_edit_url( $alert_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit content in Beaver Builder', 'acps-alert-popups' ); ?></a>
+			<?php endif; ?>
 			<a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::MENU_SLUG ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to all alerts', 'acps-alert-popups' ); ?></a>
 			<hr class="wp-header-end" />
 
 			<?php $this->render_message(); ?>
 
-			<form method="post" action="<?php echo esc_url( $action ); ?>">
-				<?php ACPS_Alerts_Fields::render( $alert ); ?>
-				<?php submit_button( __( 'Save alert settings', 'acps-alert-popups' ) ); ?>
-			</form>
+			<?php if ( self::edited_on_page( $alert_id ) ) : ?>
+				<?php self::render_page_pointer(); ?>
+			<?php else : ?>
+				<form method="post" action="<?php echo esc_url( $action ); ?>">
+					<?php ACPS_Alerts_Fields::render( $alert ); ?>
+					<?php submit_button( __( 'Save alert settings', 'acps-alert-popups' ) ); ?>
+				</form>
+			<?php endif; ?>
 
 			<div class="acps-section">
 				<h2 class="acps-section__title"><?php esc_html_e( 'Open this alert from a page', 'acps-alert-popups' ); ?></h2>
@@ -557,7 +813,7 @@ class ACPS_Alerts_Admin {
 							<th scope="row"><?php esc_html_e( 'Alerts per page view', 'acps-alert-popups' ); ?></th>
 							<td>
 								<input type="number" class="small-text" name="acps_settings[max_concurrent]" value="<?php echo esc_attr( $settings['max_concurrent'] ); ?>" min="1" max="5" />
-								<p class="description"><?php esc_html_e( 'When more alerts qualify, the highest priority ones win.', 'acps-alert-popups' ); ?></p>
+								<p class="description"><?php esc_html_e( 'Only the Current Alert ever pops up, so in practice this is one.', 'acps-alert-popups' ); ?></p>
 							</td>
 						</tr>
 						<tr>
@@ -788,6 +1044,12 @@ class ACPS_Alerts_Admin {
 	 */
 	public function render_meta_box( $post ) {
 		$alert = new ACPS_Alerts_Alert( $post );
+
+		if ( self::edited_on_page( $alert->get_id() ) ) {
+			self::render_page_pointer();
+
+			return;
+		}
 		?>
 		<p class="description">
 			<?php esc_html_e( 'These settings decide when and where this popup runs as a site alert. The popup content itself is designed in Beaver Builder.', 'acps-alert-popups' ); ?>
@@ -809,6 +1071,13 @@ class ACPS_Alerts_Admin {
 		}
 
 		if ( wp_is_post_revision( $post_id ) || ! ACPS_Alerts_Source::is_popup( $post_id ) ) {
+			return;
+		}
+
+		// The Current Alert has no form here, so there is nothing to save — and
+		// writing defaults over it from an empty submission would silently undo
+		// whatever the status page last set.
+		if ( self::edited_on_page( $post_id ) ) {
 			return;
 		}
 

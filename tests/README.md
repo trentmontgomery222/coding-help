@@ -15,6 +15,8 @@ php tests/status-test.php
 php tests/render-test.php
 php tests/panel-test.php
 php tests/help-test.php
+php tests/popup-module-test.php
+php tests/wiring-test.php
 node tests/admin-fields-test.js
 for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
 ```
@@ -175,3 +177,37 @@ front door, so the edge cases matter:
 - every step anchored to `[data-acps-section="…"]` points at a section the
   settings form really renders — so a renamed section breaks the test rather
   than silently breaking the tour
+
+`popup-module-test.php` — the Current Alert module, which is the one place the
+alert is edited. The module holds every setting the alert has, and saves the
+whole set at once, so the risks are the ones a complete save creates:
+
+- every setting the alert has is offered as a field, so nobody is ever sent to
+  wp-admin to change one — and `severity` and `priority` are gone and must not
+  come back
+- the heading becomes the alert's title and the text becomes its body and its
+  board summary
+- editing it three times in a row modifies the one alert and creates nothing
+- an empty heading means "leave the wording alone", not "blank it"
+- switching it on records when it went up and clears any earlier archived flag;
+  editing an alert that is already up does **not** restart its cut-off clock,
+  and the complete save carries the old timestamp through rather than resetting
+  it to the schema default
+- start and end dates apply on the custom schedule and are ignored on the others
+- a user without the capability saves nothing
+
+Verified non-vacuous: drop `posted_at` from the saved set and it fails with
+"carries the old timestamp through: expected 1000, got NULL" — which is the
+alert silently losing its cut-off.
+
+`wiring-test.php` — every method the plugin calls on itself must exist. This
+exists because four admin action handlers were referenced by `handle_actions()`
+and never written: the on/off switch, both archive links, the per-alert settings
+form and the settings form all dispatched into nothing. PHP only complains when
+the line is reached, the failsafe swallows the resulting error, and the button
+just appears to do nothing. The test reads every plugin file with the tokenizer
+and compares each `$this->x()` and `self::x()` against what is declared, so the
+whole plugin is checked at once without booting WordPress.
+
+Verified non-vacuous: delete `handle_toggle()` and it fails with
+"ACPS_Alerts_Admin calls handle_toggle(), which nothing declares".

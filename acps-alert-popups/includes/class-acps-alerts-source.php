@@ -200,7 +200,7 @@ class ACPS_Alerts_Source {
 	}
 
 	/**
-	 * Popups that are published and switched on as alerts, ordered by priority.
+	 * Popups that are published and switched on as alerts, in title order.
 	 *
 	 * @return ACPS_Alerts_Alert[]
 	 */
@@ -225,15 +225,11 @@ class ACPS_Alerts_Source {
 			}
 		}
 
+		// Only the Current Alert can ever pop up, so there is nothing to rank
+		// against anything else; a stable order is all this needs.
 		usort(
 			$alerts,
 			static function ( $a, $b ) {
-				$diff = (int) $b->get( 'priority' ) - (int) $a->get( 'priority' );
-
-				if ( 0 !== $diff ) {
-					return $diff;
-				}
-
 				return strcmp( (string) $a->get_title(), (string) $b->get_title() );
 			}
 		);
