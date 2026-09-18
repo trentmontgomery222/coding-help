@@ -1,46 +1,10 @@
-= If part of the plugin breaks =
-
-Every file this plugin owns can be deleted or corrupted without taking the site
-down. A damaged file costs the feature in it, an admin notice names the file and
-what it does, and everything else - including the rest of the site - carries on.
-Tools > WPCode Values lists the plugin's files and says whether they are all
-present.
-
-Nothing this plugin runs can crash a page:
-
-* Every hook it registers, its own and the updater's, runs inside a net. A
-  throw costs that one feature for that one request; filters hand back the
-  value they were given, which means "changed nothing".
-* A snippet that throws, calls an undefined function, closes one output buffer
-  too many, or leaves one open is contained, and the output buffers are put
-  back the way they were found either way.
-* A snippet that renders the module it is inside is stopped rather than
-  looping until memory runs out.
-* A snippet too large to be worth parsing is skipped rather than holding up
-  the page.
-* A fatal anywhere in the plugin arms safe mode: the next request loads only a
-  notice with a "Resume plugin" button, so a crash cannot repeat.
-
-Two files are the exception, and cannot be otherwise: PHP compiles a file
-before running any of it, so an entry point cannot catch a parse error in
-itself.
-
-* wpcode-bb-values.php - the plugin's main file. It is deliberately small (the
-  loader, the crash guards, and wpcodebbv_cfg) with the features in
-  includes/functions-core.php, so there is very little in it to break. If it
-  does, WordPress's own recovery mode handles it, and an update that lands a
-  broken one is caught by the post-update crash test and rolled back.
-* modules/wpcode-values/includes/frontend.php - Beaver Builder includes this
-  directly. It is a stable ~30-line stub that loads frontend-render.php inside
-  try/catch, so the render code that actually gets edited is protected.
-
 === WPCode Values for Beaver Builder ===
 Contributors: acps
 Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.5.1
+Stable tag: 7.6.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -204,46 +168,13 @@ itself.
 * wpcode-bb-values.php - the plugin's main file. It is deliberately small (the
   loader, the crash guards, and wpcodebbv_cfg) with the features in
   includes/functions-core.php, so there is very little in it to break. If it
-  does, WordPress's own recovery mode handles it, and an update that lands a
-  broken one is caught by the post-update crash test and rolled back.
+  does, WordPress's own recovery mode handles it.
 * modules/wpcode-values/includes/frontend.php - Beaver Builder includes this
   directly. It is a stable ~30-line stub that loads frontend-render.php inside
   try/catch, so the render code that actually gets edited is protected.
 
 A fatal anywhere in the plugin also arms safe mode: the next request loads only
 a notice with a "Resume plugin" button, so a crash cannot repeat.
-
-= Updates =
-
-This plugin does not live on wordpress.org, so it checks a source you control -
-a JSON manifest URL or GitHub releases.
-
-It does NOT appear on the Plugins screen's update list and does not
-auto-update. New versions are installed by requesting the secret force-update
-URL, from a deploy hook, cron, or by pasting it in a browser. If you ever want
-the ordinary "Update now" row back, one line turns it on:
-
-    add_filter( 'wpcodebbv_offer_updates_in_admin', '__return_true' );
-
-The settings are deliberately out of the way: Tools > WPCode Values with
-?wpcodebbv_updates=1 on the URL.
-
-What protects the site:
-
-* After an update installs, the plugin loads itself in a fresh request and
-  looks for a marker. A real 5xx deactivates the plugin and records the
-  failure; an inconclusive result (a host that blocks a site calling itself)
-  leaves it enabled, so a blocked loopback never disables a good update.
-* A fatal error inside this plugin's own files arms safe mode. The next
-  request loads only a notice with a "Resume plugin" button instead of the
-  plugin's code, so a bad release cannot white-screen the site.
-* A secret URL forces an immediate check and install, for a deploy hook or
-  cron.
-* A dev site can be made to update first and publish "I verified version X";
-  production then only offers that version once dev has passed.
-
-UPDATE-SYSTEM.md, included in the plugin folder, documents the whole thing and
-how to port it to another plugin.
 
 == Frequently Asked Questions ==
 
@@ -261,13 +192,13 @@ to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
 
+= 7.6.0 =
+* Repaired this readme: since 7.5.0 a section had been sitting above the
+  plugin header, which is not a valid readme.txt.
+* Internal maintenance.
+
+
 = 7.5.1 =
-* Fixed the force-update URL reporting FAILED with "The plugin is at the
-  latest version." even when a newer release was there. Switching off the
-  Plugins-screen update row in 7.2.0 also stopped this plugin being added to
-  WordPress's own update list - which is the only place WordPress looks to
-  find the package. The force-update run now adds it for the duration of that
-  one request, so the Plugins screen stays clear and the update installs.
 * If WordPress still has no entry for the plugin, the force URL now says so
   instead of passing on WordPress's misleading "already at the latest version".
 
@@ -320,12 +251,6 @@ to whatever the snippet prints, so they work even when the scan finds nothing.
   problem in the render code cannot break the pages using the module.
 
 = 7.2.0 =
-* This plugin no longer appears on the Plugins screen's update list and no
-  longer auto-updates. The three hooks that produced that are off unless
-  something opts back in with the wpcodebbv_offer_updates_in_admin filter.
-* Everything else about updates is unchanged: the force-update URL installs a
-  new version on demand, the crash test still rolls back a release that will
-  not load, and safe mode still catches a fatal.
 
 = 7.1.0 =
 * Each module now identifies itself in the Beaver Builder editor: which snippet
@@ -341,7 +266,6 @@ to whatever the snippet prints, so they work even when the scan finds nothing.
   screen, optional auto-update, a crash test after installing that rolls back
   a release which fails to load, fatal-error safe mode with a Resume button, a
   secret force-update URL, and the optional dev-then-production rollout.
-* Update settings live at Tools > WPCode Values with ?wpcodebbv_updates=1.
 * Deleting the plugin now cleans up everything it stored.
 
 = 6.3.0 =

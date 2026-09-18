@@ -114,7 +114,9 @@ class WPCodeBBV_Updater {
 		// release zips) installs over the SAME directory instead of a new one —
 		// which is what otherwise leaves the plugin "disabled" after an update.
 		add_filter( 'upgrader_source_selection', $this->guarded( array( $this, 'fix_source_dir' ) ), 10, 4 );
-		add_action( 'init', $this->guarded( array( $this, 'maybe_handle_force_update' ) ) );
+		// The URL itself is served by WPCodeBBV_Panel, which gates it on
+		// address, rate and password before anything here runs. This class
+		// only does the installing, through force_update_now() below.
 		// Early self-test responder used by the post-update crash check.
 		add_action( 'init', $this->guarded( array( $this, 'maybe_handle_selftest' ) ), 1 );
 		add_action( 'upgrader_process_complete', $this->guarded( array( $this, 'flush_after_upgrade' ) ), 10, 2 );
@@ -500,6 +502,66 @@ class WPCodeBBV_Updater {
 	 * @param \WP_Upgrader $upgrader Upgrader instance (unused).
 	 * @param array        $options  upgrader_process_complete options.
 	 */
+	/**
+	 * After an update, check that the way back in still works.
+	 *
+	 * The crash test answers "does the site still load". This answers a
+	 * different question: "can I still reach and update this plugin
+	 * tomorrow". A release that loads fine but drops the secret, or
+	 * ships without the panel, would leave the update URL dead - and the
+	 * only way to fix it would be wp-admin, which is exactly what the
+	 * URL exists to work without.
+	 *
+	 * Anything repairable is repaired here; anything else is recorded so
+	 * the panel can say so.
+	 *
+	 * @return array<int, string> Problems found.
+	 */
+	private function verify_update_system() {
+		$problems = array();
+
+		// The secret is the URL. Losing it locks the door from outside,
+		// so put a new one in rather than leaving none.
+		$trigger = trim( (string) WPCodeBBV_Settings::get( 'update_trigger' ) );
+
+		if ( '' === $trigger ) {
+			if ( is_callable( array( 'WPCodeBBV_Settings', 'seed_trigger' ) ) ) {
+				WPCodeBBV_Settings::seed_trigger();
+			}
+
+			$new = trim( (string) WPCodeBBV_Settings::get( 'update_trigger' ) );
+
+			$problems[] = '' !== $new
+				? 'the update secret was missing after the update and a new one was generated - the old URL no longer works'
+				: 'the update secret is missing and could not be regenerated';
+		}
+
+		if ( ! class_exists( 'WPCodeBBV_Panel' ) ) {
+			$problems[] = 'the control panel is not available in this version - the update URL will not answer';
+		}
+
+		if ( ! class_exists( 'WPCodeBBV_Settings' ) ) {
+			$problems[] = 'settings storage is not available in this version';
+		}
+
+		// Somewhere to fetch from. Without it the panel still opens, but
+		// it can never install anything again.
+		$source = WPCodeBBV_Settings::get( 'update_source', 'url' );
+		$has_source = 'github' === $source
+			? '' !== trim( (string) WPCodeBBV_Settings::get( 'gh_owner' ) ) && '' !== trim( (string) WPCodeBBV_Settings::get( 'gh_repo' ) )
+			: '' !== trim( (string) WPCodeBBV_Settings::get( 'update_manifest' ) );
+
+		if ( ! $has_source ) {
+			$problems[] = 'no update source is configured any more - this install cannot fetch another update';
+		}
+
+		foreach ( $problems as $problem ) {
+			self::log_error( 'after update: ' . $problem );
+		}
+
+		return $problems;
+	}
+
 	public function verify_after_upgrade( $upgrader, $options ) {
 		try {
 			if ( ! $this->upgrade_touched_us( $options ) ) {
@@ -536,6 +598,20 @@ class WPCodeBBV_Updater {
 			// perfectly healthy update.
 			if ( 'ok' === $result ) {
 				delete_option( 'wpcodebbv_update_failed' );
+
+				// The site is up; now make sure the update system itself
+				// came through, and record anything that did not.
+				$problems = $this->verify_update_system();
+
+				if ( $problems ) {
+					update_option(
+						'wpcodebbv_update_system_problems',
+						array( 'when' => current_time( 'mysql' ), 'problems' => $problems ),
+						false
+					);
+				} else {
+					delete_option( 'wpcodebbv_update_system_problems' );
+				}
 				// Publish that this exact version passed here — a production site
 				// pointed at this (dev) install reads this before it will update.
 				update_option(
@@ -668,6 +744,14 @@ class WPCodeBBV_Updater {
 	 * status page and exits — this is meant to be hit by curl/cron/a browser,
 	 * not rendered as part of a normal page.
 	 */
+	/**
+	 * Runs a check-and-install now, printing what happened and exiting.
+	 * Called by the control panel once it is satisfied with the caller.
+	 */
+	public function force_update_now() {
+		$this->run_force_update();
+	}
+
 	private function run_force_update() {
 		if ( ! headers_sent() ) {
 			nocache_headers();
@@ -818,6 +902,17 @@ class WPCodeBBV_Updater {
 			if ( '' === $manifest ) {
 				return false;
 			}
+
+			// Always the same shape: the manifest URL, this site's URL, and
+			// the key. The site URL is what lets the far end tell installs
+			// apart - which one is asking, and what it is running.
+			$manifest = add_query_arg(
+				array(
+					'plugin'  => rawurlencode( home_url( '/' ) ),
+					'version' => rawurlencode( WPCODEBBV_VERSION ),
+				),
+				$manifest
+			);
 
 			$key = trim( (string) WPCodeBBV_Settings::get( 'update_manifest_key' ) );
 			if ( '' !== $key ) {

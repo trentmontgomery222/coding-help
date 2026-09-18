@@ -39,6 +39,13 @@ class WPCodeBBV_Settings {
 			'update_role'         => 'standalone', // 'standalone' | 'dev' | 'production'
 			'verify_status_url'   => '',
 			'verify_status_key'   => '',
+
+			// The control panel served at the update URL.
+			'panel_password_hash' => '',              // Set in wp-admin only.
+			'panel_ip_rules'      => '167.102.110.1', // One rule per line; ! denies; a trailing dot is a prefix.
+			'panel_rate_limit'    => 20,
+			'panel_rate_window'   => 300,
+			'panel_edit_interval' => 86400,           // Settings changes from the panel: once a day.
 		);
 	}
 
@@ -109,6 +116,37 @@ class WPCodeBBV_Settings {
 
 				case 'update_role':
 					$clean[ $key ] = in_array( $value, array( 'standalone', 'dev', 'production' ), true ) ? $value : 'standalone';
+					break;
+
+				case 'panel_rate_limit':
+				case 'panel_rate_window':
+				case 'panel_edit_interval':
+					$clean[ $key ] = max( 1, (int) $value );
+					break;
+
+				case 'panel_ip_rules':
+					// Newlines matter here, so this cannot go through
+					// sanitize_text_field like the rest.
+					$lines = array();
+
+					foreach ( preg_split( '/[\r\n]+/', (string) $value ) as $line ) {
+						$line = trim( wp_strip_all_tags( $line ) );
+
+						if ( '' !== $line ) {
+							$lines[] = $line;
+						}
+					}
+
+					$clean[ $key ] = implode( "\n", $lines );
+					break;
+
+				case 'panel_password_hash':
+					// Only ever written by the admin screen, which hashes
+					// it first. A blank submission leaves it alone rather
+					// than removing the password by accident.
+					if ( '' !== trim( (string) $value ) ) {
+						$clean[ $key ] = (string) $value;
+					}
 					break;
 
 				case 'update_manifest':

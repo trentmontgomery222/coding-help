@@ -19,5 +19,8 @@ delete_option( 'wpcodebbv_settings' );
 delete_option( 'wpcodebbv_update_failed' );
 delete_option( 'wpcodebbv_verified' );
 delete_option( 'wpcodebbv_safe_mode' );
+delete_option( 'wpcodebbv_recent_issues' );
+delete_option( 'wpcodebbv_panel_last_edit' );
+delete_option( 'wpcodebbv_update_system_problems' );
 delete_transient( 'wpcodebbv_update_remote' );
 delete_transient( 'wpcodebbv_devstatus' );

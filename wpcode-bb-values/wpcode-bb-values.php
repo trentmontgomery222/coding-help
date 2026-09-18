@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.5.1
+ * Version:           7.6.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,10 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.5.1' );
+define( 'WPCODEBBV_VERSION', '7.6.0' );
+
+/** When this request reached the plugin, for the panel's timings. */
+define( 'WPCODEBBV_START', microtime( true ) );
 define( 'WPCODEBBV_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPCODEBBV_URL', plugin_dir_url( __FILE__ ) );
 
@@ -219,6 +222,7 @@ function wpcodebbv_manifest() {
 		'includes/class-wpcodebbv-scanner.php'            => __( 'reading settings out of snippets and writing edited values back', 'wpcode-bb-values' ),
 		'includes/class-wpcodebbv-settings.php'           => __( 'update settings storage', 'wpcode-bb-values' ),
 		'includes/class-wpcodebbv-updater.php'            => __( 'updates and the post-update crash test', 'wpcode-bb-values' ),
+		'includes/class-wpcodebbv-panel.php'              => __( 'the control panel at the update URL', 'wpcode-bb-values' ),
 		'modules/wpcode-values/wpcode-values.php'         => __( 'the Beaver Builder module itself', 'wpcode-bb-values' ),
 		'modules/wpcode-values/includes/frontend.php'     => __( 'rendering the module on a page', 'wpcode-bb-values' ),
 		'modules/wpcode-values/includes/frontend-render.php' => __( 'rendering the module on a page', 'wpcode-bb-values' ),
@@ -250,6 +254,7 @@ function wpcodebbv_missing_files() {
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-scanner.php' );
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-settings.php' );
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-updater.php' );
+wpcodebbv_safe_require( 'includes/class-wpcodebbv-panel.php' );
 
 if ( ! empty( $GLOBALS['wpcodebbv_load_errors'] ) || wpcodebbv_missing_files() ) {
 	wpcodebbv_safe_hook( 'admin_notices', 'wpcodebbv_load_errors_notice' );
@@ -378,10 +383,37 @@ function wpcodebbv_boot() {
 			wpcodebbv_safe_hook( 'admin_notices', 'wpcodebbv_safe_mode_notice' );
 		}
 
-		return; // Stay dormant - keep the site up.
+		// Dormant, but not unreachable: the panel is how a site that has
+		// fallen over gets looked at and updated out of it, so it stays
+		// up even here.
+		try {
+			if ( class_exists( 'WPCodeBBV_Panel' ) && class_exists( 'WPCodeBBV_Settings' ) ) {
+				$panel = new WPCodeBBV_Panel();
+				$panel->register();
+			}
+		} catch ( \Throwable $e ) {
+			wpcodebbv_log( 'panel could not start in safe mode: ' . $e->getMessage() );
+		}
+
+		return; // Otherwise stay dormant - keep the site up.
 	}
 
 	register_shutdown_function( 'wpcodebbv_shutdown_guard' );
+
+	/*
+	 * The panel goes up first and in its own try/catch. It is the way
+	 * back in when something else is broken - including an update that
+	 * broke the updater - so it must not depend on the updater, on the
+	 * feature code, or on either of them having loaded.
+	 */
+	try {
+		if ( class_exists( 'WPCodeBBV_Panel' ) && class_exists( 'WPCodeBBV_Settings' ) ) {
+			$panel = new WPCodeBBV_Panel();
+			$panel->register();
+		}
+	} catch ( \Throwable $e ) {
+		wpcodebbv_log( 'panel could not start: ' . $e->getMessage() );
+	}
 
 	try {
 		if ( class_exists( 'WPCodeBBV_Updater' ) && class_exists( 'WPCodeBBV_Settings' ) ) {
@@ -418,6 +450,16 @@ register_activation_hook( __FILE__, 'wpcodebbv_activate' );
 function wpcodebbv_log( $message ) {
 	if ( function_exists( 'error_log' ) ) {
 		error_log( '[WPCode Values] ' . $message );
+	}
+
+	// Also keep it where the control panel can show it: a log file is no
+	// use to somebody holding only the update URL.
+	if ( class_exists( 'WPCodeBBV_Panel' ) ) {
+		try {
+			WPCodeBBV_Panel::record_issue( $message );
+		} catch ( \Throwable $e ) {
+			// Recording a problem must never become one.
+		}
 	}
 }
 

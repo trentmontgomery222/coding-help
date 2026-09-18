@@ -1128,7 +1128,7 @@ function wpcodebbv_help_menu() {
 wpcodebbv_safe_hook( 'admin_menu', 'wpcodebbv_help_menu' );
 
 /**
- * Saves the Updates form. Hidden behind ?wpcodebbv_updates=1 on the
+ * Saves the Updates form. Hidden behind &updates=1 on the
  * help screen, since this is deployment plumbing rather than something
  * a page editor should meet.
  */
@@ -1156,6 +1156,14 @@ function wpcodebbv_handle_update_settings() {
 		}
 	}
 
+	// Hashed here, never stored or shown in the clear, and only ever
+	// settable from this screen.
+	$typed = isset( $_POST['wpcodebbv_panel_password'] ) ? (string) wp_unslash( $_POST['wpcodebbv_panel_password'] ) : '';
+
+	if ( '' !== trim( $typed ) ) {
+		$posted['panel_password_hash'] = wp_hash_password( $typed );
+	}
+
 	WPCodeBBV_Settings::save( $posted );
 
 	add_settings_error( 'wpcodebbv', 'wpcodebbv_updates_saved', __( 'Update settings saved.', 'wpcode-bb-values' ), 'updated' );
@@ -1166,7 +1174,7 @@ function wpcodebbv_handle_update_settings() {
  * URL, so the help screen stays about snippets for everyone else.
  */
 function wpcodebbv_render_update_settings() {
-	if ( empty( $_GET['wpcodebbv_updates'] ) || ! current_user_can( 'manage_options' ) || ! class_exists( 'WPCodeBBV_Settings' ) ) {
+	if ( empty( $_GET['updates'] ) || ! current_user_can( 'manage_options' ) || ! class_exists( 'WPCodeBBV_Settings' ) ) {
 		return;
 	}
 
@@ -1241,12 +1249,60 @@ function wpcodebbv_render_update_settings() {
 				</td>
 			</tr>
 			<tr>
-				<th scope="row"><?php esc_html_e( 'Force an update', 'wpcode-bb-values' ); ?></th>
+				<th scope="row"><?php esc_html_e( 'Control panel password', 'wpcode-bb-values' ); ?></th>
+				<td>
+					<input type="password" class="regular-text" name="wpcodebbv_panel_password" value="" autocomplete="new-password" placeholder="<?php echo esc_attr( '' !== (string) $s['panel_password_hash'] ? __( 'set - type to change it', 'wpcode-bb-values' ) : __( 'not set', 'wpcode-bb-values' ) ); ?>" />
+					<p class="description">
+						<?php esc_html_e( 'Required by the control panel for anything that writes. This is the only place it can be set, so the panel can never hand itself away. Leave blank to keep the current one.', 'wpcode-bb-values' ); ?>
+					</p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="wpcodebbv_ips"><?php esc_html_e( 'Who may reach the panel', 'wpcode-bb-values' ); ?></label></th>
+				<td>
+					<textarea id="wpcodebbv_ips" class="large-text code" rows="5" name="wpcodebbv_settings[panel_ip_rules]"><?php echo esc_textarea( $s['panel_ip_rules'] ); ?></textarea>
+					<p class="description">
+						<?php esc_html_e( 'One rule per line. An address on its own is allowed; a trailing dot is a prefix; a leading ! denies. A deny always wins, and an empty box allows nobody.', 'wpcode-bb-values' ); ?>
+					</p>
+					<pre style="margin:6px 0 0;">167.102.110.1   <?php esc_html_e( 'just this address', 'wpcode-bb-values' ); ?>
+196.168.        <?php esc_html_e( 'anything starting 196.168.', 'wpcode-bb-values' ); ?>
+!203.0.113.7    <?php esc_html_e( 'never this one', 'wpcode-bb-values' ); ?></pre>
+					<p class="description">
+						<?php
+						printf(
+							/* translators: %s: the visitor's IP address */
+							esc_html__( 'You are currently at %s.', 'wpcode-bb-values' ),
+							'<code>' . esc_html( class_exists( 'WPCodeBBV_Panel' ) ? WPCodeBBV_Panel::client_ip() : '' ) . '</code>'
+						);
+						?>
+					</p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Panel limits', 'wpcode-bb-values' ); ?></th>
+				<td>
+					<label>
+						<input type="text" size="4" name="wpcodebbv_settings[panel_rate_limit]" value="<?php echo esc_attr( $s['panel_rate_limit'] ); ?>" />
+						<?php esc_html_e( 'requests per', 'wpcode-bb-values' ); ?>
+					</label>
+					<label>
+						<input type="text" size="5" name="wpcodebbv_settings[panel_rate_window]" value="<?php echo esc_attr( $s['panel_rate_window'] ); ?>" />
+						<?php esc_html_e( 'seconds, per address', 'wpcode-bb-values' ); ?>
+					</label>
+					<br />
+					<label>
+						<input type="text" size="7" name="wpcodebbv_settings[panel_edit_interval]" value="<?php echo esc_attr( $s['panel_edit_interval'] ); ?>" />
+						<?php esc_html_e( 'seconds between settings changes made from the panel (86400 = once a day)', 'wpcode-bb-values' ); ?>
+					</label>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Control panel', 'wpcode-bb-values' ); ?></th>
 				<td>
 					<?php if ( '' !== $trigger ) : ?>
 						<code><?php echo esc_html( add_query_arg( 'wpcodebbv_update', $trigger, home_url( '/' ) ) ); ?></code>
 						<p class="description">
-							<?php esc_html_e( 'Requesting this URL checks and installs immediately - useful from a deploy hook or cron. It is guarded only by the secret in it, so treat it as a password.', 'wpcode-bb-values' ); ?>
+							<?php esc_html_e( 'Opens the control panel: how the install is doing, recent problems, the settings above, and a button to check and install. It needs no login, and is gated on the address rules, the rate limit, the secret in the URL, and the password for anything that writes.', 'wpcode-bb-values' ); ?>
 						</p>
 					<?php else : ?>
 						<p class="description"><?php esc_html_e( 'No secret yet. Deactivate and reactivate the plugin to generate one.', 'wpcode-bb-values' ); ?></p>
