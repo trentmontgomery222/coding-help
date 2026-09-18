@@ -65,7 +65,11 @@
 }
 
 .acps-alert__close {
-	position: absolute;
+	/* Themes style buttons hard, and a theme rule that wins here does not just
+	   move the close button — it pushes it into the flow above the alert's
+	   content, so the popup opens with a stray x sitting over the text. This is
+	   the one declaration the button cannot do without. */
+	position: absolute !important;
 	top: 6px;
 	right: 6px;
 	z-index: 2;
