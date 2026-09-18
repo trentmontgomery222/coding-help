@@ -56,15 +56,54 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 		$classes = array(
 			'acps-board__banner',
 			'acps-board__banner--' . sanitize_html_class( $level ),
+			'acps-board__banner--' . self::style_of( $settings ),
 		);
 
 		// The normal state always uses the colour picked in the module, and so
-		// does everything else when colour-by-level is switched off.
-		if ( ! $by_level || ! $alert ) {
+		// does everything else when colour-by-level is switched off. Only the
+		// solid treatment floods a background, so only it can be overridden.
+		if ( self::is_solid( $settings ) && ( ! $by_level || ! $alert ) ) {
 			$classes[] = 'acps-board__banner--custom';
 		}
 
 		return implode( ' ', $classes );
+	}
+
+	/**
+	 * Which of the two banner treatments this board is set to.
+	 *
+	 * @param object $settings Module settings.
+	 * @return string 'card' or 'solid'.
+	 */
+	public static function style_of( $settings ) {
+		return isset( $settings->banner_style ) && 'solid' === (string) $settings->banner_style ? 'solid' : 'card';
+	}
+
+	/**
+	 * Whether the banner floods its background with the level colour.
+	 *
+	 * @param object $settings Module settings.
+	 * @return bool
+	 */
+	public static function is_solid( $settings ) {
+		return 'solid' === self::style_of( $settings );
+	}
+
+	/**
+	 * The level's colour, when there is one to use.
+	 *
+	 * @param ACPS_Alerts_Alert|null $alert Entry, or null for the normal state.
+	 * @return string Hex colour, or an empty string.
+	 */
+	public static function level_color( $alert ) {
+		if ( ! $alert ) {
+			return '';
+		}
+
+		$level = ACPS_Alerts_Status::level( $alert->get( 'status_level' ) );
+		$color = isset( $level['color'] ) ? (string) $level['color'] : '';
+
+		return preg_match( '/^#[0-9a-f]{3,8}$/i', $color ) ? $color : '';
 	}
 
 	/**
@@ -82,22 +121,22 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	public static function banner_style( $alert, $settings ) {
 		$align = isset( $settings->banner_align ) ? $settings->banner_align : 'center';
 		$style = 'text-align:' . preg_replace( '/[^a-z]/', '', (string) $align ) . ';';
+		$color = self::level_color( $alert );
+
+		// The card treatment matches the popup: a white card with the level
+		// colour as a stripe along the top, rather than flooding the whole
+		// banner. The heading stays dark, so it reads as a heading.
+		if ( ! self::is_solid( $settings ) ) {
+			return '' !== $color ? $style . 'border-top-color:' . $color . ';' : $style;
+		}
 
 		$by_level = ! isset( $settings->use_level_color ) || '1' === (string) $settings->use_level_color;
 
-		if ( ! $alert || ! $by_level ) {
+		if ( ! $alert || ! $by_level || '' === $color ) {
 			return $style; // The module's own colour applies, from its stylesheet.
 		}
 
-		$level = ACPS_Alerts_Status::level( $alert->get( 'status_level' ) );
-		$color = isset( $level['color'] ) ? (string) $level['color'] : '';
-
-		// Only ever emit a colour we recognise as one.
-		if ( preg_match( '/^#[0-9a-f]{3,8}$/i', $color ) ) {
-			$style .= 'background:' . $color . ';';
-		}
-
-		return $style;
+		return $style . 'background:' . $color . ';';
 	}
 
 	/**
@@ -214,6 +253,16 @@ FLBuilder::register_module(
 				'banner'  => array(
 					'title'  => __( 'The banner', 'acps-alert-popups' ),
 					'fields' => array(
+						'banner_style' => array(
+							'type'    => 'select',
+							'label'   => __( 'Banner style', 'acps-alert-popups' ),
+							'default' => 'card',
+							'options' => array(
+								'card'  => __( 'Card — white, like the popup', 'acps-alert-popups' ),
+								'solid' => __( 'Solid — the whole banner in the level colour', 'acps-alert-popups' ),
+							),
+							'help'    => __( 'The card matches what visitors see in the popup: a coloured badge and stripe, with the heading in ordinary text.', 'acps-alert-popups' ),
+						),
 						'show_icon' => array(
 							'type'    => 'select',
 							'label'   => __( 'Show the level badge', 'acps-alert-popups' ),

@@ -218,6 +218,17 @@ whole set at once, so the risks are the ones a complete save creates:
 - start and end dates apply on the custom schedule and are ignored on the others
 - the link text, the link itself, the badge toggle and the level-word toggle all
   reach the alert, and switching a toggle off really clears it
+- the status board's two banner treatments: card is the default and an
+  unrecognised value falls back to it, the card takes the level colour as a top
+  stripe while the solid one floods its background, and the resting state
+  invents no colour at all
+- the card never asks for the solid treatment's classes, and the module
+  stylesheet hangs the chosen text colour off `--solid` only. This pins a blank
+  banner: the two colour pickers describe the solid banner, so a card picking
+  up the text colour would paint white text onto a white card.
+
+  Verified non-vacuous: widen that rule back to `.acps-board__banner` and it
+  fails with "the module stylesheet only colours text on the solid banner".
 - a user without the capability saves nothing
 
 Verified non-vacuous: drop `posted_at` from the saved set and it fails with

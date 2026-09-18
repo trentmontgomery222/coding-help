@@ -30,6 +30,12 @@ $acps_date_format  = get_option( 'date_format' );
 	<?php if ( $acps_live ) : ?>
 		<?php
 		$acps_level  = ACPS_Alerts_Status::level( $acps_live->get( 'status_level' ) );
+
+		// On the card the level word takes the level's colour; on the solid
+		// banner the whole background is already that colour, so it inherits.
+		$acps_accent = ACPS_Status_Board_Module::is_solid( $settings )
+			? ''
+			: ACPS_Status_Board_Module::level_color( $acps_live );
 		$acps_msg    = (string) $acps_live->get( 'status_message' );
 		$acps_staged = 'admins' === $acps_live->get( 'visibility' );
 		?>
@@ -50,7 +56,7 @@ $acps_date_format  = get_option( 'date_format' );
 			// heading itself is whatever was typed, because that is the thing
 			// a visitor came to read — not the word "School Status".
 			?>
-			<p class="acps-board__level">
+			<p class="acps-board__level"<?php echo $acps_accent ? ' style="color:' . esc_attr( $acps_accent ) . '"' : ''; ?>>
 				<?php echo esc_html( $acps_level['banner'] ); ?>
 				<?php if ( '' !== $acps_level['directive'] ) : ?>
 					<span class="acps-board__directive"><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></span>

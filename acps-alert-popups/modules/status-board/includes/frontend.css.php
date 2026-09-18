@@ -19,16 +19,28 @@ $acps_text = ! empty( $settings->text_color ) ? $settings->text_color : 'ffffff'
 $acps_bg   = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_bg ) ) ? '#' . $acps_bg : $acps_bg;
 $acps_text = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_text ) ) ? '#' . $acps_text : $acps_text;
 ?>
+/*
+ * The two colour pickers only describe the SOLID banner, which is the one that
+ * floods a background. Applying the text colour to the card as well would paint
+ * white text onto a white card and leave the banner apparently blank.
+ */
 .fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--custom {
 	background: <?php echo esc_html( $acps_bg ); ?>;
 }
 
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner {
+.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--solid {
 	color: <?php echo esc_html( $acps_text ); ?>;
 }
 
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner .acps-board__title,
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner .acps-board__headline,
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner .acps-board__message {
+.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--solid .acps-board__title,
+.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--solid .acps-board__level,
+.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--solid .acps-board__message {
 	color: inherit;
+}
+
+/* On the card, the banner colour becomes the stripe along the top — which is
+   what it is for when the board is resting and there is no level to take it
+   from. A live alert overrides this inline with its own level colour. */
+.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card {
+	border-top-color: <?php echo esc_html( $acps_bg ); ?>;
 }

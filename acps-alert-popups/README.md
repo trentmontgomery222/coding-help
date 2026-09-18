@@ -42,7 +42,7 @@ Drop two modules (Beaver Builder → Site Alerts group) onto your status page: *
 - **Show this alert now**, on its On/off tab, is the switch. On means visitors see it; off means the wording sits there ready for next time.
 - **Every setting is on that module**, across its Popup, On/off, Where & who, How it opens and Style tabs. Posting an alert is one screen and under a minute.
 - The module draws itself as a popup **only in the builder**. On the live status page it renders nothing; the board banner says the same thing instead. On every other page the plugin shows it as the real popup.
-- The board renders the **current status banner** plus the **archive** of past updates, as an expandable list. With the Current Alert off, the banner shows the Normal Alert wording.
+- The board renders the **current status banner** plus the **archive** of past updates, as an expandable list. The banner has two treatments, set by *Banner style*: **Card** (the default) matches the popup — a white card with the level colour as a top stripe and a badge, heading in ordinary dark text — and **Solid** floods the whole banner with the level colour. The board's two colour pickers describe the solid treatment only. With the Current Alert off, the banner shows the Normal Alert wording.
 - It **archives itself and switches itself off at 5:50pm** (configurable) unless you chose "Keep it up until I switch it off". The archive entry is a separate record; the alert's own wording is left intact. An update posted after the cut-off runs until the following day.
 - Set **Who can see it → Staff only** to stage an update on the live site where only people who can manage alerts see it. The board shows a dashed "Staff preview" strip so you can't forget.
 

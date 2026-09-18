@@ -23,6 +23,7 @@ function __( $s, $d = '' ) { return $s; }
 function esc_html( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
 function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
 function esc_url_raw( $s ) { return (string) $s; }
+function sanitize_html_class( $s ) { return preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $s ); }
 function sanitize_key( $s ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $s ) ); }
 function sanitize_text_field( $s ) { return trim( strip_tags( (string) $s ) ); }
 function sanitize_textarea_field( $s ) { return trim( strip_tags( (string) $s ) ); }
@@ -63,6 +64,9 @@ class ACPS_Alerts_Status {
 	public static function level_choices() { return array( 'info' => 'Information', 'lockdown' => 'Lockdown' ); }
 	public static function cutoff_time() { return '17:50'; }
 	public static function level( $k ) { return array( 'banner' => strtoupper( $k ), 'directive' => '', 'color' => '#d81440', 'severity' => 'critical' ); }
+	public static function level_icon( $k, $size = 64 ) { return '<span class="acps-level-icon"></span>'; }
+	public static function archive( $n = 10 ) { return array(); }
+	public static function add_archive_record( array $d ) {}
 	public static function current_alert() { return $GLOBALS['alert']; }
 }
 
@@ -286,6 +290,68 @@ $module->update( settings( array( 'heading' => 'Posted by someone without the ca
 check( 'a user without the capability saves nothing', $alert->saves, 0 );
 
 $GLOBALS['can'] = true;
+
+/* ---- the status board's two banner treatments ---- */
+
+require ACPS_ALERTS_DIR . 'modules/status-board/status-board.php';
+
+$board = (object) array();
+
+// Card is the default, because the banner should say the same thing, the same
+// way, as the popup a visitor sees everywhere else.
+check( 'the card treatment is the default', ACPS_Status_Board_Module::style_of( $board ), 'card' );
+ok( 'and it is not the solid one', ! ACPS_Status_Board_Module::is_solid( $board ) );
+
+$solid = (object) array( 'banner_style' => 'solid' );
+
+check( 'asking for solid gets solid', ACPS_Status_Board_Module::style_of( $solid ), 'solid' );
+ok( 'and that one is solid', ACPS_Status_Board_Module::is_solid( $solid ) );
+
+// Anything unrecognised falls back to the card rather than to nothing.
+check( 'a junk value falls back to the card', ACPS_Status_Board_Module::style_of( (object) array( 'banner_style' => 'nonsense' ) ), 'card' );
+
+$live = new ACPS_Alerts_Alert( 50 );
+$live->saved['status_level'] = 'lockdown';
+
+$card_classes = ACPS_Status_Board_Module::banner_classes( $live, $board );
+
+ok( 'the card banner carries its treatment class', false !== strpos( $card_classes, 'acps-board__banner--card' ) );
+ok( 'and its level class', false !== strpos( $card_classes, 'acps-board__banner--lockdown' ) );
+
+/*
+ * Pins a white-on-white banner. The module's two colour pickers describe the
+ * SOLID banner. "--custom" is what paints that background, and the module
+ * stylesheet hangs the chosen TEXT colour off the same treatment — so if the
+ * card ever picked up either one, a white card would be painted with white
+ * text and the banner would read as blank.
+ */
+ok(
+	'the card never asks for the solid background',
+	false === strpos( $card_classes, 'acps-board__banner--custom' )
+);
+
+$css = file_get_contents( ACPS_ALERTS_DIR . 'modules/status-board/includes/frontend.css.php' );
+
+ok(
+	'and the module stylesheet only colours text on the solid banner',
+	false === strpos( $css, '.acps-board__banner {' )
+		&& false !== strpos( $css, '.acps-board__banner--solid {' )
+);
+
+// The card takes the level colour as a stripe; the solid one floods it.
+$card_style = ACPS_Status_Board_Module::banner_style( $live, $board );
+
+ok( 'the card puts the level colour in its top stripe', false !== strpos( $card_style, 'border-top-color:#d81440' ) );
+ok( 'and never floods its background', false === strpos( $card_style, 'background:' ) );
+
+$solid_style = ACPS_Status_Board_Module::banner_style( $live, $solid );
+
+ok( 'the solid banner floods its background instead', false !== strpos( $solid_style, 'background:#d81440' ) );
+ok( 'and has no stripe', false === strpos( $solid_style, 'border-top-color' ) );
+
+// The resting state has no level, so neither treatment may invent a colour.
+ok( 'the resting card gets no level stripe', false === strpos( ACPS_Status_Board_Module::banner_style( null, $board ), 'border-top-color' ) );
+check( 'and level_color() has nothing to give', ACPS_Status_Board_Module::level_color( null ), '' );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All popup module cases passed\n";
 exit( $fails ? 1 : 0 );

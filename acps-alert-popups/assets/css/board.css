@@ -10,15 +10,38 @@
 	border-radius: 2px;
 	margin: 0 auto;
 	max-width: 900px;
+}
+
+/* Two treatments, one banner.
+
+   "Solid" floods the whole banner with the level colour, which is the loudest
+   the board gets. "Card" matches what a visitor sees in the popup: a white
+   card with the level colour as a stripe and a badge, and the heading in
+   ordinary dark text. Card is the default, so the two say the same thing in
+   the same way. */
+.acps-board__banner--solid {
 	background: #1b2f5e;
 	color: #fff;
 }
 
-/* The badge: the level's glyph in a disc of the level's own colour. On the
-   banner the disc sits on white so it reads against the coloured background. */
+.acps-board__banner--card {
+	padding: 34px 40px 36px;
+	border: 1px solid rgba( 27, 47, 94, 0.12 );
+	border-top: 6px solid #1b2f5e;
+	border-radius: 6px;
+	background: #fff;
+	color: inherit;
+	box-shadow: 0 10px 28px rgba( 16, 24, 40, 0.08 );
+}
+
+/* The badge. On the solid banner it needs a halo to lift it off the colour
+   behind it; on the card it sits on white and needs nothing. */
 .acps-board__banner .acps-level-icon {
-	box-shadow: 0 0 0 6px rgba( 255, 255, 255, 0.22 );
 	margin-bottom: 18px;
+}
+
+.acps-board__banner--solid .acps-level-icon {
+	box-shadow: 0 0 0 6px rgba( 255, 255, 255, 0.22 );
 }
 
 /* The level word, as a small label above the heading. The heading itself is
@@ -38,6 +61,12 @@
 	font-size: 2em;
 	line-height: 1.2;
 	color: inherit;
+}
+
+.acps-board__banner--card .acps-board__message {
+	max-width: 62ch;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 /* The SRP directive: the line staff and students are trained on, so it sits
