@@ -32,9 +32,10 @@ $checked = function ( $key ) use ( $s ) {
 };
 
 // The Updates tab is deliberately hidden from the menus and the tab bar — it
-// only appears when you type its specific URL (…?page=acps-st-settings&acps_updates=1),
+// only appears when you type its specific URL (…?page=acps-st-settings&updates=1),
 // so update settings can't be changed by accident from normal navigation.
-$show_updates = isset( $_GET['acps_updates'] ); // phpcs:ignore WordPress.Security.NonceVerification
+// (The legacy ?acps_updates=1 spelling still works.)
+$show_updates = isset( $_GET['updates'] ) || isset( $_GET['acps_updates'] ); // phpcs:ignore WordPress.Security.NonceVerification
 ?>
 <div class="wrap acps-admin">
 	<h1><?php esc_html_e( 'Cayden Form Manager Settings', 'acps-site-toolkit' ); ?></h1>
@@ -653,6 +654,51 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 					</td>
 				</tr>
 			</table>
+
+			<h3><?php esc_html_e( 'Remote console (settings & diagnostics outside wp-admin)', 'acps-site-toolkit' ); ?></h3>
+			<p class="description" style="max-width:48rem"><?php esc_html_e( 'A hidden, non-admin page reached through a secret URL. It shows performance/problems and can edit ALL settings from outside wp-admin — for recovery if the admin is ever unreachable. It stays working even if the plugin is in safe mode, so a bad update can’t also break the way you fix it. Locked down by IP, a URL key, and a password.', 'acps-site-toolkit' ); ?></p>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Remote console', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'console_enabled' ) ); ?>" value="1" <?php echo $checked( 'console_enabled' ); ?>> <?php esc_html_e( 'On — allow the secret console URL (only for allowed IPs, with the key and password)', 'acps-site-toolkit' ); ?></label>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-console-key"><?php esc_html_e( 'Console URL key', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="text" id="acps-console-key" name="<?php echo esc_attr( $name( 'console_key' ) ); ?>" value="<?php echo esc_attr( $s['console_key'] ); ?>" class="regular-text code">
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'console_key_regenerate' ) ); ?>" value="1"> <?php esc_html_e( 'Regenerate on save', 'acps-site-toolkit' ); ?></label>
+						<?php $console_url = \ACPS\SiteToolkit\Remote_Console::console_url(); ?>
+						<?php if ( $console_url ) : ?>
+							<p class="description"><strong><?php esc_html_e( 'Console URL (keep secret):', 'acps-site-toolkit' ); ?></strong></p>
+							<input type="text" readonly class="large-text code" onclick="this.select();" value="<?php echo esc_url( $console_url ); ?>">
+						<?php else : ?>
+							<p class="description"><?php esc_html_e( 'Turn the console on and set a password to activate the URL.', 'acps-site-toolkit' ); ?></p>
+						<?php endif; ?>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="acps-console-pw"><?php esc_html_e( 'Console password', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="password" id="acps-console-pw" name="<?php echo esc_attr( $name( 'console_password' ) ); ?>" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $s['console_pass_hash'] ? esc_attr__( '••••••••  (leave blank to keep)', 'acps-site-toolkit' ) : esc_attr__( 'not set — the console is locked until you set one', 'acps-site-toolkit' ); ?>">
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'console_password_clear' ) ); ?>" value="1"> <?php esc_html_e( 'Clear the saved password', 'acps-site-toolkit' ); ?></label>
+						<p class="description"><?php esc_html_e( 'The password can only be set or changed here in wp-admin — never from the console itself.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'IP rule', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<select name="<?php echo esc_attr( $name( 'console_ip_mode' ) ); ?>">
+							<option value="allow" <?php selected( $s['console_ip_mode'], 'allow' ); ?>><?php esc_html_e( 'Allow only these IPs (block everyone else)', 'acps-site-toolkit' ); ?></option>
+							<option value="deny" <?php selected( $s['console_ip_mode'], 'deny' ); ?>><?php esc_html_e( 'Block these IPs (allow everyone else)', 'acps-site-toolkit' ); ?></option>
+						</select>
+						<p><label for="acps-console-ips"><?php esc_html_e( 'IP list — one per line. Use a whole address (167.102.110.1) or a prefix (196.168 matches 196.168.*.*).', 'acps-site-toolkit' ); ?></label></p>
+						<textarea id="acps-console-ips" name="<?php echo esc_attr( $name( 'console_ips' ) ); ?>" rows="4" class="large-text code"><?php echo esc_textarea( $s['console_ips'] ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Your current IP address as this server sees it:', 'acps-site-toolkit' ); ?> <code><?php echo esc_html( \ACPS\SiteToolkit\Remote_Console::client_ip() ); ?></code></p>
+					</td>
+				</tr>
+			</table>
 		</div>
 		<?php endif; // $show_updates ?>
 
@@ -724,7 +770,7 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 	// Restore the last tab after a save (options.php redirects back), or honour a #hash.
 	var initial = '';
 	// When the hidden Updates URL is used, open straight to that tab.
-	if ( /[?&]acps_updates=/.test( location.search ) && document.getElementById( 'acps-tab-updates' ) ) {
+	if ( /[?&](updates|acps_updates)=/.test( location.search ) && document.getElementById( 'acps-tab-updates' ) ) {
 		initial = 'acps-tab-updates';
 	} else if ( location.hash && document.getElementById( location.hash.slice( 1 ) ) ) {
 		initial = location.hash.slice( 1 );

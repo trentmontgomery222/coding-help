@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Form Manager
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.48.0
+ * Version:           1.49.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.48.0' );
+define( 'ACPS_ST_VERSION', '1.49.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).
@@ -214,6 +214,32 @@ function boot() {
 		if ( is_admin() ) {
 			add_action( 'admin_notices', __NAMESPACE__ . '\\safe_mode_notice' );
 		}
+
+		// RECOVERY PATH: even while dormant, keep the remote console and the
+		// secret force-update URL alive so a bad update can't also break the way
+		// you fix it. Each is loaded behind its own guard so, if one of these is
+		// itself what crashed, it can't re-crash the request.
+		try {
+			if ( is_readable( ACPS_ST_PATH . 'includes/class-remote-console.php' ) ) {
+				Remote_Console::register();
+			}
+		} catch ( \Throwable $e ) { /* stay dormant */ }
+		try {
+			if ( is_readable( ACPS_ST_PATH . 'includes/class-updater.php' ) ) {
+				add_action(
+					'init',
+					function () {
+						try {
+							$u = new Updater();
+							$u->maybe_handle_selftest();
+							$u->maybe_handle_force_update();
+						} catch ( \Throwable $e ) { /* stay dormant */ }
+					},
+					1
+				);
+			}
+		} catch ( \Throwable $e ) { /* stay dormant */ }
+
 		return; // Stay dormant — keep the site up.
 	}
 

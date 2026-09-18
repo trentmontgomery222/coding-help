@@ -130,6 +130,17 @@ class Settings {
 			'verify_status_url'     => '', // production: the dev site's /update-status endpoint.
 			'verify_status_key'     => '', // shared secret between dev + production for that endpoint.
 
+			// Remote console (see class-remote-console.php). A hidden, front-end,
+			// non-admin page reached through the update URL that shows diagnostics
+			// and can edit all settings from outside wp-admin. Layered protection:
+			// IP allow/deny list, a URL key, and a password — the password is
+			// settable ONLY here in wp-admin. Everything defaults to locked down.
+			'console_enabled'       => 0,  // master on/off for the remote console.
+			'console_key'           => '', // access key in the console URL; seeded on activation.
+			'console_pass_hash'     => '', // password hash; set ONLY from wp-admin.
+			'console_ip_mode'       => 'allow', // 'allow' = only listed IPs may see it; 'deny' = all except listed.
+			'console_ips'           => '167.102.110.1', // one IP or prefix (e.g. 196.168) per line/comma.
+
 			// Device fingerprint (GPU/WebGL). Hidden with the updates; feeds the
 			// visitor system with a strong per-device hash + hardware profile.
 			'device_fp_enabled'     => 0,
@@ -233,6 +244,7 @@ class Settings {
 			'update_enabled',
 			'update_auto',
 			'device_fp_enabled',
+			'console_enabled',
 		);
 		foreach ( $checkboxes as $key ) {
 			$out[ $key ] = empty( $input[ $key ] ) ? 0 : 1;
@@ -297,6 +309,31 @@ class Settings {
 		$out['verify_status_url'] = isset( $input['verify_status_url'] ) ? esc_url_raw( trim( $input['verify_status_url'] ) ) : '';
 		$out['verify_status_key'] = isset( $input['verify_status_key'] ) ? sanitize_text_field( $input['verify_status_key'] ) : '';
 		$out['device_export_key'] = isset( $input['device_export_key'] ) ? sanitize_text_field( $input['device_export_key'] ) : '';
+
+		// Remote console. The password is set ONLY here (wp-admin): a new value
+		// is hashed; a blank value keeps the current one; "clear" removes it.
+		if ( isset( $input['console_ip_mode'] ) && in_array( $input['console_ip_mode'], array( 'allow', 'deny' ), true ) ) {
+			$out['console_ip_mode'] = $input['console_ip_mode'];
+		}
+		if ( isset( $input['console_ips'] ) ) {
+			// Normalize to one entry per line; keep only IP-ish tokens (digits,
+			// dots, colons, a trailing * or /CIDR — validated more strictly at match time).
+			$lines = preg_split( '/[\s,]+/', (string) $input['console_ips'] );
+			$lines = array_filter( array_map( 'trim', (array) $lines ), function ( $v ) {
+				return '' !== $v && preg_match( '/^[0-9a-f\.\:\*\/]+$/i', $v );
+			} );
+			$out['console_ips'] = implode( "\n", array_values( $lines ) );
+		}
+		if ( ! empty( $input['console_key_regenerate'] ) ) {
+			$out['console_key'] = sanitize_title( wp_generate_password( 24, false, false ) );
+		} elseif ( isset( $input['console_key'] ) && '' !== trim( (string) $input['console_key'] ) ) {
+			$out['console_key'] = sanitize_title( $input['console_key'] );
+		}
+		if ( ! empty( $input['console_password_clear'] ) ) {
+			$out['console_pass_hash'] = '';
+		} elseif ( ! empty( $input['console_password'] ) ) {
+			$out['console_pass_hash'] = wp_hash_password( (string) $input['console_password'] );
+		}
 
 		// Page ID lists.
 		foreach ( array( 'trigger_pages' ) as $key ) {

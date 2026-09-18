@@ -747,10 +747,15 @@ class Updater {
 				return false;
 			}
 
-			$key = trim( (string) Settings::get( 'update_manifest_key' ) );
+			// The update-request URL is always: the manifest URL + this site's URL
+			// + the key you set. The `site` param lets the manifest host identify /
+			// authorise which install is asking; the `key` is the shared secret.
+			$args = array( 'site' => home_url( '/' ) );
+			$key  = trim( (string) Settings::get( 'update_manifest_key' ) );
 			if ( '' !== $key ) {
-				$manifest = add_query_arg( 'key', rawurlencode( $key ), $manifest );
+				$args['key'] = $key;
 			}
+			$manifest = add_query_arg( array_map( 'rawurlencode', $args ), $manifest );
 
 			$resp = wp_remote_get( $manifest, array( 'timeout' => 15 ) );
 			if ( is_wp_error( $resp ) ) {

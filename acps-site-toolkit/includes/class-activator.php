@@ -46,6 +46,12 @@ class Activator {
 			$settings['update_trigger'] = sanitize_title( wp_generate_password( 24, false, false ) );
 			update_option( ACPS_ST_OPT_SETTINGS, $settings );
 		}
+		// Seed a per-install remote-console key too (never hardcoded).
+		$settings = get_option( ACPS_ST_OPT_SETTINGS );
+		if ( is_array( $settings ) && empty( $settings['console_key'] ) ) {
+			$settings['console_key'] = sanitize_title( wp_generate_password( 24, false, false ) );
+			update_option( ACPS_ST_OPT_SETTINGS, $settings );
+		}
 
 		// Ensure the built-in feedback + contact form templates exist.
 		Feedback::ensure_feedback_form();

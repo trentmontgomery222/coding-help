@@ -64,6 +64,15 @@ class Plugin {
 		Error_Log::ensure_form();
 		Log::ensure_form();
 
+		// Seed a per-install remote-console key on upgrade so an already-activated
+		// site gets one without needing to deactivate/reactivate. Password stays
+		// unset (console is inert) until an admin sets one.
+		$seed = get_option( ACPS_ST_OPT_SETTINGS );
+		if ( is_array( $seed ) && empty( $seed['console_key'] ) ) {
+			$seed['console_key'] = sanitize_title( wp_generate_password( 24, false, false ) );
+			update_option( ACPS_ST_OPT_SETTINGS, $seed );
+		}
+
 		// The floating button is now the contact form. If the label is still the
 		// old default, flip it to match (leaves any custom label alone).
 		$settings = get_option( ACPS_ST_OPT_SETTINGS );
@@ -115,6 +124,11 @@ class Plugin {
 		// just that feature rather than aborting the whole plugin (failsafe
 		// line 2). A hard fatal that still escapes is caught by boot()'s
 		// try/catch + safe mode (failsafe line 3).
+
+		// Remote console (hidden, IP+key+password-gated front-end control page
+		// reached through the update URL). Registered early so it can take over
+		// its own request; guarded like everything else.
+		Failsafe::guard( array( __NAMESPACE__ . '\\Remote_Console', 'register' ), array(), 'console.register' );
 
 		// Privacy hooks + purge cron.
 		Failsafe::guard( array( $this->privacy, 'register' ), array(), 'privacy.register' );
