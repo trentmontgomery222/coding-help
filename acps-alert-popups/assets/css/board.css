@@ -31,8 +31,16 @@
 	border-top: 6px solid #1b2f5e;
 	border-radius: 6px;
 	background: #fff;
-	color: inherit;
 	box-shadow: 0 10px 28px rgba( 16, 24, 40, 0.08 );
+
+	/* An explicit colour, not `inherit`.
+	 *
+	 * The card's background is white, so its text has to be dark — the two are
+	 * one decision and cannot be taken separately. Inheriting instead means a
+	 * site that set a light colour for the old solid banner gets white text on
+	 * a white card, and the message is simply not there. The head below
+	 * overrides this with its own pair. */
+	color: #1b2f5e;
 }
 
 /* The head of the card carries its own background — the board colour — so the
@@ -171,7 +179,11 @@
 
 /* ------------------------------------------------------------- Archive */
 
+/* Same pairing as the card: this list sits on the page's own background, so it
+   states its colour rather than inheriting one that may have been set for a
+   banner that no longer exists. */
 .acps-board__archive {
+	color: #1b2f5e;
 	max-width: 900px;
 	margin: 36px auto 0;
 	border-top: 1px solid #e2e4e9;

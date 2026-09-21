@@ -77,9 +77,15 @@ those pieces are wanted, `[schoolstatus]` places them, which is what that
 shortcode is for.
 
 On the card treatment the banner has a **head** carrying the board colour, with
-the heading on it in the board's text colour, and the message below it on white.
-Before that head existed a site that had set white text for the old solid banner
-ended up with white text on a white card, which reads as an empty box.
+the heading on it in the board's heading colour, and the message below it on
+white in its own message colour. Both pairs are settings on the Status Board.
+
+Every surface the board draws states its own text colour rather than inheriting
+one. A background and the text on it are a single decision and cannot be taken
+separately: while the card said `color: inherit`, a site that had set a light
+colour back when the banner was a solid block got white text on a white card.
+Nothing was missing and nothing errored — the message simply was not there, and
+you had to select it with the mouse to prove it existed.
 
 **The status level is the severity** — there is no second setting. Pick it on the Current Alert module, Popup tab → *Status level*. It decides four things: the word on the banner, the colour of the banner, the colour of the popup's stripe, and the coloured badge drawn above the heading. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. Its size, shape and colour are written into the markup rather than a stylesheet, because the badge prints on pages that may carry neither the board stylesheet nor a freshly rebuilt module stylesheet — an SVG with no dimensions falls back to 300&times;150. Badge size is a setting on both modules (56px on the popup, 64px on the banner). There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
 

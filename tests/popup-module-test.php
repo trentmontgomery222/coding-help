@@ -446,5 +446,58 @@ ok( 'and the message', false !== strpos( $banner, 'acps-board__message' ) );
 ok( 'the board no longer offers a badge switch', ! isset( $board_fields['show_icon'] ) );
 ok( 'nor a badge size', ! isset( $board_fields['icon_size'] ) );
 
+/* ---- a background and its text colour are one decision ---- */
+
+/*
+ * Pins invisible text. The card's background is white, so its text has to be
+ * dark — but the board's stylesheet used to say `color: inherit`, and a site
+ * that had set a light colour for the old solid banner therefore got white text
+ * on a white card. Nothing was missing and nothing errored; the message simply
+ * was not there, and you had to select it with the mouse to prove it existed.
+ *
+ * Every surface the board draws now states its own colour.
+ */
+$board_css = file_get_contents( ACPS_ALERTS_DIR . 'assets/css/board.css' );
+
+/**
+ * The declarations inside one CSS rule.
+ *
+ * @param string $css      Stylesheet.
+ * @param string $selector Rule to read.
+ * @return string
+ */
+function rule_body( $css, $selector ) {
+	$at = strpos( $css, $selector . ' {' );
+
+	if ( false === $at ) {
+		return '';
+	}
+
+	$open = strpos( $css, '{', $at );
+
+	return substr( $css, $open, strpos( $css, '}', $open ) - $open );
+}
+
+$card = rule_body( $board_css, '.acps-board__banner--card' );
+
+ok( 'the card states a text colour', false !== strpos( $card, 'color:' ) );
+ok( 'and does not inherit one', false === strpos( $card, 'color: inherit' ) );
+ok( 'it is white, so that colour must be dark', false !== strpos( $card, 'background: #fff' ) );
+
+$archive = rule_body( $board_css, '.acps-board__archive' );
+
+ok( 'the archive states one too', false !== strpos( $archive, 'color:' ) );
+
+// The head is the one part that is not on white, so it pairs its own two.
+$head = rule_body( $board_css, '.acps-board__banner--card .acps-board__head' );
+
+ok( 'the head sets a background', false !== strpos( $head, 'background:' ) );
+ok( 'and the colour that goes with it', false !== strpos( $head, 'color:' ) );
+
+// Both pairs are settable, because a site will want its own.
+ok( 'the heading colour is a setting', isset( $board_fields['text_color'] ) );
+ok( 'and so is the message colour', isset( $board_fields['body_color'] ) );
+ok( 'which defaults to something dark rather than empty', ! empty( $board_fields['body_color']['default'] ) );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All popup module cases passed\n";
 exit( $fails ? 1 : 0 );

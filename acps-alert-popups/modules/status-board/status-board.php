@@ -336,9 +336,17 @@ FLBuilder::register_module(
 						),
 						'text_color'     => array(
 							'type'       => 'color',
-							'label'      => __( 'Banner text colour', 'acps-alert-popups' ),
+							'label'      => __( 'Heading text colour', 'acps-alert-popups' ),
 							'default'    => 'ffffff',
 							'show_reset' => true,
+							'help'       => __( 'The heading sits on the banner colour, so this is the colour that has to read against it.', 'acps-alert-popups' ),
+						),
+						'body_color'     => array(
+							'type'       => 'color',
+							'label'      => __( 'Message text colour', 'acps-alert-popups' ),
+							'default'    => '1b2f5e',
+							'show_reset' => true,
+							'help'       => __( 'On the card style the message sits below the heading on white, so it needs a dark colour of its own rather than the heading\'s.', 'acps-alert-popups' ),
 						),
 						'banner_align'   => array(
 							'type'    => 'align',
