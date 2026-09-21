@@ -218,7 +218,7 @@ class ACPS_Alerts_Status {
 	 * @param int    $size Disc size in pixels.
 	 * @return string Markup, or an empty string when the level has no glyph.
 	 */
-	public static function level_icon( $key, $size = 64 ) {
+	public static function level_icon( $key, $size = 64, $color = '' ) {
 		$level = self::level( $key );
 		$path  = isset( $level['icon'] ) ? (string) $level['icon'] : '';
 
@@ -228,9 +228,11 @@ class ACPS_Alerts_Status {
 			return '';
 		}
 
-		$color = isset( $level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i', (string) $level['color'] )
-			? (string) $level['color']
-			: '#1b2f5e';
+		$color = self::colour( $color );
+
+		if ( '' === $color ) {
+			$color = self::level_color( $key );
+		}
 
 		$size  = max( 16, min( 160, (int) $size ) );
 		$glyph = (int) round( $size * 0.55 );
@@ -264,6 +266,81 @@ class ACPS_Alerts_Status {
 			$glyph,
 			esc_attr( $path )
 		);
+	}
+
+	/**
+	 * A colour, if that is what it is.
+	 *
+	 * Beaver Builder's colour fields store a bare hex with no #, WordPress
+	 * stores one with, and either can hold an rgb/rgba string instead. Anything
+	 * else is refused rather than escaped and hoped for, because these end up
+	 * in style attributes.
+	 *
+	 * @param mixed $value Candidate colour.
+	 * @return string A usable CSS colour, or an empty string.
+	 */
+	public static function colour( $value ) {
+		$value = trim( (string) $value );
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		if ( preg_match( '/^#[0-9a-f]{3,8}$/i', $value ) ) {
+			return $value;
+		}
+
+		if ( preg_match( '/^[0-9a-f]{3,8}$/i', $value ) ) {
+			return '#' . $value;
+		}
+
+		if ( preg_match( '/^rgba?\(\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*[0-9.]+\s*(?:,\s*[0-9.]+\s*)?\)$/i', $value ) ) {
+			return $value;
+		}
+
+		return '';
+	}
+
+	/**
+	 * The colour to draw a level in.
+	 *
+	 * The SRP colours are the ones staff are trained on, so they are the
+	 * default everywhere. But a level's colour is chosen to read on white, and
+	 * the same colour on a dark banner can be nearly invisible — so each place
+	 * that draws a level may override it.
+	 *
+	 * @param string $key       Level key.
+	 * @param string $context   Where it is being drawn: 'board', 'shortcode', 'popup'.
+	 * @param array  $overrides Level key => colour, from whatever is drawing it.
+	 * @return string
+	 */
+	public static function level_color( $key, $context = '', array $overrides = array() ) {
+		$key   = sanitize_key( $key );
+		$level = self::level( $key );
+		$color = self::colour( isset( $level['color'] ) ? $level['color'] : '' );
+
+		if ( isset( $overrides[ $key ] ) ) {
+			$chosen = self::colour( $overrides[ $key ] );
+
+			if ( '' !== $chosen ) {
+				$color = $chosen;
+			}
+		}
+
+		if ( '' === $color ) {
+			$color = '#1b2f5e';
+		}
+
+		/**
+		 * Filters the colour a status level is drawn in.
+		 *
+		 * @param string $color   The colour so far.
+		 * @param string $key     Level key.
+		 * @param string $context Where it is being drawn.
+		 */
+		$filtered = self::colour( apply_filters( 'acps_alerts_level_color', $color, $key, $context ) );
+
+		return '' !== $filtered ? $filtered : $color;
 	}
 
 	/**

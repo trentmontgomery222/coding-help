@@ -56,6 +56,26 @@ The levels are the five Standard Response Protocol actions from the "I Love U Gu
 
 Urgency runs Lockdown > Evacuate > Shelter > Secure > Hold > Information.
 
+### When a level colour does not read
+
+The SRP colours are chosen to read on white, and the same colour on a dark
+banner can be nearly invisible. Each place that draws a level may override it
+without changing that level anywhere else:
+
+- **The status board** has a *Level colours on this board* section, one colour
+  per level. Empty keeps the standard colour.
+- **A shortcode** takes `color="#ffffff"` for that one placement.
+- **A developer** can filter `acps_alerts_level_color`, which receives the
+  colour, the level key and the context (`board`, `shortcode`, `popup`).
+
+### The status page banner
+
+On the card treatment the banner has a **head** carrying the board colour, with
+the badge, the level word and the heading on it in the board's text colour, and
+the message below it on white. Before that head existed a site that had set
+white text for the old solid banner ended up with white text on a white card,
+which reads as an empty box.
+
 **The status level is the severity** — there is no second setting. Pick it on the Current Alert module, Popup tab → *Status level*. It decides four things: the word on the banner, the colour of the banner, the colour of the popup's stripe, and the coloured badge drawn above the heading. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. Its size, shape and colour are written into the markup rather than a stylesheet, because the badge prints on pages that may carry neither the board stylesheet nor a freshly rebuilt module stylesheet — an SVG with no dimensions falls back to 300&times;150. Badge size is a setting on both modules (56px on the popup, 64px on the banner). There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
 
 ### The heading is your title
@@ -123,8 +143,18 @@ the status board reads, so every place showing the status shows the same thing.
 | `align` | `center` | `left`, `center` or `right`. |
 | `size` | `56` | Badge size in pixels. |
 | `link` | `no` | `yes` wraps it in a link to the status page. |
+| `source` | `board` | `alert` reports the Current Alert's own level whether or not it is showing. |
+| `color` | — | Draw it in a colour of your own, for a background the SRP colour does not read on. |
 
 `[school_status]` is an alias, because people type it both ways.
+
+**`source` is two different questions.** `board` — the default — is what the
+status page says: the Current Alert while it is showing, the normal state once
+it is over. `alert` is what the Current Alert itself says, showing or not. Use
+`alert` inside the popup: the popup *is* that alert, so it should keep the
+alert's own badge rather than flipping to Normal the moment the event is filed
+and the board goes back to resting. `when="live"` still asks the board, so an
+alert that is switched off is not "live" whichever source is used.
 
 It styles itself inline, so it looks right on a page that loads none of this
 plugin's stylesheets — which is what lets it work inside the popup, on every

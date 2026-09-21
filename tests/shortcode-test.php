@@ -16,6 +16,7 @@ $GLOBALS['registered_shortcodes'] = array();
 $GLOBALS['entry']      = null;
 $GLOBALS['normal']     = null;
 $GLOBALS['board_page'] = 0;
+$GLOBALS['current']    = null;
 
 function add_shortcode( $tag, $cb ) { $GLOBALS['registered_shortcodes'][ $tag ] = $cb; }
 function __( $s, $d = '' ) { return $s; }
@@ -64,7 +65,18 @@ class StubAlert {
 
 class ACPS_Alerts_Status {
 	public static function board_entry() { return $GLOBALS['entry']; }
+	public static function current_alert() { return $GLOBALS['current']; }
 	public static function normal_alert() { return $GLOBALS['normal']; }
+	public static function colour( $v ) {
+		$v = trim( (string) $v );
+		if ( preg_match( '/^#[0-9a-f]{3,8}$/i', $v ) ) { return $v; }
+		if ( preg_match( '/^[0-9a-f]{3,8}$/i', $v ) ) { return '#' . $v; }
+		return '';
+	}
+	public static function level_color( $key, $context = '', array $over = array() ) {
+		$l = self::level( $key );
+		return $l['color'];
+	}
 	public static function board_page() { return (int) $GLOBALS['board_page']; }
 	public static function level( $key ) {
 		$levels = array(
@@ -73,8 +85,10 @@ class ACPS_Alerts_Status {
 		);
 		return isset( $levels[ $key ] ) ? $levels[ $key ] : $levels['normal'];
 	}
-	public static function level_icon( $key, $size = 64 ) {
-		return '<span class="acps-level-icon" style="width:' . (int) $size . 'px">ICON</span>';
+	public static function level_icon( $key, $size = 64, $color = '' ) {
+		$color = '' !== self::colour( $color ) ? self::colour( $color ) : self::level_color( $key );
+
+		return '<span class="acps-level-icon" style="width:' . (int) $size . 'px;background:' . $color . '">ICON</span>';
 	}
 }
 
@@ -206,6 +220,67 @@ ok( 'and never reaches the markup', false === strpos( $odd, 'evil' ) );
 
 // The badge size is passed through.
 ok( 'the badge size is honoured', false !== strpos( sc( array( 'show' => 'icon', 'size' => 96 ) ), 'width:96px' ) );
+
+/* ---- which status is being asked about ---- */
+
+/*
+ * Two different questions. The board shows the Current Alert while it is
+ * showing and the resting state otherwise. The popup IS the Current Alert, so
+ * inside it the alert's own level is the right answer — otherwise the badge
+ * flips to Normal the moment the event is filed and the board goes back to
+ * resting, while the popup around it still says HOLD.
+ */
+$GLOBALS['entry']   = null;
+$GLOBALS['current'] = new StubAlert( 'West Side Elementary', 'hold', 'Lifted.' );
+$GLOBALS['normal']  = new StubAlert( 'All schools open', 'normal', '' );
+
+$board_says = sc( array( 'show' => 'level' ) );
+$alert_says = sc( array( 'show' => 'level', 'source' => 'alert' ) );
+
+ok( 'with the event over the board says NORMAL', false !== strpos( $board_says, 'NORMAL' ) );
+ok( 'while the alert still says HOLD', false !== strpos( $alert_says, 'HOLD' ) );
+ok( 'and does not say NORMAL', false === strpos( $alert_says, 'NORMAL' ) );
+
+// "Is something happening" is a question about the board however the wording
+// was sourced, so when="live" still hides an alert that is switched off.
+check( 'an alert that is switched off is not "live"', sc( array( 'source' => 'alert', 'when' => 'live' ) ), '' );
+
+// While it IS showing, the two agree — which is the point.
+$GLOBALS['entry'] = $GLOBALS['current'];
+
+ok( 'while it is showing, both say HOLD', false !== strpos( sc( array( 'show' => 'level' ) ), 'HOLD' ) );
+ok( 'and so does the alert source', false !== strpos( sc( array( 'show' => 'level', 'source' => 'alert' ) ), 'HOLD' ) );
+
+// An unrecognised source is the board, not an error.
+ok( 'an unknown source falls back to the board', false !== strpos( sc( array( 'show' => 'level', 'source' => 'nonsense' ) ), 'HOLD' ) );
+
+/* ---- overriding the colour ---- */
+
+/*
+ * An SRP colour is chosen to read on white. On a dark background the same
+ * colour can be nearly invisible, so one placement may say what it should look
+ * like without changing the level anywhere else.
+ */
+$default_colour = sc( array( 'show' => 'level' ) );
+
+ok( 'by default the level is drawn in its own colour', false !== strpos( $default_colour, '#7a1c82' ) );
+
+$recoloured = sc( array( 'show' => 'level', 'color' => '#ffffff' ) );
+
+ok( 'a colour given here is used instead', false !== strpos( $recoloured, '#ffffff' ) );
+ok( 'and the standard one is not', false === strpos( $recoloured, '#7a1c82' ) );
+
+// Beaver Builder's colour fields store a bare hex with no #.
+ok( 'a bare hex is understood', false !== strpos( sc( array( 'show' => 'level', 'color' => 'ff0000' ) ), '#ff0000' ) );
+
+// Anything that is not a colour must not reach a style attribute.
+$bad_colour = sc( array( 'show' => 'level', 'color' => 'red; evil: 1' ) );
+
+ok( 'junk is refused', false === strpos( $bad_colour, 'evil' ) );
+ok( 'and the standard colour is kept', false !== strpos( $bad_colour, '#7a1c82' ) );
+
+// The badge takes the override too, or the word and the disc disagree.
+ok( 'the badge is recoloured with it', false !== strpos( sc( array( 'show' => 'icon', 'color' => '#ffffff' ) ), '#ffffff' ) );
 
 /* ---- linking to the status page ---- */
 

@@ -35,7 +35,7 @@ $acps_date_format  = get_option( 'date_format' );
 		// banner the whole background is already that colour, so it inherits.
 		$acps_accent = ACPS_Status_Board_Module::is_solid( $settings )
 			? ''
-			: ACPS_Status_Board_Module::level_color( $acps_live );
+			: ACPS_Status_Board_Module::level_color( $acps_live, $settings );
 		$acps_msg    = (string) $acps_live->get( 'status_message' );
 		$acps_staged = 'admins' === $acps_live->get( 'visibility' );
 		?>
@@ -47,23 +47,33 @@ $acps_date_format  = get_option( 'date_format' );
 		<?php endif; ?>
 
 		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( $acps_live, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( $acps_live, $settings ) ); ?>" role="status">
-			<?php if ( $acps_show_icon ) : ?>
-				<?php echo ACPS_Alerts_Status::level_icon( $acps_live->get( 'status_level' ), $acps_icon_size ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
-			<?php endif; ?>
-
 			<?php
-			// The level word sits above the heading as a small label. The
-			// heading itself is whatever was typed, because that is the thing
-			// a visitor came to read — not the word "School Status".
+			/*
+			 * The head of the card carries its own background, so the heading
+			 * reads as a heading rather than as the first line of the message.
+			 * The body below it is left on the card, which is what keeps a long
+			 * update readable.
+			 */
 			?>
-			<p class="acps-board__level"<?php echo $acps_accent ? ' style="color:' . esc_attr( $acps_accent ) . '"' : ''; ?>>
-				<?php echo esc_html( $acps_level['banner'] ); ?>
-				<?php if ( '' !== $acps_level['directive'] ) : ?>
-					<span class="acps-board__directive"><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></span>
+			<div class="acps-board__head">
+				<?php if ( $acps_show_icon ) : ?>
+					<?php echo ACPS_Alerts_Status::level_icon( $acps_live->get( 'status_level' ), $acps_icon_size, $acps_accent ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
 				<?php endif; ?>
-			</p>
 
-			<h2 class="acps-board__title"><?php echo esc_html( $acps_live->get_title() ); ?></h2>
+				<?php
+				// The level word sits above the heading as a small label. The
+				// heading itself is whatever was typed, because that is the
+				// thing a visitor came to read — not the words "School Status".
+				?>
+				<p class="acps-board__level">
+					<?php echo esc_html( $acps_level['banner'] ); ?>
+					<?php if ( '' !== $acps_level['directive'] ) : ?>
+						<span class="acps-board__directive"><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></span>
+					<?php endif; ?>
+				</p>
+
+				<h2 class="acps-board__title"><?php echo esc_html( $acps_live->get_title() ); ?></h2>
+			</div>
 
 			<?php if ( '' !== trim( $acps_msg ) ) : ?>
 				<div class="acps-board__message"><?php echo wp_kses_post( wpautop( $acps_msg ) ); ?></div>
@@ -87,7 +97,14 @@ $acps_date_format  = get_option( 'date_format' );
 		}
 		?>
 		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( null, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( null, $settings ) ); ?>" role="status">
-			<h2 class="acps-board__title"><?php echo esc_html( $acps_normal_title ); ?></h2>
+			<div class="acps-board__head">
+				<?php if ( $acps_show_icon ) : ?>
+					<?php echo ACPS_Alerts_Status::level_icon( 'normal', $acps_icon_size, ACPS_Alerts_Status::level_color( 'normal', 'board', ACPS_Status_Board_Module::level_overrides( $settings ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
+				<?php endif; ?>
+
+				<h2 class="acps-board__title"><?php echo esc_html( $acps_normal_title ); ?></h2>
+			</div>
+
 			<?php if ( '' !== trim( (string) $acps_normal_msg ) ) : ?>
 				<div class="acps-board__message"><?php echo wp_kses_post( wpautop( $acps_normal_msg ) ); ?></div>
 			<?php endif; ?>

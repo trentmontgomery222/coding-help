@@ -95,15 +95,53 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	 * @param ACPS_Alerts_Alert|null $alert Entry, or null for the normal state.
 	 * @return string Hex colour, or an empty string.
 	 */
-	public static function level_color( $alert ) {
+	public static function level_color( $alert, $settings = null ) {
 		if ( ! $alert ) {
 			return '';
 		}
 
-		$level = ACPS_Alerts_Status::level( $alert->get( 'status_level' ) );
-		$color = isset( $level['color'] ) ? (string) $level['color'] : '';
+		return ACPS_Alerts_Status::level_color(
+			$alert->get( 'status_level' ),
+			'board',
+			self::level_overrides( $settings )
+		);
+	}
 
-		return preg_match( '/^#[0-9a-f]{3,8}$/i', $color ) ? $color : '';
+	/**
+	 * The board's own colour for each level, where one has been picked.
+	 *
+	 * An SRP colour is chosen to read on white. On a dark banner the same
+	 * colour can be nearly invisible, so the board may say what each level
+	 * should look like on it without changing the level anywhere else.
+	 *
+	 * @param object|null $settings Module settings.
+	 * @return array Level key => colour.
+	 */
+	public static function level_overrides( $settings ) {
+		if ( ! is_object( $settings ) ) {
+			return array();
+		}
+
+		$out = array();
+
+		foreach ( self::colourable_levels() as $key => $label ) {
+			$field = 'level_color_' . $key;
+
+			if ( isset( $settings->{$field} ) && '' !== trim( (string) $settings->{$field} ) ) {
+				$out[ $key ] = $settings->{$field};
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The levels worth offering a colour for: the ones still in the picker.
+	 *
+	 * @return array Level key => label.
+	 */
+	public static function colourable_levels() {
+		return ACPS_Alerts_Status::level_choices();
 	}
 
 	/**
@@ -121,7 +159,7 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	public static function banner_style( $alert, $settings ) {
 		$align = isset( $settings->banner_align ) ? $settings->banner_align : 'center';
 		$style = 'text-align:' . preg_replace( '/[^a-z]/', '', (string) $align ) . ';';
-		$color = self::level_color( $alert );
+		$color = self::level_color( $alert, $settings );
 
 		// The card treatment matches the popup: a white card with the level
 		// colour as a stripe along the top, rather than flooding the whole
@@ -201,6 +239,22 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 		$settings->archive_date    = '';
 	}
 
+}
+
+/*
+ * One colour field per status level, built from the levels themselves so a site
+ * that filters in a new one gets a field for it without touching this file.
+ */
+$acps_board_level_fields = array();
+
+foreach ( ACPS_Status_Board_Module::colourable_levels() as $acps_level_key => $acps_level_label ) {
+	$acps_board_level_fields[ 'level_color_' . $acps_level_key ] = array(
+		'type'        => 'color',
+		'label'       => $acps_level_label,
+		'default'     => '',
+		'show_reset'  => true,
+		'show_alpha'  => false,
+	);
 }
 
 FLBuilder::register_module(
@@ -330,6 +384,11 @@ FLBuilder::register_module(
 							),
 						),
 					),
+				),
+				'levels'  => array(
+					'title'       => __( 'Level colours on this board', 'acps-alert-popups' ),
+					'description' => __( 'Each status level has a colour staff are trained on, and that is what the board uses. Set one here only when a level needs to look different on this board — an SRP colour is chosen to read on white, and the same colour on a dark banner can be nearly invisible. Leave one empty to keep the standard colour.', 'acps-alert-popups' ),
+					'fields'      => $acps_board_level_fields,
 				),
 				'style'   => array(
 					'title'  => __( 'Style', 'acps-alert-popups' ),

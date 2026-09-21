@@ -43,12 +43,27 @@ class ACPS_Alerts_Shortcodes {
 	 *
 	 * @return array { level, banner, directive, color, headline, message, live }
 	 */
-	public static function current() {
+	public static function current( $source = 'board' ) {
 		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
 			return array();
 		}
 
-		$alert = ACPS_Alerts_Status::board_entry();
+		/*
+		 * Two different questions, and the popup needs the second one.
+		 *
+		 * "board" is what the status page says: the Current Alert while it is
+		 * showing, the resting state otherwise.
+		 *
+		 * "alert" is what the Current Alert itself says, whether or not it is
+		 * showing. Inside the popup that is the right answer — the popup IS
+		 * that alert, so it should keep the alert's own SRP badge rather than
+		 * flipping to Normal the moment the event is filed and the board goes
+		 * back to resting.
+		 */
+		$alert = 'alert' === $source
+			? ACPS_Alerts_Status::current_alert()
+			: ACPS_Alerts_Status::board_entry();
+
 		$key   = $alert ? (string) $alert->get( 'status_level' ) : 'normal';
 		$level = ACPS_Alerts_Status::level( $key );
 
@@ -73,10 +88,14 @@ class ACPS_Alerts_Shortcodes {
 			'level'     => $key,
 			'banner'    => (string) $level['banner'],
 			'directive' => wp_strip_all_tags( (string) $level['directive'] ),
-			'color'     => (string) $level['color'],
+			'color'     => ACPS_Alerts_Status::level_color( $key, 'shortcode' ),
 			'headline'  => $headline,
 			'message'   => $message,
-			'live'      => (bool) $alert,
+
+			// "Is something happening", which is what when="live" asks. Read
+			// from the board however the wording was sourced, because an alert
+			// that exists but is switched off is not something happening.
+			'live'      => (bool) ACPS_Alerts_Status::board_entry(),
 		);
 	}
 
@@ -110,15 +129,31 @@ class ACPS_Alerts_Shortcodes {
 
 				// Wrap the whole thing in a link to the status page.
 				'link'    => 'no',
+
+				// "board" is what the status page says; "alert" is what the
+				// Current Alert says whether or not it is showing.
+				'source'  => 'board',
+
+				// Override the level's colour for this one placement. Useful
+				// on a dark background, where an SRP colour chosen to read on
+				// white can be nearly invisible.
+				'color'   => '',
 			),
 			(array) $atts,
 			'schoolstatus'
 		);
 
-		$status = self::current();
+		$source = 'alert' === strtolower( trim( (string) $atts['source'] ) ) ? 'alert' : 'board';
+		$status = self::current( $source );
 
 		if ( empty( $status ) ) {
 			return '';
+		}
+
+		$chosen = ACPS_Alerts_Status::colour( $atts['color'] );
+
+		if ( '' !== $chosen ) {
+			$status['color'] = $chosen;
 		}
 
 		if ( 'live' === $atts['when'] && ! $status['live'] ) {
@@ -205,12 +240,13 @@ class ACPS_Alerts_Shortcodes {
 	 * @return string
 	 */
 	protected static function piece( $part, array $status, array $atts ) {
-		$color = preg_match( '/^#[0-9a-f]{3,8}$/i', $status['color'] ) ? $status['color'] : '#1b2f5e';
+		$color = ACPS_Alerts_Status::colour( $status['color'] );
+		$color = '' !== $color ? $color : '#1b2f5e';
 
 		switch ( $part ) {
 			case 'icon':
 				return class_exists( 'ACPS_Alerts_Status' )
-					? ACPS_Alerts_Status::level_icon( $status['level'], absint( $atts['size'] ) )
+					? ACPS_Alerts_Status::level_icon( $status['level'], absint( $atts['size'] ), $color )
 					: '';
 
 			case 'level':

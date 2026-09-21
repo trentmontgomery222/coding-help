@@ -443,5 +443,58 @@ foreach ( ACPS_Alerts_Status::level_keys() as $acps_key ) {
 	);
 }
 
+/* ---- level colours, and overriding them ---- */
+
+check( 'a level is drawn in its own colour', ACPS_Alerts_Status::level_color( 'lockdown' ), '#d81440' );
+
+// An SRP colour is chosen to read on white; on a dark banner the same colour
+// can be nearly invisible, so whatever is drawing it may say otherwise.
+check(
+	'an override wins',
+	ACPS_Alerts_Status::level_color( 'lockdown', 'board', array( 'lockdown' => '#ffffff' ) ),
+	'#ffffff'
+);
+
+check(
+	'an override for a different level is ignored',
+	ACPS_Alerts_Status::level_color( 'lockdown', 'board', array( 'hold' => '#ffffff' ) ),
+	'#d81440'
+);
+
+check(
+	'an empty override is not an override',
+	ACPS_Alerts_Status::level_color( 'lockdown', 'board', array( 'lockdown' => '  ' ) ),
+	'#d81440'
+);
+
+check(
+	'and neither is junk',
+	ACPS_Alerts_Status::level_color( 'lockdown', 'board', array( 'lockdown' => 'red; evil:1' ) ),
+	'#d81440'
+);
+
+// Beaver Builder's colour fields store a bare hex with no #.
+check( 'a bare hex is understood', ACPS_Alerts_Status::colour( 'ff0000' ), '#ff0000' );
+check( 'one with a hash is kept', ACPS_Alerts_Status::colour( '#ff0000' ), '#ff0000' );
+check( 'rgba is a colour too', ACPS_Alerts_Status::colour( 'rgba(1,2,3,0.5)' ), 'rgba(1,2,3,0.5)' );
+check( 'nothing is not a colour', ACPS_Alerts_Status::colour( '' ), '' );
+check( 'and neither is a style injection', ACPS_Alerts_Status::colour( '#fff; background:url(x)' ), '' );
+
+// The badge takes an override too, or the disc and the word disagree.
+ok(
+	'the badge can be recoloured',
+	false !== strpos( ACPS_Alerts_Status::level_icon( 'lockdown', 56, '#ffffff' ), '#ffffff' )
+);
+
+ok(
+	'and falls back to the level colour when not',
+	false !== strpos( ACPS_Alerts_Status::level_icon( 'lockdown', 56 ), '#d81440' )
+);
+
+ok(
+	'a junk colour never reaches the badge',
+	false === strpos( ACPS_Alerts_Status::level_icon( 'lockdown', 56, 'red; evil:1' ), 'evil' )
+);
+
 echo $fails ? "\n$fails failing case(s)\n" : "All status cases passed\n";
 exit( $fails ? 1 : 0 );

@@ -64,7 +64,19 @@ class ACPS_Alerts_Status {
 	public static function level_choices() { return array( 'info' => 'Information', 'lockdown' => 'Lockdown' ); }
 	public static function cutoff_time() { return '17:50'; }
 	public static function level( $k ) { return array( 'banner' => strtoupper( $k ), 'directive' => '', 'color' => '#d81440', 'severity' => 'critical' ); }
-	public static function level_icon( $k, $size = 64 ) { return '<span class="acps-level-icon"></span>'; }
+	public static function level_icon( $k, $size = 64, $color = '' ) { return '<span class="acps-level-icon"></span>'; }
+	public static function colour( $v ) {
+		$v = trim( (string) $v );
+		if ( preg_match( '/^#[0-9a-f]{3,8}$/i', $v ) ) { return $v; }
+		if ( preg_match( '/^[0-9a-f]{3,8}$/i', $v ) ) { return '#' . $v; }
+		return '';
+	}
+	public static function level_color( $key, $context = '', array $over = array() ) {
+		if ( isset( $over[ $key ] ) && '' !== self::colour( $over[ $key ] ) ) {
+			return self::colour( $over[ $key ] );
+		}
+		return self::level( $key )['color'];
+	}
 	public static function archive( $n = 10 ) { return array(); }
 	public static function add_archive_record( array $d ) {}
 	public static function current_alert() { return $GLOBALS['alert']; }
@@ -352,6 +364,58 @@ ok( 'and has no stripe', false === strpos( $solid_style, 'border-top-color' ) );
 // The resting state has no level, so neither treatment may invent a colour.
 ok( 'the resting card gets no level stripe', false === strpos( ACPS_Status_Board_Module::banner_style( null, $board ), 'border-top-color' ) );
 check( 'and level_color() has nothing to give', ACPS_Status_Board_Module::level_color( null ), '' );
+
+/* ---- the board's own colour for a level ---- */
+
+/*
+ * An SRP colour is chosen to read on white. The same colour on a dark banner
+ * can be nearly invisible, so the board may say what a level should look like
+ * on it — without changing that level anywhere else on the site.
+ */
+$live = new ACPS_Alerts_Alert( 50 );
+$live->saved['status_level'] = 'lockdown';
+
+check(
+    'with nothing picked the level keeps its own colour',
+    ACPS_Status_Board_Module::level_color( $live, (object) array() ),
+    '#d81440'
+);
+
+check(
+    'a colour picked for that level on this board wins',
+    ACPS_Status_Board_Module::level_color( $live, (object) array( 'level_color_lockdown' => 'ffffff' ) ),
+    '#ffffff'
+);
+
+check(
+    'one picked for a different level is ignored',
+    ACPS_Status_Board_Module::level_color( $live, (object) array( 'level_color_hold' => 'ffffff' ) ),
+    '#d81440'
+);
+
+check(
+    'an empty picker is not a choice',
+    ACPS_Status_Board_Module::level_color( $live, (object) array( 'level_color_lockdown' => '' ) ),
+    '#d81440'
+);
+
+// The resting state has no level of its own to colour.
+check( 'the resting state has no level colour', ACPS_Status_Board_Module::level_color( null, (object) array() ), '' );
+
+// Every level in the picker gets a field, or one of them cannot be recoloured.
+$board_fields = array();
+
+foreach ( $GLOBALS['registered']['ACPS_Status_Board_Module'] as $tab ) {
+    foreach ( $tab['sections'] as $section ) {
+        foreach ( $section['fields'] as $key => $field ) {
+            $board_fields[ $key ] = $field;
+        }
+    }
+}
+
+foreach ( array_keys( ACPS_Alerts_Status::level_choices() ) as $level_key ) {
+    ok( "the board offers a colour for '$level_key'", isset( $board_fields[ 'level_color_' . $level_key ] ) );
+}
 
 echo $fails ? "\n$fails failing case(s)\n" : "All popup module cases passed\n";
 exit( $fails ? 1 : 0 );

@@ -113,6 +113,10 @@ pinning:
   a staff-only entry, staff see it, and nobody sees a preview-only entry on the
   board
 - every level maps to a real severity and the ranks order correctly
+- level colours: a level is drawn in its own colour, an override for that level
+  wins, one for a different level is ignored, and an empty or junk override is
+  not an override. Bare hex, hashed hex and rgba are all colours; a style
+  injection is not, and never reaches the badge.
 - every level offered in the picker ships a glyph, the badge comes out in that
   level's colour and carries its class, an unknown level falls back to
   Information rather than drawing nothing, and the size is clamped because it
@@ -229,6 +233,14 @@ whole set at once, so the risks are the ones a complete save creates:
 - start and end dates apply on the custom schedule and are ignored on the others
 - the link text, the link itself, the badge toggle and the level-word toggle all
   reach the alert, and switching a toggle off really clears it
+- the board's own colour for a level: with nothing picked the level keeps its
+  own, a colour picked for that level on this board wins, one picked for a
+  different level is ignored, an empty picker is not a choice, and the resting
+  state has no level colour. Every level in the picker gets a field, or one of
+  them could not be recoloured.
+
+  Verified non-vacuous: ignore the overrides and it fails with "a colour picked
+  for that level on this board wins".
 - the status board's two banner treatments: card is the default and an
   unrecognised value falls back to it, the card takes the level colour as a top
   stripe while the solid one floods its background, and the resting state
@@ -404,3 +416,20 @@ rendered onto pages that are not the one it was built on.
 Verified non-vacuous twice: trusting the alignment attribute fails with "a junk
 alignment falls back to centre", and ignoring the live alert's wording fails
 five cases.
+
+The shortcode suite also covers the two questions it can be asked and the colour
+override:
+
+- `source="board"` says NORMAL once an event is over while `source="alert"` still
+  says HOLD — the popup is that alert, so its badge must not flip to Normal the
+  moment the board goes back to resting. While the alert is showing the two
+  agree, and an unrecognised source is the board rather than an error.
+- `when="live"` asks the board whichever source supplied the wording, so an
+  alert that is switched off is not "live".
+- `color` overrides the level's colour, understands a bare hex, refuses a style
+  injection, and recolours the badge as well as the word so the two cannot
+  disagree.
+
+Verified non-vacuous: ignoring `source` fails with "while the alert still says
+HOLD", and skipping the colour check fails with "and the standard colour is
+kept".

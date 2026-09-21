@@ -38,9 +38,16 @@ $acps_text = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_text ) ) ? '#' . $acps_te
 	color: inherit;
 }
 
-/* On the card, the banner colour becomes the stripe along the top — which is
-   what it is for when the board is resting and there is no level to take it
-   from. A live alert overrides this inline with its own level colour. */
+/* On the card the banner colour does two jobs: the stripe along the top, and
+   the background of the head — which is what makes the heading read as a
+   heading. The text colour goes with it, since that head is the one part of
+   the card that is not on white. A live alert overrides the stripe inline with
+   its own level colour. */
 .fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card {
 	border-top-color: <?php echo esc_html( $acps_bg ); ?>;
+}
+
+.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card .acps-board__head {
+	background: <?php echo esc_html( $acps_bg ); ?>;
+	color: <?php echo esc_html( $acps_text ); ?>;
 }

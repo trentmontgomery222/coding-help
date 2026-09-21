@@ -261,12 +261,28 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 				<tr><td><code>[schoolstatus when="live"]</code></td><td><?php esc_html_e( 'Nothing at all on a normal day. Use this in a header that should stay empty until something happens.', 'acps-alert-popups' ); ?></td></tr>
 				<tr><td><code>[schoolstatus link="yes"]</code></td><td><?php esc_html_e( 'The whole thing becomes a link to the status page.', 'acps-alert-popups' ); ?></td></tr>
 				<tr><td><code>[schoolstatus layout="row" size="40"]</code></td><td><?php esc_html_e( 'Side by side instead of stacked, with a smaller badge. Also takes align="left|center|right".', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus source="alert"]</code></td><td><?php esc_html_e( 'The Current Alert\'s own level, whether or not it is showing. This is the one to use inside the popup.', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus color="#ffffff"]</code></td><td><?php esc_html_e( 'Draw it in a colour of your choosing, for a dark background the SRP colour does not read on.', 'acps-alert-popups' ); ?></td></tr>
 			</tbody>
 		</table>
 
 		<p class="acps-callout">
 			<?php esc_html_e( 'The shortcode styles itself, so it looks right on a page that loads none of this plugin\'s stylesheets — which is what lets it work inside the popup on every other page of the site.', 'acps-alert-popups' ); ?>
 		</p>
+
+		<h3><?php esc_html_e( 'Which status it reports', 'acps-alert-popups' ); ?></h3>
+		<p><?php esc_html_e( 'These are two different questions, and inside the popup the second one is the right one to ask.', 'acps-alert-popups' ); ?></p>
+		<ul class="acps-help-list">
+			<li><strong><?php esc_html_e( 'source="board"', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the default: what the status page says. The Current Alert while it is showing, the normal state once it is over.', 'acps-alert-popups' ); ?></li>
+			<li><strong><?php esc_html_e( 'source="alert"', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'what the Current Alert itself says, showing or not. Use this in the popup: the popup IS that alert, so it should keep the alert\'s own badge instead of flipping to Normal the moment the event is filed.', 'acps-alert-popups' ); ?></li>
+		</ul>
+
+		<h3><?php esc_html_e( 'When a level colour does not read', 'acps-alert-popups' ); ?></h3>
+		<p><?php esc_html_e( 'The SRP colours are chosen to read on white. On a dark background the same colour can be nearly invisible, so you can say what a level should look like in one place without changing it anywhere else.', 'acps-alert-popups' ); ?></p>
+		<ul class="acps-help-list">
+			<li><?php esc_html_e( 'For the status page: the Status Board module has a "Level colours on this board" section, with one colour per level. Leave one empty to keep the standard colour.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'For a shortcode: add color="#ffffff" to that one placement.', 'acps-alert-popups' ); ?></li>
+		</ul>
 	</div>
 
 	<?php // ---------- Anatomy ---------- ?>
