@@ -341,15 +341,55 @@ class ACPS_Alerts_Popup_Source {
 
 		$html = (string) $html;
 
-		if ( '' !== trim( $html ) ) {
-			return $html;
+		if ( '' === trim( $html ) ) {
+			// Nothing came back from the direct render, so fall back to
+			// rendering the whole layout and keeping only this node. Slower,
+			// but it goes through the same path Beaver Builder uses for its own
+			// embeds, so it works where the node-level API has moved or gone.
+			$html = self::render_by_extraction( $page_id, $node_id );
 		}
 
-		// Nothing came back from the direct render, so fall back to rendering
-		// the whole layout and keeping only this node. Slower, but it goes
-		// through the same path Beaver Builder uses for its own embeds, so it
-		// works where the node-level API has moved or gone.
-		return self::render_by_extraction( $page_id, $node_id );
+		return self::inline_popup( $html );
+	}
+
+	/**
+	 * Turns a popover back into ordinary markup.
+	 *
+	 * Beaver Builder's popup is a real HTML popover: the element carries
+	 * `popover="manual"`, and the browser keeps any such element display:none
+	 * until showPopover() is called, then promotes it to the top layer.
+	 *
+	 * Both of those are wrong here. The popup is not opening itself on this
+	 * page — it has been lifted into the alert dialog and IS that dialog's
+	 * body — so while the attribute is still on it the element sits in the DOM
+	 * greyed out and nothing appears. Even if it were opened, the top layer
+	 * would take it straight back out of the dialog it is supposed to be
+	 * inside.
+	 *
+	 * Removing the attribute is what makes it render inline. The stylesheet
+	 * undoes the rest of the closed-popup styling.
+	 *
+	 * @param string $html Rendered popup markup.
+	 * @return string
+	 */
+	public static function inline_popup( $html ) {
+		$html = (string) $html;
+
+		if ( '' === trim( $html ) ) {
+			return '';
+		}
+
+		// Only ever matches inside a tag: [^>]*? cannot cross a closing angle
+		// bracket, so the word "popover" in someone's alert text is left alone.
+		$stripped = preg_replace(
+			'/(<[a-zA-Z][^>]*?)\s+popover(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+))?/i',
+			'$1',
+			$html
+		);
+
+		// preg_replace returns null if it ever fails; the original markup is
+		// better than nothing at all.
+		return null === $stripped ? $html : $stripped;
 	}
 
 	/**

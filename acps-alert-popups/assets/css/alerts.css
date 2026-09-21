@@ -219,3 +219,49 @@ body.acps-alert-is-open {
 	font-size: 0.9em;
 	line-height: 1;
 }
+
+/* ---------------------------------------------------------------------------
+ * A Beaver Builder popup lifted onto another page.
+ *
+ * On the status page it is a real HTML popover that opens itself. Here it has
+ * been taken out of that page and put inside this dialog, so it is not a
+ * popover any more and must not behave like one: the attribute is stripped
+ * server-side, and these undo the rest of the styling that keeps a closed
+ * popup out of sight.
+ *
+ * Only the hiding and the positioning are overridden. The popup's own
+ * background, borders, spacing and typography are left exactly as they were
+ * built, because that is the design.
+ * ------------------------------------------------------------------------ */
+
+.acps-alert__content .fl-popup {
+	display: block !important;
+	position: static !important;
+	inset: auto !important;
+	width: auto !important;
+	max-width: none !important;
+	height: auto !important;
+	max-height: none !important;
+	margin: 0 !important;
+	opacity: 1 !important;
+	visibility: visible !important;
+	transform: none !important;
+	animation: none !important;
+	overflow: visible !important;
+	pointer-events: auto !important;
+}
+
+/* Its own backdrop belongs to the popover it is no longer being. The alert
+   already has an overlay of its own behind it. */
+.acps-alert__content .fl-popup::backdrop,
+.acps-alert__content .fl-popup-overlay,
+.acps-alert__content .fl-popup-backdrop {
+	display: none !important;
+}
+
+/* The close button inside a built popup would call hidePopover() on something
+   that is no longer a popover. The alert's own close button is the one that
+   works, so the popup's is left out of the way. */
+.acps-alert__content .fl-popup-close {
+	display: none !important;
+}

@@ -295,6 +295,17 @@ so they are not exercised; everything around them is ours and is:
   elsewhere on the status page, and a layout whose parents form a loop returns
   rather than hanging the request
 - the popup is hidden on the status page itself and left alone everywhere else
+- a lifted popup stops being a popover. Beaver Builder's popup carries
+  `popover="manual"`, and a browser keeps any such element at `display:none`
+  until `showPopover()` is called — so inside the alert dialog, where nothing
+  calls it, the element sits in the DOM greyed out and the alert appears empty.
+  Checked against the markup off the real site, plus every spelling the
+  attribute has (quoted, single-quoted, bare and unquoted), every element in a
+  fragment rather than just the first, `data-popover` not being mistaken for it,
+  and the word "popover" in someone's alert text left alone
+
+  Verified non-vacuous: leave the attribute on and it fails with seven cases,
+  including "every popover in the fragment is stripped: expected 0, got 2".
 
 Verified non-vacuous twice: a naive class match fails with "a longer node id is
 not matched by a shorter one", and a cache that is never revalidated fails with

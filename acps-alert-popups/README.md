@@ -165,6 +165,17 @@ back — in a `finally`, so a throw mid-render cannot leave every later builder
 call on the request reading the wrong layout. It also enqueues the status page's
 generated CSS and JS, or the popup arrives unstyled.
 
+Beaver Builder's popup is a real HTML popover — the element carries
+`popover="manual"` — and a browser keeps any such element at `display:none`
+until `showPopover()` is called, then promotes it to the top layer. Neither is
+right once the popup has been lifted into the alert dialog and *is* that
+dialog's body: while the attribute is on it the element sits in the DOM greyed
+out and nothing shows, and opening it would take it straight back out of the
+dialog. So the attribute is stripped server-side, and `alerts.css` undoes the
+rest of the closed-popup styling. Only the hiding and the positioning are
+overridden — the popup's own background, borders, spacing and typography are
+left exactly as they were built.
+
 If the node-level API is not there, it falls back to rendering the whole layout
 through `[fl_builder_insert_layout]` and lifting the `fl-node-<id>` subtree back
 out with DOMDocument. If that fails too, the Current Alert module's own heading

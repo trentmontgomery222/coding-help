@@ -234,6 +234,54 @@ $looped = ACPS_Alerts_Popup_Source::wording();
 
 ok( 'a layout with a parent loop returns rather than hanging', is_array( $looped ) );
 
+/* ---- a lifted popup is no longer a popover ---- */
+
+/*
+ * Beaver Builder's popup is a real HTML popover. The browser keeps any element
+ * carrying `popover` at display:none until showPopover() is called — so once it
+ * has been lifted into the alert dialog, where nothing is going to call that, it
+ * sits in the DOM greyed out and the alert appears empty. This is the markup
+ * that came off the real site.
+ */
+$real = '<div id="testpop" class="fl-popup fl-animation fl-fade-in" popover="manual" data-animation-delay="0" data-animation-duration="0.5"><p>Body</p></div>';
+
+$inlined = ACPS_Alerts_Popup_Source::inline_popup( $real );
+
+ok( 'the popover attribute is gone', false === stripos( $inlined, 'popover=' ) );
+ok( 'and so is any bare one', ! preg_match( '/<[^>]*\spopover[\s>]/i', $inlined ) );
+ok( 'the popup itself is untouched', false !== strpos( $inlined, 'class="fl-popup fl-animation fl-fade-in"' ) );
+ok( 'its id survives', false !== strpos( $inlined, 'id="testpop"' ) );
+ok( 'its data attributes survive', false !== strpos( $inlined, 'data-animation-duration="0.5"' ) );
+ok( 'and its body survives', false !== strpos( $inlined, '<p>Body</p>' ) );
+
+// Every spelling of the attribute, since it is valid bare and unquoted too.
+foreach ( array( '<div popover="auto">x</div>', "<div popover='manual'>x</div>", '<div popover>x</div>', '<div popover=manual>x</div>' ) as $variant ) {
+	$out = ACPS_Alerts_Popup_Source::inline_popup( $variant );
+
+	ok( 'popover is stripped from: ' . $variant, ! preg_match( '/<[^>]*\spopover/i', $out ) );
+	ok( 'and the element survives it: ' . $variant, false !== strpos( $out, '>x</div>' ) );
+}
+
+// Several elements in one fragment, not just the first.
+$many = '<div popover="manual"><span popover="auto">a</span></div>';
+
+check( 'every popover in the fragment is stripped', preg_match_all( '/<[^>]*\spopover/i', ACPS_Alerts_Popup_Source::inline_popup( $many ) ), 0 );
+
+// The word in someone's alert text is not an attribute and must be left alone.
+$prose = '<div class="fl-popup" popover="manual"><p>This popover explains the closure.</p></div>';
+$kept  = ACPS_Alerts_Popup_Source::inline_popup( $prose );
+
+ok( 'the word "popover" in the text is left alone', false !== strpos( $kept, 'This popover explains the closure.' ) );
+ok( 'while the attribute on the tag is still removed', ! preg_match( '/<[^>]*\spopover\s*=/i', $kept ) );
+
+// Things that look close but are not the attribute.
+$near = '<div popovertarget="x" data-popover="y">z</div>';
+$out  = ACPS_Alerts_Popup_Source::inline_popup( $near );
+
+ok( 'data-popover is not mistaken for popover', false !== strpos( $out, 'data-popover="y"' ) );
+
+check( 'empty markup stays empty', ACPS_Alerts_Popup_Source::inline_popup( '' ), '' );
+
 /* ---- the popup never opens on the page it is built on ---- */
 
 $GLOBALS['meta'][42]['_fl_builder_data'] = layout();
