@@ -243,6 +243,19 @@ body.acps-alert-is-open {
 	 * the popup's own width from the status page's stylesheet and throws it
 	 * across the whole screen. Its width, height, padding and margins are part
 	 * of the design and are left alone. */
+	/* The browser's own `[popover]` rules go with the attribute, and one of the
+	   things they supply is the popup's BACKGROUND — `background-color: Canvas`
+	   and `color: CanvasText`. Beaver Builder's popup settings do not write a
+	   background of their own unless one is picked, so a popup that looked
+	   white on its own page arrives here see-through. (Firefox showed this
+	   plainly; a browser that happened to have an older stylesheet cached
+	   covered it up with our panel behind, which is a worse kind of wrong.)
+	   Declared without !important so a popup that DOES set its own background
+	   still wins. */
+	background-color: #fff;
+	background-color: Canvas;
+	color: CanvasText;
+
 	/* Beaver Builder lays the popup out in `.fl-popup:popover-open`, which can
 	   never match once the attribute is gone, so the same layout is restated
 	   here. Without it the popup loses its column flow and its centring. */
@@ -266,11 +279,14 @@ body.acps-alert-is-open {
 	display: none !important;
 }
 
-/* The close button inside a built popup would call hidePopover() on something
-   that is no longer a popover. The alert's own close button is the one that
-   works, so the popup's is left out of the way. */
+/* The popup's own close button stays, and is wired to close the alert instead
+   of calling hidePopover() on something that is no longer a popover. It sits at
+   the popup's corner, which is where it was designed to sit; ours would land at
+   the corner of the window, because the dialog spans the page so the popup's
+   percentage width has something to be a percentage of. The alert only draws a
+   close button of its own when the popup did not bring one. */
 .acps-alert__content .fl-popup-close {
-	display: none !important;
+	cursor: pointer;
 }
 
 /* ---------------------------------------------------------------------------

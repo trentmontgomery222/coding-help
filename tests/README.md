@@ -303,6 +303,16 @@ so they are not exercised; everything around them is ours and is:
   elsewhere on the status page, and a layout whose parents form a loop returns
   rather than hanging the request
 - the popup is hidden on the status page itself and left alone everywhere else
+- the popup's own close button is wired to the alert and keeps its class, so it
+  keeps its styling and its place at the popup's corner; wiring it twice adds
+  the attribute once, a self-closing tag stays self-closing, a single-quoted
+  class is matched, and the class name written in prose is not. A popup that
+  brought no close button reports so, and `render-test.php` checks the alert
+  then supplies one — and only then, so there is never a second thing to click.
+
+  Verified non-vacuous twice: always drawing ours fails with "the alert does not
+  add a second one", and dropping the already-wired guard fails with "wiring it
+  twice adds the attribute once".
 - the lifted node is wrapped back in `fl-builder-content` and
   `fl-builder-content-<page id>`, with the post id as a data attribute; markup
   that already carries this page's wrapper is left alone, and one carrying

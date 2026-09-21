@@ -107,18 +107,18 @@ class ACPS_Alerts_Help {
 
 		// Assets are optional files; a missing one costs the tour, not the page.
 		if ( ACPS_Alerts_Failsafe::has_file( 'assets/css/tour.css' ) ) {
-			wp_enqueue_style( 'acps-alerts-tour', ACPS_ALERTS_URL . 'assets/css/tour.css', array(), ACPS_ALERTS_VERSION );
+			wp_enqueue_style( 'acps-alerts-tour', ACPS_ALERTS_URL . 'assets/css/tour.css', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/css/tour.css' ) );
 		}
 
 		if ( 'help' === $key && ACPS_Alerts_Failsafe::has_file( 'assets/css/help.css' ) ) {
-			wp_enqueue_style( 'acps-alerts-help', ACPS_ALERTS_URL . 'assets/css/help.css', array( 'acps-alerts-tour' ), ACPS_ALERTS_VERSION );
+			wp_enqueue_style( 'acps-alerts-help', ACPS_ALERTS_URL . 'assets/css/help.css', array( 'acps-alerts-tour' ), ACPS_Alerts_Failsafe::asset_version( 'assets/css/help.css' ) );
 		}
 
 		if ( ! ACPS_Alerts_Failsafe::has_file( 'assets/js/tour.js' ) ) {
 			return;
 		}
 
-		wp_enqueue_script( 'acps-alerts-tour', ACPS_ALERTS_URL . 'assets/js/tour.js', array(), ACPS_ALERTS_VERSION, true );
+		wp_enqueue_script( 'acps-alerts-tour', ACPS_ALERTS_URL . 'assets/js/tour.js', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/js/tour.js' ), true );
 
 		$resume = array();
 
@@ -152,7 +152,7 @@ class ACPS_Alerts_Help {
 		);
 
 		if ( 'help' === $key && ACPS_Alerts_Failsafe::has_file( 'assets/js/help.js' ) ) {
-			wp_enqueue_script( 'acps-alerts-help', ACPS_ALERTS_URL . 'assets/js/help.js', array( 'acps-alerts-tour' ), ACPS_ALERTS_VERSION, true );
+			wp_enqueue_script( 'acps-alerts-help', ACPS_ALERTS_URL . 'assets/js/help.js', array( 'acps-alerts-tour' ), ACPS_Alerts_Failsafe::asset_version( 'assets/js/help.js' ), true );
 		}
 	}
 

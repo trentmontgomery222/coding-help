@@ -363,6 +363,51 @@ ok(
 	ACPS_Alerts_Popup_Source::has_content( '<div class="fl-popup"><video src="/a.mp4"></video></div>' )
 );
 
+/* ---- the popup's own close button ---- */
+
+/*
+ * The popup was built with a close button styled and positioned against its
+ * own corner. Ours is positioned against the alert's dialog, and that dialog
+ * spans the page so the popup's percentage width has something to be a
+ * percentage of — so ours lands in the corner of the WINDOW instead. The
+ * popup's own button is used, wired to close the alert, because it calls
+ * hidePopover() on something that is no longer a popover.
+ */
+$with_close = '<div class="fl-popup"><button class="fl-popup-close" aria-label="Close"><svg></svg></button><p>Body</p></div>';
+$adopted    = ACPS_Alerts_Popup_Source::adopt_close_button( $with_close );
+
+ok( 'the popup close button is wired to the alert', false !== strpos( $adopted, 'data-acps-close' ) );
+ok( 'and is reported as usable', ACPS_Alerts_Popup_Source::has_close_button( $adopted ) );
+ok( 'the button keeps its own class, so it keeps its styling', false !== strpos( $adopted, 'class="fl-popup-close"' ) );
+ok( 'and everything it contained', false !== strpos( $adopted, '<svg></svg>' ) );
+
+// Running twice — a cached render re-adopted — must not stack attributes.
+$twice = ACPS_Alerts_Popup_Source::adopt_close_button( $adopted );
+
+check( 'wiring it twice adds the attribute once', substr_count( $twice, 'data-acps-close' ), 1 );
+
+// A self-closing tag keeps its slash rather than being broken.
+$self = ACPS_Alerts_Popup_Source::adopt_close_button( '<span class="fl-popup-close" />' );
+
+ok( 'a self-closing button stays self-closing', false !== strpos( $self, '/>' ) );
+ok( 'and is still wired', false !== strpos( $self, 'data-acps-close' ) );
+
+// Single-quoted class attributes are just as valid.
+$single = ACPS_Alerts_Popup_Source::adopt_close_button( "<button class='fl-popup-close'>x</button>" );
+
+ok( 'a single-quoted class is matched too', false !== strpos( $single, 'data-acps-close' ) );
+
+// A popup built without a close button leaves the alert to supply its own.
+$without = '<div class="fl-popup"><p>Body</p></div>';
+
+check( 'a popup with no close button is untouched', ACPS_Alerts_Popup_Source::adopt_close_button( $without ), $without );
+ok( 'and reports that the alert must draw one', ! ACPS_Alerts_Popup_Source::has_close_button( $without ) );
+
+// The words must not be mistaken for the button.
+$prose = '<div class="fl-popup"><p>Use the fl-popup-close button to dismiss.</p></div>';
+
+ok( 'the class name in prose is not wired', ! ACPS_Alerts_Popup_Source::has_close_button( ACPS_Alerts_Popup_Source::adopt_close_button( $prose ) ) );
+
 /* ---- the popup has to stay inside the container its CSS names ---- */
 
 /*

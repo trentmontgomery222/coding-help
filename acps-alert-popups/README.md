@@ -220,6 +220,28 @@ used. Beaver Builder also lays the popup out under `.fl-popup:popover-open`,
 which can never match once the attribute is stripped, so `alerts.css` restates
 that layout.
 
+**The browser's popover defaults go with the attribute.** `[popover]` supplies
+more than positioning — it also supplies `background-color: Canvas` and
+`color: CanvasText`, and Beaver Builder's popup settings do not write a
+background unless one is picked. So a popup that looked solid white on its own
+page arrives see-through once the attribute is stripped. `alerts.css` restates
+those defaults, without `!important`, so a popup that does set its own
+background still wins.
+
+**The popup's own close button is used**, wired to close the alert rather than
+calling `hidePopover()` on something that is no longer a popover. It is styled
+and positioned against the popup's corner, which is where it belongs; the
+alert's dialog spans the page so a percentage width has something to be a
+percentage of, and a button positioned against *that* lands in the corner of
+the window. The alert draws a close button of its own only when the popup did
+not bring one.
+
+**Assets are versioned by file modification time**, not by the plugin version.
+A stylesheet edited between releases keeps the same version, so browsers and
+page caches go on serving the old one — and the symptom is not "no styling",
+which would be obvious, but styling from some earlier state of the file,
+differing from one browser to the next depending on what each has cached.
+
 **The popup is the box.** An alert whose body was designed in the builder gets
 `acps-alert--built` on its shell, and the shell then contributes only the
 overlay and the close button: no panel, no corners, no shadow, no max-width of

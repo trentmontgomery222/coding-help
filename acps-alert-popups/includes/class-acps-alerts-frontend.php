@@ -211,7 +211,7 @@ class ACPS_Alerts_Frontend {
 		}
 
 		if ( ACPS_Alerts_Failsafe::has_file( 'assets/css/alerts.css' ) ) {
-			wp_enqueue_style( 'acps-alerts', ACPS_ALERTS_URL . 'assets/css/alerts.css', array(), ACPS_ALERTS_VERSION );
+			wp_enqueue_style( 'acps-alerts', ACPS_ALERTS_URL . 'assets/css/alerts.css', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/css/alerts.css' ) );
 
 			$custom_css = (string) ACPS_Alerts_Settings::get( 'custom_css' );
 			$z_index    = (int) ACPS_Alerts_Settings::get( 'z_index' );
@@ -219,7 +219,7 @@ class ACPS_Alerts_Frontend {
 			wp_add_inline_style( 'acps-alerts', ':root{--acps-alert-z-index:' . $z_index . ';}' . $custom_css );
 		}
 
-		wp_enqueue_script( 'acps-alerts', ACPS_ALERTS_URL . 'assets/js/alerts.js', array(), ACPS_ALERTS_VERSION, true );
+		wp_enqueue_script( 'acps-alerts', ACPS_ALERTS_URL . 'assets/js/alerts.js', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/js/alerts.js' ), true );
 
 		wp_localize_script(
 			'acps-alerts',
@@ -438,6 +438,13 @@ class ACPS_Alerts_Frontend {
 		// ours on top would give it two of each.
 		$furniture = ! $built;
 
+		// Resolved before anything is printed, because whether the alert needs a
+		// close button of its own depends on whether the body brought one.
+		$body = $this->get_popup_content( $id );
+
+		$own_close = class_exists( 'ACPS_Alerts_Popup_Source' )
+			&& ACPS_Alerts_Popup_Source::has_close_button( $body );
+
 		$cta_text = trim( (string) $alert->get( 'cta_text' ) );
 		$cta_url  = trim( (string) $alert->get( 'cta_url' ) );
 
@@ -462,7 +469,7 @@ class ACPS_Alerts_Frontend {
 		>
 			<div class="acps-alert__overlay" data-acps-overlay></div>
 			<div class="acps-alert__dialog"<?php echo $built ? '' : ' style="max-width:' . esc_attr( $width ) . 'px' . ( $stripe ? ';border-top-color:' . esc_attr( $stripe ) : '' ) . '"'; ?>>
-				<?php if ( $alert->get( 'dismissible' ) ) : ?>
+				<?php if ( $alert->get( 'dismissible' ) && ! $own_close ) : ?>
 					<button type="button" class="acps-alert__close" data-acps-close aria-label="<?php esc_attr_e( 'Close alert', 'acps-alert-popups' ); ?>">
 						<span aria-hidden="true">&times;</span>
 					</button>
@@ -485,7 +492,7 @@ class ACPS_Alerts_Frontend {
 						<h2 class="acps-alert__heading"><?php echo esc_html( $alert->get_title() ); ?></h2>
 					<?php endif; ?>
 
-					<?php echo $this->get_popup_content( $id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Rendered page-builder layout. ?>
+					<?php echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Rendered page-builder layout. ?>
 
 					<?php if ( $furniture && '' !== $cta_text && '' !== $cta_url ) : ?>
 						<p class="acps-alert__cta">

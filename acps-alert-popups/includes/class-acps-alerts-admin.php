@@ -1111,7 +1111,7 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
-		wp_enqueue_style( 'acps-alerts-admin', ACPS_ALERTS_URL . 'assets/css/admin.css', array(), ACPS_ALERTS_VERSION );
-		wp_enqueue_script( 'acps-alerts-admin', ACPS_ALERTS_URL . 'assets/js/admin.js', array(), ACPS_ALERTS_VERSION, true );
+		wp_enqueue_style( 'acps-alerts-admin', ACPS_ALERTS_URL . 'assets/css/admin.css', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/css/admin.css' ) );
+		wp_enqueue_script( 'acps-alerts-admin', ACPS_ALERTS_URL . 'assets/js/admin.js', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/js/admin.js' ), true );
 	}
 }

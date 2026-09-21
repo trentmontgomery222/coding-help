@@ -81,6 +81,33 @@ class ACPS_Alerts_Failsafe {
 	 *
 	 * @return string[]
 	 */
+	/**
+	 * A cache-busting version string for one of the plugin's own assets.
+	 *
+	 * The plugin version alone is not enough. A stylesheet edited between two
+	 * releases keeps the same version, so browsers and page caches go on
+	 * serving the old one — and the symptom is not "no styling", which would be
+	 * obvious, but styling from some earlier state of the file, differing from
+	 * one browser to the next depending on what each happens to have cached.
+	 * That is a miserable thing to debug from a screenshot.
+	 *
+	 * @param string $rel Path relative to the plugin directory.
+	 * @return string
+	 */
+	public static function asset_version( $rel ) {
+		$file = ACPS_ALERTS_DIR . ltrim( (string) $rel, '/' );
+
+		if ( is_readable( $file ) ) {
+			$stamp = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A missing stamp is not worth a warning.
+
+			if ( $stamp ) {
+				return ACPS_ALERTS_VERSION . '.' . $stamp;
+			}
+		}
+
+		return ACPS_ALERTS_VERSION;
+	}
+
 	public static function optional_files() {
 		return array(
 			'assets/css/alerts.css',

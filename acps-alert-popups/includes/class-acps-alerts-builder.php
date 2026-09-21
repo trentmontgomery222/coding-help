@@ -38,7 +38,7 @@ class ACPS_Alerts_Builder {
 			return;
 		}
 
-		wp_register_style( 'acps-alerts-board', ACPS_ALERTS_URL . 'assets/css/board.css', array(), ACPS_ALERTS_VERSION );
+		wp_register_style( 'acps-alerts-board', ACPS_ALERTS_URL . 'assets/css/board.css', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/css/board.css' ) );
 
 		// The module asks for this by name when it renders; registering here and
 		// enqueuing on demand keeps it off pages with no board on them.

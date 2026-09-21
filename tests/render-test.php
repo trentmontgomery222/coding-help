@@ -150,6 +150,7 @@ class ACPS_Alerts_Popup_Source {
 	public static function available() { return ! empty( $GLOBALS['bb_popup'] ); }
 	public static function render() { return $GLOBALS['bb_popup_html']; }
 	public static function enqueue_assets() {}
+	public static function has_close_button( $html ) { return false !== strpos( (string) $html, 'data-acps-close' ); }
 }
 
 // Beaver Builder stand-in. render_content_by_id reproduces the real bug:
@@ -401,10 +402,29 @@ ok( 'the shell says its body was built elsewhere', false !== strpos( $out, 'acps
 ok( 'so our panel can step out of the way', false === strpos( $out, 'style="max-width:640px' ) );
 check( 'and none of our own heading is added on top', substr_count( $out, 'acps-alert__heading' ), 0 );
 
-// The overlay and the close button are still ours: the popup no longer opens
-// or closes itself once it has been lifted out of its own page.
+// The overlay stays ours: the popup no longer dims the page behind it once it
+// has been lifted out of its own page.
 ok( 'the overlay is still there', false !== strpos( $out, 'acps-alert__overlay' ) );
-ok( 'and so is the close button', false !== strpos( $out, 'acps-alert__close' ) );
+
+// This popup brought no close button, so the alert supplies one.
+ok( 'a popup with no close button gets ours', false !== strpos( $out, 'acps-alert__close' ) );
+
+/* ---- a popup that brought its own close button keeps it ---- */
+
+$GLOBALS['bb_popup_html'] = '<div class="fl-popup"><button class="fl-popup-close" data-acps-close>x</button><p>Built body.</p></div>';
+
+$probe->queue_alerts( array( new ACPS_Alerts_Alert( 52 ) ) );
+$GLOBALS['role_of'][52] = 'current';
+$GLOBALS['content'][52] = '';
+$GLOBALS['meta'][52]    = array();
+
+ob_start();
+$probe->render_alerts();
+$owned = ob_get_clean();
+
+ok( 'the popup keeps its own close button', false !== strpos( $owned, 'fl-popup-close' ) );
+check( 'and the alert does not add a second one', substr_count( $owned, 'acps-alert__close' ), 0 );
+check( 'so there is exactly one thing to click', substr_count( $owned, 'data-acps-close' ), 1 );
 
 /* ---- a plain alert keeps our panel ---- */
 

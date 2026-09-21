@@ -539,7 +539,7 @@ class ACPS_Alerts_Popup_Source {
 			return '';
 		}
 
-		$html = self::wrap( self::inline_popup( $html ), $page_id );
+		$html = self::wrap( self::adopt_close_button( self::inline_popup( $html ) ), $page_id );
 
 		self::cache( $html );
 
@@ -618,6 +618,65 @@ class ACPS_Alerts_Popup_Source {
 		}
 
 		set_transient( self::cache_key(), (string) $html, DAY_IN_SECONDS );
+	}
+
+	/**
+	 * Wires the popup's own close button up to the alert.
+	 *
+	 * The popup was built with a close button, positioned and styled against
+	 * the popup's own corner — which is where a close button belongs and where
+	 * it sits on its own page. Ours is positioned against the alert's dialog
+	 * instead, and that dialog spans the page so the popup's percentage width
+	 * has something to be a percentage of; our button therefore lands in the
+	 * corner of the window rather than the corner of the popup.
+	 *
+	 * So the popup's button is used. It cannot do its own job any more — it
+	 * calls hidePopover() on something that is no longer a popover — but adding
+	 * the attribute the alert's script listens for makes it close the alert,
+	 * which is the same thing from the visitor's side.
+	 *
+	 * @param string $html The popup's markup.
+	 * @return string
+	 */
+	public static function adopt_close_button( $html ) {
+		$html = (string) $html;
+
+		if ( '' === trim( $html ) || false === strpos( $html, 'fl-popup-close' ) ) {
+			return $html;
+		}
+
+		$pattern = '/<(?:button|a|span|div)\b[^>]*\bclass\s*=\s*(?:"[^"]*\bfl-popup-close\b[^"]*"|\'[^\']*\bfl-popup-close\b[^\']*\')[^>]*>/i';
+
+		$result = preg_replace_callback(
+			$pattern,
+			function ( $matches ) {
+				$tag = $matches[0];
+
+				// Already wired, from a cached render.
+				if ( false !== stripos( $tag, 'data-acps-close' ) ) {
+					return $tag;
+				}
+
+				// Insert before the closing bracket, keeping a self-closing
+				// slash where there is one.
+				$end = preg_match( '#/>$#', $tag ) ? ' data-acps-close />' : ' data-acps-close>';
+
+				return preg_replace( '#\s*/?>$#', $end, $tag );
+			},
+			$html
+		);
+
+		return null === $result ? $html : $result;
+	}
+
+	/**
+	 * Whether markup carries a close button the alert can use.
+	 *
+	 * @param string $html Rendered markup.
+	 * @return bool
+	 */
+	public static function has_close_button( $html ) {
+		return false !== strpos( (string) $html, 'data-acps-close' );
 	}
 
 	/**
