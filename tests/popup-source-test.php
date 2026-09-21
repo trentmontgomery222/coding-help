@@ -37,6 +37,7 @@ function apply_filters( $tag, $value ) {
 function __( $s, $d = '' ) { return $s; }
 function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
 function get_post_meta( $id, $k, $single = false ) { return isset( $GLOBALS['meta'][ $id ][ $k ] ) ? $GLOBALS['meta'][ $id ][ $k ] : ''; }
+function update_post_meta( $id, $k, $v ) { $GLOBALS['meta'][ $id ][ $k ] = $v; return true; }
 function get_option( $k, $d = false ) { return array_key_exists( $k, $GLOBALS['options'] ) ? $GLOBALS['options'][ $k ] : $d; }
 function update_option( $k, $v, $a = null ) { $GLOBALS['options'][ $k ] = $v; return true; }
 function delete_option( $k ) { unset( $GLOBALS['options'][ $k ] ); return true; }
@@ -610,6 +611,84 @@ ACPS_Alerts_Popup_Source::hide_on_source_page();
 $other = ob_get_clean();
 
 check( 'and left alone on every other page, where it is the alert', $other, '' );
+
+/* ---- writing the popup's wording, from a quick admin form ---- */
+
+/*
+ * The inverse of wording(). A quick admin form (SRP level, header, text)
+ * changes what the popup says without opening Beaver Builder, so the write has
+ * to land in the popup's own heading and rich-text modules — the same two
+ * wording() reads — and nowhere else on the page.
+ */
+$GLOBALS['meta'][42]['_fl_builder_data'] = layout();
+unset( $GLOBALS['meta'][42]['_fl_builder_draft'] );
+ACPS_Alerts_Popup_Source::forget();
+
+$wrote = ACPS_Alerts_Popup_Source::write_wording( 'Buses running late', '<p>All routes delayed 30 minutes.</p>', 42 );
+
+check( 'the heading is reported written', $wrote['heading'], true );
+check( 'and the body is reported written', $wrote['text'], true );
+
+$after = ACPS_Alerts_Popup_Source::wording();
+
+check( 'the new heading is what the popup now reads back', $after['heading'], 'Buses running late' );
+check( 'and the new body too', $after['text'], 'All routes delayed 30 minutes.' );
+
+// The write must stay inside the popup: the status page's own heading module,
+// which sits outside it, must be untouched.
+$page_head = $GLOBALS['meta'][42]['_fl_builder_data']['pagehead'];
+check( 'the heading outside the popup is left alone', $page_head->settings->heading, 'School Status Page' );
+
+// A draft copy, when the builder has one open, is kept in step so a later Save
+// in the builder does not republish the old wording over this.
+$draft = layout();
+$draft['phead']->settings->heading = 'stale draft heading';
+$GLOBALS['meta'][42]['_fl_builder_draft'] = $draft;
+ACPS_Alerts_Popup_Source::forget();
+
+ACPS_Alerts_Popup_Source::write_wording( 'Early dismissal', '<p>Out at noon.</p>', 42 );
+
+check(
+	'the builder draft is updated alongside the published layout',
+	$GLOBALS['meta'][42]['_fl_builder_draft']['phead']->settings->heading,
+	'Early dismissal'
+);
+
+// An empty field leaves that piece alone rather than blanking it.
+ACPS_Alerts_Popup_Source::write_wording( '', '<p>Body only.</p>', 42 );
+
+$partial = ACPS_Alerts_Popup_Source::wording();
+
+check( 'an empty heading leaves the old heading standing', $partial['heading'], 'Early dismissal' );
+check( 'while the body is still updated', $partial['text'], 'Body only.' );
+
+// The scope check is load-bearing: an outside heading listed BEFORE the popup's
+// own must still be passed over, or the write lands on the page title.
+$ordered = array(
+	'pagehead' => (object) array( 'type' => 'module', 'parent' => 'col1', 'settings' => (object) array( 'type' => 'heading', 'heading' => 'School Status Page' ) ),
+	'row1'     => (object) array( 'type' => 'row', 'parent' => null ),
+	'col1'     => (object) array( 'type' => 'column', 'parent' => 'row1' ),
+	'popup1'   => (object) array( 'type' => 'module', 'parent' => 'col1', 'settings' => (object) array( 'type' => 'popup' ) ),
+	'phead'    => (object) array( 'type' => 'module', 'parent' => 'popup1', 'settings' => (object) array( 'type' => 'heading', 'heading' => 'old' ) ),
+);
+$GLOBALS['meta'][42]['_fl_builder_data'] = $ordered;
+unset( $GLOBALS['meta'][42]['_fl_builder_draft'] );
+ACPS_Alerts_Popup_Source::forget();
+
+ACPS_Alerts_Popup_Source::write_wording( 'Lockdown lifted', '', 42 );
+
+check( 'a heading outside the popup, listed first, is skipped', $GLOBALS['meta'][42]['_fl_builder_data']['pagehead']->settings->heading, 'School Status Page' );
+check( 'and the popup heading further down is the one written', $GLOBALS['meta'][42]['_fl_builder_data']['phead']->settings->heading, 'Lockdown lifted' );
+
+// No popup on the page: nothing to write, and nothing claimed.
+$GLOBALS['meta'][42]['_fl_builder_data'] = array( 'row1' => (object) array( 'type' => 'row', 'parent' => null ) );
+unset( $GLOBALS['meta'][42]['_fl_builder_draft'] );
+ACPS_Alerts_Popup_Source::forget();
+
+$nowhere = ACPS_Alerts_Popup_Source::write_wording( 'Nowhere to put this', 'x', 42 );
+
+check( 'with no popup the heading is not claimed as written', $nowhere['heading'], false );
+check( 'nor the body', $nowhere['text'], false );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All popup source cases passed\n";
 exit( $fails ? 1 : 0 );

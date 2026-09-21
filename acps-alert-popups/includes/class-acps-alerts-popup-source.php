@@ -1055,6 +1055,136 @@ class ACPS_Alerts_Popup_Source {
 	}
 
 	/**
+	 * Writes a heading and body into the popup's own modules.
+	 *
+	 * The exact inverse of wording(): where that reads the first heading module
+	 * and the first rich-text module inside the popup, this writes them. That
+	 * is what lets a quick admin form change what the popup says without opening
+	 * Beaver Builder — the rest of the popup, and any extra modules built into
+	 * it, are left exactly as they are.
+	 *
+	 * The layout is edited straight in post meta, the same place wording() reads
+	 * it from, because Beaver Builder's own writers act on whichever post is
+	 * being rendered and this runs from an admin form on another screen.
+	 *
+	 * @param string $heading Plain-text heading. Empty leaves the heading alone.
+	 * @param string $text    Body HTML. Empty leaves the body alone.
+	 * @param int    $page_id Page to write to. Defaults to the status page.
+	 * @return array { heading: bool, text: bool } which pieces were written.
+	 */
+	public static function write_wording( $heading, $text, $page_id = 0 ) {
+		$page_id = $page_id ? (int) $page_id : self::page_id();
+		$result  = array( 'heading' => false, 'text' => false );
+
+		if ( ! $page_id ) {
+			return $result;
+		}
+
+		$node_id = self::find_node( $page_id );
+
+		if ( '' === $node_id ) {
+			return $result;
+		}
+
+		/*
+		 * The published layout, and the builder's draft of it when one exists.
+		 *
+		 * Writing only the published data would show on the live site but be
+		 * silently reverted the next time somebody opened the popup in the
+		 * builder and clicked Save, because the builder republishes its draft.
+		 * Keeping the two in step means the change sticks.
+		 */
+		foreach ( array( '_fl_builder_data', '_fl_builder_draft' ) as $meta_key ) {
+			$layout = get_post_meta( $page_id, $meta_key, true );
+
+			if ( ! is_array( $layout ) || empty( $layout ) ) {
+				continue;
+			}
+
+			$done = self::set_wording_in( $layout, $node_id, $heading, $text );
+
+			if ( $done['heading'] || $done['text'] ) {
+				update_post_meta( $page_id, $meta_key, $layout );
+			}
+
+			// The published layout is the one that decides what actually shows,
+			// so that is the answer handed back.
+			if ( '_fl_builder_data' === $meta_key ) {
+				$result = $done;
+			}
+		}
+
+		// Our own cached render is keyed on the alert's revision, which the
+		// caller bumps, but the node id cache and any stale transient are
+		// dropped here so nothing survives the edit.
+		self::forget();
+
+		return $result;
+	}
+
+	/**
+	 * Sets the heading and body on the popup's modules within one layout.
+	 *
+	 * Mutates $layout in place and reports which pieces it found somewhere to
+	 * put. The first heading module and the first rich-text module inside the
+	 * popup are the targets, matching what wording() reads back.
+	 *
+	 * @param array  $layout  Layout map, edited in place.
+	 * @param string $node_id The popup node everything must sit inside.
+	 * @param string $heading Heading to write, or '' to skip it.
+	 * @param string $text    Body to write, or '' to skip it.
+	 * @return array { heading: bool, text: bool }
+	 */
+	protected static function set_wording_in( array &$layout, $node_id, $heading, $text ) {
+		$done      = array( 'heading' => false, 'text' => false );
+		$want_head = '' !== (string) $heading;
+		$want_text = '' !== (string) $text;
+
+		foreach ( $layout as $key => $node ) {
+			if ( ! is_object( $node ) && ! is_array( $node ) ) {
+				continue;
+			}
+
+			$node = (object) $node;
+
+			if ( ! isset( $node->type ) || 'module' !== $node->type || ! isset( $node->settings ) ) {
+				continue;
+			}
+
+			if ( ! self::descends_from( $layout, $node, $node_id ) ) {
+				continue;
+			}
+
+			$settings = (object) $node->settings;
+			$slug     = isset( $settings->type ) ? (string) $settings->type : '';
+
+			if ( ! $done['heading'] && $want_head && in_array( $slug, array( 'heading', 'fl-heading' ), true ) ) {
+				$settings->heading = (string) $heading;
+				$done['heading']   = true;
+			} elseif ( ! $done['text'] && $want_text && in_array( $slug, array( 'rich-text', 'fl-rich-text' ), true ) ) {
+				$settings->text = (string) $text;
+				$done['text']   = true;
+			} else {
+				continue;
+			}
+
+			// Beaver Builder stores nodes as objects; keep them that way, and
+			// write the possibly-normalised node back into the map.
+			$node->settings = $settings;
+			$layout[ $key ] = $node;
+
+			$head_left = $want_head && ! $done['heading'];
+			$text_left = $want_text && ! $done['text'];
+
+			if ( ! $head_left && ! $text_left ) {
+				break;
+			}
+		}
+
+		return $done;
+	}
+
+	/**
 	 * Whether a node sits anywhere inside another one.
 	 *
 	 * Beaver Builder stores a flat map with each node naming its parent, so

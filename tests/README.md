@@ -349,6 +349,18 @@ so they are not exercised; everything around them is ours and is:
 - the banner reads the heading and text from inside the popup, never a heading
   elsewhere on the status page, and a layout whose parents form a loop returns
   rather than hanging the request
+- the quick "Post an Alert" form writes the heading and text back into those
+  same two modules — the inverse of the read above — and nowhere else. What is
+  written is what the popup then reads back; a heading module OUTSIDE the popup
+  is left alone even when it is listed before the popup's own, so the scope
+  check is load-bearing; an empty field leaves that piece standing rather than
+  blanking it; the builder's draft copy is kept in step with the published
+  layout so a later Save in the builder does not republish the old wording; and
+  with no popup on the page nothing is claimed as written.
+
+  Verified non-vacuous: dropping the "inside the popup" check makes the write
+  land on the page title, failing "a heading outside the popup, listed first,
+  is skipped"
 - the popup is hidden on the status page itself and left alone everywhere else
 - the popup's own close button is wired to the alert and keeps its class, so it
   keeps its styling and its place at the popup's corner; wiring it twice adds

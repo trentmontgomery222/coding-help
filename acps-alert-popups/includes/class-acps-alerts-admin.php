@@ -95,6 +95,17 @@ class ACPS_Alerts_Admin {
 			$this->safe_render( 'render_router' )
 		);
 
+		// A plain link into the router's post view. WordPress happily takes a
+		// query-string slug for a submenu item, and the router draws the screen
+		// from ?acps_view=post, so no separate callback is needed.
+		add_submenu_page(
+			self::MENU_SLUG,
+			__( 'Post an Alert', 'acps-alert-popups' ),
+			__( 'Post an Alert', 'acps-alert-popups' ),
+			$cap,
+			'admin.php?page=' . self::MENU_SLUG . '&acps_view=post'
+		);
+
 		add_submenu_page(
 			self::MENU_SLUG,
 			__( 'Alert Settings', 'acps-alert-popups' ),
@@ -228,6 +239,12 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
+		if ( 'post' === $action ) {
+			$this->handle_post_alert();
+
+			return;
+		}
+
 	}
 
 	/**
@@ -303,6 +320,127 @@ class ACPS_Alerts_Admin {
 		}
 
 		$this->redirect_back( $enabled ? 'enabled' : 'disabled' );
+	}
+
+	/**
+	 * Posts an alert from the quick form: sets the level, the header and the
+	 * text, and switches it on — all in one submit.
+	 *
+	 * This is the fast path. It changes the header and text of the Current
+	 * Alert's popup in place (the heading and rich-text modules inside Beaver
+	 * Builder's Popup module on the status page), sets the SRP level, and turns
+	 * the alert on. Everything else about the popup — extra modules, styling,
+	 * layout — is whatever was built in Beaver Builder, and is left untouched,
+	 * so the form and the builder are two ways of editing the same popup rather
+	 * than two competing popups.
+	 *
+	 * @return void
+	 */
+	protected function handle_post_alert() {
+		if ( ! current_user_can( self::capability() ) || ! isset( $_POST['acps_post_nonce'] ) ) {
+			return;
+		}
+
+		$nonce = sanitize_text_field( wp_unslash( $_POST['acps_post_nonce'] ) );
+
+		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_post_alert' ) ) {
+			return;
+		}
+
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			return;
+		}
+
+		$alert = ACPS_Alerts_Status::current_alert();
+
+		if ( ! $alert ) {
+			// No Current Alert to post to — send back to the form with a note
+			// rather than silently doing nothing.
+			$this->redirect_back( 'post-nocurrent', array( 'acps_view' => 'post' ) );
+		}
+
+		$raw = isset( $_POST['acps_post'] ) ? (array) wp_unslash( $_POST['acps_post'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Each field sanitized below.
+
+		$level   = isset( $raw['level'] ) ? sanitize_key( $raw['level'] ) : '';
+		$heading = isset( $raw['heading'] ) ? sanitize_text_field( $raw['heading'] ) : '';
+		$text    = isset( $raw['text'] ) ? wp_kses_post( $raw['text'] ) : '';
+
+		// A level typed into the URL that is not one we know is dropped rather
+		// than stored, so the popup can never end up on a colour with no name.
+		if ( '' === $level || ! in_array( $level, ACPS_Alerts_Status::level_keys(), true ) ) {
+			$level = (string) $alert->get( 'status_level' );
+		}
+
+		ACPS_Alerts_Failsafe::guard(
+			array( __CLASS__, 'apply_quick_post' ),
+			array( $alert, $level, $heading, $text ),
+			'admin/quick-post'
+		);
+
+		$this->redirect_back( 'posted', array( 'acps_view' => 'post' ) );
+	}
+
+	/**
+	 * Writes a quick-form submission onto the Current Alert and its popup.
+	 *
+	 * Public so the failsafe can call it. Kept off the full settings save on
+	 * purpose: this touches only the four things the form offers, so a schedule,
+	 * targeting or trigger set on the status page is preserved rather than reset
+	 * to a default by a form that never showed it.
+	 *
+	 * @param ACPS_Alerts_Alert $alert   The Current Alert.
+	 * @param string            $level   Validated status level.
+	 * @param string            $heading Header text, or '' to leave it.
+	 * @param string            $text    Body HTML, or '' to leave it.
+	 * @return void
+	 */
+	public static function apply_quick_post( ACPS_Alerts_Alert $alert, $level, $heading, $text ) {
+		$post_id = $alert->get_id();
+		$prefix  = ACPS_Alerts_Alert::META_PREFIX;
+
+		// The popup itself: the header and text live in the Beaver Builder Popup
+		// module on the status page, so that is where they are written.
+		if ( class_exists( 'ACPS_Alerts_Popup_Source' ) ) {
+			ACPS_Alerts_Popup_Source::write_wording( $heading, $text );
+		}
+
+		// The alert's own copy, which the status board banner, the admin list
+		// and the [schoolstatus] shortcode read. Kept in step with the popup so
+		// nothing shows a different message than the popup does. An empty field
+		// leaves the stored value alone, matching how the popup is written.
+		$update = array( 'ID' => $post_id );
+
+		if ( '' !== $heading ) {
+			$update['post_title'] = $heading;
+		}
+
+		if ( '' !== $text ) {
+			$update['post_content'] = wp_kses_post( $text );
+
+			update_post_meta( $post_id, $prefix . 'status_message', wp_strip_all_tags( $text ) );
+		}
+
+		if ( count( $update ) > 1 ) {
+			wp_update_post( $update );
+		}
+
+		update_post_meta( $post_id, $prefix . 'status_level', $level );
+
+		// Switch it on. Its clock only (re)starts when it was not already live,
+		// so changing the wording of an alert that is already up does not push
+		// its daily cut-off back.
+		$was_live = (bool) $alert->get( 'enabled' );
+
+		update_post_meta( $post_id, $prefix . 'enabled', 1 );
+
+		if ( ! $was_live ) {
+			update_post_meta( $post_id, $prefix . 'posted_at', time() );
+			update_post_meta( $post_id, $prefix . 'archived', 0 );
+		}
+
+		// Count this as a change, so a visitor who has already seen the old
+		// wording is shown the new one.
+		$alert->touch();
 	}
 
 	/**
@@ -429,6 +567,12 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
+		if ( 'post' === $view ) {
+			$this->render_post();
+
+			return;
+		}
+
 		$this->render_list();
 	}
 
@@ -447,7 +591,21 @@ class ACPS_Alerts_Admin {
 			'settings-saved' => __( 'Settings saved.', 'acps-alert-popups' ),
 			'archived'       => __( 'Filed in the archive and switched off. The alert itself is unchanged.', 'acps-alert-popups' ),
 			'restored'       => __( 'Switched back on. Its daily cut-off starts again from now.', 'acps-alert-popups' ),
+			'posted'         => __( 'Alert posted. It is live now, and the popup shows the new message.', 'acps-alert-popups' ),
 		);
+
+		$errors = array(
+			'post-nocurrent' => __( 'There is no Current Alert to post to yet. Reactivate the plugin if the two alerts were never created.', 'acps-alert-popups' ),
+		);
+
+		if ( isset( $errors[ $message ] ) ) {
+			?>
+			<div class="notice notice-error is-dismissible">
+				<p><?php echo esc_html( $errors[ $message ] ); ?></p>
+			</div>
+			<?php
+			return;
+		}
 
 		if ( ! isset( $messages[ $message ] ) ) {
 			return;
@@ -455,6 +613,104 @@ class ACPS_Alerts_Admin {
 		?>
 		<div class="notice notice-success is-dismissible">
 			<p><?php echo esc_html( $messages[ $message ] ); ?></p>
+		</div>
+		<?php
+	}
+
+	/**
+	 * The quick "post an alert" form.
+	 *
+	 * Pick a level, type a header and a message, submit — the popup changes, the
+	 * level is set, and the alert goes live, without opening Beaver Builder. The
+	 * fields are pre-filled with what the popup says now, so a small change is a
+	 * small edit. Anything more than header and text — extra modules, styling —
+	 * is done in Beaver Builder, on the same popup.
+	 *
+	 * @return void
+	 */
+	protected function render_post() {
+		$alert = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::current_alert() : null;
+
+		$action = add_query_arg(
+			array(
+				'page'        => self::MENU_SLUG,
+				'acps_action' => 'post',
+			),
+			admin_url( 'admin.php' )
+		);
+
+		// Pre-fill from the popup itself, falling back to the alert's own copy,
+		// so the boxes show what is on screen now rather than starting empty.
+		$words = class_exists( 'ACPS_Alerts_Popup_Source' )
+			? ACPS_Alerts_Popup_Source::wording()
+			: array( 'heading' => '', 'text' => '' );
+
+		$heading = '' !== (string) $words['heading']
+			? (string) $words['heading']
+			: ( $alert ? (string) $alert->get_title() : '' );
+
+		$text = '' !== (string) $words['text']
+			? (string) $words['text']
+			: ( $alert ? (string) $alert->get( 'status_message' ) : '' );
+
+		$level   = $alert ? (string) $alert->get( 'status_level' ) : 'normal';
+		$choices = ACPS_Alerts_Status::level_choices();
+		$page_url = ACPS_Alerts_Status::board_edit_url();
+		?>
+		<div class="wrap acps-alerts-wrap">
+			<h1 class="wp-heading-inline"><?php esc_html_e( 'Post an Alert', 'acps-alert-popups' ); ?></h1>
+			<hr class="wp-header-end" />
+
+			<?php $this->render_message(); ?>
+
+			<?php if ( ! $alert ) : ?>
+				<div class="notice notice-error inline">
+					<p><?php esc_html_e( 'There is no Current Alert yet. Reactivate the plugin to create it.', 'acps-alert-popups' ); ?></p>
+				</div>
+			<?php else : ?>
+				<p class="description">
+					<?php esc_html_e( 'Set the level, header and message, then post. The popup and the status page update together and the alert goes live straight away.', 'acps-alert-popups' ); ?>
+				</p>
+
+				<form method="post" action="<?php echo esc_url( $action ); ?>" class="acps-post-form">
+					<?php wp_nonce_field( 'acps_alerts_post_alert', 'acps_post_nonce' ); ?>
+
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><label for="acps-post-level"><?php esc_html_e( 'Level', 'acps-alert-popups' ); ?></label></th>
+							<td>
+								<select name="acps_post[level]" id="acps-post-level">
+									<?php foreach ( $choices as $key => $label ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $level, $key ); ?>><?php echo esc_html( $label ); ?></option>
+									<?php endforeach; ?>
+								</select>
+								<p class="description"><?php esc_html_e( 'Sets the colour of the popup and the banner, and the word shown on them.', 'acps-alert-popups' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-post-heading"><?php esc_html_e( 'Header', 'acps-alert-popups' ); ?></label></th>
+							<td>
+								<input name="acps_post[heading]" id="acps-post-heading" type="text" class="large-text" value="<?php echo esc_attr( $heading ); ?>" />
+								<p class="description"><?php esc_html_e( 'The title on the popup and the status page. Leave blank to keep the current one.', 'acps-alert-popups' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-post-text"><?php esc_html_e( 'Text', 'acps-alert-popups' ); ?></label></th>
+							<td>
+								<textarea name="acps_post[text]" id="acps-post-text" rows="6" class="large-text"><?php echo esc_textarea( $text ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'The message body. Basic formatting is allowed. Leave blank to keep the current text.', 'acps-alert-popups' ); ?></p>
+							</td>
+						</tr>
+					</table>
+
+					<p class="submit">
+						<button type="submit" class="button button-primary button-hero"><?php esc_html_e( 'Post alert', 'acps-alert-popups' ); ?></button>
+						<?php if ( '' !== $page_url ) : ?>
+							<a class="button" href="<?php echo esc_url( $page_url ); ?>"><?php esc_html_e( 'Edit the full popup in Beaver Builder', 'acps-alert-popups' ); ?></a>
+						<?php endif; ?>
+					</p>
+				</form>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -469,6 +725,7 @@ class ACPS_Alerts_Admin {
 		?>
 		<div class="wrap acps-alerts-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Site Alerts', 'acps-alert-popups' ); ?></h1>
+			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'post' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Post an Alert', 'acps-alert-popups' ); ?></a>
 			<hr class="wp-header-end" />
 
 			<?php $this->render_message(); ?>

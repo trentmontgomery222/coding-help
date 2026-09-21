@@ -50,6 +50,14 @@ Your status page carries three things: Beaver Builder's **Popup** module (the al
 
 Archived updates are stored as records in their own list, not as posts, so the archive can grow without the site ever gaining a third alert.
 
+### The quick way: Post an Alert
+
+There is also a one-screen shortcut in wp-admin, for when you just need the words changed fast and do not want to open Beaver Builder. **Site Alerts → Post an Alert** (there is a button on the alerts list too) is a short form: a **Level**, a **Header**, and a **Text** box, and one **Post alert** button.
+
+Submitting it does three things at once: it writes the header and text straight into the popup — the heading and rich-text modules inside the Beaver Builder Popup module on the status page, the very ones the popup already shows — sets the level, and switches the alert on. The popup, the status board and the `[schoolstatus]` shortcode all update together.
+
+It only touches those three things. Everything else about the popup — any extra modules you added, the styling, the layout — is exactly as you built it in Beaver Builder, because the form edits the same popup rather than replacing it. So the two ways of working fit together: post the everyday changes from this form in a few seconds, and open Beaver Builder when you want to change how the popup is built. The boxes come pre-filled with what the popup says right now, so a small change is a small edit, and an empty box leaves that piece alone. Changing the wording of an alert that is already up does not restart its daily cut-off.
+
 ### Status levels are SRP
 
 The levels are the five Standard Response Protocol actions from the "I Love U Guys" Foundation — **Hold**, **Secure**, **Shelter**, **Evacuate**, **Lockdown** — each with its directive and its colour, so the site says exactly what the drill says. Two everyday levels sit alongside them: **Normal** and **Information**, which are deliberately *not* marked as response actions.
