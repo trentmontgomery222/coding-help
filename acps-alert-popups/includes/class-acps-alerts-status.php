@@ -748,6 +748,10 @@ class ACPS_Alerts_Status {
 
 		do_action( 'acps_alerts_current_archived', $alert->get_id() );
 
+		// Taking it down changes what visitors see, so cached pages have to be
+		// rebuilt just as they are when one is posted.
+		self::flush_page_caches();
+
 		return true;
 	}
 
@@ -1007,5 +1011,57 @@ class ACPS_Alerts_Status {
 		}
 
 		return self::archive_current() ? 1 : 0;
+	}
+
+	/**
+	 * Rebuilds every cached copy of the site after the status changes.
+	 *
+	 * An alert can appear on any page, so when a new status is posted, taken
+	 * down or edited, a page cache holding the old HTML would keep showing the
+	 * old thing (or nothing) until it expired on its own. Posting an alert has
+	 * to behave as if every page were edited at once, so this purges the whole
+	 * of whatever full-page cache the site runs, plus this plugin's own render
+	 * of the popup.
+	 *
+	 * Everything here is optional and guarded: each cache is purged only if its
+	 * plugin is installed, and a site with no page cache simply does nothing.
+	 *
+	 * @return void
+	 */
+	public static function flush_page_caches() {
+		// This plugin's own cached render of the popup, so the new wording is
+		// rebuilt from the current layout rather than served from the old one.
+		if ( class_exists( 'ACPS_Alerts_Popup_Source' ) ) {
+			ACPS_Alerts_Popup_Source::forget();
+		}
+
+		// Full-page caches, purged whole rather than per-post: the alert is in
+		// the footer of every page, so a single-post purge would miss almost
+		// all of them. Each call is made only when that plugin is present.
+		$callables = array(
+			'wp_cache_clear_cache',    // WP Super Cache.
+			'rocket_clean_domain',     // WP Rocket.
+			'w3tc_flush_all',          // W3 Total Cache.
+			'wpfc_clear_all_cache',    // WP Fastest Cache.
+			'sg_cachepress_purge_cache', // SiteGround Optimizer.
+		);
+
+		foreach ( $callables as $fn ) {
+			if ( function_exists( $fn ) ) {
+				ACPS_Alerts_Failsafe::guard( $fn, array(), 'status/flush-' . $fn );
+			}
+		}
+
+		// Caches that clear on an action rather than a function call.
+		foreach ( array( 'litespeed_purge_all', 'cache_enabler_clear_complete_cache', 'breeze_clear_all_cache', 'swcfpc_purge_everything' ) as $purge_hook ) {
+			do_action( $purge_hook );
+		}
+
+		/**
+		 * Fires when the plugin wants every cached page rebuilt, e.g. after a
+		 * new status is posted. Hook it to purge a CDN or any bespoke cache the
+		 * list above does not cover.
+		 */
+		do_action( 'acps_alerts_flush_caches' );
 	}
 }

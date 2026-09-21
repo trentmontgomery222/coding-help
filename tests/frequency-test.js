@@ -58,6 +58,7 @@ const harness = new Function(
 	var data = state.data;
 	function readRecord() { return state.record; }
 	function sessionId() { return state.session; }
+	function previewing() { var v = data.isPreview; return true === v || 1 === v || '1' === v; }
 	${ source.slice( start, end ) }
 	return mayShow;
 	`
@@ -302,7 +303,8 @@ check( 'a second alert records under its own key', !! preview.store[ 'acps_alert
  * alone. This is the exact "it shows every time" report, reproduced or ruled
  * out against the shipped code rather than a restatement of it.
  */
-function twoLoads( freq ) {
+function twoLoads( freq, preview ) {
+	if ( undefined === preview ) { preview = '0'; } // what wp_localize_script sends for a non-preview visitor.
 	const local = {};
 	const session = {};
 
@@ -331,7 +333,7 @@ function twoLoads( freq ) {
 		};
 
 		const win = {
-			ACPSAlertsData: { alerts: [ cfg ], storage: 'local', isPreview: false },
+			ACPSAlertsData: { alerts: [ cfg ], storage: 'local', isPreview: preview },
 			localStorage: storage( local ), sessionStorage: storage( session ),
 			addEventListener: () => {}, setTimeout: () => {}, scrollY: 0, innerHeight: 800
 		};
@@ -343,7 +345,7 @@ function twoLoads( freq ) {
 
 	const cfg = { id: 1, trigger: 'load', frequency: freq, frequencyDays: 7, version: '4-1700000000' };
 
-	return { first: pageLoad( cfg ), second: pageLoad( cfg ) };
+	return { first: pageLoad( cfg ), second: pageLoad( cfg ), local };
 }
 
 [ 'session', 'edit', 'once' ].forEach( function ( freq ) {
@@ -364,6 +366,26 @@ check( 'always: and opens again, by design', always2.second, true );
 const blank = twoLoads( '' );
 check( 'blank frequency: opens once', blank.first, true );
 check( 'blank frequency: does not keep reappearing', blank.second, false );
+
+/* ---- the "0" that WordPress sends is not a preview ---- */
+
+/*
+ * wp_localize_script stringifies everything, so a non-preview visitor arrives
+ * with isPreview === "0" — and "0" is truthy. Read naively that made every
+ * visitor look like an editor previewing: the popup showed on every page and
+ * nothing was ever written to storage. These loads pass the real string.
+ */
+const notPreview = twoLoads( 'session', '0' );
+check( 'isPreview "0": opens on the first visit', notPreview.first, true );
+check( 'isPreview "0": and is gated on the next, because "0" is not a preview', notPreview.second, false );
+check( 'isPreview "0": and it actually recorded the visit', !! notPreview.local[ 'acps_alert_1' ], true );
+
+// A genuine preview ("1") is meant to show every time and record nothing, so an
+// editor checking their work never burns the visitor's "seen once".
+const realPreview = twoLoads( 'session', '1' );
+check( 'isPreview "1": shows on the first visit', realPreview.first, true );
+check( 'isPreview "1": and again, because previewing ignores frequency', realPreview.second, true );
+check( 'isPreview "1": and writes nothing to storage', undefined, realPreview.local[ 'acps_alert_1' ] );
 
 console.log( failures ? `\n${ failures } failing case(s)` : 'All frequency cases passed' );
 process.exit( failures ? 1 : 0 );

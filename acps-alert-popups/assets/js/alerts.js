@@ -15,6 +15,24 @@
 	var lastFocused = null;
 
 	/**
+	 * Whether this is an editor previewing one alert, in which case the
+	 * frequency rule is ignored and nothing is written to storage.
+	 *
+	 * wp_localize_script turns every value it is given into a STRING, so a PHP
+	 * `0` arrives here as the string "0" — and "0" is truthy in JavaScript.
+	 * Read naively, `data.isPreview` is therefore always true, every ordinary
+	 * visitor looks like an editor previewing, and the popup shows on every
+	 * page while never recording that it was seen. Only a real 1 counts.
+	 *
+	 * @return {boolean}
+	 */
+	function previewing() {
+		var v = data.isPreview;
+
+		return true === v || 1 === v || '1' === v;
+	}
+
+	/**
 	 * Reads a dismissal record for an alert.
 	 *
 	 * @param {number} id Alert ID.
@@ -106,7 +124,7 @@
 	function remember( id, fields ) {
 		var cfg = config( id );
 
-		if ( ! cfg || data.isPreview ) {
+		if ( ! cfg || previewing() ) {
 			return;
 		}
 
@@ -131,7 +149,7 @@
 	 * @return {boolean} True when it may show.
 	 */
 	function mayShow( config ) {
-		if ( data.isPreview || 'always' === config.frequency ) {
+		if ( previewing() || 'always' === config.frequency ) {
 			return true;
 		}
 

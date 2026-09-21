@@ -153,6 +153,14 @@ class ACPS_Alerts_Plugin {
 			array( 'ACPS_Alerts_Updater', 'flush_cache' ),
 			'plugin/flush-cache'
 		);
+
+		// A saved alert changes what the whole site shows, so rebuild every
+		// cached page — posting a status behaves as if every page were edited.
+		ACPS_Alerts_Failsafe::action(
+			'acps_alerts_saved',
+			array( 'ACPS_Alerts_Status', 'flush_page_caches' ),
+			'plugin/flush-page-caches'
+		);
 	}
 
 	/**

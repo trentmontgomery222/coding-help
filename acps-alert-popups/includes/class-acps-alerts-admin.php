@@ -319,6 +319,9 @@ class ACPS_Alerts_Admin {
 			update_post_meta( $alert_id, ACPS_Alerts_Alert::META_PREFIX . 'archived', 0 );
 		}
 
+		// On or off, what visitors see just changed; rebuild cached pages.
+		ACPS_Alerts_Status::flush_page_caches();
+
 		$this->redirect_back( $enabled ? 'enabled' : 'disabled' );
 	}
 
@@ -441,6 +444,10 @@ class ACPS_Alerts_Admin {
 		// Count this as a change, so a visitor who has already seen the old
 		// wording is shown the new one.
 		$alert->touch();
+
+		// Posting has to reach visitors immediately, even where a page cache
+		// would otherwise serve yesterday's HTML.
+		ACPS_Alerts_Status::flush_page_caches();
 	}
 
 	/**
@@ -472,6 +479,9 @@ class ACPS_Alerts_Admin {
 
 		update_post_meta( $alert_id, ACPS_Alerts_Alert::META_PREFIX . 'archived', 0 );
 		update_post_meta( $alert_id, ACPS_Alerts_Alert::META_PREFIX . 'posted_at', time() );
+
+		// Bringing it back puts it in front of visitors again; rebuild caches.
+		ACPS_Alerts_Status::flush_page_caches();
 
 		$this->redirect_back( 'restored' );
 	}

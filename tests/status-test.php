@@ -24,7 +24,8 @@ $GLOBALS['post_meta'] = array();
 function add_action() {}
 function add_filter() {}
 function apply_filters( $tag, $value ) { return $value; }
-function do_action() {}
+$GLOBALS['fired'] = array();
+function do_action( $tag = '' ) { $GLOBALS['fired'][] = $tag; }
 function __( $s, $d = '' ) { return $s; }
 function get_option( $k, $d = false ) {
 	if ( 'gmt_offset' === $k ) { return $GLOBALS['gmt_offset']; }
@@ -67,6 +68,7 @@ class ACPS_Alerts_Failsafe {
 	public static function filter() {}
 	public static function record() {}
 	public static function log() {}
+	public static function guard( $cb, $args = array() ) { return is_callable( $cb ) ? call_user_func_array( $cb, (array) $args ) : null; }
 }
 class ACPS_Alerts_Admin {
 	public static function capability() { return 'edit_pages'; }
@@ -495,6 +497,26 @@ ok(
 	'a junk colour never reaches the badge',
 	false === strpos( ACPS_Alerts_Status::level_icon( 'lockdown', 56, 'red; evil:1' ), 'evil' )
 );
+
+/* ---- posting a status rebuilds cached pages ---- */
+
+/*
+ * An alert rides in the footer of every page, so a full-page cache would keep
+ * serving the old HTML after a new status is posted. flush_page_caches() has to
+ * purge whatever cache the site runs and fire a generic hook a site can wire to
+ * its CDN. Purge functions are called only when their plugin is present.
+ */
+$GLOBALS['fired'] = array();
+$GLOBALS['flushed'] = false;
+
+// Stand in for one caching plugin being installed.
+function rocket_clean_domain() { $GLOBALS['flushed'] = true; }
+
+ACPS_Alerts_Status::flush_page_caches();
+
+ok( 'a present cache plugin is purged', true === $GLOBALS['flushed'] );
+ok( 'the generic flush hook fires for CDNs and bespoke caches', in_array( 'acps_alerts_flush_caches', $GLOBALS['fired'], true ) );
+ok( 'a hook-driven cache is asked to purge too', in_array( 'litespeed_purge_all', $GLOBALS['fired'], true ) );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All status cases passed\n";
 exit( $fails ? 1 : 0 );
