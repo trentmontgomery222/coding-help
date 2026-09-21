@@ -426,6 +426,17 @@ ok( 'the popup keeps its own close button', false !== strpos( $owned, 'fl-popup-
 check( 'and the alert does not add a second one', substr_count( $owned, 'acps-alert__close' ), 0 );
 check( 'so there is exactly one thing to click', substr_count( $owned, 'data-acps-close' ), 1 );
 
+/*
+ * The stylesheet has to tell the two cases apart. A dialog spanning the page
+ * gives the popup's percentage width a basis, which is what it needs — but a
+ * close button of OURS positioned against that dialog lands in the corner of
+ * the window rather than the corner of the popup. So the markup says which
+ * case this is.
+ */
+ok( 'the shell says the popup brought its own close button', false !== strpos( $owned, 'acps-alert--own-close' ) );
+ok( 'while a popup without one does not claim to', false === strpos( $out, 'acps-alert--own-close' ) );
+ok( 'and that one is still marked as built', false !== strpos( $out, 'acps-alert--built' ) );
+
 /* ---- a plain alert keeps our panel ---- */
 
 $GLOBALS['bb_popup']    = false;

@@ -406,6 +406,14 @@ class ACPS_Alerts_Frontend {
 		$built = self::has_builder_layout( $id )
 			|| ( class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available() );
 
+		// Resolved before anything is printed, because whether the alert needs a
+		// close button of its own — and how the dialog is sized — both depend on
+		// whether the body brought one.
+		$body = $this->get_popup_content( $id );
+
+		$own_close = class_exists( 'ACPS_Alerts_Popup_Source' )
+			&& ACPS_Alerts_Popup_Source::has_close_button( $body );
+
 		$classes = array(
 			'acps-alert',
 			'acps-alert--' . $severity,
@@ -417,6 +425,14 @@ class ACPS_Alerts_Frontend {
 		// alert would not look like the thing that was built.
 		if ( $built ) {
 			$classes[] = 'acps-alert--built';
+		}
+
+		// Said out loud, because the stylesheet has to treat the two cases
+		// differently: a dialog that spans the page gives the popup's
+		// percentage width a basis, but puts OUR close button in the corner of
+		// the window rather than the corner of the popup.
+		if ( $own_close ) {
+			$classes[] = 'acps-alert--own-close';
 		}
 
 		if ( ! $alert->get( 'show_overlay' ) ) {
@@ -437,13 +453,6 @@ class ACPS_Alerts_Frontend {
 		// status page — already has its own heading and buttons, and adding
 		// ours on top would give it two of each.
 		$furniture = ! $built;
-
-		// Resolved before anything is printed, because whether the alert needs a
-		// close button of its own depends on whether the body brought one.
-		$body = $this->get_popup_content( $id );
-
-		$own_close = class_exists( 'ACPS_Alerts_Popup_Source' )
-			&& ACPS_Alerts_Popup_Source::has_close_button( $body );
 
 		$cta_text = trim( (string) $alert->get( 'cta_text' ) );
 		$cta_url  = trim( (string) $alert->get( 'cta_url' ) );

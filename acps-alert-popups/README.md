@@ -228,6 +228,15 @@ page arrives see-through once the attribute is stripped. `alerts.css` restates
 those defaults, without `!important`, so a popup that does set its own
 background still wins.
 
+**The lifted popup is `position: relative`, never `static`.** Its close button —
+and anything else inside it that Beaver Builder positions absolutely — is placed
+against the popup's own corner (`top: -20px; right: -20px`), and an absolutely
+positioned element anchors to its nearest *positioned* ancestor. Make the popup
+static and it stops being one, so the button skips past it to the alert's
+dialog, which spans the page, and lands 20px outside the corner of the window.
+Relative lifts it out of the popover's fixed positioning just as static does
+while keeping the containing block intact.
+
 **The popup's own close button is used**, wired to close the alert rather than
 calling `hidePopover()` on something that is no longer a popover. It is styled
 and positioned against the popup's corner, which is where it belongs; the

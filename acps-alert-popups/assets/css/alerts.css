@@ -262,7 +262,19 @@ body.acps-alert-is-open {
 	display: flex !important;
 	flex-direction: column;
 	overflow: visible;
-	position: static !important;
+	/* Relative, not static.
+	 *
+	 * The popup's own close button is absolutely positioned at top:-20px,
+	 * right:-20px — just outside the popup's corner — and an absolutely
+	 * positioned element anchors to its nearest POSITIONED ancestor. Make the
+	 * popup static and it stops being one, so the button skips past it and
+	 * anchors to the alert's dialog instead, which spans the page. The button
+	 * then sits 20px outside the corner of the WINDOW.
+	 *
+	 * Relative takes it out of the popover's fixed positioning just as static
+	 * does, while keeping it the containing block everything inside it is
+	 * positioned against. */
+	position: relative !important;
 	inset: auto !important;
 	opacity: 1 !important;
 	visibility: visible !important;
@@ -323,4 +335,16 @@ body.acps-alert-is-open {
 	background: #fff;
 	border-radius: 50%;
 	box-shadow: 0 2px 10px rgba( 0, 0, 0, 0.25 );
+}
+
+/* When the popup brought no close button of its own, the alert supplies one —
+   and that one is positioned against the dialog. A dialog spanning the page
+   would put it in the corner of the window, so in that case the dialog is
+   allowed to hug its contents instead. The popup's percentage width loses its
+   full-page basis, which is the right trade: a close button nobody can find is
+   worse than a box a little narrower than it was drawn. */
+.acps-alert--built:not( .acps-alert--own-close ) .acps-alert__dialog {
+	width: auto;
+	max-width: min( 100%, 900px );
+	margin: 0 auto;
 }

@@ -313,6 +313,13 @@ so they are not exercised; everything around them is ours and is:
   Verified non-vacuous twice: always drawing ours fails with "the alert does not
   add a second one", and dropping the already-wired guard fails with "wiring it
   twice adds the attribute once".
+- the shell says which of the two cases it is, with `acps-alert--own-close`,
+  because the stylesheet has to size the dialog differently for each: spanning
+  the page gives the popup's percentage width a basis, but puts a close button
+  of *ours* in the corner of the window instead of the corner of the popup.
+
+  Verified non-vacuous: never adding the class fails with "the shell says the
+  popup brought its own close button".
 - the lifted node is wrapped back in `fl-builder-content` and
   `fl-builder-content-<page id>`, with the post id as a data attribute; markup
   that already carries this page's wrapper is left alone, and one carrying
