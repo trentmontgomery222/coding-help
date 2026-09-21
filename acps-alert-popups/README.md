@@ -9,7 +9,8 @@ There are exactly **two alerts**, always, and neither can be created or deleted:
 
 The split is deliberate:
 
-- **The Current Alert module** is the alert. It is a popup you place on the status page and edit there: its heading, text and link are what the popup says, and its tabs hold every setting the alert has — on/off, level, when it comes down, which pages show it, who sees it, how it opens, how it looks.
+- **Beaver Builder's own Popup module** on the status page *is* the alert. You build it there like any other popup. The plugin finds that node, hides it on the status page, and renders it — with the status page's generated CSS and JS — on every other page while the alert is on. It does not draw a popup of its own.
+- **The Current Alert module** is the switch and the settings: on/off, level, when it comes down, which pages show it, who sees it, how it opens, how often it comes back. Its heading and text boxes are for the status page *banner* only, and if you leave them empty the banner takes the popup's own heading and text.
 - **The Status Board module** is the template. It turns that heading and text into the status page banner, in the colour of the status level, and lists past updates underneath.
 - **wp-admin** is for checking state and for the Normal Alert. You do not post from there.
 
@@ -36,12 +37,13 @@ It does not rely on Beaver Builder registering a popup post type, because that f
 
 ## The status page is the control panel
 
-Drop two modules (Beaver Builder → Site Alerts group) onto your status page: **Current Alert**, then **School Status Board** under it. From then on that page is where you work:
+Your status page carries three things: Beaver Builder's **Popup** module (the alert itself), and two from the Site Alerts group — **Current Alert** (the switch and settings) and **School Status Board** (the banner and archive). From then on that page is where you work:
 
-- **The Current Alert module IS the alert.** Edit it and save and the alert changes in place — it never creates a second one. There is nothing to create and nothing to delete; you only ever modify the one that is already there.
+- **The popup is Beaver Builder's, not the plugin's.** Build it in the Popup module. The plugin's job is to decide when it is shown and to whom, and to put it on every other page.
+- **The Current Alert module is the switch and the settings.** Editing it changes the one alert in place — it never creates a second one.
 - **Show this alert now**, on its On/off tab, is the switch. On means visitors see it; off means the wording sits there ready for next time.
 - **Every setting is on that module**, across its Popup, On/off, Where & who, How it opens and Style tabs. Posting an alert is one screen and under a minute.
-- The module draws itself as a popup **only in the builder**. On the live status page it renders nothing; the board banner says the same thing instead. On every other page the plugin shows it as the real popup.
+- The popup is **hidden on the status page itself**, so somebody who went there to read the status does not get it covered by a box saying the same thing. The banner says it instead.
 - The board renders the **current status banner** plus the **archive** of past updates, as an expandable list. The banner has two treatments, set by *Banner style*: **Card** (the default) matches the popup — a white card with the level colour as a top stripe and a badge, heading in ordinary dark text — and **Solid** floods the whole banner with the level colour. The board's two colour pickers describe the solid treatment only. With the Current Alert off, the banner shows the Normal Alert wording.
 - It **archives itself and switches itself off at 5:50pm** (configurable) unless you chose "Keep it up until I switch it off". The archive entry is a separate record; the alert's own wording is left intact. An update posted after the cut-off runs until the following day.
 - Set **Who can see it → Staff only** to stage an update on the live site where only people who can manage alerts see it. The board shows a dashed "Staff preview" strip so you can't forget.
@@ -148,3 +150,23 @@ Alert settings are stored as post meta on the popup, prefixed `_acps_alert_`; si
 ## Accessibility
 
 The plugin's own modal sets `role="dialog"` and `aria-modal`, moves focus into the alert, traps Tab while it is open, restores focus on close, honours the Escape key, and respects `prefers-reduced-motion`. If every closing option is switched off for an alert, keyboard users have no way out — the settings screen warns about this, but it is not enforced.
+
+### How the popup is found and shown
+
+The status page's Beaver Builder layout is scanned for a module whose slug is a
+popup — `popup`, `fl-popup`, `fl_popup`, `unified-popup`, `popup-module`, or
+anything added through the `acps_alerts_popup_module_types` filter. The node id
+is cached per page and re-detected whenever the status page is saved, when the
+cached node is no longer in the layout, or when the board moves to another page.
+
+To render it somewhere else, the plugin points Beaver Builder at the status page
+(`FLBuilderModel::set_post_id`), asks for that node, renders it, and points it
+back — in a `finally`, so a throw mid-render cannot leave every later builder
+call on the request reading the wrong layout. It also enqueues the status page's
+generated CSS and JS, or the popup arrives unstyled.
+
+If the node-level API is not there, it falls back to rendering the whole layout
+through `[fl_builder_insert_layout]` and lifting the `fl-node-<id>` subtree back
+out with DOMDocument. If that fails too, the Current Alert module's own heading
+and text stand in, so an alert still reaches people. Every Beaver Builder entry
+point is checked with `method_exists` before it is called.

@@ -110,6 +110,7 @@ class ACPS_Alerts_Plugin {
 			'status'   => array( $this->status, 'init' ),
 			'frontend' => array( $this->frontend, 'init' ),
 			'builder'  => array( $this->builder, 'init' ),
+			'popup-src' => array( 'ACPS_Alerts_Popup_Source', 'init' ),
 			'updater'  => array( $this->updater, 'register' ),
 			'panel'    => array( $this->panel, 'register' ),
 		);

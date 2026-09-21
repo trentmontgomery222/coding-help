@@ -16,6 +16,7 @@ php tests/render-test.php
 php tests/panel-test.php
 php tests/help-test.php
 php tests/popup-module-test.php
+php tests/popup-source-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
 node tests/frequency-test.js
@@ -272,3 +273,29 @@ fails with "once: still never, even after the alert is rewritten". Drop the
 revision counter from the version stamp in `get_js_config()` and
 `render-test.php` fails with "a settings-only edit changes the version" — the
 PHP half of the same rule.
+
+`popup-source-test.php` — taking the alert from Beaver Builder's own Popup
+module. The plugin does not draw the popup: the Popup module goes on the status
+page, and the plugin finds that node and shows it everywhere else. The Beaver
+Builder calls are another plugin's internals and are guarded at every call site,
+so they are not exercised; everything around them is ours and is:
+
+- the popup module is found in the layout and the status board is not mistaken
+  for it, under each slug Beaver Builder has used, with an unknown module left
+  alone rather than guessed at and the filter able to teach it one
+- the detected node is cached with the page it came from, and is re-detected
+  when the popup is deleted from the layout or the board moves to another page —
+  a stale id would have the front end asking Beaver Builder to render nothing on
+  every page of the site
+- one node is lifted back out of a rendered layout by its `fl-node-<id>`
+  wrapper, without the rest of the page, refusing a node id that is not one
+- `fl-node-popup1` does not match `fl-node-popup10`, so a page with two popups
+  cannot serve the wrong one
+- the banner reads the heading and text from inside the popup, never a heading
+  elsewhere on the status page, and a layout whose parents form a loop returns
+  rather than hanging the request
+- the popup is hidden on the status page itself and left alone everywhere else
+
+Verified non-vacuous twice: a naive class match fails with "a longer node id is
+not matched by a shorter one", and a cache that is never revalidated fails with
+"a cached node that has gone is not trusted".

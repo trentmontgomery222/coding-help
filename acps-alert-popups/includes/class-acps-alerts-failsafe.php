@@ -62,6 +62,7 @@ class ACPS_Alerts_Failsafe {
 			'includes/class-acps-alerts-post-type.php',
 			'includes/class-acps-alerts-status.php',
 			'includes/class-acps-alerts-source.php',
+			'includes/class-acps-alerts-popup-source.php',
 			'includes/class-acps-alerts-alert.php',
 			'includes/class-acps-alerts-conditions.php',
 			'includes/class-acps-alerts-fields.php',

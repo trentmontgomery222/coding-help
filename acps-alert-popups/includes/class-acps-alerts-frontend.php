@@ -406,10 +406,12 @@ class ACPS_Alerts_Frontend {
 		}
 
 		// The badge, the heading and the link below it are only drawn for an
-		// alert whose body is plain content. A popup designed in Beaver Builder
-		// already has its own heading and buttons, and adding ours on top would
-		// give it two of each.
-		$furniture = ! self::has_builder_layout( $id );
+		// alert whose body is plain content. A popup built in Beaver Builder —
+		// whether that is a layout on this post or the Popup module on the
+		// status page — already has its own heading and buttons, and adding
+		// ours on top would give it two of each.
+		$furniture = ! self::has_builder_layout( $id )
+			&& ! ( class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available() );
 
 		$cta_text = trim( (string) $alert->get( 'cta_text' ) );
 		$cta_url  = trim( (string) $alert->get( 'cta_url' ) );
@@ -519,14 +521,28 @@ class ACPS_Alerts_Frontend {
 	 * @return string
 	 */
 	protected function resolve_popup_content( $post_id ) {
-		// The Current Alert is written in the Current Alert module on the status
-		// page, and that module stores what it says as this post's content. A
-		// builder layout left on the post from before would silently win over
-		// what the module now says, so it is never consulted for this one.
-		$from_module = class_exists( 'ACPS_Alerts_Post_Type' )
+		$is_current = class_exists( 'ACPS_Alerts_Post_Type' )
 			&& ACPS_Alerts_Post_Type::ROLE_CURRENT === ACPS_Alerts_Post_Type::role_of( $post_id );
 
-		if ( ! $from_module && self::has_builder_layout( $post_id ) && shortcode_exists( 'fl_builder_insert_layout' ) ) {
+		// The Current Alert IS the Beaver Builder popup sitting on the status
+		// page. Take that, rather than drawing anything of our own.
+		if ( $is_current && class_exists( 'ACPS_Alerts_Popup_Source' ) ) {
+			$popup = ACPS_Alerts_Failsafe::guard(
+				array( 'ACPS_Alerts_Popup_Source', 'render' ),
+				array(),
+				'frontend/bb-popup',
+				''
+			);
+
+			if ( '' !== trim( (string) $popup ) ) {
+				return (string) $popup;
+			}
+		}
+
+		// Falling through here means there is no popup module on the status page
+		// yet, or Beaver Builder could not render it. The module's own heading
+		// and text stand in so an alert still reaches people.
+		if ( ! $is_current && self::has_builder_layout( $post_id ) && shortcode_exists( 'fl_builder_insert_layout' ) ) {
 			$html = ACPS_Alerts_Failsafe::guard(
 				'do_shortcode',
 				array( '[fl_builder_insert_layout id="' . $post_id . '"]' ),

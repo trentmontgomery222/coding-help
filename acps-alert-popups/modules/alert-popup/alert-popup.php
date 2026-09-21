@@ -121,6 +121,23 @@ class ACPS_Alert_Popup_Module extends FLBuilderModule {
 		$post_id  = $alert->get_id();
 		$heading  = isset( $settings->heading ) ? trim( wp_strip_all_tags( (string) $settings->heading ) ) : '';
 		$text     = isset( $settings->text ) ? (string) $settings->text : '';
+
+		// Nothing typed here: read the wording out of the Beaver Builder popup
+		// on this page instead, so the banner and the admin list still have
+		// something to show for a popup built entirely in the builder.
+		if ( '' === $heading || '' === trim( wp_strip_all_tags( $text ) ) ) {
+			$from_popup = class_exists( 'ACPS_Alerts_Popup_Source' )
+				? ACPS_Alerts_Popup_Source::wording()
+				: array( 'heading' => '', 'text' => '' );
+
+			if ( '' === $heading ) {
+				$heading = trim( (string) $from_popup['heading'] );
+			}
+
+			if ( '' === trim( wp_strip_all_tags( $text ) ) ) {
+				$text = (string) $from_popup['text'];
+			}
+		}
 		$was_live = (bool) $alert->get( 'enabled' );
 		$is_live  = isset( $settings->active ) && '1' === (string) $settings->active;
 
@@ -281,30 +298,31 @@ FLBuilder::register_module(
 			'title'    => __( 'Popup', 'acps-alert-popups' ),
 			'sections' => array(
 				'content' => array(
-					'title'       => __( 'What the popup says', 'acps-alert-popups' ),
-					'description' => __( 'This is the alert. The status page turns the heading and text below into its banner, and the plugin shows this popup on every other page while the alert is on.', 'acps-alert-popups' ),
+					'title'       => __( 'The banner wording', 'acps-alert-popups' ),
+					'description' => __( 'The popup itself is the Beaver Builder Popup module on this page — build it there, and the plugin shows that popup across the site. These boxes are only for the status page banner, which is text rather than a popup. Leave them empty and the banner takes the popup\'s own heading and text.', 'acps-alert-popups' ),
 					'fields'      => array(
 						'heading' => array(
 							'type'        => 'text',
-							'label'       => __( 'Heading', 'acps-alert-popups' ),
+							'label'       => __( 'Banner heading', 'acps-alert-popups' ),
 							'default'     => '',
 							'placeholder' => __( 'Snow Day — All Schools Closed', 'acps-alert-popups' ),
 							'connections' => array( 'string' ),
-							'help'        => __( 'Leave empty to change nothing about the wording.', 'acps-alert-popups' ),
+							'help'        => __( 'Also the alert\'s name in wp-admin. Leave empty to use the popup\'s own heading.', 'acps-alert-popups' ),
 						),
 						'text'    => array(
 							'type'    => 'editor',
-							'label'   => __( 'Text', 'acps-alert-popups' ),
+							'label'   => __( 'Banner text', 'acps-alert-popups' ),
 							'default' => '',
 							'media_buttons' => false,
 							'rows'    => 8,
+							'help'    => __( 'Shown under the heading on the status page. Leave empty to use the popup\'s own text.', 'acps-alert-popups' ),
 						),
 						'cta_text' => array(
 							'type'        => 'text',
 							'label'       => __( 'Link text', 'acps-alert-popups' ),
 							'default'     => __( 'View updates', 'acps-alert-popups' ),
 							'placeholder' => __( 'View updates', 'acps-alert-popups' ),
-							'help'        => __( 'The link under the message. Leave empty for no link.', 'acps-alert-popups' ),
+							'help'        => __( 'Only used when there is no Beaver Builder popup on this page to take instead — a popup has its own buttons.', 'acps-alert-popups' ),
 						),
 						'cta_url'  => array(
 							'type'        => 'link',

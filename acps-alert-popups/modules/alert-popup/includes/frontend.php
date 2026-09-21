@@ -91,8 +91,17 @@ if ( '' === trim( $acps_heading ) ) {
 		</div>
 	</div>
 
+	<?php
+	$acps_has_bb = class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available();
+	?>
 	<p class="acps-popup-edit__note">
-		<?php esc_html_e( 'This is the Current Alert. Only you see this box — it is here so you can edit the popup on the page it belongs to.', 'acps-alert-popups' ); ?>
+		<?php if ( $acps_has_bb ) : ?>
+			<strong><?php esc_html_e( 'The popup people see is the Beaver Builder Popup module on this page.', 'acps-alert-popups' ); ?></strong>
+			<?php esc_html_e( 'Build it there. This module does not draw the popup — it is the switch and the settings, and the box above is only a sketch of the status page banner.', 'acps-alert-popups' ); ?>
+		<?php else : ?>
+			<strong><?php esc_html_e( 'No Beaver Builder Popup module found on this page.', 'acps-alert-popups' ); ?></strong>
+			<?php esc_html_e( 'Add one and build the alert in it. Until then the plugin falls back to showing the heading and text below, so an alert still reaches people.', 'acps-alert-popups' ); ?>
+		<?php endif; ?>
 		<br />
 		<?php if ( $acps_popup ) : ?>
 			<?php esc_html_e( 'When it is on, this popup shows across the site. It never shows on the status page; the banner below says the same thing instead.', 'acps-alert-popups' ); ?>
