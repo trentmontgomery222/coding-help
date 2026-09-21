@@ -95,6 +95,36 @@
 	}
 
 	/**
+	 * Records what this visitor now knows about an alert.
+	 *
+	 * Merges into whatever is already stored rather than replacing it, so
+	 * closing an alert keeps the moment it was shown.
+	 *
+	 * @param {number} id     Alert ID.
+	 * @param {Object} fields Fields to write.
+	 */
+	function remember( id, fields ) {
+		var cfg = config( id );
+
+		if ( ! cfg || data.isPreview ) {
+			return;
+		}
+
+		var record = readRecord( id ) || {};
+
+		record.session = sessionId();
+		record.version = cfg.version || '';
+
+		for ( var key in fields ) {
+			if ( Object.prototype.hasOwnProperty.call( fields, key ) ) {
+				record[ key ] = fields[ key ];
+			}
+		}
+
+		writeRecord( id, record );
+	}
+
+	/**
 	 * Whether an alert is still allowed to auto-open for this visitor.
 	 *
 	 * @param {Object} config Alert config.
@@ -107,7 +137,11 @@
 
 		var record = readRecord( config.id );
 
-		if ( ! record || ! record.dismissedAt ) {
+		// Being shown it is what counts, not closing it. A record written by an
+		// older version only has the dismissal, so that still reads as seen.
+		var seenAt = record ? ( record.seenAt || record.dismissedAt ) : 0;
+
+		if ( ! seenAt ) {
 			return true;
 		}
 
@@ -137,7 +171,7 @@
 		}
 
 		if ( 'days' === config.frequency ) {
-			var elapsed = Date.now() - record.dismissedAt;
+			var elapsed = Date.now() - seenAt;
 
 			return elapsed > config.frequencyDays * 86400000;
 		}
@@ -234,6 +268,11 @@
 
 		var native = resolveCallback( data.nativeOpen );
 
+		// Written before anything is shown, because from here on the visitor
+		// has seen it — whether they close it, follow the link inside it, or
+		// just click away to another page.
+		remember( id, { seenAt: Date.now() } );
+
 		if ( native ) {
 			// Beaver Builder owns the popup chrome in this mode.
 			native( id );
@@ -257,10 +296,10 @@
 	/**
 	 * Closes an alert and remembers the dismissal.
 	 *
-	 * @param {number}  id       Alert ID.
-	 * @param {boolean} remember Whether to store the dismissal.
+	 * @param {number}  id    Alert ID.
+	 * @param {boolean} store Whether to record the dismissal.
 	 */
-	function close( id, remember ) {
+	function close( id, store ) {
 		var el = element( id );
 		var cfg = config( id );
 
@@ -278,12 +317,8 @@
 			document.body.classList.remove( 'acps-alert-is-open' );
 		}
 
-		if ( false !== remember && cfg && ! data.isPreview ) {
-			writeRecord( id, {
-				dismissedAt: Date.now(),
-				session: sessionId(),
-				version: cfg.version || ''
-			} );
+		if ( false !== store ) {
+			remember( id, { dismissedAt: Date.now() } );
 		}
 
 		if ( lastFocused && lastFocused.focus ) {

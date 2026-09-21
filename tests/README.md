@@ -233,6 +233,20 @@ whole set at once, so the risks are the ones a complete save creates:
 - start and end dates apply on the custom schedule and are ignored on the others
 - the link text, the link itself, the badge toggle and the level-word toggle all
   reach the alert, and switching a toggle off really clears it
+- being shown an alert is what counts, not closing it. The whole front end
+  script is booted against a stub DOM and the real `open()` is let run, because
+  this is a question about what reaches storage and neither `mayShow()` nor
+  `close()` answers it alone. The dismissal used to be written only in
+  `close()`, so a visitor who read the popup and followed the link inside it
+  left no record and got the same popup on the very next page — "it keeps
+  coming back", with `mayShow()` behaving perfectly the whole time. Closing
+  still records the dismissal on top, and a record from before this that only
+  carries a dismissal still reads as seen.
+
+  Verified non-vacuous: drop the write from `open()` and it fails five ways,
+  including "a visitor who never pressed the X is not shown it again"; narrow
+  the read to `record.seenAt` and the older records stop counting, failing
+  "session: not again in the same session".
 - a background and its text colour are one decision, and the card is one
   surface. The card states both, neither inherited; the head and the message are
   spacing only and carry no colour of their own; and there is one pair of

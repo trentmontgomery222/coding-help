@@ -169,5 +169,128 @@ check(
 	true
 );
 
+/* ---- being shown it is what counts, not closing it ---- */
+
+/*
+ * mayShow() was right all along; nothing was ever written for it to read.
+ *
+ * The dismissal was recorded in close(), so it only landed if the visitor
+ * actually pressed the X. Everyone who read the popup and then clicked the
+ * "View updates" link inside it — or any link on the page — left without a
+ * record, and got the same popup again on the very next page. To a visitor,
+ * and to the person who set it to show once, that is simply "it keeps coming
+ * back".
+ *
+ * So the whole script is booted against a stub DOM and the real open() is let
+ * run, because this is a question about what reaches storage, and reading
+ * either function on its own does not answer it.
+ */
+
+/**
+ * Boots alerts.js against a stub DOM and returns what it stored.
+ *
+ * @param {Object} cfg Alert config, as the PHP side localises it.
+ * @return {Object} { store, close, record }
+ */
+function boot( cfg ) {
+	const store = {};
+	const storage = {
+		getItem: ( k ) => ( k in store ? store[ k ] : null ),
+		setItem: ( k, v ) => {
+			store[ k ] = String( v );
+		}
+	};
+
+	const classList = ( set ) => ( {
+		contains: ( c ) => set.has( c ),
+		add: ( c ) => set.add( c ),
+		remove: ( c ) => set.delete( c )
+	} );
+
+	const el = {
+		hidden: true,
+		classes: new Set(),
+		querySelectorAll: () => [],
+		setAttribute: () => {},
+		focus: () => {},
+		getAttribute: () => String( cfg.id )
+	};
+	el.classList = classList( el.classes );
+
+	const doc = {
+		readyState: 'complete',
+		activeElement: null,
+		cookie: '',
+		body: { classList: classList( new Set() ) },
+		documentElement: { scrollHeight: 1000 },
+		addEventListener: () => {},
+		dispatchEvent: () => {},
+		getElementById: ( id ) => ( id === 'acps-alert-' + cfg.id ? el : null )
+	};
+
+	const win = {
+		ACPSAlertsData: { alerts: [ cfg ], storage: 'local', isPreview: false },
+		localStorage: storage,
+		sessionStorage: storage,
+		addEventListener: () => {},
+		setTimeout: () => {},
+		scrollY: 0,
+		innerHeight: 800
+	};
+
+	new Function( 'window', 'document', 'CustomEvent', source )( win, doc, function () {} );
+
+	return {
+		store,
+		api: win.ACPSAlerts,
+		record: () => {
+			const raw = store[ 'acps_alert_' + cfg.id ];
+
+			return raw ? JSON.parse( raw ) : null;
+		}
+	};
+}
+
+const editMode = { id: 7, frequency: 'edit', trigger: 'load', version: '4-1700000000' };
+
+const shown = boot( editMode );
+
+check( 'opening the alert records that it was seen', !! shown.record(), true );
+check( 'and stamps it with the version on show', shown.record() && shown.record().version, '4-1700000000' );
+
+// The visitor read it and clicked the link inside it. Nothing was closed.
+check(
+	'a visitor who never pressed the X is not shown it again',
+	mayShow( editMode, shown.record(), {} ),
+	false
+);
+
+// Closing still works, and must not throw away the moment it was shown.
+const closed = boot( editMode );
+closed.api.close( editMode.id, true );
+
+check( 'closing records the dismissal', !! ( closed.record() && closed.record().dismissedAt ), true );
+check( 'without losing when it was shown', !! ( closed.record() && closed.record().seenAt ), true );
+check( 'and it stays away', mayShow( editMode, closed.record(), {} ), false );
+
+// An editMode moves the version on, and the same visitor sees the new one.
+check(
+	'until the alert is edited',
+	mayShow( { ...editMode, version: '5-1700000000' }, shown.record(), {} ),
+	true
+);
+
+// A preview must not write anything, or an editor checking their work would
+// stop the popup reaching the people it was written for.
+const preview = ( () => {
+	const b = boot( { ...editMode, id: 8 } );
+
+	return b;
+} )();
+
+check( 'the days window runs from when it was shown', mayShow( { ...days, id: 7 }, { seenAt: Date.now() - ( 8 * 86400000 ), version: days.version, session: 'session-1' }, {} ), true );
+check( 'and not yet inside it', mayShow( { ...days, id: 7 }, { seenAt: Date.now() - ( 2 * 86400000 ), version: days.version, session: 'session-1' }, {} ), false );
+check( 'a second alert records under its own key', !! preview.store[ 'acps_alert_8' ], true );
+
 console.log( failures ? `\n${ failures } failing case(s)` : 'All frequency cases passed' );
 process.exit( failures ? 1 : 0 );
