@@ -15,8 +15,6 @@ if ( ! isset( $settings ) || ! is_object( $settings ) || ! class_exists( 'ACPS_A
 $acps_live   = ACPS_Alerts_Status::board_entry();
 $acps_normal = ACPS_Alerts_Status::normal_alert();
 
-$acps_show_icon    = ! isset( $settings->show_icon ) || '1' === (string) $settings->show_icon;
-$acps_icon_size    = isset( $settings->icon_size ) ? absint( $settings->icon_size ) : 64;
 $acps_show_archive = ! isset( $settings->show_archive ) || '1' === (string) $settings->show_archive;
 $acps_show_dates   = ! isset( $settings->archive_dates ) || '1' === (string) $settings->archive_dates;
 $acps_count        = isset( $settings->archive_count ) ? absint( $settings->archive_count ) : 10;
@@ -29,13 +27,6 @@ $acps_date_format  = get_option( 'date_format' );
 
 	<?php if ( $acps_live ) : ?>
 		<?php
-		$acps_level  = ACPS_Alerts_Status::level( $acps_live->get( 'status_level' ) );
-
-		// On the card the level word takes the level's colour; on the solid
-		// banner the whole background is already that colour, so it inherits.
-		$acps_accent = ACPS_Status_Board_Module::is_solid( $settings )
-			? ''
-			: ACPS_Status_Board_Module::level_color( $acps_live, $settings );
 		$acps_msg    = (string) $acps_live->get( 'status_message' );
 		$acps_staged = 'admins' === $acps_live->get( 'visibility' );
 		?>
@@ -49,29 +40,16 @@ $acps_date_format  = get_option( 'date_format' );
 		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( $acps_live, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( $acps_live, $settings ) ); ?>" role="status">
 			<?php
 			/*
-			 * The head of the card carries its own background, so the heading
-			 * reads as a heading rather than as the first line of the message.
-			 * The body below it is left on the card, which is what keeps a long
-			 * update readable.
+			 * The banner is the heading and the message, and nothing else. No
+			 * badge, no level word, no directive — the level shows in the
+			 * banner's colour, and anywhere those pieces are wanted they can be
+			 * placed with [schoolstatus], which is what that shortcode is for.
+			 *
+			 * The head carries its own background so the heading reads as a
+			 * heading rather than as the first line of the message.
 			 */
 			?>
 			<div class="acps-board__head">
-				<?php if ( $acps_show_icon ) : ?>
-					<?php echo ACPS_Alerts_Status::level_icon( $acps_live->get( 'status_level' ), $acps_icon_size, $acps_accent ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
-				<?php endif; ?>
-
-				<?php
-				// The level word sits above the heading as a small label. The
-				// heading itself is whatever was typed, because that is the
-				// thing a visitor came to read — not the words "School Status".
-				?>
-				<p class="acps-board__level">
-					<?php echo esc_html( $acps_level['banner'] ); ?>
-					<?php if ( '' !== $acps_level['directive'] ) : ?>
-						<span class="acps-board__directive"><?php echo esc_html( wp_strip_all_tags( $acps_level['directive'] ) ); ?></span>
-					<?php endif; ?>
-				</p>
-
 				<h2 class="acps-board__title"><?php echo esc_html( $acps_live->get_title() ); ?></h2>
 			</div>
 
@@ -98,10 +76,6 @@ $acps_date_format  = get_option( 'date_format' );
 		?>
 		<div class="<?php echo esc_attr( ACPS_Status_Board_Module::banner_classes( null, $settings ) ); ?>" style="<?php echo esc_attr( ACPS_Status_Board_Module::banner_style( null, $settings ) ); ?>" role="status">
 			<div class="acps-board__head">
-				<?php if ( $acps_show_icon ) : ?>
-					<?php echo ACPS_Alerts_Status::level_icon( 'normal', $acps_icon_size, ACPS_Alerts_Status::level_color( 'normal', 'board', ACPS_Status_Board_Module::level_overrides( $settings ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
-				<?php endif; ?>
-
 				<h2 class="acps-board__title"><?php echo esc_html( $acps_normal_title ); ?></h2>
 			</div>
 

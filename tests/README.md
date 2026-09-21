@@ -233,6 +233,12 @@ whole set at once, so the risks are the ones a complete save creates:
 - start and end dates apply on the custom schedule and are ignored on the others
 - the link text, the link itself, the badge toggle and the level-word toggle all
   reach the alert, and switching a toggle off really clears it
+- the banner draws the heading and the message and nothing else: no badge, no
+  level word, no directive, and no setting left offering to put one back. Read
+  from the template itself, because this is a rule about what reaches the page.
+
+  Verified non-vacuous: put a badge and a level word back and it fails with "the
+  banner draws no badge".
 - the board's own colour for a level: with nothing picked the level keeps its
   own, a colour picked for that level on this board wins, one picked for a
   different level is ignored, an empty picker is not a choice, and the resting

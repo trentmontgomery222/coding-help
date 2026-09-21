@@ -36,8 +36,7 @@
 }
 
 /* The head of the card carries its own background — the board colour — so the
-   badge, the level word and the heading read as a heading rather than as the
-   first line of the message. The body below stays on the card, which is what
+   heading reads as a heading rather than as the first line of the message. The body below stays on the card, which is what
    keeps a long update readable. */
 .acps-board__banner--card .acps-board__head {
 	padding: 30px 40px 26px;
@@ -45,9 +44,7 @@
 	color: #fff;
 }
 
-.acps-board__banner--card .acps-board__head .acps-board__title,
-.acps-board__banner--card .acps-board__head .acps-board__level,
-.acps-board__banner--card .acps-board__head .acps-board__directive {
+.acps-board__banner--card .acps-board__head .acps-board__title {
 	color: inherit;
 }
 
@@ -62,29 +59,9 @@
 	background: none;
 }
 
-/* The badge. On the solid banner it needs a halo to lift it off the colour
-   behind it; on the card it sits on white and needs nothing. */
-.acps-board__banner .acps-level-icon {
-	margin-bottom: 18px;
-}
-
-.acps-board__banner--solid .acps-level-icon,
-.acps-board__banner--card .acps-board__head .acps-level-icon {
-	box-shadow: 0 0 0 6px rgba( 255, 255, 255, 0.22 );
-}
-
-/* The level word, as a small label above the heading. The heading itself is
-   the alert's own title — that is the thing people came to read. */
-.acps-board__level {
-	margin: 0 0 8px;
-	font-size: 0.8em;
-	font-weight: 800;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: inherit;
-	opacity: 0.9;
-}
-
+/* The banner is the heading and the message, and nothing else: no badge, no
+   level word, no directive. The level shows in the banner's own colour, and
+   anywhere those pieces are wanted they are placed with [schoolstatus]. */
 .acps-board__title {
 	margin: 0 0 12px;
 	font-size: 2em;
@@ -96,19 +73,6 @@
 	max-width: 62ch;
 	margin-left: auto;
 	margin-right: auto;
-}
-
-/* The SRP directive: the line staff and students are trained on, so it sits
-   directly under the action word and stays prominent. */
-.acps-board__directive {
-	display: block;
-	margin: 4px 0 0;
-	font-size: 1em;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: inherit;
-	opacity: 0.92;
 }
 
 .acps-board__headline {

@@ -33,7 +33,6 @@ $acps_text = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_text ) ) ? '#' . $acps_te
 }
 
 .fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--solid .acps-board__title,
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--solid .acps-board__level,
 .fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--solid .acps-board__message {
 	color: inherit;
 }

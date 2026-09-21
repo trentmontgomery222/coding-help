@@ -315,73 +315,7 @@ FLBuilder::register_module(
 								'card'  => __( 'Card — white, like the popup', 'acps-alert-popups' ),
 								'solid' => __( 'Solid — the whole banner in the level colour', 'acps-alert-popups' ),
 							),
-							'help'    => __( 'The card matches what visitors see in the popup: a coloured badge and stripe, with the heading in ordinary text.', 'acps-alert-popups' ),
-						),
-						'show_icon' => array(
-							'type'    => 'select',
-							'label'   => __( 'Show the level badge', 'acps-alert-popups' ),
-							'default' => '1',
-							'options' => array(
-								'1' => __( 'Yes — the coloured disc above the heading', 'acps-alert-popups' ),
-								'0' => __( 'No', 'acps-alert-popups' ),
-							),
-							'help'    => __( 'The heading underneath it is always the alert\'s own title.', 'acps-alert-popups' ),
-						),
-						'icon_size' => array(
-							'type'    => 'unit',
-							'label'   => __( 'Badge size', 'acps-alert-popups' ),
-							'default' => '64',
-							'units'   => array( 'px' ),
-							'slider'  => array( 'min' => 16, 'max' => 160, 'step' => 4 ),
-						),
-					),
-				),
-				'normal'  => array(
-					'title'  => __( 'When nothing is happening', 'acps-alert-popups' ),
-					'fields' => array(
-						'normal_title'   => array(
-							'type'    => 'text',
-							'label'   => __( 'Heading', 'acps-alert-popups' ),
-							'default' => __( 'School Status: NORMAL', 'acps-alert-popups' ),
-						),
-						'normal_message' => array(
-							'type'    => 'textarea',
-							'label'   => __( 'Message', 'acps-alert-popups' ),
-							'rows'    => 4,
-							'default' => __( 'All schools are operating as normal. This information will be updated as needed to provide families, students, staff, and the community with the latest information regarding school operations and safety.', 'acps-alert-popups' ),
-						),
-					),
-				),
-				'archive' => array(
-					'title'  => __( 'Archive', 'acps-alert-popups' ),
-					'fields' => array(
-						'show_archive'  => array(
-							'type'    => 'select',
-							'label'   => __( 'Show past updates', 'acps-alert-popups' ),
-							'default' => '1',
-							'options' => array(
-								'1' => __( 'Yes', 'acps-alert-popups' ),
-								'0' => __( 'No', 'acps-alert-popups' ),
-							),
-						),
-						'archive_count' => array(
-							'type'    => 'unit',
-							'label'   => __( 'How many', 'acps-alert-popups' ),
-							'default' => '10',
-							'slider'  => array(
-								'min'  => 1,
-								'max'  => 50,
-								'step' => 1,
-							),
-						),
-						'archive_dates' => array(
-							'type'    => 'select',
-							'label'   => __( 'Show the date on each one', 'acps-alert-popups' ),
-							'default' => '1',
-							'options' => array(
-								'1' => __( 'Yes', 'acps-alert-popups' ),
-								'0' => __( 'No', 'acps-alert-popups' ),
-							),
+							'help'    => __( 'The banner is the heading and the message, and nothing else. The card puts the heading on a coloured head with the message on white below; the solid style floods the whole banner with the level colour. For a badge or the level word anywhere on the page, use the [schoolstatus] shortcode.', 'acps-alert-popups' ),
 						),
 					),
 				),

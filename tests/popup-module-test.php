@@ -417,5 +417,34 @@ foreach ( array_keys( ACPS_Alerts_Status::level_choices() ) as $level_key ) {
     ok( "the board offers a colour for '$level_key'", isset( $board_fields[ 'level_color_' . $level_key ] ) );
 }
 
+/* ---- the banner is the heading and the message, and nothing else ---- */
+
+/*
+ * No badge, no level word, no directive. The level shows in the banner's own
+ * colour, and anywhere those pieces are wanted they are placed with
+ * [schoolstatus] — which is the whole reason that shortcode exists. Read from
+ * the template itself, because this is a rule about what reaches the page.
+ */
+$board_template = file_get_contents( ACPS_ALERTS_DIR . 'modules/status-board/includes/frontend.php' );
+
+$banner = substr(
+	$board_template,
+	strpos( $board_template, '<div class="acps-board">' ),
+	strpos( $board_template, 'acps-board__archive' ) - strpos( $board_template, '<div class="acps-board">' )
+);
+
+ok( 'the banner draws no badge', false === strpos( $banner, 'level_icon' ) );
+ok( 'no level word', false === strpos( $banner, 'acps-board__level' ) );
+ok( 'and no directive', false === strpos( $banner, 'acps-board__directive' ) );
+
+// What it does draw.
+ok( 'it draws the heading', false !== strpos( $banner, 'acps-board__title' ) );
+ok( 'and the message', false !== strpos( $banner, 'acps-board__message' ) );
+
+// The settings that drew the badge are gone too, so nothing offers to put it
+// back.
+ok( 'the board no longer offers a badge switch', ! isset( $board_fields['show_icon'] ) );
+ok( 'nor a badge size', ! isset( $board_fields['icon_size'] ) );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All popup module cases passed\n";
 exit( $fails ? 1 : 0 );
