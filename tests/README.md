@@ -303,6 +303,18 @@ so they are not exercised; everything around them is ours and is:
   elsewhere on the status page, and a layout whose parents form a loop returns
   rather than hanging the request
 - the popup is hidden on the status page itself and left alone everywhere else
+- the status page's generated stylesheet is loaded under our own handle, from
+  the url Beaver Builder reports, versioned by the file so an edit busts the
+  browser cache, with the base layout stylesheet alongside it. Two ways that
+  silently costs the popup its entire design, both pinned: a stylesheet linked
+  when the cached file is not on disk, and a dependency on Beaver Builder's base
+  handle when that handle is not registered — WordPress declines to print such a
+  style without a word.
+
+  Verified non-vacuous: declare the dependency unconditionally and it fails with
+  "it never depends on an unregistered handle: fl-builder-layout"; link a file
+  that is not there and it fails with "a stylesheet that is not on disk is not
+  linked to".
 - a lifted popup stops being a popover. Beaver Builder's popup carries
   `popover="manual"`, and a browser keeps any such element at `display:none`
   until `showPopover()` is called — so inside the alert dialog, where nothing

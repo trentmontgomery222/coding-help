@@ -235,19 +235,21 @@ body.acps-alert-is-open {
  * ------------------------------------------------------------------------ */
 
 .acps-alert__content .fl-popup {
+	/* Only the closed state is undone.
+	 *
+	 * Size is deliberately NOT touched. Once the popover attribute is gone the
+	 * browser's popover rules stop applying to this element entirely, so there
+	 * is nothing left to fight — and a `max-width: none !important` here beats
+	 * the popup's own width from the status page's stylesheet and throws it
+	 * across the whole screen. Its width, height, padding and margins are part
+	 * of the design and are left alone. */
 	display: block !important;
 	position: static !important;
 	inset: auto !important;
-	width: auto !important;
-	max-width: none !important;
-	height: auto !important;
-	max-height: none !important;
-	margin: 0 !important;
 	opacity: 1 !important;
 	visibility: visible !important;
 	transform: none !important;
 	animation: none !important;
-	overflow: visible !important;
 	pointer-events: auto !important;
 }
 

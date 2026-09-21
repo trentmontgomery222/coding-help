@@ -189,18 +189,29 @@ wrong layout.
 per post, so the popup's design lives in the status page's stylesheet and is
 simply not on any other page. That gets loaded on `wp_enqueue_scripts`, not at
 render time — a stylesheet asked for in the footer arrives after the browser has
-already painted the popup unstyled. Three things are needed and each is checked
-rather than assumed: Beaver Builder's base layout stylesheet (absent on a page
-with no builder content of its own), the status page's generated stylesheet via
-whichever enqueue method that version has, and — when that call turns out to
-have done nothing, which is verified by looking for the `fl-builder-layout-<id>`
-handle — the cached stylesheet loaded straight off disk through
-`FLBuilderModel::get_asset_info()`.
+already painted the popup unstyled. Beaver Builder's base layout stylesheet is enqueued (it is absent on a page with
+no builder content of its own), its own enqueue method is called for whichever
+name that version has, and then the status page's cached stylesheet is loaded
+under our own handle regardless, located through
+`FLBuilderModel::get_asset_info()`. There is no reliable way to tell whether
+Beaver Builder's call did anything — the handle for a layout has changed shape
+between versions, so looking for one by name answers "no" for a version that
+named it something else — and being wrong means the popup arrives with its
+structure and none of its design. Loading it twice costs one cached request;
+not loading it costs the whole look.
+
+Two details that silently cost everything if got wrong: the stylesheet is only
+linked when the cached file is really on disk, and Beaver Builder's base handle
+is only named as a dependency when it is really registered — WordPress declines,
+without a word, to print a style whose dependency it has never heard of.
 
 **The popup is the box.** An alert whose body was designed in the builder gets
 `acps-alert--built` on its shell, and the shell then contributes only the
 overlay and the close button: no panel, no corners, no shadow, no max-width of
-ours. Otherwise the popup's own white box sits inside a second white box and the
+ours. The popup's own size is never overridden either — once the `popover`
+attribute is stripped the browser's popover rules stop applying, so there is
+nothing to fight, and a `max-width: none` aimed at those rules would instead
+beat the popup's real width and throw it across the screen. Otherwise the popup's own white box sits inside a second white box and the
 alert stops looking like the thing that was built.
 
 Beaver Builder's popup is a real HTML popover — the element carries

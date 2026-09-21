@@ -50,6 +50,42 @@ function set_transient( $k, $v, $t = 0 ) { $GLOBALS['transients'][ $k ] = $v; re
 function delete_transient( $k ) { unset( $GLOBALS['transients'][ $k ] ); return true; }
 
 $GLOBALS['transients'] = array();
+$GLOBALS['styles']     = array();
+$GLOBALS['registered_styles'] = array( 'fl-builder-layout' );
+
+function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = null ) {
+	$GLOBALS['styles'][ $handle ] = array( 'src' => $src, 'deps' => (array) $deps, 'ver' => $ver );
+}
+function wp_style_is( $handle, $list = 'enqueued' ) {
+	if ( 'registered' === $list ) {
+		return in_array( $handle, $GLOBALS['registered_styles'], true ) || isset( $GLOBALS['styles'][ $handle ] );
+	}
+	return isset( $GLOBALS['styles'][ $handle ] );
+}
+
+/**
+ * Stands in for Beaver Builder's asset reader, which reports where it cached a
+ * page's generated stylesheet.
+ */
+class FLBuilderModel {
+	public static $info = array();
+	public static function get_asset_info() { return self::$info; }
+	public static function set_post_id( $id ) {}
+	public static function reset_post_id() {}
+	public static function get_nodes( $type = null, $parent = null ) { return array(); }
+}
+
+class FLBuilder {
+	/**
+	 * Empty stands for a Beaver Builder that will not say where it lives, so
+	 * no base stylesheet can be enqueued and that handle stays unknown.
+	 *
+	 * @var string
+	 */
+	public static $url = 'https://example.org/wp-content/plugins/bb-plugin/';
+
+	public static function plugin_url() { return self::$url; }
+}
 
 class ACPS_Alerts_Failsafe {
 	public static function action() {}
@@ -326,6 +362,70 @@ ok(
 	'and so is one that is only a video',
 	ACPS_Alerts_Popup_Source::has_content( '<div class="fl-popup"><video src="/a.mp4"></video></div>' )
 );
+
+/* ---- loading the status page's stylesheet ---- */
+
+/*
+ * The popup's design lives in the status page's generated stylesheet, and that
+ * file is on no other page. Without it the popup arrives with its structure and
+ * none of its look — unstyled buttons, and every width gone.
+ */
+$css_file = sys_get_temp_dir() . '/acps-layout-test.css';
+file_put_contents( $css_file, '.fl-node-x .fl-button{background:#2b4a8b;}' );
+
+FLBuilderModel::$info = array(
+	'css'     => $css_file,
+	'css_url' => 'https://example.org/cache/42.css',
+);
+
+$GLOBALS['styles'] = array();
+ACPS_Alerts_Popup_Source::enqueue_assets();
+
+ok( 'the status page stylesheet is loaded', isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
+check( 'from the url Beaver Builder reported', $GLOBALS['styles']['acps-alerts-popup-layout']['src'], 'https://example.org/cache/42.css' );
+ok( 'versioned by the file, so an edit busts the browser cache', '' !== (string) $GLOBALS['styles']['acps-alerts-popup-layout']['ver'] );
+ok( 'and the base layout stylesheet comes with it', isset( $GLOBALS['styles']['fl-builder-layout'] ) );
+
+/*
+ * Pins a stylesheet that never reaches the page. WordPress silently declines to
+ * print a style whose dependency it has not heard of, so naming Beaver
+ * Builder's base handle unconditionally would mean that on a site where it is
+ * called something else, this stylesheet is dropped without a word and the
+ * popup has no design at all.
+ */
+$GLOBALS['registered_styles'] = array();
+$GLOBALS['styles']            = array();
+FLBuilder::$url               = '';
+
+ACPS_Alerts_Popup_Source::forget();
+ACPS_Alerts_Popup_Source::enqueue_assets();
+
+ok( 'with nowhere to load it from, no base stylesheet is registered', ! isset( $GLOBALS['styles']['fl-builder-layout'] ) );
+
+$deps = isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) ? $GLOBALS['styles']['acps-alerts-popup-layout']['deps'] : null;
+
+ok( 'the stylesheet is still loaded when the base handle is unknown', null !== $deps );
+
+foreach ( (array) $deps as $dep ) {
+	ok( "it never depends on an unregistered handle: $dep", wp_style_is( $dep, 'registered' ) );
+}
+
+// No cached file on disk — a status page nobody has visited yet — must not
+// enqueue a stylesheet pointing at nothing.
+FLBuilderModel::$info = array(
+	'css'     => $css_file . '.missing',
+	'css_url' => 'https://example.org/cache/nope.css',
+);
+
+$GLOBALS['styles'] = array();
+ACPS_Alerts_Popup_Source::forget();
+ACPS_Alerts_Popup_Source::enqueue_assets();
+
+ok( 'a stylesheet that is not on disk is not linked to', ! isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
+
+FLBuilder::$url = 'https://example.org/wp-content/plugins/bb-plugin/';
+
+unlink( $css_file );
 
 /* ---- the popup never opens on the page it is built on ---- */
 

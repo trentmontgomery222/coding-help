@@ -41,6 +41,16 @@ class ACPS_Alerts_Popup_Source {
 	const STYLE_HANDLE = 'acps-alerts-popup-layout';
 
 	/**
+	 * Pages whose assets have already been asked for this request.
+	 *
+	 * A property rather than a static local so that forgetting the popup also
+	 * forgets this: "the popup moved, look again" has to mean the styles too.
+	 *
+	 * @var array
+	 */
+	protected static $assets_done = array();
+
+	/**
 	 * Watches for anything that could move the popup.
 	 *
 	 * @return void
@@ -266,6 +276,8 @@ class ACPS_Alerts_Popup_Source {
 		// it here keeps a saved page from leaving one behind for a day.
 		delete_transient( self::cache_key() );
 		delete_option( self::NODE_OPTION );
+
+		self::$assets_done = array();
 	}
 
 	/**
@@ -297,13 +309,11 @@ class ACPS_Alerts_Popup_Source {
 			return;
 		}
 
-		static $done = array();
-
-		if ( isset( $done[ $page_id ] ) ) {
+		if ( isset( self::$assets_done[ $page_id ] ) ) {
 			return;
 		}
 
-		$done[ $page_id ] = true;
+		self::$assets_done[ $page_id ] = true;
 
 		// Beaver Builder's base layout stylesheet. On a page with no builder
 		// content of its own it is simply not there, and without it the popup
@@ -329,41 +339,26 @@ class ACPS_Alerts_Popup_Source {
 			}
 		}
 
-		// Whether that worked is worth checking rather than assuming. Beaver
-		// Builder enqueues a page's stylesheet under a handle named after the
-		// post, so its absence means the call above did nothing — a renamed
-		// method, or one that quietly declines for a post that is not the one
-		// being viewed. Either way the popup would arrive with its structure
-		// but none of its design.
-		if ( self::layout_styles_enqueued( $page_id ) ) {
-			return;
+		/*
+		 * And load the status page's stylesheet ourselves as well, rather than
+		 * trusting that the call above did anything.
+		 *
+		 * There is no reliable way to tell whether it did: Beaver Builder's
+		 * handle for a layout has changed shape between versions, so looking
+		 * for one by name answers "no" for a version that named it something
+		 * else, and the method can also decline quietly for a post that is not
+		 * the one being viewed. Getting this wrong means the popup arrives with
+		 * its structure and none of its design — the buttons unstyled, the
+		 * widths gone.
+		 *
+		 * Loading the cached file under our own handle always works. If Beaver
+		 * Builder did already enqueue it, the same stylesheet is fetched twice,
+		 * which costs one cached request and nothing else. That is the better
+		 * side to be wrong on.
+		 */
+		if ( ! self::enqueue_cached_stylesheet( $page_id ) ) {
+			ACPS_Alerts_Failsafe::record( 'popup-source/assets', 'no cached stylesheet for the status page; the popup may render unstyled' );
 		}
-
-		if ( self::enqueue_cached_stylesheet( $page_id ) ) {
-			return;
-		}
-
-		ACPS_Alerts_Failsafe::record( 'popup-source/assets', 'could not load the status page stylesheet; the popup will render unstyled' );
-	}
-
-	/**
-	 * Whether the status page's own stylesheet is on this page.
-	 *
-	 * @param int $page_id Post ID.
-	 * @return bool
-	 */
-	protected static function layout_styles_enqueued( $page_id ) {
-		if ( ! function_exists( 'wp_style_is' ) ) {
-			return false;
-		}
-
-		foreach ( array( 'fl-builder-layout-' . (int) $page_id, self::STYLE_HANDLE ) as $handle ) {
-			if ( wp_style_is( $handle, 'enqueued' ) || wp_style_is( $handle, 'done' ) ) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	/**
@@ -436,10 +431,22 @@ class ACPS_Alerts_Popup_Source {
 				continue;
 			}
 
+			/*
+			 * Only name the base stylesheet as a dependency when it is really
+			 * registered. WordPress silently declines to print a style whose
+			 * dependency it has never heard of — so on a site where Beaver
+			 * Builder's base handle is named something else, declaring it
+			 * unconditionally would mean this stylesheet never reaches the page
+			 * at all, and the popup would arrive with no design whatsoever.
+			 */
+			$deps = ( function_exists( 'wp_style_is' ) && wp_style_is( 'fl-builder-layout', 'registered' ) )
+				? array( 'fl-builder-layout' )
+				: array();
+
 			wp_enqueue_style(
 				self::STYLE_HANDLE,
 				$url,
-				array( 'fl-builder-layout' ),
+				$deps,
 				(string) filemtime( $path )
 			);
 
