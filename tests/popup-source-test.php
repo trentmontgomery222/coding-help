@@ -86,6 +86,17 @@ class FLBuilder {
 	public static $url = 'https://example.org/wp-content/plugins/bb-plugin/';
 
 	public static function plugin_url() { return self::$url; }
+
+	/**
+	 * Records whether Beaver Builder's own layout SCRIPTS were asked for. The
+	 * popup engine rides in on this call, so on a normal page it must stay
+	 * false — the plugin, not Beaver Builder, opens the popup.
+	 *
+	 * @var bool
+	 */
+	public static $scripts_loaded = false;
+
+	public static function enqueue_layout_styles_scripts_by_id( $id ) { self::$scripts_loaded = true; }
 }
 
 class ACPS_Alerts_Failsafe {
@@ -549,6 +560,35 @@ ok( 'the status page stylesheet is loaded', isset( $GLOBALS['styles']['acps-aler
 check( 'from the url Beaver Builder reported', $GLOBALS['styles']['acps-alerts-popup-layout']['src'], 'https://example.org/cache/42.css' );
 ok( 'versioned by the file, so an edit busts the browser cache', '' !== (string) $GLOBALS['styles']['acps-alerts-popup-layout']['ver'] );
 ok( 'and the base layout stylesheet comes with it', isset( $GLOBALS['styles']['fl-builder-layout'] ) );
+
+/* ---- the popup engine must not be loaded onto the page ---- */
+
+/*
+ * The bug that would not die: the popup showed on every page and nothing was
+ * ever written to storage. The popup a visitor saw was Beaver Builder's own,
+ * opened by Beaver Builder's popup script, which this used to enqueue along
+ * with the layout styles. The plugin owns opening the alert; Beaver Builder's
+ * scripts must not ride along, or nothing this plugin decides — frequency,
+ * "seen once" — can hold.
+ */
+FLBuilder::$scripts_loaded = false;
+$GLOBALS['styles']         = array();
+ACPS_Alerts_Popup_Source::forget();
+ACPS_Alerts_Popup_Source::enqueue_assets();
+
+ok( 'Beaver Builder\'s popup scripts are NOT enqueued by default', false === FLBuilder::$scripts_loaded );
+ok( 'but the layout stylesheet still is, so the popup keeps its design', isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
+
+// A site that truly needs the builder's scripts inside the popup can ask.
+$GLOBALS['filters']['acps_alerts_load_bb_scripts'] = function () { return true; };
+FLBuilder::$scripts_loaded = false;
+ACPS_Alerts_Popup_Source::forget();
+ACPS_Alerts_Popup_Source::enqueue_assets();
+
+ok( 'the filter can opt a site back into the builder scripts', true === FLBuilder::$scripts_loaded );
+
+unset( $GLOBALS['filters']['acps_alerts_load_bb_scripts'] );
+ACPS_Alerts_Popup_Source::forget();
 
 /*
  * Pins a stylesheet that never reaches the page. WordPress silently declines to

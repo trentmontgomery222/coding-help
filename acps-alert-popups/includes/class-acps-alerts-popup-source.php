@@ -320,22 +320,37 @@ class ACPS_Alerts_Popup_Source {
 		// has no rows, no columns and no spacing.
 		self::enqueue_base_styles();
 
-		// The name of this has moved between versions, so try each one that has
-		// existed rather than depending on a single spelling.
-		$methods = array(
-			'enqueue_layout_styles_scripts_by_id',
-			'enqueue_layout_styles_scripts',
-		);
+		/*
+		 * Styles only — deliberately NOT Beaver Builder's own scripts.
+		 *
+		 * The obvious call here is enqueue_layout_styles_scripts_by_id(), and it
+		 * is what this used to do. But it also enqueues the layout's SCRIPTS,
+		 * and the popup module's script is Beaver Builder's popup engine. On
+		 * every page that engine would find this popup and open it on its own —
+		 * over the top of everything, on every page load — with no idea that
+		 * this plugin decides when the alert shows and how often it comes back.
+		 * That is exactly the "it pops up every single time and nothing is ever
+		 * written to storage" failure: the popup a visitor saw was Beaver
+		 * Builder's, opened by Beaver Builder, never touched by our runtime.
+		 *
+		 * So the popup engine must not run here. This plugin owns opening and
+		 * closing (assets/js/alerts.js), and it needs only the layout's CSS,
+		 * which enqueue_cached_stylesheet() below loads directly from the
+		 * compiled file. A site that genuinely needs Beaver Builder's own
+		 * scripts for something inside the popup can opt back in with the
+		 * acps_alerts_load_bb_scripts filter.
+		 */
+		if ( apply_filters( 'acps_alerts_load_bb_scripts', false ) ) {
+			foreach ( array( 'enqueue_layout_styles_scripts_by_id', 'enqueue_layout_styles_scripts' ) as $method ) {
+				if ( method_exists( 'FLBuilder', $method ) ) {
+					ACPS_Alerts_Failsafe::guard(
+						array( 'FLBuilder', $method ),
+						array( $page_id ),
+						'popup-source/assets'
+					);
 
-		foreach ( $methods as $method ) {
-			if ( method_exists( 'FLBuilder', $method ) ) {
-				ACPS_Alerts_Failsafe::guard(
-					array( 'FLBuilder', $method ),
-					array( $page_id ),
-					'popup-source/assets'
-				);
-
-				break;
+					break;
+				}
 			}
 		}
 
