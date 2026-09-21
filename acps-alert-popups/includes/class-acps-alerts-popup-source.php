@@ -256,6 +256,10 @@ class ACPS_Alerts_Popup_Source {
 	 * @return void
 	 */
 	public static function forget() {
+		// The rendered markup is keyed by the page's modified time, so editing
+		// the popup already orphans it rather than serving it stale. Deleting
+		// it here keeps a saved page from leaving one behind for a day.
+		delete_transient( self::cache_key() );
 		delete_option( self::NODE_OPTION );
 	}
 
@@ -331,25 +335,155 @@ class ACPS_Alerts_Popup_Source {
 			return '';
 		}
 
+		$cached = self::cached();
+
+		if ( null !== $cached ) {
+			self::enqueue_assets();
+
+			return $cached;
+		}
+
 		self::enqueue_assets();
 
-		$html = ACPS_Alerts_Failsafe::capture(
-			array( __CLASS__, 'render_node' ),
-			array( $page_id, $node_id ),
-			'popup-source/render'
+		/*
+		 * Render the whole layout and keep this node, rather than asking
+		 * Beaver Builder for the node on its own.
+		 *
+		 * The popup is a CONTAINER. What is inside it — the heading, the text,
+		 * the button — are separate nodes in the layout that name the popup as
+		 * their parent, not part of the popup module itself. Rendering just the
+		 * module gives back the popup's shell with nothing in it, which reaches
+		 * the page as an alert containing only a close button.
+		 *
+		 * Rendering the layout is the same path Beaver Builder uses for its own
+		 * embeds, so the popup comes back built: children, styles and all.
+		 */
+		$html = '';
+
+		/*
+		 * Three ways of getting at it, in the order of how complete the result
+		 * is. Each is tried only while the one before it came back with nothing
+		 * to read, so a working site pays for the first alone.
+		 */
+		$strategies = array(
+			// The whole layout, with everything but this node dropped. The
+			// popup comes back exactly as the status page builds it.
+			'popup-source/extract'  => array( array( __CLASS__, 'render_by_extraction' ), array( $page_id, $node_id ), false ),
+
+			// The popup's children on their own. Beaver Builder renders popups
+			// outside the layout flow in some versions, which leaves nothing
+			// for the step above to find. The alert supplies its own frame, so
+			// the popup's shell is no loss.
+			'popup-source/children' => array( array( __CLASS__, 'render_children' ), array( $page_id, $node_id ), true ),
+
+			// The popup module by itself. Last because it renders the shell
+			// without its children, but a popup built with no children at all
+			// still has its own content to show.
+			'popup-source/module'   => array( array( __CLASS__, 'render_node' ), array( $page_id, $node_id ), true ),
 		);
 
+		foreach ( $strategies as $context => $strategy ) {
+			list( $callable, $args, $captures ) = $strategy;
+
+			$result = $captures
+				? ACPS_Alerts_Failsafe::capture( $callable, $args, $context )
+				: ACPS_Alerts_Failsafe::guard( $callable, $args, $context, '' );
+
+			if ( self::has_content( $result ) ) {
+				$html = (string) $result;
+
+				break;
+			}
+		}
+
+		// An empty shell is worse than nothing: the caller can still fall back
+		// to the alert's own heading and text, and a visitor gets a popup with
+		// words in it rather than one holding a lone close button.
+		if ( ! self::has_content( $html ) ) {
+			ACPS_Alerts_Failsafe::record( 'popup-source/render', 'the popup rendered with no content in it' );
+
+			return '';
+		}
+
+		$html = self::inline_popup( $html );
+
+		self::cache( $html );
+
+		return $html;
+	}
+
+	/**
+	 * Whether rendered markup actually has something in it.
+	 *
+	 * A popup shell with no children is markup, and passes an "is it empty"
+	 * check on the string, but it is an alert with nothing to read. Text or an
+	 * image both count; tags on their own do not.
+	 *
+	 * @param string $html Rendered markup.
+	 * @return bool
+	 */
+	public static function has_content( $html ) {
 		$html = (string) $html;
 
 		if ( '' === trim( $html ) ) {
-			// Nothing came back from the direct render, so fall back to
-			// rendering the whole layout and keeping only this node. Slower,
-			// but it goes through the same path Beaver Builder uses for its own
-			// embeds, so it works where the node-level API has moved or gone.
-			$html = self::render_by_extraction( $page_id, $node_id );
+			return false;
 		}
 
-		return self::inline_popup( $html );
+		if ( '' !== trim( wp_strip_all_tags( $html ) ) ) {
+			return true;
+		}
+
+		// No text, but a picture or a video is still an alert worth showing.
+		return (bool) preg_match( '/<(img|picture|svg|video|iframe)[\s>]/i', $html );
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * Caching the rendered popup.
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * The key the rendered popup is stored under.
+	 *
+	 * Includes when the status page was last modified, so editing the popup
+	 * produces a different key and the old markup is simply never read again.
+	 *
+	 * @return string
+	 */
+	protected static function cache_key() {
+		$page_id = self::page_id();
+
+		return 'acps_alerts_popup_html_' . md5(
+			$page_id . '|' . self::node_id() . '|' . (string) get_post_modified_time( 'U', true, $page_id ) . '|' . ACPS_ALERTS_VERSION
+		);
+	}
+
+	/**
+	 * The rendered popup from an earlier request, if there is one.
+	 *
+	 * Rendering a whole page layout in the footer of every page on the site is
+	 * the most expensive thing this plugin does, and the answer only changes
+	 * when the status page is edited.
+	 *
+	 * @return string|null Markup, or null when nothing is stored.
+	 */
+	protected static function cached() {
+		$stored = get_transient( self::cache_key() );
+
+		return is_string( $stored ) && '' !== $stored ? $stored : null;
+	}
+
+	/**
+	 * Remembers the rendered popup.
+	 *
+	 * @param string $html Markup to store.
+	 * @return void
+	 */
+	protected static function cache( $html ) {
+		if ( '' === trim( (string) $html ) ) {
+			return;
+		}
+
+		set_transient( self::cache_key(), (string) $html, DAY_IN_SECONDS );
 	}
 
 	/**
@@ -393,6 +527,89 @@ class ACPS_Alerts_Popup_Source {
 	}
 
 	/**
+	 * Renders whatever sits inside the popup, without the popup's own shell.
+	 *
+	 * The popup is a container: its heading, text and buttons are separate
+	 * nodes naming it as their parent. When the layout render cannot be used,
+	 * these are what the alert actually needs — the dialog around them is the
+	 * plugin's own, so the popup's shell is not missed.
+	 *
+	 * Public because the failsafe captures its output from outside the class.
+	 *
+	 * @param int    $page_id Post the layout belongs to.
+	 * @param string $node_id The popup node.
+	 * @return void
+	 */
+	public static function render_children( $page_id, $node_id ) {
+		if ( ! class_exists( 'FLBuilderModel' ) || ! method_exists( 'FLBuilderModel', 'get_nodes' ) ) {
+			return;
+		}
+
+		$switched = self::point_at( $page_id );
+
+		try {
+			$children = FLBuilderModel::get_nodes( null, $node_id );
+
+			foreach ( (array) $children as $child ) {
+				$child = (object) $child;
+				$type  = isset( $child->type ) ? (string) $child->type : '';
+
+				// Each kind of node has its own renderer, and which of them a
+				// given version exposes varies, so each is checked before use.
+				$renderer = array(
+					'row'    => 'render_row',
+					'column' => 'render_column',
+					'module' => 'render_module',
+				);
+
+				if ( isset( $renderer[ $type ] ) && method_exists( 'FLBuilder', $renderer[ $type ] ) ) {
+					call_user_func( array( 'FLBuilder', $renderer[ $type ] ), $child );
+				}
+			}
+		} finally {
+			self::point_back( $switched );
+		}
+	}
+
+	/**
+	 * Points Beaver Builder at another post's layout.
+	 *
+	 * It reads nodes out of whichever post it thinks it is rendering, and in
+	 * the footer of another page that is the wrong post.
+	 *
+	 * @param int $page_id Post to read from.
+	 * @return bool Whether it was switched, for point_back().
+	 */
+	protected static function point_at( $page_id ) {
+		if ( ! class_exists( 'FLBuilderModel' ) ) {
+			return false;
+		}
+
+		if ( ! method_exists( 'FLBuilderModel', 'set_post_id' ) || ! method_exists( 'FLBuilderModel', 'reset_post_id' ) ) {
+			return false;
+		}
+
+		FLBuilderModel::set_post_id( (int) $page_id );
+
+		return true;
+	}
+
+	/**
+	 * Puts Beaver Builder back on the post it was reading.
+	 *
+	 * Always called from a finally: leaving it pointed elsewhere would have
+	 * every later builder call on the request reading the wrong layout.
+	 *
+	 * @param bool $switched Whether point_at() switched it.
+	 * @return void
+	 */
+	protected static function point_back( $switched ) {
+		if ( $switched ) {
+			FLBuilderModel::reset_post_id();
+		}
+	}
+
+	/**
 	 * Asks Beaver Builder to render one node of another post's layout.
 	 *
 	 * Public because the failsafe captures its output from outside the class.
@@ -406,17 +623,7 @@ class ACPS_Alerts_Popup_Source {
 			return;
 		}
 
-		$switched = false;
-
-		// Beaver Builder reads nodes out of whichever post it thinks it is
-		// rendering. In the footer of another page that is the wrong post, so
-		// point it at the status page first and put it back afterwards — even
-		// if the render throws, or every later builder call on this request
-		// would read the wrong layout.
-		if ( method_exists( 'FLBuilderModel', 'set_post_id' ) && method_exists( 'FLBuilderModel', 'reset_post_id' ) ) {
-			FLBuilderModel::set_post_id( $page_id );
-			$switched = true;
-		}
+		$switched = self::point_at( $page_id );
 
 		try {
 			$node = FLBuilderModel::get_node( $node_id );
@@ -439,9 +646,7 @@ class ACPS_Alerts_Popup_Source {
 				echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Beaver Builder's own rendered module.
 			}
 		} finally {
-			if ( $switched ) {
-				FLBuilderModel::reset_post_id();
-			}
+			self::point_back( $switched );
 		}
 	}
 
@@ -455,7 +660,7 @@ class ACPS_Alerts_Popup_Source {
 	 * @param string $node_id Node to keep.
 	 * @return string
 	 */
-	protected static function render_by_extraction( $page_id, $node_id ) {
+	public static function render_by_extraction( $page_id, $node_id ) {
 		if ( ! shortcode_exists( 'fl_builder_insert_layout' ) ) {
 			return '';
 		}

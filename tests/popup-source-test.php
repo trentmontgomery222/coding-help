@@ -19,6 +19,8 @@
 
 define( 'ABSPATH', '/tmp/wp/' );
 define( 'ACPS_ALERTS_DIR', dirname( __DIR__ ) . '/acps-alert-popups/' );
+define( 'ACPS_ALERTS_VERSION', '1.0.0' );
+define( 'DAY_IN_SECONDS', 86400 );
 
 $GLOBALS['meta']      = array();
 $GLOBALS['options']   = array();
@@ -42,6 +44,12 @@ function wp_strip_all_tags( $s ) { return trim( strip_tags( (string) $s ) ); }
 function shortcode_exists( $t ) { return false; }
 function is_singular( $t = '' ) { return $GLOBALS['singular']; }
 function get_queried_object_id() { return $GLOBALS['queried']; }
+function get_post_modified_time( $f = 'U', $gmt = false, $id = 0 ) { return 1700000000; }
+function get_transient( $k ) { return isset( $GLOBALS['transients'][ $k ] ) ? $GLOBALS['transients'][ $k ] : false; }
+function set_transient( $k, $v, $t = 0 ) { $GLOBALS['transients'][ $k ] = $v; return true; }
+function delete_transient( $k ) { unset( $GLOBALS['transients'][ $k ] ); return true; }
+
+$GLOBALS['transients'] = array();
 
 class ACPS_Alerts_Failsafe {
 	public static function action() {}
@@ -281,6 +289,43 @@ $out  = ACPS_Alerts_Popup_Source::inline_popup( $near );
 ok( 'data-popover is not mistaken for popover', false !== strpos( $out, 'data-popover="y"' ) );
 
 check( 'empty markup stays empty', ACPS_Alerts_Popup_Source::inline_popup( '' ), '' );
+
+/* ---- an alert with nothing in it is not an alert ---- */
+
+/*
+ * Pins "it shows but there is no content besides the X". The popup is a
+ * CONTAINER: its heading, text and buttons are separate nodes naming it as
+ * their parent, so rendering the popup module on its own returns the shell and
+ * none of the content. That shell is a non-empty string, which is exactly why
+ * a plain "is it empty" check let it through and the alert reached the page
+ * holding nothing but a close button.
+ */
+$shell = '<div id="testpop" class="fl-popup fl-animation fl-fade-in"></div>';
+
+ok( 'a popup shell with no children does not count as content', ! ACPS_Alerts_Popup_Source::has_content( $shell ) );
+
+$nested_shell = '<div class="fl-popup"><div class="fl-row"><div class="fl-col"></div></div></div>';
+
+ok( 'and neither do empty rows and columns inside it', ! ACPS_Alerts_Popup_Source::has_content( $nested_shell ) );
+
+ok( 'nothing at all is not content', ! ACPS_Alerts_Popup_Source::has_content( '' ) );
+ok( 'and neither is whitespace', ! ACPS_Alerts_Popup_Source::has_content( "  \n\t " ) );
+
+ok(
+	'a popup with words in it is content',
+	ACPS_Alerts_Popup_Source::has_content( '<div class="fl-popup"><p>All schools are closed.</p></div>' )
+);
+
+// A popup can legitimately be a picture with no words in it.
+ok(
+	'a popup that is only an image is content',
+	ACPS_Alerts_Popup_Source::has_content( '<div class="fl-popup"><img src="/snow.png" alt="" /></div>' )
+);
+
+ok(
+	'and so is one that is only a video',
+	ACPS_Alerts_Popup_Source::has_content( '<div class="fl-popup"><video src="/a.mp4"></video></div>' )
+);
 
 /* ---- the popup never opens on the page it is built on ---- */
 

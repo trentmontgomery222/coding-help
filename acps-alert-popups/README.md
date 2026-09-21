@@ -159,11 +159,32 @@ anything added through the `acps_alerts_popup_module_types` filter. The node id
 is cached per page and re-detected whenever the status page is saved, when the
 cached node is no longer in the layout, or when the board moves to another page.
 
-To render it somewhere else, the plugin points Beaver Builder at the status page
-(`FLBuilderModel::set_post_id`), asks for that node, renders it, and points it
-back — in a `finally`, so a throw mid-render cannot leave every later builder
-call on the request reading the wrong layout. It also enqueues the status page's
-generated CSS and JS, or the popup arrives unstyled.
+The popup is a **container**: its heading, text and buttons are separate nodes
+in the layout that name the popup as their parent, not part of the popup module
+itself. Rendering just the module returns the shell with nothing in it. So there
+are three strategies, tried in order of how complete the result is, each only
+reached while the one before came back with nothing to read:
+
+1. Render the whole layout through `[fl_builder_insert_layout]` and keep the
+   `fl-node-<id>` subtree. The popup comes back exactly as the status page
+   builds it.
+2. Render the popup's child nodes on their own, for versions that render popups
+   outside the layout flow. The alert supplies its own frame, so the popup's
+   shell is no loss.
+3. Render the popup module alone — the shell, for a popup that genuinely has no
+   children.
+
+A result with no text and no image counts as nothing, so an empty shell falls
+through to the alert's own heading and text rather than reaching a visitor as a
+popup holding only a close button. The finished markup is cached in a transient
+keyed on the status page's modified time, because rendering a page layout in the
+footer of every page is the most expensive thing this plugin does.
+
+Throughout, Beaver Builder is pointed at the status page with
+`FLBuilderModel::set_post_id` and pointed back in a `finally`, so a throw
+mid-render cannot leave every later builder call on the request reading the
+wrong layout. The status page's generated CSS and JS are enqueued too, or the
+popup arrives unstyled.
 
 Beaver Builder's popup is a real HTML popover — the element carries
 `popover="manual"` — and a browser keeps any such element at `display:none`
@@ -176,8 +197,6 @@ rest of the closed-popup styling. Only the hiding and the positioning are
 overridden — the popup's own background, borders, spacing and typography are
 left exactly as they were built.
 
-If the node-level API is not there, it falls back to rendering the whole layout
-through `[fl_builder_insert_layout]` and lifting the `fl-node-<id>` subtree back
-out with DOMDocument. If that fails too, the Current Alert module's own heading
-and text stand in, so an alert still reaches people. Every Beaver Builder entry
-point is checked with `method_exists` before it is called.
+If all three come back empty, the Current Alert module's own heading and text
+stand in, so an alert still reaches people. Every Beaver Builder entry point is
+checked with `method_exists` before it is called.

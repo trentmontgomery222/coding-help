@@ -306,6 +306,16 @@ so they are not exercised; everything around them is ours and is:
 
   Verified non-vacuous: leave the attribute on and it fails with seven cases,
   including "every popover in the fragment is stripped: expected 0, got 2".
+- an alert with nothing in it is not an alert. The popup is a container, so
+  rendering the module on its own returns the shell and none of the content —
+  and that shell is a non-empty string, which is exactly why a plain "is it
+  empty" check let it through and the alert reached the page holding only a
+  close button. A shell, and empty rows and columns inside one, count as
+  nothing; words count; so do an image and a video, since a popup can
+  legitimately be a picture.
+
+  Verified non-vacuous: swap the check back for `'' !== trim( $html )` and it
+  fails with "a popup shell with no children does not count as content".
 
 Verified non-vacuous twice: a naive class match fails with "a longer node id is
 not matched by a shorter one", and a cache that is never revalidated fails with
