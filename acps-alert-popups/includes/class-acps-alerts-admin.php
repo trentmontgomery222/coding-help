@@ -108,6 +108,14 @@ class ACPS_Alerts_Admin {
 
 		add_submenu_page(
 			self::MENU_SLUG,
+			__( 'Wording', 'acps-alert-popups' ),
+			__( 'Wording', 'acps-alert-popups' ),
+			$cap,
+			'admin.php?page=' . self::MENU_SLUG . '&acps_view=wording'
+		);
+
+		add_submenu_page(
+			self::MENU_SLUG,
 			__( 'Alert Settings', 'acps-alert-popups' ),
 			__( 'Settings', 'acps-alert-popups' ),
 			'manage_options',
@@ -241,6 +249,12 @@ class ACPS_Alerts_Admin {
 
 		if ( 'post' === $action ) {
 			$this->handle_post_alert();
+
+			return;
+		}
+
+		if ( 'save-wording' === $action ) {
+			$this->handle_wording_save();
 
 			return;
 		}
@@ -451,6 +465,82 @@ class ACPS_Alerts_Admin {
 	}
 
 	/**
+	 * Saves the Wording screen: the resting-state message and the level words.
+	 *
+	 * This is the one place to change the site's own text without hunting
+	 * through Beaver Builder or an alert's settings — the message shown when
+	 * nothing is happening, and the word and directive each status level shows.
+	 *
+	 * @return void
+	 */
+	protected function handle_wording_save() {
+		if ( ! current_user_can( self::capability() ) || ! isset( $_POST['acps_wording_nonce'] ) ) {
+			return;
+		}
+
+		$nonce = sanitize_text_field( wp_unslash( $_POST['acps_wording_nonce'] ) );
+
+		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_save_wording' ) || ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			return;
+		}
+
+		ACPS_Alerts_Failsafe::guard( array( __CLASS__, 'apply_wording' ), array(), 'admin/wording' );
+
+		$this->redirect_back( 'wording-saved', array( 'acps_view' => 'wording' ) );
+	}
+
+	/**
+	 * Writes a Wording submission. Public so the failsafe can call it.
+	 *
+	 * @return void
+	 */
+	public static function apply_wording() {
+		$rest = isset( $_POST['acps_rest'] ) ? (array) wp_unslash( $_POST['acps_rest'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized field by field below.
+
+		// The resting state: the Normal Alert's own heading and message.
+		$normal = ACPS_Alerts_Status::normal_alert();
+
+		if ( $normal ) {
+			$heading = isset( $rest['heading'] ) ? sanitize_text_field( $rest['heading'] ) : '';
+			$message = isset( $rest['message'] ) ? wp_kses_post( $rest['message'] ) : '';
+
+			$update = array( 'ID' => $normal->get_id() );
+
+			if ( '' !== $heading ) {
+				$update['post_title'] = $heading;
+			}
+
+			// The message may legitimately be cleared, so it is always written.
+			$update['post_content'] = $message;
+			wp_update_post( $update );
+
+			update_post_meta( $normal->get_id(), ACPS_Alerts_Alert::META_PREFIX . 'status_message', wp_strip_all_tags( $message ) );
+		}
+
+		// The level words: banner word and directive for each non-retired level.
+		$raw   = isset( $_POST['acps_words'] ) ? (array) wp_unslash( $_POST['acps_words'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized per field below.
+		$words = array();
+
+		foreach ( ACPS_Alerts_Status::levels() as $key => $level ) {
+			if ( ! empty( $level['legacy'] ) || ! isset( $raw[ $key ] ) ) {
+				continue;
+			}
+
+			$row = (array) $raw[ $key ];
+
+			$words[ $key ] = array(
+				'banner'    => isset( $row['banner'] ) ? sanitize_text_field( $row['banner'] ) : '',
+				'directive' => isset( $row['directive'] ) ? sanitize_text_field( $row['directive'] ) : '',
+			);
+		}
+
+		update_option( 'acps_alerts_level_words', $words );
+
+		// Wording is visible text, so cached pages must be rebuilt.
+		ACPS_Alerts_Status::flush_page_caches();
+	}
+
+	/**
 	 * Files the current alert into the archive, or brings it back.
 	 *
 	 * @param string $action Either 'archive' or 'restore'.
@@ -583,6 +673,12 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
+		if ( 'wording' === $view ) {
+			$this->render_wording();
+
+			return;
+		}
+
 		$this->render_list();
 	}
 
@@ -602,6 +698,7 @@ class ACPS_Alerts_Admin {
 			'archived'       => __( 'Filed in the archive and switched off. The alert itself is unchanged.', 'acps-alert-popups' ),
 			'restored'       => __( 'Switched back on. Its daily cut-off starts again from now.', 'acps-alert-popups' ),
 			'posted'         => __( 'Alert posted. It is live now, and the popup shows the new message.', 'acps-alert-popups' ),
+			'wording-saved'  => __( 'Wording saved. The changes are live everywhere the text appears.', 'acps-alert-popups' ),
 		);
 
 		$errors = array(
@@ -726,6 +823,97 @@ class ACPS_Alerts_Admin {
 	}
 
 	/**
+	 * The Wording screen: one place to change the site's own text.
+	 *
+	 * The message shown when nothing is happening (the resting state, stored on
+	 * the Normal Alert), and the word and directive each status level shows.
+	 * These are the visitor-facing strings that are not typed into a specific
+	 * alert, gathered here so they are easy to find and change.
+	 *
+	 * @return void
+	 */
+	protected function render_wording() {
+		$normal = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::normal_alert() : null;
+
+		$action = add_query_arg(
+			array(
+				'page'        => self::MENU_SLUG,
+				'acps_action' => 'save-wording',
+			),
+			admin_url( 'admin.php' )
+		);
+
+		$rest_heading = $normal ? (string) $normal->get_title() : '';
+		$rest_message = $normal ? (string) $normal->get( 'status_message' ) : '';
+		?>
+		<div class="wrap acps-alerts-wrap">
+			<h1 class="wp-heading-inline"><?php esc_html_e( 'Wording', 'acps-alert-popups' ); ?></h1>
+			<hr class="wp-header-end" />
+
+			<?php $this->render_message(); ?>
+
+			<p class="description">
+				<?php esc_html_e( 'Change the site\'s own text here: what the status page says when nothing is happening, and the word and directive each status level shows. The message on a live alert is set when you post it.', 'acps-alert-popups' ); ?>
+			</p>
+
+			<form method="post" action="<?php echo esc_url( $action ); ?>" class="acps-wording-form">
+				<?php wp_nonce_field( 'acps_alerts_save_wording', 'acps_wording_nonce' ); ?>
+
+				<h2><?php esc_html_e( 'When nothing is happening', 'acps-alert-popups' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'The resting state, shown on the status page whenever no alert is live.', 'acps-alert-popups' ); ?></p>
+
+				<?php if ( ! $normal ) : ?>
+					<div class="notice notice-error inline">
+						<p><?php esc_html_e( 'The Normal Alert does not exist yet. Reactivate the plugin to create it.', 'acps-alert-popups' ); ?></p>
+					</div>
+				<?php else : ?>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><label for="acps-rest-heading"><?php esc_html_e( 'Heading', 'acps-alert-popups' ); ?></label></th>
+							<td><input name="acps_rest[heading]" id="acps-rest-heading" type="text" class="large-text" value="<?php echo esc_attr( $rest_heading ); ?>" /></td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-rest-message"><?php esc_html_e( 'Message', 'acps-alert-popups' ); ?></label></th>
+							<td>
+								<textarea name="acps_rest[message]" id="acps-rest-message" rows="4" class="large-text"><?php echo esc_textarea( $rest_message ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'Leave blank for a heading with no message beneath it.', 'acps-alert-popups' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				<?php endif; ?>
+
+				<h2><?php esc_html_e( 'Status level wording', 'acps-alert-popups' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'The word on the banner and the popup, and the directive beneath it, for each level. Match these to your district\'s training materials.', 'acps-alert-popups' ); ?></p>
+
+				<table class="widefat striped acps-wording-levels">
+					<thead>
+						<tr>
+							<th><?php esc_html_e( 'Level', 'acps-alert-popups' ); ?></th>
+							<th><?php esc_html_e( 'Word shown', 'acps-alert-popups' ); ?></th>
+							<th><?php esc_html_e( 'Directive', 'acps-alert-popups' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( ACPS_Alerts_Status::levels() as $key => $level ) : ?>
+							<?php if ( ! empty( $level['legacy'] ) ) { continue; } ?>
+							<tr>
+								<td><strong><?php echo esc_html( $level['label'] ); ?></strong></td>
+								<td><input type="text" class="regular-text" name="acps_words[<?php echo esc_attr( $key ); ?>][banner]" value="<?php echo esc_attr( $level['banner'] ); ?>" /></td>
+								<td><input type="text" class="large-text" name="acps_words[<?php echo esc_attr( $key ); ?>][directive]" value="<?php echo esc_attr( wp_strip_all_tags( $level['directive'] ) ); ?>" /></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+
+				<p class="submit">
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Save wording', 'acps-alert-popups' ); ?></button>
+				</p>
+			</form>
+		</div>
+		<?php
+	}
+
+	/**
 	 * The list of every popup, with its alert status.
 	 *
 	 * @return void
@@ -736,6 +924,7 @@ class ACPS_Alerts_Admin {
 		<div class="wrap acps-alerts-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Site Alerts', 'acps-alert-popups' ); ?></h1>
 			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'post' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Post an Alert', 'acps-alert-popups' ); ?></a>
+			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'wording' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Edit wording', 'acps-alert-popups' ); ?></a>
 			<hr class="wp-header-end" />
 
 			<?php $this->render_message(); ?>

@@ -58,6 +58,15 @@ Submitting it does three things at once: it writes the header and text straight 
 
 It only touches those three things. Everything else about the popup — any extra modules you added, the styling, the layout — is exactly as you built it in Beaver Builder, because the form edits the same popup rather than replacing it. So the two ways of working fit together: post the everyday changes from this form in a few seconds, and open Beaver Builder when you want to change how the popup is built. The boxes come pre-filled with what the popup says right now, so a small change is a small edit, and an empty box leaves that piece alone. Changing the wording of an alert that is already up does not restart its daily cut-off.
 
+### Editing the site's own text
+
+**Site Alerts → Wording** (there is an *Edit wording* button on the alerts list) is one place for the visitor-facing text that is not typed into a specific alert:
+
+- **When nothing is happening** — the heading and message the status page shows at rest. This is the Normal Alert's wording, made easy to reach and fully changeable; leave the message blank for a heading on its own.
+- **Status level wording** — the word each level shows on the banner and popup, and the directive beneath it, for every level. Match these to your district's training materials. A blank word falls back to the built-in one (a banner is never empty); a blank directive is an intentional "no directive".
+
+Changes are live everywhere the text appears the moment you save, and page caches are rebuilt for you. A developer can still override any level with the `acps_alerts_status_levels` filter, which runs after anything typed here.
+
 ### Status levels are SRP
 
 The levels are the five Standard Response Protocol actions from the "I Love U Guys" Foundation — **Hold**, **Secure**, **Shelter**, **Evacuate**, **Lockdown** — each with its directive and its colour, so the site says exactly what the drill says. Two everyday levels sit alongside them: **Normal** and **Information**, which are deliberately *not* marked as response actions.

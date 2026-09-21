@@ -156,6 +156,26 @@ class ACPS_Alerts_Status {
 			),
 		);
 
+		// Wording typed on the admin Wording screen wins over the built-in
+		// words, so a district can say exactly what its drill says without a
+		// developer. A blank banner falls back to the default (a banner must
+		// never be empty); a blank directive is an intentional "no directive".
+		$overrides = self::level_word_overrides();
+
+		foreach ( $overrides as $key => $words ) {
+			if ( ! isset( $levels[ $key ] ) ) {
+				continue;
+			}
+
+			if ( isset( $words['banner'] ) && '' !== trim( (string) $words['banner'] ) ) {
+				$levels[ $key ]['banner'] = (string) $words['banner'];
+			}
+
+			if ( array_key_exists( 'directive', $words ) ) {
+				$levels[ $key ]['directive'] = (string) $words['directive'];
+			}
+		}
+
 		/**
 		 * Filters the status levels.
 		 *
@@ -164,9 +184,23 @@ class ACPS_Alerts_Status {
 		 * (info|success|warning|critical), srp (bool) and rank (higher is more
 		 * urgent, and wins the banner when several updates are live).
 		 *
+		 * A developer filter runs last, so it still has the final say over
+		 * anything typed on the Wording screen.
+		 *
 		 * @param array $levels Level definitions.
 		 */
 		return (array) apply_filters( 'acps_alerts_status_levels', $levels );
+	}
+
+	/**
+	 * Per-level word overrides typed on the admin Wording screen.
+	 *
+	 * @return array key => { banner, directive }
+	 */
+	public static function level_word_overrides() {
+		$stored = get_option( 'acps_alerts_level_words', array() );
+
+		return is_array( $stored ) ? $stored : array();
 	}
 
 	/**

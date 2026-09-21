@@ -498,6 +498,33 @@ ok(
 	false === strpos( ACPS_Alerts_Status::level_icon( 'lockdown', 56, 'red; evil:1' ), 'evil' )
 );
 
+/* ---- level words can be changed from the Wording screen ---- */
+
+/*
+ * The Wording screen stores per-level word/directive overrides in an option,
+ * and levels() folds them in so a district can say exactly what its drill says.
+ * A blank banner must fall back to the built-in word (a banner is never empty);
+ * a blank directive is an intentional "no directive".
+ */
+$GLOBALS['options']['acps_alerts_level_words'] = array(
+	'hold'   => array( 'banner' => 'HOLD IN PLACE', 'directive' => 'Stay in your room' ),
+	'secure' => array( 'banner' => '', 'directive' => '' ),
+);
+
+$hold = ACPS_Alerts_Status::level( 'hold' );
+check( 'a changed banner word is used', $hold['banner'], 'HOLD IN PLACE' );
+check( 'and a changed directive is used', $hold['directive'], 'Stay in your room' );
+
+$secure = ACPS_Alerts_Status::level( 'secure' );
+ok( 'a blank banner falls back to the built-in word', '' !== $secure['banner'] );
+check( 'while a blank directive clears it', $secure['directive'], '' );
+
+// An override for a level that does not exist is ignored, not fatal.
+$GLOBALS['options']['acps_alerts_level_words'] = array( 'nope' => array( 'banner' => 'X' ) );
+ok( 'an override for an unknown level is ignored', is_array( ACPS_Alerts_Status::levels() ) );
+
+$GLOBALS['options']['acps_alerts_level_words'] = array();
+
 /* ---- posting a status rebuilds cached pages ---- */
 
 /*
