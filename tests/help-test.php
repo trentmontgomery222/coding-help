@@ -140,6 +140,52 @@ $tours = $help->tours();
 
 ok( 'the first-alert tour exists', isset( $tours['first-alert'] ) );
 
+/*
+ * The features we teach must match the features we have. The everyday job is
+ * now the quick Post an Alert form, so the first-alert tour has to actually
+ * walk the visitor onto the post screen and point at that form — not march
+ * through the old admin settings tabs.
+ */
+$first_steps = $tours['first-alert']['steps'];
+
+$reaches_post = false;
+$points_at_form = false;
+
+foreach ( $first_steps as $step ) {
+	if ( isset( $step['screen'] ) && 'post' === $step['screen'] ) {
+		$reaches_post = true;
+
+		if ( isset( $step['selector'] ) && false !== strpos( $step['selector'], 'acps-post-form' ) ) {
+			$points_at_form = true;
+		}
+	}
+}
+
+ok( 'the first-alert tour walks onto the Post an Alert screen', $reaches_post );
+ok( 'and points at the quick-post form there', $points_at_form );
+
+// A step naming the post screen must be reachable: the screen it lives on is
+// not the one the tour starts on, so it needs a url to jump to.
+foreach ( $first_steps as $n => $step ) {
+	if ( isset( $step['screen'] ) && 'post' === $step['screen'] && empty( $step['url'] ) && 0 === $n ) {
+		ok( 'the post-screen step is reachable (has a url when it is first)', false );
+	}
+}
+
+// The severity/priority idea is gone: no tour may talk about ranking alerts or
+// one "winning" when several are live, because only one alert can ever be live.
+$tour_blob = '';
+
+foreach ( $tours as $t ) {
+	foreach ( $t['steps'] as $st ) {
+		$tour_blob .= ' ' . ( isset( $st['title'] ) ? $st['title'] : '' ) . ' ' . ( isset( $st['html'] ) ? $st['html'] : '' );
+	}
+}
+
+foreach ( array( 'which alert wins', 'most urgent', 'most serious', 'outranks', 'two qualify' ) as $gone ) {
+	ok( "no tour still teaches the removed ranking idea: '$gone'", false === stripos( $tour_blob, $gone ) );
+}
+
 foreach ( $tours as $id => $tour ) {
 	ok( "tour '$id' has a title", ! empty( $tour['title'] ) );
 	ok( "tour '$id' has steps", ! empty( $tour['steps'] ) && is_array( $tour['steps'] ) );

@@ -110,7 +110,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	<?php // ---------- The status board ---------- ?>
 	<div class="acps-help-section">
 		<h2><?php esc_html_e( 'The status page is the control panel', 'acps-alert-popups' ); ?></h2>
-		<p><?php esc_html_e( 'Two modules go on your status page, and between them they are the whole system. You never come into wp-admin to post an update.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'Two modules go on your status page, and between them they are the whole system. You can post an update from either the status page or the quick Post an Alert form in wp-admin — both change the same one alert.', 'acps-alert-popups' ); ?></p>
 		<ul class="acps-help-list">
 			<li><strong><?php esc_html_e( 'Current Alert', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the popup itself. You write the alert here and switch it on here, and every setting it has is on its tabs. It only shows in the builder; visitors see it as a popup on every other page.', 'acps-alert-popups' ); ?></li>
 			<li><strong><?php esc_html_e( 'School Status Board', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the template. It shows the alert\'s heading and message as the banner, in the colour of its status level, and lists the past updates underneath. The banner is those two things and nothing else — for a badge or the level word, put [schoolstatus] wherever you want it.', 'acps-alert-popups' ); ?></li>
@@ -183,6 +183,21 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- How it works ---------- ?>
+	<div class="acps-help-section">
+		<h2><?php esc_html_e( 'The quick way: Post an Alert', 'acps-alert-popups' ); ?></h2>
+		<p><?php esc_html_e( 'When you just need to change the words fast, you do not have to open Beaver Builder. Site Alerts → Post an Alert (there is a button on the alerts list too) is a one-screen form.', 'acps-alert-popups' ); ?></p>
+		<ol class="acps-help-list">
+			<li><strong><?php esc_html_e( 'Level', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the status level, which sets the colour of the popup and the banner and the word shown on them.', 'acps-alert-popups' ); ?></li>
+			<li><strong><?php esc_html_e( 'Header', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the title on the popup and the status page.', 'acps-alert-popups' ); ?></li>
+			<li><strong><?php esc_html_e( 'Text', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the message body.', 'acps-alert-popups' ); ?></li>
+		</ol>
+		<p><?php esc_html_e( 'Press Post alert and, in one step, the header and text are written straight into the popup, the level is set, and the alert goes live. The popup, the status board and any [schoolstatus] shortcode all update together.', 'acps-alert-popups' ); ?></p>
+		<p class="acps-callout">
+			<?php esc_html_e( 'It touches only those three things. Any extra content, images, buttons, styling or layout you built into the popup are left exactly as they are — the form and Beaver Builder edit the same popup, so you never end up with two. The boxes come pre-filled with what the popup says now, an empty box leaves that piece alone, and re-wording an alert that is already up does not restart its daily cut-off.', 'acps-alert-popups' ); ?>
+		</p>
+		<p><a class="button button-primary" href="<?php echo esc_url( add_query_arg( array( 'page' => ACPS_Alerts_Admin::MENU_SLUG, 'acps_view' => 'post' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Post an Alert', 'acps-alert-popups' ); ?></a></p>
+	</div>
+
 	<div class="acps-help-section">
 		<h2><?php esc_html_e( 'How it works', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'There are only two halves to this, and they never overlap.', 'acps-alert-popups' ); ?></p>
@@ -382,7 +397,6 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		<p class="acps-callout">
 			<?php esc_html_e( 'Check these directives against your own district training materials before you go live. If your wording differs, a developer can adjust it with the acps_alerts_status_levels filter — do not let the website and the drill disagree.', 'acps-alert-popups' ); ?>
 		</p>
-		<p><?php esc_html_e( 'When several updates are live at once, the most urgent action becomes the banner and the rest sit beneath it. Lockdown outranks Evacuate, which outranks Shelter, Secure and Hold.', 'acps-alert-popups' ); ?></p>
 		<p><?php esc_html_e( 'Updates written before the move to SRP still work: their old wording keeps rendering, and you can switch them to an SRP action whenever you like.', 'acps-alert-popups' ); ?></p>
 	</div>
 
@@ -550,12 +564,12 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 					),
 				),
 				array(
-					__( 'I fixed a typo and it made a second update', 'acps-alert-popups' ),
-					__( 'That was a bug and it is fixed. Editing the wording now corrects the live update in place. If you are still seeing it, the plugin has not been updated — and any extras already created can be archived from Site Alerts, or with the "Tidy duplicates" button when they are exact copies.', 'acps-alert-popups' ),
+					__( 'I fixed a typo — did that make a second update?', 'acps-alert-popups' ),
+					__( 'No. There is only ever one Current Alert, so editing the wording corrects the live update in place. You never get a second copy, and the daily cut-off is not pushed back.', 'acps-alert-popups' ),
 				),
 				array(
 					__( 'Can I have more than one update live at once?', 'acps-alert-popups' ),
-					__( 'Yes. The most serious one becomes the banner, and the others appear beneath it as smaller notices. For the popup, the usual "alerts per page view" limit in Settings still applies.', 'acps-alert-popups' ),
+					__( 'No. There is one Current Alert and it is what shows; the Normal Alert is only the resting state. To change what is up, rewrite the Current Alert — from Post an Alert or on the status page — rather than adding another.', 'acps-alert-popups' ),
 				),
 				array(
 					__( 'How do I put an archived update back?', 'acps-alert-popups' ),
@@ -566,8 +580,8 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 					__( 'No. Edit it in Beaver Builder and save. The alert keeps all of its settings — they live separately from the design.', 'acps-alert-popups' ),
 				),
 				array(
-					__( 'Can I show two alerts at once?', 'acps-alert-popups' ),
-					__( 'Only the Current Alert can pop up, so a visitor never gets two at once. The Normal Alert is the board&rsquo;s resting state and never interrupts anybody.', 'acps-alert-popups' ),
+					__( 'What is the Normal Alert for, then?', 'acps-alert-popups' ),
+					__( 'It is the resting state the status board shows when nothing is happening. It never pops up and never interrupts anybody — only the Current Alert does that.', 'acps-alert-popups' ),
 				),
 				array(
 					__( 'Will it show on mobile?', 'acps-alert-popups' ),
@@ -586,8 +600,8 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 					__( 'Yes. Each alert settings screen has a preview link. It shows you that alert on the live site, ignoring its schedule, targeting and frequency, and only works for people who can edit pages.', 'acps-alert-popups' ),
 				),
 				array(
-					__( 'Does deleting the popup delete the alert?', 'acps-alert-popups' ),
-					__( 'Yes — they are the same thing. Deleting the popup in WordPress removes it from the alerts list too. If you only want it to stop, switch it off instead.', 'acps-alert-popups' ),
+					__( 'Can I delete an alert?', 'acps-alert-popups' ),
+					__( 'No. The site keeps exactly two — the Current Alert and the Normal Alert — and both are protected from deletion, so the system can never be left with nothing to show. To stop an alert, switch it off; it stays ready for next time.', 'acps-alert-popups' ),
 				),
 				array(
 					__( 'Who can manage alerts?', 'acps-alert-popups' ),

@@ -119,7 +119,7 @@ The popup's look is the Current Alert module's **Style** tab: where the box sits
 
 You should not need this file. The plugin teaches itself:
 
-- **A guided tour.** Open **Site Alerts** and click **Show me how**. It dims the screen, spotlights one real control at a time and explains it, walking you from an empty list all the way to a live alert — across screens, picking up where it left off. Escape leaves at any point; you can replay it whenever.
+- **A guided tour.** Open **Site Alerts** and start the guided tour. It dims the screen, spotlights one real control at a time and explains it, walking you from the alerts list through the quick **Post an Alert** form and on to the illustrated guides — across screens, picking up where it left off. Escape leaves at any point; you can replay it whenever. A second, optional tour walks the fine-grained settings in detail.
 - **Site Alerts → Help & Tutorials.** A setup checklist that ticks itself off as you go, illustrated guides for every setting, ready-made recipes (snow day, event, staff-only, click-to-open), troubleshooting, an FAQ and a glossary.
 - **The Help tab** at the top right of every plugin screen, with a "my alert isn't showing" checklist.
 - **A live preview** on the alert settings screen that redraws as you change position, width, severity and overlay — plus a warning if you switch off every way of closing the alert.
