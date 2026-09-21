@@ -292,5 +292,78 @@ check( 'the days window runs from when it was shown', mayShow( { ...days, id: 7 
 check( 'and not yet inside it', mayShow( { ...days, id: 7 }, { seenAt: Date.now() - ( 2 * 86400000 ), version: days.version, session: 'session-1' }, {} ), false );
 check( 'a second alert records under its own key', !! preview.store[ 'acps_alert_8' ], true );
 
+/* ---- two real page loads, sharing one browser's storage ---- */
+
+/*
+ * The isolated mayShow() cases above prove the decision is right. This proves
+ * the whole thing works end to end: boot the real script twice against ONE
+ * shared localStorage and sessionStorage — a first page load, then a second in
+ * the same session — and check the popup is auto-opened once and then left
+ * alone. This is the exact "it shows every time" report, reproduced or ruled
+ * out against the shipped code rather than a restatement of it.
+ */
+function twoLoads( freq ) {
+	const local = {};
+	const session = {};
+
+	function storage( store ) {
+		return {
+			getItem: ( k ) => ( k in store ? store[ k ] : null ),
+			setItem: ( k, v ) => { store[ k ] = String( v ); },
+			removeItem: ( k ) => { delete store[ k ]; }
+		};
+	}
+
+	function classes( set ) {
+		return { contains: ( c ) => set.has( c ), add: ( c ) => set.add( c ), remove: ( c ) => set.delete( c ) };
+	}
+
+	function pageLoad( cfg ) {
+		const el = { hidden: true, set: new Set(), querySelectorAll: () => [], setAttribute: () => {}, focus: () => {}, getAttribute: () => String( cfg.id ) };
+		el.classList = classes( el.set );
+
+		const doc = {
+			readyState: 'complete', activeElement: null, cookie: '',
+			body: { classList: classes( new Set() ) },
+			documentElement: { scrollHeight: 1000 },
+			addEventListener: () => {}, dispatchEvent: () => {},
+			getElementById: ( id ) => ( id === 'acps-alert-' + cfg.id ? el : null )
+		};
+
+		const win = {
+			ACPSAlertsData: { alerts: [ cfg ], storage: 'local', isPreview: false },
+			localStorage: storage( local ), sessionStorage: storage( session ),
+			addEventListener: () => {}, setTimeout: () => {}, scrollY: 0, innerHeight: 800
+		};
+
+		new Function( 'window', 'document', 'CustomEvent', source )( win, doc, function () {} );
+
+		return el.set.has( 'is-open' );
+	}
+
+	const cfg = { id: 1, trigger: 'load', frequency: freq, frequencyDays: 7, version: '4-1700000000' };
+
+	return { first: pageLoad( cfg ), second: pageLoad( cfg ) };
+}
+
+[ 'session', 'edit', 'once' ].forEach( function ( freq ) {
+	const r = twoLoads( freq );
+
+	check( `${ freq }: the popup opens on the first visit`, r.first, true );
+	check( `${ freq }: and does NOT open again on the next page`, r.second, false );
+} );
+
+// "always" is the one mode that keeps showing, on purpose.
+const always2 = twoLoads( 'always' );
+check( 'always: opens on the first visit', always2.first, true );
+check( 'always: and opens again, by design', always2.second, true );
+
+// A frequency that was never written, or an unknown one, must not behave like
+// "always". Once seen, it leaves the visitor alone — this is the exact
+// "shows every time no matter what" failure, pinned shut.
+const blank = twoLoads( '' );
+check( 'blank frequency: opens once', blank.first, true );
+check( 'blank frequency: does not keep reappearing', blank.second, false );
+
 console.log( failures ? `\n${ failures } failing case(s)` : 'All frequency cases passed' );
 process.exit( failures ? 1 : 0 );

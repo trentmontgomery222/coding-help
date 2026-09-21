@@ -176,7 +176,12 @@
 			return elapsed > config.frequencyDays * 86400000;
 		}
 
-		return true;
+		// Anything else is an unrecognised or blank frequency. The visitor has
+		// been shown this already and nothing has changed, so err on the side of
+		// leaving them alone rather than nagging on every page — only "always",
+		// handled at the very top, keeps reappearing. This is what stops a
+		// setting that never got written from behaving like "show every time".
+		return false;
 	}
 
 	/**
