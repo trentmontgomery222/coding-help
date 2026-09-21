@@ -303,6 +303,18 @@ so they are not exercised; everything around them is ours and is:
   elsewhere on the status page, and a layout whose parents form a loop returns
   rather than hanging the request
 - the popup is hidden on the status page itself and left alone everywhere else
+- the lifted node is wrapped back in `fl-builder-content` and
+  `fl-builder-content-<page id>`, with the post id as a data attribute; markup
+  that already carries this page's wrapper is left alone, and one carrying
+  another page's is not mistaken for it. This pins the transparent popup and the
+  unstyled button: Beaver Builder writes most of a layout's CSS against an
+  ancestor, so a node taken out of its page loses every rule that names one —
+  silently, with the stylesheet loaded and the node classes still correct. Only
+  the rules that need no ancestor survive, which is why the icon kept its purple
+  disc and the heading its font while the popup went transparent.
+
+  Verified non-vacuous: drop the wrapper and it fails with "the bare container
+  class is restored" and three more.
 - the status page's generated stylesheet is loaded under our own handle, from
   the url Beaver Builder reports, versioned by the file so an edit busts the
   browser cache, with the base layout stylesheet alongside it. Two ways that

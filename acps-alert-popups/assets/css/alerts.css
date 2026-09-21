@@ -243,7 +243,12 @@ body.acps-alert-is-open {
 	 * the popup's own width from the status page's stylesheet and throws it
 	 * across the whole screen. Its width, height, padding and margins are part
 	 * of the design and are left alone. */
-	display: block !important;
+	/* Beaver Builder lays the popup out in `.fl-popup:popover-open`, which can
+	   never match once the attribute is gone, so the same layout is restated
+	   here. Without it the popup loses its column flow and its centring. */
+	display: flex !important;
+	flex-direction: column;
+	overflow: visible;
 	position: static !important;
 	inset: auto !important;
 	opacity: 1 !important;
@@ -278,7 +283,9 @@ body.acps-alert-is-open {
  * ------------------------------------------------------------------------ */
 
 .acps-alert--built .acps-alert__dialog {
-	width: auto;
+	/* Full width, so the popup's own `max-width` — which Beaver Builder often
+	   writes as a percentage — has something real to be a percentage of. */
+	width: 100%;
 	max-width: none;
 	background: none;
 	border: 0;

@@ -205,6 +205,21 @@ linked when the cached file is really on disk, and Beaver Builder's base handle
 is only named as a dependency when it is really registered — WordPress declines,
 without a word, to print a style whose dependency it has never heard of.
 
+**The lifted node has to stay inside the container its CSS names.** Beaver
+Builder writes most of a layout's rules against an ancestor —
+`.fl-builder-content .fl-node-xxx.fl-button-group .fl-button`,
+`.fl-builder-content-123 .fl-node-yyy.fl-popup` — so taking the node out of its
+page makes every one of those rules stop matching, silently, with the
+stylesheet loaded and the node classes all still correct. The rules that happen
+not to need an ancestor still apply, which is what makes the failure so
+confusing: the icon keeps its colour and the heading its font while the popup
+loses its background, border, radius and width and every button loses its fill.
+The markup is therefore wrapped back in
+`<div class="fl-builder-content fl-builder-content-<page id>">` before it is
+used. Beaver Builder also lays the popup out under `.fl-popup:popover-open`,
+which can never match once the attribute is stripped, so `alerts.css` restates
+that layout.
+
 **The popup is the box.** An alert whose body was designed in the builder gets
 `acps-alert--built` on its shell, and the shell then contributes only the
 overlay and the close button: no panel, no corners, no shadow, no max-width of

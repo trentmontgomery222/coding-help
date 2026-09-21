@@ -363,6 +363,50 @@ ok(
 	ACPS_Alerts_Popup_Source::has_content( '<div class="fl-popup"><video src="/a.mp4"></video></div>' )
 );
 
+/* ---- the popup has to stay inside the container its CSS names ---- */
+
+/*
+ * Pins the transparent popup and the unstyled button. Beaver Builder writes
+ * most of a layout's CSS against an ancestor:
+ *
+ *     .fl-builder-content .fl-node-xxx.fl-button-group .fl-button { background: ... }
+ *     .fl-builder-content-10240 .fl-node-yyy.fl-popup { max-width: 55%; ... }
+ *
+ * Lift the node out of its page and that ancestor is gone, so every one of
+ * those rules stops matching — silently, because the stylesheet did load and
+ * the node classes are all still right. What survives is exactly the rules that
+ * happen not to need an ancestor. That is why the icon kept its purple disc and
+ * the heading its font, while the popup lost its background, border, radius and
+ * width, and the button lost its fill.
+ */
+$node = '<div id="testpop" class="fl-popup fl-node-0jstg31kvzho"><a class="fl-button">Go to the school status page</a></div>';
+
+$wrapped = ACPS_Alerts_Popup_Source::wrap( $node, 10240 );
+
+ok( 'the bare container class is restored', false !== strpos( $wrapped, 'fl-builder-content' ) );
+ok( 'and the one carrying the post id', false !== strpos( $wrapped, 'fl-builder-content-10240' ) );
+ok( 'the popup is inside it', strpos( $wrapped, 'fl-builder-content-10240' ) < strpos( $wrapped, 'id="testpop"' ) );
+ok( 'the popup itself is untouched', false !== strpos( $wrapped, 'class="fl-popup fl-node-0jstg31kvzho"' ) );
+ok( 'and so is everything in it', false !== strpos( $wrapped, 'Go to the school status page' ) );
+
+// Beaver Builder's own post-id attribute goes on too, since its scripts read it.
+ok( 'the post id is on the wrapper as data too', false !== strpos( $wrapped, 'data-post-id="10240"' ) );
+
+// The whole-layout render already brings the wrapper. Wrapping again would nest
+// one inside the other for nothing.
+$already = '<div class="fl-builder-content fl-builder-content-10240"><div class="fl-popup">x</div></div>';
+
+check( 'markup that already has the wrapper is left alone', ACPS_Alerts_Popup_Source::wrap( $already, 10240 ), $already );
+
+// A wrapper for a DIFFERENT page is not this page's wrapper, and the rules
+// scoped to this one would still not match, so it is wrapped.
+$other = '<div class="fl-builder-content fl-builder-content-999"><div class="fl-popup">x</div></div>';
+
+ok( 'a wrapper for another page does not count', false !== strpos( ACPS_Alerts_Popup_Source::wrap( $other, 10240 ), 'fl-builder-content-10240' ) );
+
+check( 'nothing to wrap stays nothing', ACPS_Alerts_Popup_Source::wrap( '', 10240 ), '' );
+check( 'and with no page there is no wrapper to name', ACPS_Alerts_Popup_Source::wrap( $node, 0 ), $node );
+
 /* ---- loading the status page's stylesheet ---- */
 
 /*

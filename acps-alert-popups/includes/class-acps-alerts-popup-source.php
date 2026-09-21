@@ -539,7 +539,7 @@ class ACPS_Alerts_Popup_Source {
 			return '';
 		}
 
-		$html = self::inline_popup( $html );
+		$html = self::wrap( self::inline_popup( $html ), $page_id );
 
 		self::cache( $html );
 
@@ -618,6 +618,49 @@ class ACPS_Alerts_Popup_Source {
 		}
 
 		set_transient( self::cache_key(), (string) $html, DAY_IN_SECONDS );
+	}
+
+	/**
+	 * Puts the popup back inside the container its styling expects.
+	 *
+	 * Beaver Builder writes most of a layout's CSS against an ancestor:
+	 *
+	 *     .fl-builder-content .fl-node-xxx.fl-button-group .fl-button { ... }
+	 *     .fl-builder-content-123 .fl-node-yyy.fl-popup { ... }
+	 *
+	 * Lifting a node out of its page leaves that ancestor behind, and every one
+	 * of those rules stops matching — silently, because the stylesheet is
+	 * loaded and the node classes are all still correct. What reaches the page
+	 * is a popup with the rules that happen not to need an ancestor (the icon's
+	 * colour, the heading's font) and none of the rules that do (the popup's own
+	 * background, border, radius and width; every button's fill).
+	 *
+	 * Both class names are needed: the bare one, and the one carrying the post
+	 * id, which is how Beaver Builder scopes a layout to its own page.
+	 *
+	 * @param string $html    The popup's markup.
+	 * @param int    $page_id Post the layout belongs to.
+	 * @return string
+	 */
+	public static function wrap( $html, $page_id ) {
+		$html    = (string) $html;
+		$page_id = (int) $page_id;
+
+		if ( '' === trim( $html ) || ! $page_id ) {
+			return $html;
+		}
+
+		// The whole-layout render already brings the wrapper with it; wrapping
+		// again would nest one inside the other for no gain.
+		if ( false !== strpos( $html, 'fl-builder-content-' . $page_id ) ) {
+			return $html;
+		}
+
+		return sprintf(
+			'<div class="fl-builder-content fl-builder-content-%1$d" data-post-id="%1$d">%2$s</div>',
+			$page_id,
+			$html
+		);
 	}
 
 	/**
