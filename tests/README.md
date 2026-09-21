@@ -17,6 +17,7 @@ php tests/panel-test.php
 php tests/help-test.php
 php tests/popup-module-test.php
 php tests/popup-source-test.php
+php tests/shortcode-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
 node tests/frequency-test.js
@@ -320,6 +321,15 @@ so they are not exercised; everything around them is ours and is:
 
   Verified non-vacuous: never adding the class fails with "the shell says the
   popup brought its own close button".
+- a `[schoolstatus]` shortcode inside the popup is not frozen by the cache. The
+  rendered popup is cached, and a shortcode baked into cached markup says
+  whatever it said when that markup was stored — so the status folds into the
+  cache key: a different level, or an edit to the same alert, is stored under a
+  different key, while an unchanged status reuses its own rather than
+  re-rendering a whole page layout on every view.
+
+  Verified non-vacuous: drop the status from the key and it fails with "a
+  different status is stored under a different key".
 - the lifted node is wrapped back in `fl-builder-content` and
   `fl-builder-content-<page id>`, with the post id as a data attribute; markup
   that already carries this page's wrapper is left alone, and one carrying
@@ -369,3 +379,28 @@ so they are not exercised; everything around them is ours and is:
 Verified non-vacuous twice: a naive class match fails with "a longer node id is
 not matched by a shorter one", and a cache that is never revalidated fails with
 "a cached node that has gone is not trusted".
+
+`shortcode-test.php` — `[schoolstatus]`, which puts the current status wherever
+it is typed. Two things make it worth pinning: it has to agree with the status
+board, because two places reporting different statuses is worse than either
+being wrong; and it has to style itself, because it can be typed into a page
+that loads none of this plugin's stylesheets — including the popup, which is
+rendered onto pages that are not the one it was built on.
+
+- registered under both `schoolstatus` and `school_status`
+- the resting state still says something, marked as the resting state; a live
+  alert reports its own level and wording, and the live wording wins over the
+  normal wording
+- `show` picks parts in the order listed, accepting commas or spaces, ignoring
+  a part nobody has heard of rather than printing it, and drawing nothing when
+  nothing recognisable was asked for
+- `when="live"` draws nothing on a normal day
+- the wrapper lays itself out inline, in the direction and alignment asked for,
+  and an alignment nobody recognises falls back to centre rather than reaching
+  the style attribute
+- `link="yes"` links to the status page, and does not invent a link when no
+  status page is set
+
+Verified non-vacuous twice: trusting the alignment attribute fails with "a junk
+alignment falls back to centre", and ignoring the live alert's wording fails
+five cases.

@@ -69,6 +69,13 @@ class ACPS_Alerts_Plugin {
 	public $panel;
 
 	/**
+	 * The [schoolstatus] shortcodes.
+	 *
+	 * @var ACPS_Alerts_Shortcodes
+	 */
+	public $shortcodes;
+
+	/**
 	 * Tours, guides and contextual help. Null when the optional help files are
 	 * not installed.
 	 *
@@ -97,6 +104,7 @@ class ACPS_Alerts_Plugin {
 		$this->builder  = new ACPS_Alerts_Builder();
 		$this->updater  = new ACPS_Alerts_Updater();
 		$this->panel    = new ACPS_Alerts_Panel( $this->updater );
+		$this->shortcodes = new ACPS_Alerts_Shortcodes();
 
 		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'load_textdomain' ), 'plugin/textdomain' );
 
@@ -111,6 +119,7 @@ class ACPS_Alerts_Plugin {
 			'frontend' => array( $this->frontend, 'init' ),
 			'builder'  => array( $this->builder, 'init' ),
 			'popup-src' => array( 'ACPS_Alerts_Popup_Source', 'init' ),
+			'shortcodes' => array( $this->shortcodes, 'init' ),
 			'updater'  => array( $this->updater, 'register' ),
 			'panel'    => array( $this->panel, 'register' ),
 		);

@@ -103,9 +103,40 @@ class ACPS_Alerts_Failsafe {
 
 class ACPS_Alerts_Status {
 	public static function board_page() { return (int) $GLOBALS['board']; }
+
+	// The cache key folds in what the status currently is, so that a
+	// [schoolstatus] shortcode baked into the popup's cached markup is not
+	// frozen at whatever it said when that markup was stored.
+	public static function board_entry() { return $GLOBALS['entry']; }
+}
+
+$GLOBALS['entry'] = null;
+
+/**
+ * An entry the status stamp can be taken from.
+ */
+class StubEntry {
+	public $level;
+	public $rev;
+
+	public function __construct( $level, $rev ) {
+		$this->level = $level;
+		$this->rev   = $rev;
+	}
+
+	public function get( $k, $d = null ) { return 'status_level' === $k ? $this->level : $d; }
+	public function revision() { return $this->rev; }
 }
 
 require ACPS_ALERTS_DIR . 'includes/class-acps-alerts-popup-source.php';
+
+/**
+ * Reaches the protected cache, which is otherwise only written at the end of a
+ * render that needs Beaver Builder present.
+ */
+class CacheProbe extends ACPS_Alerts_Popup_Source {
+	public static function cache_probe( $html ) { self::cache( $html ); }
+}
 
 $fails = 0;
 function check( $label, $actual, $expected ) {
@@ -362,6 +393,49 @@ ok(
 	'and so is one that is only a video',
 	ACPS_Alerts_Popup_Source::has_content( '<div class="fl-popup"><video src="/a.mp4"></video></div>' )
 );
+
+/* ---- a shortcode inside the popup must not be frozen by the cache ---- */
+
+/*
+ * The rendered popup is cached, and the popup can contain [schoolstatus]. A
+ * shortcode baked into cached markup says whatever it said when the markup was
+ * stored, so the status folds into the cache key: the moment the alert changes,
+ * the old markup is simply never read again.
+ */
+$GLOBALS['meta'][42]['_fl_builder_data'] = layout();
+ACPS_Alerts_Popup_Source::forget();
+
+$GLOBALS['transients'] = array();
+$GLOBALS['entry']      = null;
+
+CacheProbe::cache_probe( 'RESTING MARKUP' );
+
+$resting_keys = array_keys( $GLOBALS['transients'] );
+
+// An alert goes up.
+$GLOBALS['entry'] = new StubEntry( 'hold', 7 );
+
+CacheProbe::cache_probe( 'HOLD MARKUP' );
+
+ok( 'a different status is stored under a different key', count( $GLOBALS['transients'] ) > count( $resting_keys ) );
+
+// Editing the alert moves its revision, which has to count as a change too.
+$before = array_keys( $GLOBALS['transients'] );
+$GLOBALS['entry'] = new StubEntry( 'hold', 8 );
+
+CacheProbe::cache_probe( 'EDITED MARKUP' );
+
+ok( 'and so does an edit to the same alert', count( $GLOBALS['transients'] ) > count( $before ) );
+
+// Nothing changing must reuse the key, or the popup would be re-rendered on
+// every page view — the most expensive thing this plugin does.
+$steady = count( $GLOBALS['transients'] );
+
+CacheProbe::cache_probe( 'EDITED MARKUP' );
+
+check( 'an unchanged status reuses its key', count( $GLOBALS['transients'] ), $steady );
+
+$GLOBALS['entry'] = null;
 
 /* ---- the popup's own close button ---- */
 

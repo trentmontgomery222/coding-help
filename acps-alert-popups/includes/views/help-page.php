@@ -238,6 +238,37 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		</ol>
 	</div>
 
+	<?php // ---------- The status shortcode ---------- ?>
+	<div class="acps-help-section">
+		<h2><?php esc_html_e( 'Putting the status anywhere', 'acps-alert-popups' ); ?></h2>
+		<p><?php esc_html_e( 'The shortcode below prints the current status wherever you type it — at the top of the popup, in a header, in a sidebar, in a post. It reads the same Current Alert the status board reads, so every place that shows the status is showing the same thing, and all of them change the moment you change the alert.', 'acps-alert-popups' ); ?></p>
+
+		<p><code>[schoolstatus]</code></p>
+
+		<h3><?php esc_html_e( 'Choosing what it prints', 'acps-alert-popups' ); ?></h3>
+		<table class="widefat striped acps-help-table">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'You type', 'acps-alert-popups' ); ?></th>
+					<th><?php esc_html_e( 'You get', 'acps-alert-popups' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr><td><code>[schoolstatus]</code></td><td><?php esc_html_e( 'The badge and the level word — HOLD, LOCKDOWN, NORMAL.', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus show="icon"]</code></td><td><?php esc_html_e( 'Just the coloured badge. This is the one to put at the top of the popup.', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus show="all"]</code></td><td><?php esc_html_e( 'Badge, level word, its SRP directive, the headline and the message.', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus show="icon headline"]</code></td><td><?php esc_html_e( 'Any parts you like, in the order you list them: icon, level, directive, headline, message.', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus when="live"]</code></td><td><?php esc_html_e( 'Nothing at all on a normal day. Use this in a header that should stay empty until something happens.', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus link="yes"]</code></td><td><?php esc_html_e( 'The whole thing becomes a link to the status page.', 'acps-alert-popups' ); ?></td></tr>
+				<tr><td><code>[schoolstatus layout="row" size="40"]</code></td><td><?php esc_html_e( 'Side by side instead of stacked, with a smaller badge. Also takes align="left|center|right".', 'acps-alert-popups' ); ?></td></tr>
+			</tbody>
+		</table>
+
+		<p class="acps-callout">
+			<?php esc_html_e( 'The shortcode styles itself, so it looks right on a page that loads none of this plugin\'s stylesheets — which is what lets it work inside the popup on every other page of the site.', 'acps-alert-popups' ); ?>
+		</p>
+	</div>
+
 	<?php // ---------- Anatomy ---------- ?>
 	<div class="acps-help-section">
 		<h2><?php esc_html_e( 'What a visitor actually sees', 'acps-alert-popups' ); ?></h2>

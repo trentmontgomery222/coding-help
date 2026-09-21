@@ -109,6 +109,30 @@ It works off a revision counter bumped on every write, paired with the post's mo
 - Alerts with the **click-only** trigger ignore page targeting, so a trigger button works wherever it is placed. Schedule, audience and exclusions still apply to them.
 - Only the Current Alert can ever pop up, so a visitor never gets two alerts at once.
 
+### Putting the status anywhere
+
+`[schoolstatus]` prints the current status wherever it is typed — at the top of
+the popup, in a header, in a sidebar, in a post. It reads the same Current Alert
+the status board reads, so every place showing the status shows the same thing.
+
+| Attribute | Default | What it does |
+| --- | --- | --- |
+| `show` | `icon level` | Which parts, in the order listed: `icon`, `level`, `directive`, `headline`, `message`, or `all`. Commas or spaces. |
+| `when` | `always` | `live` prints nothing at all on a normal day. |
+| `layout` | `stack` | `row` puts the parts side by side. |
+| `align` | `center` | `left`, `center` or `right`. |
+| `size` | `56` | Badge size in pixels. |
+| `link` | `no` | `yes` wraps it in a link to the status page. |
+
+`[school_status]` is an alias, because people type it both ways.
+
+It styles itself inline, so it looks right on a page that loads none of this
+plugin's stylesheets — which is what lets it work inside the popup, on every
+other page of the site. For the same reason the popup's cached markup is keyed
+on the current status as well as the page's modified time: a shortcode baked
+into cached markup would otherwise be frozen at whatever it said when that
+markup was stored.
+
 ### Opening an alert from a page
 
 Three ways, all equivalent:

@@ -587,8 +587,35 @@ class ACPS_Alerts_Popup_Source {
 		$page_id = self::page_id();
 
 		return 'acps_alerts_popup_html_' . md5(
-			$page_id . '|' . self::node_id() . '|' . (string) get_post_modified_time( 'U', true, $page_id ) . '|' . ACPS_ALERTS_VERSION
+			$page_id . '|' . self::node_id() . '|' . (string) get_post_modified_time( 'U', true, $page_id )
+			. '|' . self::status_stamp() . '|' . ACPS_ALERTS_VERSION
 		);
+	}
+
+	/**
+	 * What the status is, as a string the cache key can be built from.
+	 *
+	 * The popup can contain a [schoolstatus] shortcode, and a shortcode inside
+	 * cached markup is frozen at whatever it said when the markup was stored.
+	 * Folding the status into the key means the moment the alert changes, the
+	 * old markup is simply never read again.
+	 *
+	 * @return string
+	 */
+	protected static function status_stamp() {
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			return '';
+		}
+
+		$alert = ACPS_Alerts_Status::board_entry();
+
+		if ( ! $alert ) {
+			return 'normal';
+		}
+
+		// The revision moves on every edit to the alert, so the wording is
+		// covered as well as the level.
+		return 'live:' . $alert->get( 'status_level' ) . ':' . $alert->revision();
 	}
 
 	/**
