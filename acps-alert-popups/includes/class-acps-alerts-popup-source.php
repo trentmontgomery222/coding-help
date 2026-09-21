@@ -321,26 +321,25 @@ class ACPS_Alerts_Popup_Source {
 		self::enqueue_base_styles();
 
 		/*
-		 * Styles only — deliberately NOT Beaver Builder's own scripts.
+		 * Beaver Builder's own layout assets — how the popup gets ALL of its
+		 * design on a page it was not built on.
 		 *
-		 * The obvious call here is enqueue_layout_styles_scripts_by_id(), and it
-		 * is what this used to do. But it also enqueues the layout's SCRIPTS,
-		 * and the popup module's script is Beaver Builder's popup engine. On
-		 * every page that engine would find this popup and open it on its own —
-		 * over the top of everything, on every page load — with no idea that
-		 * this plugin decides when the alert shows and how often it comes back.
-		 * That is exactly the "it pops up every single time and nothing is ever
-		 * written to storage" failure: the popup a visitor saw was Beaver
-		 * Builder's, opened by Beaver Builder, never touched by our runtime.
+		 * enqueue_cached_stylesheet() below loads the compiled stylesheet
+		 * directly and is a good backstop, but on its own it misses pieces on
+		 * some sites: webfonts, an icon sheet, a module's secondary CSS. The
+		 * result is the popup arriving half-styled — a heading and a button but
+		 * no card behind them. Letting Beaver Builder enqueue the layout the way
+		 * it does on its own page is what makes the styling reliable, so it is
+		 * on by default.
 		 *
-		 * So the popup engine must not run here. This plugin owns opening and
-		 * closing (assets/js/alerts.js), and it needs only the layout's CSS,
-		 * which enqueue_cached_stylesheet() below loads directly from the
-		 * compiled file. A site that genuinely needs Beaver Builder's own
-		 * scripts for something inside the popup can opt back in with the
-		 * acps_alerts_load_bb_scripts filter.
+		 * This call also loads the layout's scripts, including the popup engine,
+		 * but that engine cannot open THIS popup: inline_popup() has already
+		 * stripped the `popover` attribute, so there is nothing for it to show.
+		 * Opening and the frequency rule stay entirely with this plugin's own
+		 * runtime (assets/js/alerts.js). A site that needs to keep Beaver
+		 * Builder's scripts off every page can pass false to the filter.
 		 */
-		if ( apply_filters( 'acps_alerts_load_bb_scripts', false ) ) {
+		if ( apply_filters( 'acps_alerts_load_bb_scripts', true ) ) {
 			foreach ( array( 'enqueue_layout_styles_scripts_by_id', 'enqueue_layout_styles_scripts' ) as $method ) {
 				if ( method_exists( 'FLBuilder', $method ) ) {
 					ACPS_Alerts_Failsafe::guard(
@@ -552,6 +551,19 @@ class ACPS_Alerts_Popup_Source {
 			ACPS_Alerts_Failsafe::record( 'popup-source/render', 'the popup rendered with no content in it' );
 
 			return '';
+		}
+
+		// A shortcode typed into the popup — [schoolstatus] for the badge, say —
+		// can survive Beaver Builder's render as literal text when it sits in a
+		// module that does not expand shortcodes (a heading, for one). Run the
+		// processor over the finished popup so it executes wherever it landed.
+		// It is harmless on markup that has none left.
+		if ( function_exists( 'do_shortcode' ) ) {
+			$expanded = ACPS_Alerts_Failsafe::guard( 'do_shortcode', array( $html ), 'popup-source/shortcodes', null );
+
+			if ( is_string( $expanded ) && '' !== trim( $expanded ) ) {
+				$html = $expanded;
+			}
 		}
 
 		$html = self::wrap( self::adopt_close_button( self::inline_popup( $html ) ), $page_id );

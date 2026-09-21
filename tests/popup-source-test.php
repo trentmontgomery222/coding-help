@@ -43,6 +43,9 @@ function update_option( $k, $v, $a = null ) { $GLOBALS['options'][ $k ] = $v; re
 function delete_option( $k ) { unset( $GLOBALS['options'][ $k ] ); return true; }
 function wp_strip_all_tags( $s ) { return trim( strip_tags( (string) $s ) ); }
 function shortcode_exists( $t ) { return false; }
+$GLOBALS['shortcode_ran'] = false;
+function do_shortcode( $html ) { $GLOBALS['shortcode_ran'] = true; return str_replace( '[schoolstatus show="icon"]', '<span class="acps-status">BADGE</span>', (string) $html ); }
+function function_exists_stub() {}
 function is_singular( $t = '' ) { return $GLOBALS['singular']; }
 function get_queried_object_id() { return $GLOBALS['queried']; }
 function get_post_modified_time( $f = 'U', $gmt = false, $id = 0 ) { return 1700000000; }
@@ -74,6 +77,7 @@ class FLBuilderModel {
 	public static function set_post_id( $id ) {}
 	public static function reset_post_id() {}
 	public static function get_nodes( $type = null, $parent = null ) { return array(); }
+	public static function get_node( $id ) { $n = new stdClass(); $n->settings = new stdClass(); $n->settings->type = 'popup'; return $n; }
 }
 
 class FLBuilder {
@@ -97,6 +101,7 @@ class FLBuilder {
 	public static $scripts_loaded = false;
 
 	public static function enqueue_layout_styles_scripts_by_id( $id ) { self::$scripts_loaded = true; }
+	public static function render_module_html( $type, $settings, $node ) { return '<div class="fl-popup">[schoolstatus show="icon"]</div>'; }
 }
 
 class ACPS_Alerts_Failsafe {
@@ -564,28 +569,27 @@ ok( 'and the base layout stylesheet comes with it', isset( $GLOBALS['styles']['f
 /* ---- the popup engine must not be loaded onto the page ---- */
 
 /*
- * The bug that would not die: the popup showed on every page and nothing was
- * ever written to storage. The popup a visitor saw was Beaver Builder's own,
- * opened by Beaver Builder's popup script, which this used to enqueue along
- * with the layout styles. The plugin owns opening the alert; Beaver Builder's
- * scripts must not ride along, or nothing this plugin decides — frequency,
- * "seen once" — can hold.
+ * The popup is built on the status page, so on every other page Beaver Builder's
+ * own layout assets have to be loaded or the popup arrives half-styled — a
+ * heading and a button but no card. So the builder's enqueue runs by default.
+ * Its popup engine cannot open THIS popup because inline_popup() has already
+ * stripped the popover attribute; opening stays with the plugin's own runtime.
  */
 FLBuilder::$scripts_loaded = false;
 $GLOBALS['styles']         = array();
 ACPS_Alerts_Popup_Source::forget();
 ACPS_Alerts_Popup_Source::enqueue_assets();
 
-ok( 'Beaver Builder\'s popup scripts are NOT enqueued by default', false === FLBuilder::$scripts_loaded );
-ok( 'but the layout stylesheet still is, so the popup keeps its design', isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
+ok( 'Beaver Builder\'s layout assets are enqueued by default, so the popup is fully styled', true === FLBuilder::$scripts_loaded );
+ok( 'and the compiled stylesheet is loaded as a backstop too', isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
 
-// A site that truly needs the builder's scripts inside the popup can ask.
-$GLOBALS['filters']['acps_alerts_load_bb_scripts'] = function () { return true; };
+// A site that needs the builder's scripts kept off every page can opt out.
+$GLOBALS['filters']['acps_alerts_load_bb_scripts'] = function () { return false; };
 FLBuilder::$scripts_loaded = false;
 ACPS_Alerts_Popup_Source::forget();
 ACPS_Alerts_Popup_Source::enqueue_assets();
 
-ok( 'the filter can opt a site back into the builder scripts', true === FLBuilder::$scripts_loaded );
+ok( 'the filter can turn the builder assets off', false === FLBuilder::$scripts_loaded );
 
 unset( $GLOBALS['filters']['acps_alerts_load_bb_scripts'] );
 ACPS_Alerts_Popup_Source::forget();
@@ -729,6 +733,24 @@ $nowhere = ACPS_Alerts_Popup_Source::write_wording( 'Nowhere to put this', 'x', 
 
 check( 'with no popup the heading is not claimed as written', $nowhere['heading'], false );
 check( 'nor the body', $nowhere['text'], false );
+
+/* ---- a shortcode inside the popup is executed, not printed ---- */
+
+/*
+ * [schoolstatus] typed into the popup can survive Beaver Builder's render as
+ * literal text when it sits in a module that does not expand shortcodes. On a
+ * live site that showed the raw "[schoolstatus source=\"board\" show=\"icon\"]"
+ * on the page. render() runs the processor over the finished popup so it fires.
+ */
+$GLOBALS['meta'][42]['_fl_builder_data'] = layout();
+$GLOBALS['shortcode_ran']                = false;
+ACPS_Alerts_Popup_Source::forget();
+
+$rendered = ACPS_Alerts_Popup_Source::render();
+
+ok( 'the popup is run through the shortcode processor', true === $GLOBALS['shortcode_ran'] );
+ok( 'so a shortcode inside it is executed', false !== strpos( $rendered, 'BADGE' ) );
+ok( 'and its literal text is gone', false === strpos( $rendered, '[schoolstatus' ) );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All popup source cases passed\n";
 exit( $fails ? 1 : 0 );
