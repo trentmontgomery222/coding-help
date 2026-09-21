@@ -183,8 +183,25 @@ footer of every page is the most expensive thing this plugin does.
 Throughout, Beaver Builder is pointed at the status page with
 `FLBuilderModel::set_post_id` and pointed back in a `finally`, so a throw
 mid-render cannot leave every later builder call on the request reading the
-wrong layout. The status page's generated CSS and JS are enqueued too, or the
-popup arrives unstyled.
+wrong layout.
+
+**Styling is a separate job from markup.** Beaver Builder writes one stylesheet
+per post, so the popup's design lives in the status page's stylesheet and is
+simply not on any other page. That gets loaded on `wp_enqueue_scripts`, not at
+render time — a stylesheet asked for in the footer arrives after the browser has
+already painted the popup unstyled. Three things are needed and each is checked
+rather than assumed: Beaver Builder's base layout stylesheet (absent on a page
+with no builder content of its own), the status page's generated stylesheet via
+whichever enqueue method that version has, and — when that call turns out to
+have done nothing, which is verified by looking for the `fl-builder-layout-<id>`
+handle — the cached stylesheet loaded straight off disk through
+`FLBuilderModel::get_asset_info()`.
+
+**The popup is the box.** An alert whose body was designed in the builder gets
+`acps-alert--built` on its shell, and the shell then contributes only the
+overlay and the close button: no panel, no corners, no shadow, no max-width of
+ours. Otherwise the popup's own white box sits inside a second white box and the
+alert stops looking like the thing that was built.
 
 Beaver Builder's popup is a real HTML popover — the element carries
 `popover="manual"` — and a browser keeps any such element at `display:none`

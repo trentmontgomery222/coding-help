@@ -235,8 +235,21 @@ class ACPS_Alerts_Frontend {
 			)
 		);
 
-		// Let Beaver Builder load the CSS and JS each popup layout needs. This
-		// reaches into another plugin's internals, so each call is guarded
+		// Let Beaver Builder load the CSS and JS each popup needs, here rather
+		// than at render time: a stylesheet asked for in the footer arrives
+		// after the browser has already painted the popup unstyled.
+		//
+		// The Current Alert's styling belongs to the STATUS PAGE, because that
+		// is where its popup is built. Every other alert brings its own.
+		if ( class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available() ) {
+			ACPS_Alerts_Failsafe::guard(
+				array( 'ACPS_Alerts_Popup_Source', 'enqueue_assets' ),
+				array(),
+				'frontend/bb-popup-assets'
+			);
+		}
+
+		// This reaches into another plugin's internals, so each call is guarded
 		// separately: if Beaver Builder throws, the alert still renders with the
 		// theme's own styling rather than taking the page down.
 		foreach ( $this->queue as $alert ) {
@@ -387,11 +400,24 @@ class ACPS_Alerts_Frontend {
 			: array();
 		$severity = isset( $level['severity'] ) ? (string) $level['severity'] : 'info';
 
+		// Whether the body of this alert is a popup somebody designed in Beaver
+		// Builder, rather than plain text this plugin is laying out. Worked out
+		// before the classes, because it decides one of them.
+		$built = self::has_builder_layout( $id )
+			|| ( class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available() );
+
 		$classes = array(
 			'acps-alert',
 			'acps-alert--' . $severity,
 			'acps-alert--' . $position,
 		);
+
+		// A designed popup is the box. Ours would otherwise sit around it as a
+		// second white panel with its own corners, shadow and width, and the
+		// alert would not look like the thing that was built.
+		if ( $built ) {
+			$classes[] = 'acps-alert--built';
+		}
 
 		if ( ! $alert->get( 'show_overlay' ) ) {
 			$classes[] = 'acps-alert--no-overlay';
@@ -410,8 +436,7 @@ class ACPS_Alerts_Frontend {
 		// whether that is a layout on this post or the Popup module on the
 		// status page — already has its own heading and buttons, and adding
 		// ours on top would give it two of each.
-		$furniture = ! self::has_builder_layout( $id )
-			&& ! ( class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available() );
+		$furniture = ! $built;
 
 		$cta_text = trim( (string) $alert->get( 'cta_text' ) );
 		$cta_url  = trim( (string) $alert->get( 'cta_url' ) );
@@ -436,7 +461,7 @@ class ACPS_Alerts_Frontend {
 			hidden
 		>
 			<div class="acps-alert__overlay" data-acps-overlay></div>
-			<div class="acps-alert__dialog" style="max-width:<?php echo esc_attr( $width ); ?>px<?php echo $stripe ? ';border-top-color:' . esc_attr( $stripe ) : ''; ?>">
+			<div class="acps-alert__dialog"<?php echo $built ? '' : ' style="max-width:' . esc_attr( $width ) . 'px' . ( $stripe ? ';border-top-color:' . esc_attr( $stripe ) : '' ) . '"'; ?>>
 				<?php if ( $alert->get( 'dismissible' ) ) : ?>
 					<button type="button" class="acps-alert__close" data-acps-close aria-label="<?php esc_attr_e( 'Close alert', 'acps-alert-popups' ); ?>">
 						<span aria-hidden="true">&times;</span>

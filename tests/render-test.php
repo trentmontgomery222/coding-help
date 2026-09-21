@@ -64,7 +64,10 @@ function get_permalink( $id ) { return 'https://example.org/school-status/'; }
 function get_post_modified_time( $f = 'U', $gmt = false, $id = 0 ) { return $GLOBALS['modified']; }
 
 $GLOBALS['alert_over'] = array();
-$GLOBALS['revision']   = 1;
+$GLOBALS['revision']      = 1;
+$GLOBALS['role_of']       = array();
+$GLOBALS['bb_popup']      = false;
+$GLOBALS['bb_popup_html'] = '';
 $GLOBALS['modified']   = 1700000000;
 
 class ACPS_Alerts_Failsafe {
@@ -140,7 +143,13 @@ class ACPS_Alerts_Status {
 
 class ACPS_Alerts_Post_Type {
 	const ROLE_CURRENT = 'current';
-	public static function role_of( $id ) { return ''; }
+	public static function role_of( $id ) { return isset( $GLOBALS['role_of'][ $id ] ) ? $GLOBALS['role_of'][ $id ] : ''; }
+}
+
+class ACPS_Alerts_Popup_Source {
+	public static function available() { return ! empty( $GLOBALS['bb_popup'] ); }
+	public static function render() { return $GLOBALS['bb_popup_html']; }
+	public static function enqueue_assets() {}
 }
 
 // Beaver Builder stand-in. render_content_by_id reproduces the real bug:
@@ -365,6 +374,54 @@ ok(
 // Nothing changing must leave it alone, or every visitor would be shown every
 // alert on every page view.
 ok( 'an unchanged alert keeps its version', $probe->config()[0]['version'] === $after_content[0]['version'] );
+
+/* ---- a popup designed in Beaver Builder is the box ---- */
+
+/*
+ * Our dialog has its own white panel, corners, shadow and max-width. Around a
+ * popup that was designed in the builder — which brings all of those with it —
+ * that reads as a second panel, and the alert stops looking like the thing that
+ * was built. The shell contributes only the overlay and the close button.
+ */
+$GLOBALS['role_of'][50]   = 'current';
+$GLOBALS['bb_popup']      = true;
+$GLOBALS['bb_popup_html'] = '<div class="fl-popup"><h2>Built heading</h2><p>Built body.</p></div>';
+$GLOBALS['content'][50]   = '<p>fallback text</p>';
+$GLOBALS['meta'][50]      = array();
+
+$probe->queue_alerts( array( new ACPS_Alerts_Alert( 50 ) ) );
+
+ob_start();
+$probe->render_alerts();
+$out = ob_get_clean();
+
+check( 'the built popup is what renders', substr_count( $out, 'Built heading' ), 1 );
+check( 'and the fallback text is not used alongside it', substr_count( $out, 'fallback text' ), 0 );
+ok( 'the shell says its body was built elsewhere', false !== strpos( $out, 'acps-alert--built' ) );
+ok( 'so our panel can step out of the way', false === strpos( $out, 'style="max-width:640px' ) );
+check( 'and none of our own heading is added on top', substr_count( $out, 'acps-alert__heading' ), 0 );
+
+// The overlay and the close button are still ours: the popup no longer opens
+// or closes itself once it has been lifted out of its own page.
+ok( 'the overlay is still there', false !== strpos( $out, 'acps-alert__overlay' ) );
+ok( 'and so is the close button', false !== strpos( $out, 'acps-alert__close' ) );
+
+/* ---- a plain alert keeps our panel ---- */
+
+$GLOBALS['bb_popup']    = false;
+$GLOBALS['role_of'][51] = '';
+$GLOBALS['content'][51] = '<p>plain words</p>';
+$GLOBALS['meta'][51]    = array();
+
+$probe->queue_alerts( array( new ACPS_Alerts_Alert( 51 ) ) );
+
+ob_start();
+$probe->render_alerts();
+$plain = ob_get_clean();
+
+ok( 'a plain alert is not marked as built', false === strpos( $plain, 'acps-alert--built' ) );
+ok( 'and keeps the width it was given', false !== strpos( $plain, 'max-width:640px' ) );
+ok( 'and gets our heading, since nothing else supplies one', false !== strpos( $plain, 'acps-alert__heading' ) );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All render cases passed\n";
 exit( $fails ? 1 : 0 );

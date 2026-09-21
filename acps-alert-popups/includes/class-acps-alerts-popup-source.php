@@ -36,6 +36,11 @@ class ACPS_Alerts_Popup_Source {
 	const NODE_OPTION = 'acps_alerts_popup_node';
 
 	/**
+	 * Handle for the status page's stylesheet when we load it ourselves.
+	 */
+	const STYLE_HANDLE = 'acps-alerts-popup-layout';
+
+	/**
 	 * Watches for anything that could move the popup.
 	 *
 	 * @return void
@@ -300,6 +305,11 @@ class ACPS_Alerts_Popup_Source {
 
 		$done[ $page_id ] = true;
 
+		// Beaver Builder's base layout stylesheet. On a page with no builder
+		// content of its own it is simply not there, and without it the popup
+		// has no rows, no columns and no spacing.
+		self::enqueue_base_styles();
+
 		// The name of this has moved between versions, so try each one that has
 		// existed rather than depending on a single spelling.
 		$methods = array(
@@ -315,11 +325,128 @@ class ACPS_Alerts_Popup_Source {
 					'popup-source/assets'
 				);
 
-				return;
+				break;
 			}
 		}
 
-		ACPS_Alerts_Failsafe::record( 'popup-source/assets', 'no Beaver Builder method to enqueue another layout' );
+		// Whether that worked is worth checking rather than assuming. Beaver
+		// Builder enqueues a page's stylesheet under a handle named after the
+		// post, so its absence means the call above did nothing — a renamed
+		// method, or one that quietly declines for a post that is not the one
+		// being viewed. Either way the popup would arrive with its structure
+		// but none of its design.
+		if ( self::layout_styles_enqueued( $page_id ) ) {
+			return;
+		}
+
+		if ( self::enqueue_cached_stylesheet( $page_id ) ) {
+			return;
+		}
+
+		ACPS_Alerts_Failsafe::record( 'popup-source/assets', 'could not load the status page stylesheet; the popup will render unstyled' );
+	}
+
+	/**
+	 * Whether the status page's own stylesheet is on this page.
+	 *
+	 * @param int $page_id Post ID.
+	 * @return bool
+	 */
+	protected static function layout_styles_enqueued( $page_id ) {
+		if ( ! function_exists( 'wp_style_is' ) ) {
+			return false;
+		}
+
+		foreach ( array( 'fl-builder-layout-' . (int) $page_id, self::STYLE_HANDLE ) as $handle ) {
+			if ( wp_style_is( $handle, 'enqueued' ) || wp_style_is( $handle, 'done' ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Loads Beaver Builder's base layout stylesheet.
+	 *
+	 * @return void
+	 */
+	protected static function enqueue_base_styles() {
+		if ( ! function_exists( 'wp_style_is' ) || ! method_exists( 'FLBuilder', 'plugin_url' ) ) {
+			return;
+		}
+
+		if ( wp_style_is( 'fl-builder-layout', 'enqueued' ) || wp_style_is( 'fl-builder-layout', 'done' ) ) {
+			return;
+		}
+
+		$url = ACPS_Alerts_Failsafe::guard( array( 'FLBuilder', 'plugin_url' ), array(), 'popup-source/base-url', '' );
+
+		if ( ! is_string( $url ) || '' === $url ) {
+			return;
+		}
+
+		wp_enqueue_style(
+			'fl-builder-layout',
+			rtrim( $url, '/' ) . '/css/fl-builder-layout.css',
+			array(),
+			defined( 'FL_BUILDER_VERSION' ) ? FL_BUILDER_VERSION : null
+		);
+	}
+
+	/**
+	 * Loads the status page's generated stylesheet straight off disk.
+	 *
+	 * The fallback for when Beaver Builder's own enqueue did not fire. It
+	 * writes one cached stylesheet per post and can say where it is, which is
+	 * a far more stable thing to ask for than a particular method name.
+	 *
+	 * @param int $page_id Post ID.
+	 * @return bool Whether a stylesheet was found and enqueued.
+	 */
+	protected static function enqueue_cached_stylesheet( $page_id ) {
+		if ( ! class_exists( 'FLBuilderModel' ) || ! method_exists( 'FLBuilderModel', 'get_asset_info' ) ) {
+			return false;
+		}
+
+		$switched = self::point_at( $page_id );
+
+		try {
+			$info = ACPS_Alerts_Failsafe::guard( array( 'FLBuilderModel', 'get_asset_info' ), array(), 'popup-source/asset-info', array() );
+		} finally {
+			self::point_back( $switched );
+		}
+
+		$info = (array) $info;
+
+		// Partial refresh writes a different file from a full render, and only
+		// one of the two is on disk, so the path is checked rather than picked.
+		$pairs = array(
+			array( 'css_partial', 'css_partial_url' ),
+			array( 'css', 'css_url' ),
+		);
+
+		foreach ( $pairs as $pair ) {
+			list( $path_key, $url_key ) = $pair;
+
+			$path = isset( $info[ $path_key ] ) ? (string) $info[ $path_key ] : '';
+			$url  = isset( $info[ $url_key ] ) ? (string) $info[ $url_key ] : '';
+
+			if ( '' === $path || '' === $url || ! is_readable( $path ) ) {
+				continue;
+			}
+
+			wp_enqueue_style(
+				self::STYLE_HANDLE,
+				$url,
+				array( 'fl-builder-layout' ),
+				(string) filemtime( $path )
+			);
+
+			return true;
+		}
+
+		return false;
 	}
 
 	/**

@@ -151,6 +151,14 @@ builder-styled and once theme-styled. These checks assert:
   page when no destination is given, and the level word is off unless asked for
 - a popup with a Beaver Builder layout gets none of that furniture, so a
   designed popup never ends up with two headings
+- an alert whose body was designed in the builder is marked `acps-alert--built`
+  and loses our panel's inline width, so the popup's own box is the only box;
+  the overlay and close button stay, because a popup lifted off its own page no
+  longer opens or closes itself. A plain alert keeps the panel, its width and
+  our heading.
+
+  Verified non-vacuous: stop marking it and the render test fails with "the
+  shell says its body was built elsewhere".
 
 Verified non-vacuous: run against the pre-fix renderer it fails with exactly the
 reported symptom.
