@@ -76,16 +76,20 @@ level word, no directive. The level shows in the banner's own colour. Anywhere
 those pieces are wanted, `[schoolstatus]` places them, which is what that
 shortcode is for.
 
-On the card treatment the banner has a **head** carrying the board colour, with
-the heading on it in the board's heading colour, and the message below it on
-white in its own message colour. Both pairs are settings on the Status Board.
+On the card treatment the banner is **one surface**: the heading and the message
+sit on the same background, in the same colour. That is two settings on the
+Status Board — *Banner colour* and *Banner text colour* — and there is no third
+to disagree with them.
 
-Every surface the board draws states its own text colour rather than inheriting
-one. A background and the text on it are a single decision and cannot be taken
-separately: while the card said `color: inherit`, a site that had set a light
-colour back when the banner was a solid block got white text on a white card.
-Nothing was missing and nothing errored — the message simply was not there, and
-you had to select it with the mouse to prove it existed.
+The pair is stated on the card itself, never inherited, and the head and the
+message carry no colour of their own. A background and the text on it are a
+single decision and cannot be taken separately, which this got wrong twice:
+first the card said `color: inherit` and a site that had set a light colour back
+when the banner was a solid block got white text on a white card; then the card
+had two surfaces with a pair each, which is two chances to set a colour that
+does not read against what it is sitting on. Neither failed loudly — the message
+simply was not there, and you had to select it with the mouse to prove it
+existed. One pair cannot be got half right.
 
 **The status level is the severity** — there is no second setting. Pick it on the Current Alert module, Popup tab → *Status level*. It decides four things: the word on the banner, the colour of the banner, the colour of the popup's stripe, and the coloured badge drawn above the heading. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. Its size, shape and colour are written into the markup rather than a stylesheet, because the badge prints on pages that may carry neither the board stylesheet nor a freshly rebuilt module stylesheet — an SVG with no dimensions falls back to 300&times;150. Badge size is a setting on both modules (56px on the popup, 64px on the banner). There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
 

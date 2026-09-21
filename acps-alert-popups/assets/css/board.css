@@ -24,47 +24,41 @@
 	color: #fff;
 }
 
+/* The card is ONE surface: the heading and the message sit on the same
+   background, in the same colour. Two surfaces meant two colour pairs, and a
+   pair that does not match its background is invisible text — which is exactly
+   what went wrong twice. One pair cannot be got half right. */
 .acps-board__banner--card {
 	padding: 0;
 	overflow: hidden;
 	border: 1px solid rgba( 27, 47, 94, 0.12 );
 	border-top: 6px solid #1b2f5e;
 	border-radius: 6px;
-	background: #fff;
 	box-shadow: 0 10px 28px rgba( 16, 24, 40, 0.08 );
 
-	/* An explicit colour, not `inherit`.
-	 *
-	 * The card's background is white, so its text has to be dark — the two are
-	 * one decision and cannot be taken separately. Inheriting instead means a
-	 * site that set a light colour for the old solid banner gets white text on
-	 * a white card, and the message is simply not there. The head below
-	 * overrides this with its own pair. */
-	color: #1b2f5e;
-}
-
-/* The head of the card carries its own background — the board colour — so the
-   heading reads as a heading rather than as the first line of the message. The body below stays on the card, which is what
-   keeps a long update readable. */
-.acps-board__banner--card .acps-board__head {
-	padding: 30px 40px 26px;
+	/* Stated, never inherited: a background and the text on it are one
+	   decision and cannot be taken separately. */
 	background: #1b2f5e;
 	color: #fff;
 }
 
-.acps-board__banner--card .acps-board__head .acps-board__title {
+/* The head and the message are spacing only. Neither carries a colour of its
+   own, so neither can disagree with what it is sitting on. */
+.acps-board__banner--card .acps-board__head {
+	padding: 30px 40px 6px;
+}
+
+.acps-board__banner--card .acps-board__head .acps-board__title,
+.acps-board__banner--card .acps-board__message {
 	color: inherit;
 }
 
 .acps-board__banner--card .acps-board__message {
-	padding: 26px 40px 30px;
+	padding: 0 40px 32px;
 }
 
-/* On the solid banner the head is not a band — the whole banner is already
-   one colour — so it only supplies spacing. */
 .acps-board__banner--solid .acps-board__head {
 	padding: 0;
-	background: none;
 }
 
 /* The banner is the heading and the message, and nothing else: no badge, no

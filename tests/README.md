@@ -233,15 +233,20 @@ whole set at once, so the risks are the ones a complete save creates:
 - start and end dates apply on the custom schedule and are ignored on the others
 - the link text, the link itself, the badge toggle and the level-word toggle all
   reach the alert, and switching a toggle off really clears it
-- a background and its text colour are one decision. Every surface the board
-  draws states its own colour instead of inheriting one, the head pairs its
-  background with the colour that reads on it, and both pairs are settings with
-  real defaults. This pins invisible text: while the card inherited, a site that
-  had set a light colour for the old solid banner got white text on a white
-  card, and you had to select it with the mouse to prove it was there.
+- a background and its text colour are one decision, and the card is one
+  surface. The card states both, neither inherited; the head and the message are
+  spacing only and carry no colour of their own; and there is one pair of
+  pickers, so there is no second colour to disagree with the first. This pins
+  invisible text twice over: while the card inherited, a site that had set a
+  light colour for the old solid banner got white text on a white card; then the
+  card had a coloured head and a white body, each with its own pair, which is
+  two chances to get it wrong. Either way you had to select the text with the
+  mouse to prove it was there.
 
   Verified non-vacuous: put `color: inherit` back on the card and it fails with
-  "and does not inherit one".
+  "and the text colour that goes on it" plus "neither inherited"; give the head
+  a background of its own and it fails with "the head sets no background of its
+  own".
 - the banner draws the heading and the message and nothing else: no badge, no
   level word, no directive, and no setting left offering to put one back. Read
   from the template itself, because this is a rule about what reaches the page.

@@ -13,13 +13,11 @@ defined( 'ABSPATH' ) || exit;
 
 $acps_bg   = ! empty( $settings->banner_color ) ? $settings->banner_color : '1b2f5e';
 $acps_text = ! empty( $settings->text_color ) ? $settings->text_color : 'ffffff';
-$acps_body = ! empty( $settings->body_color ) ? $settings->body_color : '1b2f5e';
 
 // Beaver Builder colour fields store a bare hex, but can also hold an rgba()
 // string; only prefix a # when it really is a hex value.
 $acps_bg   = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_bg ) ) ? '#' . $acps_bg : $acps_bg;
 $acps_text = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_text ) ) ? '#' . $acps_text : $acps_text;
-$acps_body = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_body ) ) ? '#' . $acps_body : $acps_body;
 ?>
 /*
  * The two colour pickers only describe the SOLID banner, which is the one that
@@ -39,23 +37,12 @@ $acps_body = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_body ) ) ? '#' . $acps_bo
 	color: inherit;
 }
 
-/* On the card the banner colour does two jobs: the stripe along the top, and
-   the background of the head — which is what makes the heading read as a
-   heading. The text colour goes with it, since that head is the one part of
-   the card that is not on white. A live alert overrides the stripe inline with
-   its own level colour. */
+/* The card is one surface, so the two pickers describe the whole of it: the
+   heading and the message sit on the same background, in the same colour. The
+   stripe along the top takes that colour too, and a live alert overrides the
+   stripe inline with its own level colour. */
 .fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card {
 	border-top-color: <?php echo esc_html( $acps_bg ); ?>;
-}
-
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card .acps-board__head {
 	background: <?php echo esc_html( $acps_bg ); ?>;
 	color: <?php echo esc_html( $acps_text ); ?>;
-}
-
-/* The message sits below the head on white, so it takes a colour of its own
-   rather than the heading's — which is white, and would vanish. */
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card,
-.fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card .acps-board__message {
-	color: <?php echo esc_html( $acps_body ); ?>;
 }

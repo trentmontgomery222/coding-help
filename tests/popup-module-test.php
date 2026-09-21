@@ -449,13 +449,18 @@ ok( 'nor a badge size', ! isset( $board_fields['icon_size'] ) );
 /* ---- a background and its text colour are one decision ---- */
 
 /*
- * Pins invisible text. The card's background is white, so its text has to be
- * dark — but the board's stylesheet used to say `color: inherit`, and a site
- * that had set a light colour for the old solid banner therefore got white text
- * on a white card. Nothing was missing and nothing errored; the message simply
- * was not there, and you had to select it with the mouse to prove it existed.
+ * Pins invisible text, twice over.
  *
- * Every surface the board draws now states its own colour.
+ * First the card said `color: inherit`, so on a site that had set a light
+ * colour back when the banner was a solid block, the message came out white on
+ * the card's white — there, but unreadable until you selected it.
+ *
+ * Then the card had TWO surfaces: a coloured head and a white body, each with
+ * its own pair. Two pairs is two chances to set a colour that does not match
+ * what it is sitting on.
+ *
+ * So the card is now one surface with one pair, stated rather than inherited.
+ * One pair cannot be got half right.
  */
 $board_css = file_get_contents( ACPS_ALERTS_DIR . 'assets/css/board.css' );
 
@@ -474,30 +479,35 @@ function rule_body( $css, $selector ) {
 	}
 
 	$open = strpos( $css, '{', $at );
+	$body = substr( $css, $open, strpos( $css, '}', $open ) - $open );
 
-	return substr( $css, $open, strpos( $css, '}', $open ) - $open );
+	// Comments explain the declarations; they are not declarations, and a
+	// comment mentioning "inherit" must not read as the rule inheriting.
+	return (string) preg_replace( '#/\*.*?\*/#s', '', $body );
 }
 
 $card = rule_body( $board_css, '.acps-board__banner--card' );
 
-ok( 'the card states a text colour', false !== strpos( $card, 'color:' ) );
-ok( 'and does not inherit one', false === strpos( $card, 'color: inherit' ) );
-ok( 'it is white, so that colour must be dark', false !== strpos( $card, 'background: #fff' ) );
+ok( 'the card states a background', false !== strpos( $card, 'background:' ) );
+ok( 'and the text colour that goes on it', false !== strpos( $card, 'color: #' ) );
+ok( 'neither inherited', false === strpos( $card, 'inherit' ) );
+
+// The head and the message are spacing. Neither carries a colour of its own,
+// so neither can disagree with what it is sitting on.
+$head = rule_body( $board_css, '.acps-board__banner--card .acps-board__head' );
+
+ok( 'the head sets no background of its own', false === strpos( $head, 'background' ) );
+ok( 'and no colour of its own', false === strpos( $head, 'color' ) );
 
 $archive = rule_body( $board_css, '.acps-board__archive' );
 
-ok( 'the archive states one too', false !== strpos( $archive, 'color:' ) );
+ok( 'the archive states its colour too', false !== strpos( $archive, 'color:' ) );
 
-// The head is the one part that is not on white, so it pairs its own two.
-$head = rule_body( $board_css, '.acps-board__banner--card .acps-board__head' );
-
-ok( 'the head sets a background', false !== strpos( $head, 'background:' ) );
-ok( 'and the colour that goes with it', false !== strpos( $head, 'color:' ) );
-
-// Both pairs are settable, because a site will want its own.
-ok( 'the heading colour is a setting', isset( $board_fields['text_color'] ) );
-ok( 'and so is the message colour', isset( $board_fields['body_color'] ) );
-ok( 'which defaults to something dark rather than empty', ! empty( $board_fields['body_color']['default'] ) );
+// One surface means one pair of pickers, so there is nothing to set that could
+// contradict anything else.
+ok( 'the banner has one text colour setting', isset( $board_fields['text_color'] ) );
+ok( 'and one background setting', isset( $board_fields['banner_color'] ) );
+ok( 'with no second colour to disagree with them', ! isset( $board_fields['body_color'] ) );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All popup module cases passed\n";
 exit( $fails ? 1 : 0 );

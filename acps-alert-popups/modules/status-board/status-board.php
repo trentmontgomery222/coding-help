@@ -315,7 +315,7 @@ FLBuilder::register_module(
 								'card'  => __( 'Card — white, like the popup', 'acps-alert-popups' ),
 								'solid' => __( 'Solid — the whole banner in the level colour', 'acps-alert-popups' ),
 							),
-							'help'    => __( 'The banner is the heading and the message, and nothing else. The card puts the heading on a coloured head with the message on white below; the solid style floods the whole banner with the level colour. For a badge or the level word anywhere on the page, use the [schoolstatus] shortcode.', 'acps-alert-popups' ),
+							'help'    => __( 'The banner is the heading and the message, and nothing else. The card is a rounded panel with a stripe along the top; the solid style is a flat full-width block. Either way the whole banner is one colour. For a badge or the level word anywhere on the page, use the [schoolstatus] shortcode.', 'acps-alert-popups' ),
 						),
 					),
 				),
@@ -336,17 +336,10 @@ FLBuilder::register_module(
 						),
 						'text_color'     => array(
 							'type'       => 'color',
-							'label'      => __( 'Heading text colour', 'acps-alert-popups' ),
+							'label'      => __( 'Banner text colour', 'acps-alert-popups' ),
 							'default'    => 'ffffff',
 							'show_reset' => true,
-							'help'       => __( 'The heading sits on the banner colour, so this is the colour that has to read against it.', 'acps-alert-popups' ),
-						),
-						'body_color'     => array(
-							'type'       => 'color',
-							'label'      => __( 'Message text colour', 'acps-alert-popups' ),
-							'default'    => '1b2f5e',
-							'show_reset' => true,
-							'help'       => __( 'On the card style the message sits below the heading on white, so it needs a dark colour of its own rather than the heading\'s.', 'acps-alert-popups' ),
+							'help'       => __( 'The heading and the message both sit on the banner colour, so this is the one colour that has to read against it.', 'acps-alert-popups' ),
 						),
 						'banner_align'   => array(
 							'type'    => 'align',
