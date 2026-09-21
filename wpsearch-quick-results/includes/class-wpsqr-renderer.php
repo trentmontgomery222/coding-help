@@ -36,6 +36,15 @@ class WPSQR_Renderer {
 
 		$posts = WPSQR_Engine::hydrate( $results['post_ids'] );
 
+		// A notice query rule shows a banner above the results and leaves the
+		// results themselves untouched.
+		if ( ! empty( $results['notice']['message'] ) ) {
+			printf(
+				'<p class="acps-notice">%s</p>',
+				esc_html( str_replace( '{query}', $term, (string) $results['notice']['message'] ) )
+			);
+		}
+
 		printf(
 			'<div class="swp-total-results-notice"><p>%s</p></div>',
 			esc_html(

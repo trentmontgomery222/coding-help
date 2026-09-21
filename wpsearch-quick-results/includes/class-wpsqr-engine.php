@@ -44,17 +44,26 @@ class WPSQR_Engine {
 
 		$normalized = WPSQR_Normalizer::normalize( $term );
 
-		// A blocked term never reaches the search engine at all — the fastest
-		// search is the one that doesn't run.
-		$blocked = WPSQR_Rules::query_verdict( $normalized );
-		if ( $blocked ) {
-			return array(
-				'post_ids' => array(),
-				'total'    => 0,
-				'cached'   => true,
-				'ms'       => self::elapsed( $started ),
-				'blocked'  => $blocked,
-			);
+		// A query rule either suppresses the results (noResults / redirect) or
+		// just annotates them (notice). A suppressing rule short-circuits — the
+		// fastest search is the one that never runs. A notice is carried
+		// through so the results still show, with a banner above them.
+		$verdict = WPSQR_Rules::query_verdict( $normalized );
+		$notice  = null;
+
+		if ( $verdict ) {
+			if ( WPSQR_Rules::query_suppresses( $verdict ) ) {
+				return array(
+					'post_ids' => array(),
+					'total'    => 0,
+					'cached'   => true,
+					'ms'       => self::elapsed( $started ),
+					'blocked'  => $verdict,
+					'notice'   => null,
+				);
+			}
+
+			$notice = $verdict; // a notice rule: results stay, banner shows
 		}
 
 		if ( '' === $normalized ) {
@@ -64,6 +73,7 @@ class WPSQR_Engine {
 				'cached'   => false,
 				'ms'       => self::elapsed( $started ),
 				'blocked'  => null,
+				'notice'   => null,
 			);
 		}
 
@@ -92,6 +102,7 @@ class WPSQR_Engine {
 				'cached'   => true,
 				'ms'       => self::elapsed( $started ),
 				'blocked'  => null,
+				'notice'   => $notice,
 			);
 		}
 
@@ -125,6 +136,7 @@ class WPSQR_Engine {
 			'cached'   => false,
 			'ms'       => $ms,
 			'blocked'  => null,
+			'notice'   => $notice,
 		);
 	}
 

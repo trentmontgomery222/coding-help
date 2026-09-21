@@ -362,6 +362,20 @@ class WPSQR_Rules {
 	 * @return array|null The matching rule, or null. 'allow' returns null —
 	 *                    an allow rule exists precisely to mean "do nothing".
 	 */
+	/**
+	 * Does a query rule actually suppress the results, or only annotate them?
+	 *
+	 * noResults empties the page, and redirect sends the visitor away — both
+	 * mean "no results here". notice and allow leave the results in place; a
+	 * notice just shows a banner above them. Treating a notice as suppressing
+	 * is what made adding one show "0 results found".
+	 */
+	public static function query_suppresses( $rule ) {
+		$then = isset( $rule['then'] ) ? $rule['then'] : 'noResults';
+
+		return in_array( $then, array( 'noResults', 'redirect' ), true );
+	}
+
 	public static function query_verdict( $term ) {
 		$settings = WPSQR_Plugin::settings();
 		$term     = strtolower( trim( (string) $term ) );
