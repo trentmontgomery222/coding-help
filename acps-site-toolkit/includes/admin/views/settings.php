@@ -279,6 +279,21 @@ $show_updates = isset( $_GET['updates'] ) || isset( $_GET['acps_updates'] ); // 
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><?php esc_html_e( 'Gravity Forms', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<?php $gf_here = class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active(); ?>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'gf_integrate' ) ); ?>" value="1" <?php echo $checked( 'gf_integrate' ); ?>> <?php esc_html_e( 'Integrate with Gravity Forms when it’s installed (house these screens under the Gravity Forms menu and merge the lists)', 'acps-site-toolkit' ); ?></label>
+						<p class="description">
+							<?php esc_html_e( 'Uncheck to ignore Gravity Forms completely and use this plugin’s own full form system (its own “Forms” menu, forms list, and entries) — even while Gravity Forms stays installed and active.', 'acps-site-toolkit' ); ?>
+							<?php if ( $gf_here ) : ?>
+								<br><strong><?php esc_html_e( 'Gravity Forms is currently active.', 'acps-site-toolkit' ); ?></strong>
+							<?php else : ?>
+								<br><em><?php esc_html_e( 'Gravity Forms is not currently active, so this has no effect right now.', 'acps-site-toolkit' ); ?></em>
+							<?php endif; ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Store submitter IP & browser', 'acps-site-toolkit' ); ?></th>
 					<td>
 						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'entry_store_ip' ) ); ?>" value="1" <?php echo $checked( 'entry_store_ip' ); ?>> <?php esc_html_e( 'Save the submitter’s anonymised IP + browser summary on each entry', 'acps-site-toolkit' ); ?></label>

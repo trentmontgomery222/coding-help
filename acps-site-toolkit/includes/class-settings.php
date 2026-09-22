@@ -160,6 +160,11 @@ class Settings {
 			// when no form is specified. 0 = auto (the Site Feedback form).
 			'default_form_id'       => 0,
 
+			// Integrate with Gravity Forms when it's active (houses our screens
+			// under the GF menu, merges the lists, etc.). Turn OFF to ignore
+			// Gravity Forms entirely and use our own complete form system.
+			'gf_integrate'          => 1,
+
 			// Capabilities.
 			'editors_view_reports'  => 0, // grant read-only feedback/analytics to editors (spec §9.1).
 
@@ -256,6 +261,7 @@ class Settings {
 			'update_auto',
 			'device_fp_enabled',
 			'console_enabled',
+			'gf_integrate',
 		);
 		foreach ( $checkboxes as $key ) {
 			$out[ $key ] = empty( $input[ $key ] ) ? 0 : 1;

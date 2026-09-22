@@ -40,13 +40,24 @@ class Gravity_Forms {
 	}
 
 	/**
+	 * Should we integrate with Gravity Forms? True only when GF is active AND the
+	 * admin hasn't overridden it to "use our own form system" in Settings. When
+	 * false, the plugin behaves exactly as if Gravity Forms weren't installed.
+	 *
+	 * @return bool
+	 */
+	public static function should_integrate() {
+		return self::is_active() && (bool) Settings::get( 'gf_integrate', 1 );
+	}
+
+	/**
 	 * Gravity Forms' forms, normalized with Unread / Total counts and a link to
 	 * their entries — the same shape our dashboard widget uses for our own forms.
 	 *
 	 * @return array[] Each: id, title, total, unread, entries_url.
 	 */
 	public static function forms() {
-		if ( ! self::is_active() || ! class_exists( 'GFAPI' ) ) {
+		if ( ! self::should_integrate() || ! class_exists( 'GFAPI' ) ) {
 			return array();
 		}
 		$out = array();
@@ -93,7 +104,7 @@ class Gravity_Forms {
 	 * @param Admin\Admin $admin The admin controller (for render callbacks).
 	 */
 	public static function register_menu( $admin ) {
-		if ( ! self::is_active() ) {
+		if ( ! self::should_integrate() ) {
 			return;
 		}
 		$reports = Settings::CAP_READ;

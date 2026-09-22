@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $forms    = Form::all();
-$gf_active = class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active();
+$gf_active = class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::should_integrate();
 $gf_forms  = $gf_active ? \ACPS\SiteToolkit\Gravity_Forms::forms() : array();
 ?>
 <div class="wrap acps-admin">

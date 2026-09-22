@@ -52,7 +52,7 @@ class Admin {
 	 * Surface our tools under the Gravity Forms menu when GF is active.
 	 */
 	public function gf_overlay_menu() {
-		if ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active() ) {
+		if ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::should_integrate() ) {
 			\ACPS\SiteToolkit\Gravity_Forms::register_menu( $this );
 		}
 	}
@@ -298,7 +298,7 @@ class Admin {
 		// menu instead — every screen is registered there by gf_overlay_menu().
 		// So we skip our own top-level menu entirely and only keep the Settings
 		// page (under WordPress → Settings) below.
-		if ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active() ) {
+		if ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::should_integrate() ) {
 			$this->register_settings_menu();
 			return;
 		}
@@ -376,7 +376,7 @@ class Admin {
 			require ACPS_ST_PATH . 'includes/admin/views/form-builder.php';
 		} elseif ( 'import' === $action ) {
 			require ACPS_ST_PATH . 'includes/admin/views/import-google.php';
-		} elseif ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active() ) {
+		} elseif ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::should_integrate() ) {
 			// With Gravity Forms active there is no separate built-in list — the
 			// built-in forms live on Gravity Forms' own Forms page. Send the bare
 			// list URL there instead of showing a duplicate.
