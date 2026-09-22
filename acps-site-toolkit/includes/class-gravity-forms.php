@@ -76,6 +76,7 @@ class Gravity_Forms {
 					'total'       => $total,
 					'unread'      => $unread,
 					'entries_url' => admin_url( 'admin.php?page=gf_entries&id=' . $id ),
+					'edit_url'    => admin_url( 'admin.php?page=gf_edit_forms&id=' . $id ),
 				);
 			}
 		} catch ( \Throwable $e ) {
@@ -97,14 +98,20 @@ class Gravity_Forms {
 		}
 		$reports = Settings::CAP_READ;
 
-		add_submenu_page( self::GF_PARENT, __( 'Feedback inbox', 'acps-site-toolkit' ), __( 'Feedback inbox', 'acps-site-toolkit' ), $reports, 'acps-st-gf-feedback', array( $admin, 'render_feedback' ) );
+		// House everything under the Gravity Forms menu. "All forms" is our
+		// unified list (Gravity Forms' forms AND ours together); Entries and the
+		// rest are our add-ons that GF doesn't have.
+		add_submenu_page( self::GF_PARENT, __( 'All forms', 'acps-site-toolkit' ), __( 'All forms', 'acps-site-toolkit' ), 'manage_options', 'acps-st-forms', array( $admin, 'render_forms' ) );
+		add_submenu_page( self::GF_PARENT, __( 'Entries (add-on)', 'acps-site-toolkit' ), __( 'Entries (add-on)', 'acps-site-toolkit' ), 'manage_options', 'acps-st-entries', array( $admin, 'render_entries' ) );
+		add_submenu_page( self::GF_PARENT, __( 'Feedback inbox', 'acps-site-toolkit' ), __( 'Feedback inbox', 'acps-site-toolkit' ), $reports, 'acps-st', array( $admin, 'render_feedback' ) );
 
 		if ( Settings::get( 'analytics_enabled' ) ) {
-			add_submenu_page( self::GF_PARENT, __( 'Form analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, 'acps-st-gf-analytics', array( $admin, 'render_analytics' ) );
+			add_submenu_page( self::GF_PARENT, __( 'Form analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, 'acps-st-analytics', array( $admin, 'render_analytics' ) );
 		}
 		if ( ( Settings::get( 'analytics_enabled' ) && Settings::get( 'track_visitors' ) ) || Settings::get( 'device_fp_enabled' ) ) {
-			add_submenu_page( self::GF_PARENT, __( 'Visitors', 'acps-site-toolkit' ), __( 'Visitors', 'acps-site-toolkit' ), 'manage_options', 'acps-st-gf-visitors', array( $admin, 'render_visitors' ) );
+			add_submenu_page( self::GF_PARENT, __( 'Visitors', 'acps-site-toolkit' ), __( 'Visitors', 'acps-site-toolkit' ), 'manage_options', 'acps-st-visitors', array( $admin, 'render_visitors' ) );
 		}
-		add_submenu_page( self::GF_PARENT, __( 'Guided help', 'acps-site-toolkit' ), __( 'Guided help', 'acps-site-toolkit' ), $reports, 'acps-st-gf-help', array( $admin, 'render_help' ) );
+		add_submenu_page( self::GF_PARENT, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', 'acps-st-qa', array( $admin, 'render_qa' ) );
+		add_submenu_page( self::GF_PARENT, __( 'Guided help', 'acps-site-toolkit' ), __( 'Guided help', 'acps-site-toolkit' ), $reports, 'acps-st-help', array( $admin, 'render_help' ) );
 	}
 }

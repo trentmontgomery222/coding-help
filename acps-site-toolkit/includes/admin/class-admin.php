@@ -294,6 +294,15 @@ class Admin {
 	public function menu() {
 		$reports = $this->reports_cap();
 
+		// When Gravity Forms is active, forms are "housed" under the Gravity Forms
+		// menu instead — every screen is registered there by gf_overlay_menu().
+		// So we skip our own top-level menu entirely and only keep the Settings
+		// page (under WordPress → Settings) below.
+		if ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active() ) {
+			$this->register_settings_menu();
+			return;
+		}
+
 		add_menu_page(
 			__( 'Forms', 'acps-site-toolkit' ),
 			__( 'Forms', 'acps-site-toolkit' ),
@@ -319,8 +328,14 @@ class Admin {
 		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
 		add_submenu_page( self::SLUG, __( 'Help Guide', 'acps-site-toolkit' ), __( 'Help Guide', 'acps-site-toolkit' ), $reports, self::SLUG . '-help', array( $this, 'render_help' ) );
 
-		// Settings lives under the WordPress “Settings” menu (Settings → Forms),
-		// not the plugin’s own menu.
+		$this->register_settings_menu();
+	}
+
+	/**
+	 * Register the settings page under WordPress → Settings (Settings → Forms).
+	 * Kept separate so it registers whether or not our own top-level menu does.
+	 */
+	private function register_settings_menu() {
 		add_options_page(
 			__( 'Forms', 'acps-site-toolkit' ),
 			__( 'Forms', 'acps-site-toolkit' ),
