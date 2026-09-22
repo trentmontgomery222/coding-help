@@ -102,8 +102,19 @@
 		}
 		trigger.addEventListener( 'click', function ( e ) {
 			var target = document.querySelector( sel );
-			if ( target ) {
-				e.preventDefault();
+			if ( ! target ) {
+				return;
+			}
+			e.preventDefault();
+			// Fire ONE full, bubbling mouse event so popup plugins that listen via
+			// delegation (Popup Maker, PowerPack, etc.) react. Fall back to a plain
+			// .click() only if constructing the event isn't supported.
+			var fired = false;
+			try {
+				target.dispatchEvent( new MouseEvent( 'click', { bubbles: true, cancelable: true, view: window } ) );
+				fired = true;
+			} catch ( err ) {}
+			if ( ! fired && typeof target.click === 'function' ) {
 				target.click();
 			}
 		} );
