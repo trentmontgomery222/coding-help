@@ -149,8 +149,8 @@ class Gravity_Forms {
 
 		ob_start();
 		?>
-		<div id="acps-gf-builtin" class="acps-gf-builtin" style="display:none;margin-top:24px">
-			<h2 style="display:flex;align-items:center;gap:10px">
+		<div id="acps-gf-builtin" class="acps-gf-builtin" style="display:none;margin:28px 20px 0 0;padding-top:20px;border-top:1px solid #dcdce0">
+			<h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:0">
 				<?php esc_html_e( 'Built-in forms', 'acps-site-toolkit' ); ?>
 				<a class="button button-secondary" href="<?php echo esc_url( $new ); ?>"><?php esc_html_e( 'Add built-in form', 'acps-site-toolkit' ); ?></a>
 				<a class="button button-secondary" href="<?php echo esc_url( $import ); ?>"><?php esc_html_e( 'Import Google Form', 'acps-site-toolkit' ); ?></a>
@@ -188,12 +188,22 @@ class Gravity_Forms {
 		( function () {
 			var el = document.getElementById( 'acps-gf-builtin' );
 			if ( ! el ) { return; }
-			var host = document.querySelector( '#gform_list_container' ) || document.querySelector( '.gform-settings' ) || document.querySelector( '.wrap' );
-			if ( host ) {
-				if ( host.classList.contains( 'wrap' ) ) { host.appendChild( el ); }
-				else { host.parentNode.appendChild( el ); }
-				el.style.display = '';
+			// Insert right after Gravity Forms' own list (in its container) so we
+			// line up with it. Skip our own table when searching.
+			var tables = document.querySelectorAll( '.wp-list-table' );
+			var gf = null;
+			for ( var i = 0; i < tables.length; i++ ) {
+				if ( ! el.contains( tables[ i ] ) ) { gf = tables[ i ]; break; }
 			}
+			var anchor = null;
+			if ( gf ) { anchor = ( gf.closest && gf.closest( 'form' ) ) || gf; }
+			if ( anchor && anchor.parentNode ) {
+				anchor.parentNode.insertBefore( el, anchor.nextSibling );
+			} else {
+				var w = document.querySelector( '#wpbody-content .wrap' ) || document.querySelector( '.wrap' );
+				if ( w ) { w.appendChild( el ); }
+			}
+			el.style.display = '';
 		}() );
 		</script>
 		<?php
