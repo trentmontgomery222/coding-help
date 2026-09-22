@@ -121,6 +121,89 @@ class Gravity_Forms {
 		// Hook the generic footer and gate on the page param, so it works
 		// regardless of how GF names its page hook suffix.
 		add_action( 'admin_footer', array( __CLASS__, 'render_builtin_on_gf' ) );
+		// And surface our built-in entries on Gravity Forms' Entries page.
+		add_action( 'admin_footer', array( __CLASS__, 'render_builtin_entries_on_gf' ) );
+	}
+
+	/**
+	 * Add a "Built-in form entries" panel to Gravity Forms' Entries page, listing
+	 * our built-in forms with their entry counts and links to each one's entries.
+	 * GF's entries screen is per-form (columns are that form's fields), so we
+	 * can't interleave our rows — a panel above GF's list is the honest fit.
+	 */
+	public static function render_builtin_entries_on_gf() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		if ( 'gf_entries' !== $page ) {
+			return;
+		}
+		// Skip the single-entry detail view (?view=entry / &lid=).
+		if ( ! empty( $_GET['lid'] ) || ( isset( $_GET['view'] ) && 'entry' === $_GET['view'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return;
+		}
+
+		$forms = Form::all();
+		if ( ! $forms ) {
+			return;
+		}
+		$counts = Entries::counts_by_form();
+
+		ob_start();
+		?>
+		<div id="acps-gf-entries" style="display:none;margin:0 20px 20px 0">
+			<h2 style="margin:0 0 6px"><?php esc_html_e( 'Built-in form entries', 'acps-site-toolkit' ); ?></h2>
+			<p class="description" style="margin-top:0"><?php esc_html_e( 'Submissions to Cayden Riddle’s built-in forms. Gravity Forms’ own entries are shown below.', 'acps-site-toolkit' ); ?></p>
+			<table class="wp-list-table widefat fixed striped" style="max-width:760px">
+				<thead><tr>
+					<th><?php esc_html_e( 'Form', 'acps-site-toolkit' ); ?></th>
+					<th style="width:110px"><?php esc_html_e( 'Unread', 'acps-site-toolkit' ); ?></th>
+					<th style="width:110px"><?php esc_html_e( 'Total', 'acps-site-toolkit' ); ?></th>
+					<th style="width:120px"></th>
+				</tr></thead>
+				<tbody>
+					<?php
+					foreach ( $forms as $f ) :
+						$c       = isset( $counts[ $f->id ] ) ? $counts[ $f->id ] : array( 'total' => 0, 'unread' => 0 );
+						$entries = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $f->id );
+						$unread  = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $f->id . '&status=new' );
+						$title   = $f->title ? $f->title : __( '(untitled form)', 'acps-site-toolkit' );
+						?>
+						<tr>
+							<td><strong><a href="<?php echo esc_url( $entries ); ?>"><?php echo esc_html( $title ); ?></a></strong></td>
+							<td><?php echo $c['unread'] > 0 ? '<a href="' . esc_url( $unread ) . '"><strong>' . esc_html( number_format_i18n( $c['unread'] ) ) . '</strong></a>' : '0'; ?></td>
+							<td><a href="<?php echo esc_url( $entries ); ?>"><?php echo esc_html( number_format_i18n( $c['total'] ) ); ?></a></td>
+							<td><a class="button button-small" href="<?php echo esc_url( $entries ); ?>"><?php esc_html_e( 'View entries', 'acps-site-toolkit' ); ?></a></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<script>
+		( function () {
+			var el = document.getElementById( 'acps-gf-entries' );
+			if ( ! el ) { return; }
+			// Place above Gravity Forms' own entries list (in its container), so it
+			// lines up. Skip our own table when searching.
+			var tables = document.querySelectorAll( '.wp-list-table' );
+			var gf = null;
+			for ( var i = 0; i < tables.length; i++ ) {
+				if ( ! el.contains( tables[ i ] ) ) { gf = tables[ i ]; break; }
+			}
+			var anchor = null;
+			if ( gf ) { anchor = ( gf.closest && gf.closest( 'form' ) ) || gf; }
+			if ( anchor && anchor.parentNode ) {
+				anchor.parentNode.insertBefore( el, anchor );
+			} else {
+				var w = document.querySelector( '#wpbody-content .wrap' ) || document.querySelector( '.wrap' );
+				if ( w ) { w.appendChild( el ); }
+			}
+			el.style.display = '';
+		}() );
+		</script>
+		<?php
+		echo ob_get_clean(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 
 	/**
