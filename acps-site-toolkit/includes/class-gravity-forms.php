@@ -149,61 +149,74 @@ class Gravity_Forms {
 
 		ob_start();
 		?>
-		<div id="acps-gf-builtin" class="acps-gf-builtin" style="display:none;margin:28px 20px 0 0;padding-top:20px;border-top:1px solid #dcdce0">
-			<h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:0">
-				<?php esc_html_e( 'Built-in forms', 'acps-site-toolkit' ); ?>
-				<a class="button button-secondary" href="<?php echo esc_url( $new ); ?>"><?php esc_html_e( 'Add built-in form', 'acps-site-toolkit' ); ?></a>
-				<a class="button button-secondary" href="<?php echo esc_url( $import ); ?>"><?php esc_html_e( 'Import Google Form', 'acps-site-toolkit' ); ?></a>
-			</h2>
-			<p class="description"><?php esc_html_e( 'Forms from Cayden Riddle’s built-in builder (accessible forms, the Google Form bridge, feedback, etc.). Gravity Forms’ own forms are listed above.', 'acps-site-toolkit' ); ?></p>
-			<?php if ( $forms ) : ?>
-				<table class="wp-list-table widefat fixed striped">
-					<thead><tr>
-						<th><?php esc_html_e( 'Title', 'acps-site-toolkit' ); ?></th>
-						<th><?php esc_html_e( 'Status', 'acps-site-toolkit' ); ?></th>
-						<th><?php esc_html_e( 'Entries', 'acps-site-toolkit' ); ?></th>
-						<th><?php esc_html_e( 'Shortcode', 'acps-site-toolkit' ); ?></th>
-					</tr></thead>
-					<tbody>
-						<?php
-						foreach ( $forms as $f ) :
-							$edit    = admin_url( 'admin.php?page=acps-st-forms&action=edit&form=' . $f->id );
-							$entries = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $f->id );
-							$c       = isset( $counts[ $f->id ] ) ? $counts[ $f->id ] : array( 'total' => 0 );
-							?>
-							<tr>
-								<td><strong><a href="<?php echo esc_url( $edit ); ?>"><?php echo esc_html( $f->title ? $f->title : __( '(untitled form)', 'acps-site-toolkit' ) ); ?></a></strong><?php echo $f->is_feedback ? ' <span class="acps-badge">' . esc_html__( 'Feedback', 'acps-site-toolkit' ) . '</span>' : ''; ?></td>
-								<td><?php echo esc_html( $f->status ); ?></td>
-								<td><a href="<?php echo esc_url( $entries ); ?>"><?php echo esc_html( number_format_i18n( $c['total'] ) ); ?></a></td>
-								<td><code>[acps_form id="<?php echo esc_html( $f->id ); ?>"]</code></td>
-							</tr>
-						<?php endforeach; ?>
-					</tbody>
-				</table>
-			<?php else : ?>
-				<p><?php esc_html_e( 'No built-in forms yet.', 'acps-site-toolkit' ); ?></p>
-			<?php endif; ?>
+		<div id="acps-gf-builtin" style="display:none">
+			<span id="acps-gf-btns">
+				<a class="page-title-action" href="<?php echo esc_url( $new ); ?>"><?php esc_html_e( 'Add built-in form', 'acps-site-toolkit' ); ?></a>
+				<a class="page-title-action" href="<?php echo esc_url( $import ); ?>"><?php esc_html_e( 'Import Google Form', 'acps-site-toolkit' ); ?></a>
+			</span>
+			<table><tbody id="acps-gf-src">
+				<?php foreach ( $forms as $f ) : ?>
+					<?php
+					$edit      = admin_url( 'admin.php?page=acps-st-forms&action=edit&form=' . $f->id );
+					$entries   = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $f->id );
+					$c         = isset( $counts[ $f->id ] ) ? $counts[ $f->id ] : array( 'total' => 0 );
+					$is_pub    = ( 'published' === $f->status );
+					$pill_bg   = $is_pub ? '#e6f4ea' : '#f0f0f1';
+					$pill_fg   = $is_pub ? '#1a7f37' : '#50575e';
+					$pill_text = $is_pub ? __( 'Active', 'acps-site-toolkit' ) : __( 'Draft', 'acps-site-toolkit' );
+					$title     = $f->title ? $f->title : __( '(untitled form)', 'acps-site-toolkit' );
+					?>
+					<tr class="acps-builtin-row">
+						<th scope="row" class="check-column"></th>
+						<td class="is_active column-is_active" data-colname="Status">
+							<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;background:<?php echo esc_attr( $pill_bg ); ?>;color:<?php echo esc_attr( $pill_fg ); ?>"><?php echo esc_html( $pill_text ); ?></span>
+						</td>
+						<td class="title column-title has-row-actions column-primary" data-colname="Title">
+							<strong><a href="<?php echo esc_url( $edit ); ?>"><?php echo esc_html( $title ); ?></a></strong>
+							<span class="acps-badge" style="background:#5b3fb0;margin-left:6px"><?php esc_html_e( 'Built-in', 'acps-site-toolkit' ); ?></span>
+							<?php if ( $f->is_feedback ) : ?><span class="acps-badge"><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></span><?php endif; ?>
+							<div class="row-actions">
+								<span><a href="<?php echo esc_url( $edit ); ?>"><?php esc_html_e( 'Edit', 'acps-site-toolkit' ); ?></a> | </span>
+								<span><a href="<?php echo esc_url( $entries ); ?>"><?php esc_html_e( 'Entries', 'acps-site-toolkit' ); ?></a> | </span>
+								<span class="acps-sc"><?php esc_html_e( 'Shortcode:', 'acps-site-toolkit' ); ?> <code>[acps_form id="<?php echo esc_html( $f->id ); ?>"]</code></span>
+							</div>
+							<button type="button" class="toggle-row"><span class="screen-reader-text"><?php esc_html_e( 'Show more details', 'acps-site-toolkit' ); ?></span></button>
+						</td>
+						<td class="id column-id" data-colname="ID"><?php echo esc_html( 'B' . $f->id ); ?></td>
+						<td class="entry_count column-entry_count" data-colname="Entries"><a href="<?php echo esc_url( $entries ); ?>"><?php echo esc_html( number_format_i18n( $c['total'] ) ); ?></a></td>
+						<td class="view_count column-view_count" data-colname="Views">&mdash;</td>
+						<td class="conversion column-conversion" data-colname="Conversion">&mdash;</td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody></table>
 		</div>
+		<style>
+			tr.acps-builtin-row > td, tr.acps-builtin-row > th { background: #fbfaff; }
+			tr.acps-builtin-row .acps-sc code { font-size: 12px; }
+		</style>
 		<script>
 		( function () {
-			var el = document.getElementById( 'acps-gf-builtin' );
-			if ( ! el ) { return; }
-			// Insert right after Gravity Forms' own list (in its container) so we
-			// line up with it. Skip our own table when searching.
-			var tables = document.querySelectorAll( '.wp-list-table' );
-			var gf = null;
-			for ( var i = 0; i < tables.length; i++ ) {
-				if ( ! el.contains( tables[ i ] ) ) { gf = tables[ i ]; break; }
+			// Move our built-in form rows straight into Gravity Forms' list table
+			// so they sit in the SAME list, and our action buttons next to "Add New".
+			var src  = document.getElementById( 'acps-gf-src' );
+			var dest = document.getElementById( 'the-list' );
+			if ( src && dest ) {
+				while ( src.firstElementChild ) { dest.appendChild( src.firstElementChild ); }
 			}
-			var anchor = null;
-			if ( gf ) { anchor = ( gf.closest && gf.closest( 'form' ) ) || gf; }
-			if ( anchor && anchor.parentNode ) {
-				anchor.parentNode.insertBefore( el, anchor.nextSibling );
-			} else {
-				var w = document.querySelector( '#wpbody-content .wrap' ) || document.querySelector( '.wrap' );
-				if ( w ) { w.appendChild( el ); }
+			var btns = document.getElementById( 'acps-gf-btns' );
+			if ( btns ) {
+				var head = document.querySelector( '.wp-heading-inline' );
+				var addNew = document.querySelector( '.wrap .page-title-action' );
+				if ( addNew && addNew.parentNode ) {
+					// Place after GF's existing "Add New" button.
+					while ( btns.firstElementChild ) { addNew.parentNode.insertBefore( btns.firstElementChild, addNew.nextSibling ); }
+				} else if ( head && head.parentNode ) {
+					head.parentNode.insertBefore( btns, head.nextSibling );
+					btns.style.display = '';
+				}
 			}
-			el.style.display = '';
+			var host = document.getElementById( 'acps-gf-builtin' );
+			if ( host && host.parentNode ) { host.parentNode.removeChild( host ); }
 		}() );
 		</script>
 		<?php
