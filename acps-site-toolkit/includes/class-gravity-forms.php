@@ -258,9 +258,21 @@ class Gravity_Forms {
 							<strong><a href="<?php echo esc_url( $edit ); ?>"><?php echo esc_html( $title ); ?></a></strong>
 							<span class="acps-badge" style="background:#5b3fb0;margin-left:6px"><?php esc_html_e( 'Built-in', 'acps-site-toolkit' ); ?></span>
 							<?php if ( $f->is_feedback ) : ?><span class="acps-badge"><?php esc_html_e( 'Feedback', 'acps-site-toolkit' ); ?></span><?php endif; ?>
+							<?php
+							$confirm = $f->is_feedback
+								? __( 'Delete the Site Feedback form and all its entries? The floating feedback button will stop working until you re-create it.', 'acps-site-toolkit' )
+								: __( 'Delete this form and all its entries?', 'acps-site-toolkit' );
+							?>
+							<?php
+							$del = wp_nonce_url(
+								admin_url( 'admin-post.php?action=acps_st_form_action&do=delete&form_id=' . $f->id ),
+								'acps_st_form_action'
+							);
+							?>
 							<div class="row-actions">
 								<span><a href="<?php echo esc_url( $edit ); ?>"><?php esc_html_e( 'Edit', 'acps-site-toolkit' ); ?></a> | </span>
 								<span><a href="<?php echo esc_url( $entries ); ?>"><?php esc_html_e( 'Entries', 'acps-site-toolkit' ); ?></a> | </span>
+								<span class="trash"><a href="<?php echo esc_url( $del ); ?>" style="color:#b32d2e" onclick="return confirm('<?php echo esc_js( $confirm ); ?>');"><?php esc_html_e( 'Delete', 'acps-site-toolkit' ); ?></a> | </span>
 								<span class="acps-sc"><?php esc_html_e( 'Shortcode:', 'acps-site-toolkit' ); ?> <code>[acps_form id="<?php echo esc_html( $f->id ); ?>"]</code></span>
 							</div>
 							<button type="button" class="toggle-row"><span class="screen-reader-text"><?php esc_html_e( 'Show more details', 'acps-site-toolkit' ); ?></span></button>

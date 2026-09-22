@@ -30,6 +30,11 @@ class Feedback {
 		if ( $form ) {
 			return $form;
 		}
+		// If an admin deliberately deleted the Site Feedback form, don't keep
+		// recreating it on activation / update.
+		if ( get_option( 'acps_st_feedback_form_deleted' ) ) {
+			return null;
+		}
 
 		$form              = new Form();
 		$form->title       = __( 'Site Feedback', 'acps-site-toolkit' );

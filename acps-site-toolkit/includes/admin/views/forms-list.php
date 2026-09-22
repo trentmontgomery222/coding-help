@@ -67,9 +67,12 @@ $gf_forms  = $gf_active ? \ACPS\SiteToolkit\Gravity_Forms::forms() : array();
 							<input type="hidden" name="action" value="acps_st_form_action">
 							<input type="hidden" name="form_id" value="<?php echo esc_attr( $form->id ); ?>">
 							<button type="submit" name="do" value="duplicate" class="button-link"><?php esc_html_e( 'Duplicate', 'acps-site-toolkit' ); ?></button>
-							<?php if ( ! $form->is_feedback ) : ?>
-								<button type="submit" name="do" value="delete" class="button-link acps-danger" onclick="return confirm('<?php echo esc_js( __( 'Delete this form and all its entries?', 'acps-site-toolkit' ) ); ?>');"><?php esc_html_e( 'Delete', 'acps-site-toolkit' ); ?></button>
-							<?php endif; ?>
+							<?php
+							$confirm = $form->is_feedback
+								? __( 'Delete the Site Feedback form and all its entries? The floating feedback button will stop working until you re-create it.', 'acps-site-toolkit' )
+								: __( 'Delete this form and all its entries?', 'acps-site-toolkit' );
+							?>
+							<button type="submit" name="do" value="delete" class="button-link acps-danger" onclick="return confirm('<?php echo esc_js( $confirm ); ?>');"><?php esc_html_e( 'Delete', 'acps-site-toolkit' ); ?></button>
 						</form>
 					</td>
 				</tr>

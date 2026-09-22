@@ -603,14 +603,23 @@ class Admin {
 		$this->require_cap( 'manage_options' );
 		check_admin_referer( 'acps_st_form_action' );
 
-		$id  = isset( $_POST['form_id'] ) ? absint( $_POST['form_id'] ) : 0;
-		$do  = isset( $_POST['do'] ) ? sanitize_key( $_POST['do'] ) : '';
+		// Accept both POST (the inline forms on our own list) and GET (the nonce
+		// links injected into Gravity Forms' table, where a nested <form> is not
+		// valid HTML).
+		$id  = isset( $_REQUEST['form_id'] ) ? absint( $_REQUEST['form_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification
+		$do  = isset( $_REQUEST['do'] ) ? sanitize_key( $_REQUEST['do'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 
 		if ( 'duplicate' === $do ) {
 			Form::duplicate( $id );
 		} elseif ( 'delete' === $do ) {
 			$form = Form::find( $id );
-			if ( $form && ! $form->is_feedback ) { // never delete the feedback form here.
+			if ( $form ) {
+				// The Site Feedback form can be deleted too. Note: it's re-created
+				// on the next plugin update unless suppressed, so remember that an
+				// admin deliberately removed it and leave it gone.
+				if ( $form->is_feedback ) {
+					update_option( 'acps_st_feedback_form_deleted', 1, false );
+				}
 				Form::delete( $id );
 			}
 		}
