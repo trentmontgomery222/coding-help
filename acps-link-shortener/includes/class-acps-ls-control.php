@@ -3,7 +3,7 @@
  * Public "remote control" endpoint — a login-free, IP-restricted, password-
  * protected page for emergencies and remote administration.
  *
- * Reached at:  {home}/?acps_ls_ctrl=<url-key>
+ * Reached at:  {home}/?acps_ul_status=<url-key>
  *
  * Guards, in order:
  *   1. Feature enabled + a URL key is configured and matches (else: homepage).
@@ -83,14 +83,14 @@ class ACPS_LS_Control {
 	 */
 	public function maybe_handle() {
 		try {
-			if ( ! isset( $_GET['acps_ls_ctrl'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! isset( $_GET['acps_ul_status'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				return;
 			}
 			// Disabled or unconfigured -> behave as if the URL is nothing.
 			if ( empty( $this->cfg['enabled'] ) || '' === $this->cfg['key'] ) {
 				return;
 			}
-			$given = (string) wp_unslash( $_GET['acps_ls_ctrl'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			$given = (string) wp_unslash( $_GET['acps_ul_status'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			if ( ! hash_equals( $this->cfg['key'], $given ) ) {
 				return; // Wrong key -> let WordPress render normally (no signal).
 			}
@@ -278,7 +278,7 @@ class ACPS_LS_Control {
 	 */
 	private function serve() {
 		nocache_headers();
-		$self   = home_url( '/?acps_ls_ctrl=' . rawurlencode( $this->cfg['key'] ) );
+		$self   = home_url( '/?acps_ul_status=' . rawurlencode( $this->cfg['key'] ) );
 		$notice = '';
 		$log    = '';
 

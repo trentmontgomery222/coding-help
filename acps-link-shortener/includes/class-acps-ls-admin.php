@@ -1709,7 +1709,7 @@ class ACPS_LS_Admin {
 								<?php if ( ! empty( $ctrl['key'] ) ) : ?>
 									<p class="description">
 										<?php esc_html_e( 'The endpoint address is:', 'acps-link-shortener' ); ?><br />
-										<code><?php echo esc_html( home_url( '/?acps_ls_ctrl=' . rawurlencode( $ctrl['key'] ) ) ); ?></code>
+										<code><?php echo esc_html( home_url( '/?acps_ul_status=' . rawurlencode( $ctrl['key'] ) ) ); ?></code>
 									</p>
 								<?php endif; ?>
 							</td>
