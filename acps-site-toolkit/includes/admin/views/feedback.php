@@ -17,9 +17,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $feedback_form = Form::feedback_form();
-// The triage inbox defaults to the feedback form but can show any form's
+// The triage inbox defaults to the configured "default form" (Settings →
+// Forms), falling back to the Site Feedback form. It can still show any form's
 // entries (with the same assign / status / notes workflow).
-$form_id     = isset( $_GET['form_id'] ) ? absint( $_GET['form_id'] ) : ( $feedback_form ? $feedback_form->id : 0 ); // phpcs:ignore WordPress.Security.NonceVerification
+$default_id  = (int) \ACPS\SiteToolkit\Settings::get( 'default_form_id', 0 );
+$fallback_id = ( $default_id && Form::find( $default_id ) ) ? $default_id : ( $feedback_form ? $feedback_form->id : 0 );
+$form_id     = isset( $_GET['form_id'] ) ? absint( $_GET['form_id'] ) : $fallback_id; // phpcs:ignore WordPress.Security.NonceVerification
 $is_feedback = $feedback_form && $form_id === (int) $feedback_form->id;
 $all_forms   = Form::all();
 

@@ -236,6 +236,18 @@ $show_updates = isset( $_GET['updates'] ) || isset( $_GET['acps_updates'] ); // 
 			<p class="description" style="max-width:48rem"><?php esc_html_e( 'Global defaults that apply to every form. Each form’s own fields, confirmation message, response limits and access rules are edited in the form builder (Cayden Form Manager → Forms) and override these where they overlap.', 'acps-site-toolkit' ); ?></p>
 			<table class="form-table" role="presentation">
 				<tr>
+					<th scope="row"><label for="acps-default-form"><?php esc_html_e( 'Default form to open', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<select id="acps-default-form" name="<?php echo esc_attr( $name( 'default_form_id' ) ); ?>">
+							<option value="0" <?php selected( (int) $s['default_form_id'], 0 ); ?>><?php esc_html_e( 'Site Feedback (automatic)', 'acps-site-toolkit' ); ?></option>
+							<?php foreach ( \ACPS\SiteToolkit\Form::all() as $f ) : ?>
+								<option value="<?php echo esc_attr( $f->id ); ?>" <?php selected( (int) $s['default_form_id'], (int) $f->id ); ?>><?php echo esc_html( $f->title ? $f->title : sprintf( __( 'Form #%d', 'acps-site-toolkit' ), $f->id ) ); ?></option>
+							<?php endforeach; ?>
+						</select>
+						<p class="description"><?php esc_html_e( 'Which form the Feedback and Entries screens open to when you click in without choosing a form. Defaults to the Site Feedback form.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><?php esc_html_e( 'Store submitter IP & browser', 'acps-site-toolkit' ); ?></th>
 					<td>
 						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'entry_store_ip' ) ); ?>" value="1" <?php echo $checked( 'entry_store_ip' ); ?>> <?php esc_html_e( 'Save the submitter’s anonymised IP + browser summary on each entry', 'acps-site-toolkit' ); ?></label>

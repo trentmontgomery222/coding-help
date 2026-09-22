@@ -18,7 +18,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $forms   = Form::all();
-$form_id = isset( $_GET['form_id'] ) ? absint( $_GET['form_id'] ) : ( $forms ? $forms[0]->id : 0 ); // phpcs:ignore WordPress.Security.NonceVerification
+// Default to the configured "default form" (Settings → Forms); otherwise the
+// Site Feedback form, otherwise the first form.
+$default_id  = (int) \ACPS\SiteToolkit\Settings::get( 'default_form_id', 0 );
+$fallback_id = ( $default_id && Form::find( $default_id ) ) ? $default_id : 0;
+if ( ! $fallback_id ) {
+	$feedback_form = Form::feedback_form();
+	$fallback_id   = $feedback_form ? (int) $feedback_form->id : ( $forms ? (int) $forms[0]->id : 0 );
+}
+$form_id = isset( $_GET['form_id'] ) ? absint( $_GET['form_id'] ) : $fallback_id; // phpcs:ignore WordPress.Security.NonceVerification
 $view_id = isset( $_GET['entry'] ) ? absint( $_GET['entry'] ) : 0; // phpcs:ignore
 
 if ( $view_id ) {

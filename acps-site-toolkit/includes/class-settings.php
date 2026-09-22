@@ -149,6 +149,10 @@ class Settings {
 			// Bridge plugin) pulls from. There is no main/pull role here.
 			'device_export_key'     => '',
 
+			// Which form the Feedback inbox / Entries screens open to by default
+			// when no form is specified. 0 = auto (the Site Feedback form).
+			'default_form_id'       => 0,
+
 			// Capabilities.
 			'editors_view_reports'  => 0, // grant read-only feedback/analytics to editors (spec §9.1).
 
@@ -309,6 +313,7 @@ class Settings {
 		$out['verify_status_url'] = isset( $input['verify_status_url'] ) ? esc_url_raw( trim( $input['verify_status_url'] ) ) : '';
 		$out['verify_status_key'] = isset( $input['verify_status_key'] ) ? sanitize_text_field( $input['verify_status_key'] ) : '';
 		$out['device_export_key'] = isset( $input['device_export_key'] ) ? sanitize_text_field( $input['device_export_key'] ) : '';
+		$out['default_form_id']   = isset( $input['default_form_id'] ) ? absint( $input['default_form_id'] ) : 0;
 
 		// Remote console. The password is set ONLY here (wp-admin): a new value
 		// is hashed; a blank value keeps the current one; "clear" removes it.
