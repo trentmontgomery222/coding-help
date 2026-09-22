@@ -293,7 +293,7 @@ class Updater {
 				'name'          => 'Cayden Form Manager',
 				'slug'          => $this->slug(),
 				'version'       => $remote['version'],
-				'author'        => '<a href="https://acpsmd.org/">ACPS</a>',
+				'author'        => '<a href="https://acpsmd.org/">Cayden Riddle</a>',
 				'homepage'      => ! empty( $remote['html_url'] ) ? $remote['html_url'] : '',
 				// Fall back to this INSTALLED copy's own requirements if the
 				// remote source didn't supply any for the new version.

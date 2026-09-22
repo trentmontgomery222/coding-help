@@ -3,10 +3,10 @@
  * Plugin Name:       Cayden Form Manager
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.51.0
+ * Version:           1.52.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
- * Author:            ACPS
+ * Author:            Cayden Riddle
  * Author URI:        https://acpsmd.org/
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.51.0' );
+define( 'ACPS_ST_VERSION', '1.52.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).

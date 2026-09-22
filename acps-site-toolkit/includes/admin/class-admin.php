@@ -43,6 +43,18 @@ class Admin {
 		add_action( 'admin_post_acps_st_check_update', array( $this, 'handle_check_update' ) );
 		add_action( 'wp_ajax_acps_st_active', array( $this, 'ajax_active' ) );
 		add_action( 'wp_dashboard_setup', array( $this, 'dashboard_widget' ) );
+		// Overlap Gravity Forms' menu when it's installed — registered late so
+		// GF's own top-level menu already exists to attach to.
+		add_action( 'admin_menu', array( $this, 'gf_overlay_menu' ), 20 );
+	}
+
+	/**
+	 * Surface our tools under the Gravity Forms menu when GF is active.
+	 */
+	public function gf_overlay_menu() {
+		if ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active() ) {
+			\ACPS\SiteToolkit\Gravity_Forms::register_menu( $this );
+		}
 	}
 
 	/**
@@ -55,7 +67,7 @@ class Admin {
 		}
 		wp_add_dashboard_widget(
 			'acps_st_dashboard',
-			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
+			__( 'Forms', 'acps-site-toolkit' ),
 			array( $this, 'render_dashboard_widget' )
 		);
 	}
@@ -65,10 +77,13 @@ class Admin {
 	 * busiest first, with a "View all forms" button.
 	 */
 	public function render_dashboard_widget() {
-		$forms = Form::all();
-		if ( ! $forms ) {
+		$forms    = Form::all();
+		$gf_forms = ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) ) ? \ACPS\SiteToolkit\Gravity_Forms::forms() : array();
+
+		if ( ! $forms && ! $gf_forms ) {
 			echo '<p>' . esc_html__( 'No forms yet.', 'acps-site-toolkit' ) . '</p>';
 			echo '<p><a class="button" href="' . esc_url( admin_url( 'admin.php?page=acps-st-forms&action=new' ) ) . '">' . esc_html__( 'Create your first form', 'acps-site-toolkit' ) . '</a></p>';
+			$this->dashboard_widget_style();
 			return;
 		}
 
@@ -91,39 +106,85 @@ class Admin {
 			}
 		);
 
-		echo '<table class="acps-dash-forms widefat striped"><thead><tr>'
-			. '<th>' . esc_html__( 'Title', 'acps-site-toolkit' ) . '</th>'
-			. '<th class="acps-dash-num">' . esc_html__( 'Unread', 'acps-site-toolkit' ) . '</th>'
-			. '<th class="acps-dash-num">' . esc_html__( 'Total', 'acps-site-toolkit' ) . '</th>'
-			. '</tr></thead><tbody>';
+		if ( $forms ) {
+			echo '<table class="acps-dash-forms widefat striped"><thead><tr>'
+				. '<th>' . esc_html__( 'Title', 'acps-site-toolkit' ) . '</th>'
+				. '<th class="acps-dash-num">' . esc_html__( 'Unread', 'acps-site-toolkit' ) . '</th>'
+				. '<th class="acps-dash-num">' . esc_html__( 'Total', 'acps-site-toolkit' ) . '</th>'
+				. '</tr></thead><tbody>';
 
-		foreach ( $forms as $form ) {
-			$c        = isset( $counts[ $form->id ] ) ? $counts[ $form->id ] : array( 'total' => 0, 'unread' => 0 );
-			$entries  = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $form->id );
-			$title    = $form->title ? $form->title : __( '(untitled form)', 'acps-site-toolkit' );
+			foreach ( $forms as $form ) {
+				$c       = isset( $counts[ $form->id ] ) ? $counts[ $form->id ] : array( 'total' => 0, 'unread' => 0 );
+				$entries = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $form->id );
+				$title   = $form->title ? $form->title : __( '(untitled form)', 'acps-site-toolkit' );
 
-			echo '<tr>';
-			echo '<td><a href="' . esc_url( $entries ) . '"><strong>' . esc_html( $title ) . '</strong></a></td>';
-			if ( $c['unread'] > 0 ) {
-				echo '<td class="acps-dash-num"><a href="' . esc_url( add_query_arg( 'status', 'new', $entries ) ) . '"><strong>' . esc_html( number_format_i18n( $c['unread'] ) ) . '</strong></a></td>';
-			} else {
-				echo '<td class="acps-dash-num">0</td>';
+				echo '<tr>';
+				echo '<td><a href="' . esc_url( $entries ) . '"><strong>' . esc_html( $title ) . '</strong></a></td>';
+				if ( $c['unread'] > 0 ) {
+					echo '<td class="acps-dash-num"><a href="' . esc_url( add_query_arg( 'status', 'new', $entries ) ) . '"><strong>' . esc_html( number_format_i18n( $c['unread'] ) ) . '</strong></a></td>';
+				} else {
+					echo '<td class="acps-dash-num">0</td>';
+				}
+				echo '<td class="acps-dash-num"><a href="' . esc_url( $entries ) . '">' . esc_html( number_format_i18n( $c['total'] ) ) . '</a></td>';
+				echo '</tr>';
 			}
-			echo '<td class="acps-dash-num"><a href="' . esc_url( $entries ) . '">' . esc_html( number_format_i18n( $c['total'] ) ) . '</a></td>';
-			echo '</tr>';
+			echo '</tbody></table>';
 		}
 
-		echo '</tbody></table>';
-		echo '<p class="acps-dash-actions"><a class="button" href="' . esc_url( admin_url( 'admin.php?page=acps-st-forms' ) ) . '">' . esc_html__( 'View all forms', 'acps-site-toolkit' ) . '</a></p>';
+		// Gravity Forms overlap: list GF's own forms in the same widget, with the
+		// same Unread / Total treatment, when Gravity Forms is installed.
+		if ( $gf_forms ) {
+			usort(
+				$gf_forms,
+				function ( $a, $b ) {
+					if ( $a['unread'] !== $b['unread'] ) {
+						return $b['unread'] - $a['unread'];
+					}
+					if ( $a['total'] !== $b['total'] ) {
+						return $b['total'] - $a['total'];
+					}
+					return strcasecmp( $a['title'], $b['title'] );
+				}
+			);
+			echo '<p class="acps-dash-gf-h">' . esc_html__( 'Gravity Forms', 'acps-site-toolkit' ) . '</p>';
+			echo '<table class="acps-dash-forms widefat striped"><thead><tr>'
+				. '<th>' . esc_html__( 'Title', 'acps-site-toolkit' ) . '</th>'
+				. '<th class="acps-dash-num">' . esc_html__( 'Unread', 'acps-site-toolkit' ) . '</th>'
+				. '<th class="acps-dash-num">' . esc_html__( 'Total', 'acps-site-toolkit' ) . '</th>'
+				. '</tr></thead><tbody>';
+			foreach ( $gf_forms as $g ) {
+				$title = $g['title'] ? $g['title'] : __( '(untitled form)', 'acps-site-toolkit' );
+				echo '<tr>';
+				echo '<td><a href="' . esc_url( $g['entries_url'] ) . '"><strong>' . esc_html( $title ) . '</strong></a></td>';
+				if ( $g['unread'] > 0 ) {
+					echo '<td class="acps-dash-num"><a href="' . esc_url( $g['entries_url'] ) . '"><strong>' . esc_html( number_format_i18n( $g['unread'] ) ) . '</strong></a></td>';
+				} else {
+					echo '<td class="acps-dash-num">0</td>';
+				}
+				echo '<td class="acps-dash-num"><a href="' . esc_url( $g['entries_url'] ) . '">' . esc_html( number_format_i18n( $g['total'] ) ) . '</a></td>';
+				echo '</tr>';
+			}
+			echo '</tbody></table>';
+		}
 
-		// Minimal inline styling so the widget looks right without loading the
-		// full admin stylesheet on the dashboard.
+		echo '<p class="acps-dash-actions"><a class="button" href="' . esc_url( admin_url( 'admin.php?page=acps-st-forms' ) ) . '">' . esc_html__( 'View all forms', 'acps-site-toolkit' ) . '</a></p>';
+		echo '<p class="acps-dash-by">' . esc_html__( 'by Cayden Riddle', 'acps-site-toolkit' ) . '</p>';
+		$this->dashboard_widget_style();
+	}
+
+	/**
+	 * Inline styling for the dashboard widget (kept out of the main stylesheet so
+	 * the dashboard doesn't load it site-wide).
+	 */
+	private function dashboard_widget_style() {
 		echo '<style>'
 			. '#acps_st_dashboard .acps-dash-num{text-align:right;white-space:nowrap}'
 			. '#acps_st_dashboard table{margin:-4px 0 8px}'
 			. '#acps_st_dashboard thead th{font-style:italic;color:#50575e}'
 			. '#acps_st_dashboard td,#acps_st_dashboard th{padding:8px 10px}'
 			. '#acps_st_dashboard .acps-dash-actions{text-align:right;margin:0}'
+			. '#acps_st_dashboard .acps-dash-gf-h{font-weight:600;color:#50575e;margin:12px 0 2px;text-transform:uppercase;font-size:11px;letter-spacing:.04em}'
+			. '#acps_st_dashboard .acps-dash-by{text-align:right;color:#8c8f94;font-size:11px;font-style:italic;margin:6px 0 0}'
 			. '</style>';
 	}
 
@@ -234,8 +295,8 @@ class Admin {
 		$reports = $this->reports_cap();
 
 		add_menu_page(
-			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
-			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
+			__( 'Forms', 'acps-site-toolkit' ),
+			__( 'Forms', 'acps-site-toolkit' ),
 			$reports,
 			self::SLUG,
 			array( $this, 'render_feedback' ),
@@ -258,11 +319,11 @@ class Admin {
 		add_submenu_page( self::SLUG, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', self::SLUG . '-qa', array( $this, 'render_qa' ) );
 		add_submenu_page( self::SLUG, __( 'Help Guide', 'acps-site-toolkit' ), __( 'Help Guide', 'acps-site-toolkit' ), $reports, self::SLUG . '-help', array( $this, 'render_help' ) );
 
-		// Settings lives under the WordPress “Settings” menu (Settings → Cayden
-		// Form Manager), not the plugin’s own menu.
+		// Settings lives under the WordPress “Settings” menu (Settings → Forms),
+		// not the plugin’s own menu.
 		add_options_page(
-			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
-			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
+			__( 'Forms', 'acps-site-toolkit' ),
+			__( 'Forms', 'acps-site-toolkit' ),
 			'manage_options',
 			self::SLUG . '-settings',
 			array( $this, 'render_settings' )
