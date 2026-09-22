@@ -185,24 +185,37 @@ class Feedback {
 		// it carries any custom class the popup plugin listens for, plus an
 		// optional CSS selector to click. No modal or contact form of our own.
 		if ( 'popup' === Settings::get( 'trigger_mode', 'feedback' ) ) {
+			$popup_id    = trim( (string) Settings::get( 'trigger_popup_id', '' ) );
 			$popup_class = trim( (string) Settings::get( 'trigger_popup_class', '' ) );
 			$popup_click = trim( (string) Settings::get( 'trigger_popup_click', '' ) );
 			$extra       = $trigger_class . ( '' !== $popup_class ? ' ' . $popup_class : '' );
-			$click_attr  = '' !== $popup_click ? ' data-acps-popup-click="' . esc_attr( $popup_click ) . '"' : '';
+
+			// Beaver Builder opens a popup when a link to #<Popup ID> is clicked,
+			// so when a Popup ID is set we render the trigger as that exact anchor
+			// (the method BB expects). Otherwise it's a button carrying a popup
+			// class and/or a click-selector for other popup tools.
+			if ( '' !== $popup_id ) {
+				$tag       = 'a';
+				$tag_attrs = ' href="#' . esc_attr( $popup_id ) . '" style="text-decoration:none;' . esc_attr( $trigger_style ) . '"';
+			} else {
+				$tag       = 'button';
+				$click     = '' !== $popup_click ? ' data-acps-popup-click="' . esc_attr( $popup_click ) . '"' : '';
+				$tag_attrs = ' type="button" style="' . esc_attr( $trigger_style ) . '"' . $click;
+			}
 			?>
 			<div class="acps-feedback-root acps-pos-<?php echo esc_attr( $position ); ?>" data-acps-mode="popup">
 				<?php if ( $icon_url ) : ?>
-					<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?><?php echo esc_attr( $extra ); ?>" aria-haspopup="dialog" style="<?php echo esc_attr( $trigger_style ); ?>"<?php echo $click_attr; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
+					<<?php echo $tag; // phpcs:ignore WordPress.Security.EscapeOutput ?> class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?><?php echo esc_attr( $extra ); ?>" aria-haspopup="dialog"<?php echo $tag_attrs; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
 						<img class="acps-feedback-trigger__img acps-icon-rest" src="<?php echo esc_url( $icon_url ); ?>" alt="<?php echo esc_attr( $label ); ?>">
 						<?php if ( $icon_hover ) : ?>
 							<img class="acps-feedback-trigger__img acps-icon-hover" src="<?php echo esc_url( $icon_hover ); ?>" alt="" aria-hidden="true">
 						<?php endif; ?>
-					</button>
+					</<?php echo $tag; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
 				<?php else : ?>
-					<button type="button" class="acps-feedback-trigger<?php echo esc_attr( $extra ); ?>" aria-haspopup="dialog" style="<?php echo esc_attr( $trigger_style ); ?>"<?php echo $click_attr; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
+					<<?php echo $tag; // phpcs:ignore WordPress.Security.EscapeOutput ?> class="acps-feedback-trigger<?php echo esc_attr( $extra ); ?>" aria-haspopup="dialog"<?php echo $tag_attrs; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
 						<span class="acps-feedback-trigger__icon" aria-hidden="true">&#128172;</span>
 						<span class="acps-feedback-trigger__label"><?php echo esc_html( $label ); ?></span>
-					</button>
+					</<?php echo $tag; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
 				<?php endif; ?>
 			</div>
 			<?php

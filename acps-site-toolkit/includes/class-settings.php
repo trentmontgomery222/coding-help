@@ -57,7 +57,8 @@ class Settings {
 			// 'popup' just opens an external popup (e.g. a Beaver Builder popup in
 			// the header with a Gravity Forms embed) via a class / selector.
 			'trigger_mode'          => 'feedback', // 'feedback' | 'popup'.
-			'trigger_popup_class'   => '', // CSS class(es) added to the trigger for the popup plugin to catch.
+			'trigger_popup_id'      => '', // Beaver Builder Popup ID — trigger becomes a link to #<id>.
+			'trigger_popup_class'   => '', // CSS class(es) added to the trigger for a popup plugin to catch.
 			'trigger_popup_click'   => '', // optional CSS selector the trigger clicks to open the popup.
 			'modal_max_width'       => 1200, // popup max width on laptop/desktop.
 			'custom_css'            => '', // full editable stylesheet (overrides base).
@@ -271,6 +272,11 @@ class Settings {
 
 		// Trigger mode + popup targeting.
 		$out['trigger_mode'] = ( isset( $input['trigger_mode'] ) && 'popup' === $input['trigger_mode'] ) ? 'popup' : 'feedback';
+		// Beaver Builder Popup ID (used as the #hash the trigger links to). Allow
+		// a leading '#' but store without it; keep to id-safe characters.
+		if ( isset( $input['trigger_popup_id'] ) ) {
+			$out['trigger_popup_id'] = preg_replace( '/[^A-Za-z0-9_\-]/', '', ltrim( (string) $input['trigger_popup_id'], '#' ) );
+		}
 		// Space-separated CSS classes (letters, digits, _ and -).
 		if ( isset( $input['trigger_popup_class'] ) ) {
 			$classes = preg_split( '/\s+/', (string) $input['trigger_popup_class'] );

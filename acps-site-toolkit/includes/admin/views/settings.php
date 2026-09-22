@@ -167,6 +167,13 @@ $show_updates = isset( $_GET['updates'] ) || isset( $_GET['acps_updates'] ); // 
 					</td>
 				</tr>
 				<tr class="acps-popup-only">
+					<th scope="row"><label for="acps-trigger-popup-id"><?php esc_html_e( 'Beaver Builder Popup ID', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="text" id="acps-trigger-popup-id" name="<?php echo esc_attr( $name( 'trigger_popup_id' ) ); ?>" value="<?php echo esc_attr( $s['trigger_popup_id'] ); ?>" class="regular-text code" placeholder="open-gf-popup">
+						<p class="description"><?php esc_html_e( 'The exact Popup ID you set on the Beaver Builder popup (Trigger → Popup ID), e.g. open-gf-popup. The floating button becomes a link to that popup, which is how Beaver Builder opens it. If you use this, you can leave the two fields below blank.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr class="acps-popup-only">
 					<th scope="row"><label for="acps-trigger-popup-class"><?php esc_html_e( 'Popup trigger class', 'acps-site-toolkit' ); ?></label></th>
 					<td>
 						<input type="text" id="acps-trigger-popup-class" name="<?php echo esc_attr( $name( 'trigger_popup_class' ) ); ?>" value="<?php echo esc_attr( $s['trigger_popup_class'] ); ?>" class="regular-text code" placeholder="e.g. open-gf-popup">
