@@ -402,6 +402,29 @@ class Entries {
 	}
 
 	/**
+	 * Per-form submission counts for the dashboard widget: total (excluding
+	 * spam/trashed) and unread (status 'new'), in a single grouped query.
+	 *
+	 * @return array Map of form_id => array( 'total' => int, 'unread' => int ).
+	 */
+	public static function counts_by_form() {
+		global $wpdb;
+		$t    = Schema::table( 'entries' );
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB
+			"SELECT form_id, COUNT(*) AS total, SUM( CASE WHEN status = 'new' THEN 1 ELSE 0 END ) AS unread
+			 FROM {$t} WHERE status NOT IN ('spam','trashed') GROUP BY form_id"
+		);
+		$out = array();
+		foreach ( (array) $rows as $r ) {
+			$out[ (int) $r->form_id ] = array(
+				'total'  => (int) $r->total,
+				'unread' => (int) $r->unread,
+			);
+		}
+		return $out;
+	}
+
+	/**
 	 * Count submissions for a form from one device fingerprint (anonymized IP +
 	 * browser summary), matching the spam rate-limiter's notion of "device".
 	 *

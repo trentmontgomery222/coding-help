@@ -42,6 +42,89 @@ class Admin {
 		add_action( 'admin_post_acps_st_db_action', array( $this, 'handle_db_action' ) );
 		add_action( 'admin_post_acps_st_check_update', array( $this, 'handle_check_update' ) );
 		add_action( 'wp_ajax_acps_st_active', array( $this, 'ajax_active' ) );
+		add_action( 'wp_dashboard_setup', array( $this, 'dashboard_widget' ) );
+	}
+
+	/**
+	 * Register the "At a glance" style dashboard widget — a compact list of forms
+	 * with their unread + total submission counts, à la Gravity Forms.
+	 */
+	public function dashboard_widget() {
+		if ( ! current_user_can( Settings::CAP_READ ) && ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		wp_add_dashboard_widget(
+			'acps_st_dashboard',
+			__( 'Cayden Form Manager', 'acps-site-toolkit' ),
+			array( $this, 'render_dashboard_widget' )
+		);
+	}
+
+	/**
+	 * Render the dashboard widget: Title / Unread / Total per form, newest and
+	 * busiest first, with a "View all forms" button.
+	 */
+	public function render_dashboard_widget() {
+		$forms = Form::all();
+		if ( ! $forms ) {
+			echo '<p>' . esc_html__( 'No forms yet.', 'acps-site-toolkit' ) . '</p>';
+			echo '<p><a class="button" href="' . esc_url( admin_url( 'admin.php?page=acps-st-forms&action=new' ) ) . '">' . esc_html__( 'Create your first form', 'acps-site-toolkit' ) . '</a></p>';
+			return;
+		}
+
+		$counts = Entries::counts_by_form();
+
+		// Order: forms with unread first, then by total, then by title — so the
+		// things that need attention rise to the top.
+		usort(
+			$forms,
+			function ( $a, $b ) use ( $counts ) {
+				$ca = isset( $counts[ $a->id ] ) ? $counts[ $a->id ] : array( 'total' => 0, 'unread' => 0 );
+				$cb = isset( $counts[ $b->id ] ) ? $counts[ $b->id ] : array( 'total' => 0, 'unread' => 0 );
+				if ( $ca['unread'] !== $cb['unread'] ) {
+					return $cb['unread'] - $ca['unread'];
+				}
+				if ( $ca['total'] !== $cb['total'] ) {
+					return $cb['total'] - $ca['total'];
+				}
+				return strcasecmp( $a->title, $b->title );
+			}
+		);
+
+		echo '<table class="acps-dash-forms widefat striped"><thead><tr>'
+			. '<th>' . esc_html__( 'Title', 'acps-site-toolkit' ) . '</th>'
+			. '<th class="acps-dash-num">' . esc_html__( 'Unread', 'acps-site-toolkit' ) . '</th>'
+			. '<th class="acps-dash-num">' . esc_html__( 'Total', 'acps-site-toolkit' ) . '</th>'
+			. '</tr></thead><tbody>';
+
+		foreach ( $forms as $form ) {
+			$c        = isset( $counts[ $form->id ] ) ? $counts[ $form->id ] : array( 'total' => 0, 'unread' => 0 );
+			$entries  = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $form->id );
+			$title    = $form->title ? $form->title : __( '(untitled form)', 'acps-site-toolkit' );
+
+			echo '<tr>';
+			echo '<td><a href="' . esc_url( $entries ) . '"><strong>' . esc_html( $title ) . '</strong></a></td>';
+			if ( $c['unread'] > 0 ) {
+				echo '<td class="acps-dash-num"><a href="' . esc_url( add_query_arg( 'status', 'new', $entries ) ) . '"><strong>' . esc_html( number_format_i18n( $c['unread'] ) ) . '</strong></a></td>';
+			} else {
+				echo '<td class="acps-dash-num">0</td>';
+			}
+			echo '<td class="acps-dash-num"><a href="' . esc_url( $entries ) . '">' . esc_html( number_format_i18n( $c['total'] ) ) . '</a></td>';
+			echo '</tr>';
+		}
+
+		echo '</tbody></table>';
+		echo '<p class="acps-dash-actions"><a class="button" href="' . esc_url( admin_url( 'admin.php?page=acps-st-forms' ) ) . '">' . esc_html__( 'View all forms', 'acps-site-toolkit' ) . '</a></p>';
+
+		// Minimal inline styling so the widget looks right without loading the
+		// full admin stylesheet on the dashboard.
+		echo '<style>'
+			. '#acps_st_dashboard .acps-dash-num{text-align:right;white-space:nowrap}'
+			. '#acps_st_dashboard table{margin:-4px 0 8px}'
+			. '#acps_st_dashboard thead th{font-style:italic;color:#50575e}'
+			. '#acps_st_dashboard td,#acps_st_dashboard th{padding:8px 10px}'
+			. '#acps_st_dashboard .acps-dash-actions{text-align:right;margin:0}'
+			. '</style>';
 	}
 
 	/**

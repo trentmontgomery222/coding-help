@@ -67,7 +67,8 @@ if ( $view_id ) {
 
 $search = isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : ''; // phpcs:ignore
 $paged  = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1; // phpcs:ignore
-$result = Entries::query( array( 'form_id' => $form_id, 'search' => $search, 'paged' => $paged, 'per_page' => 25 ) );
+$status = isset( $_GET['status'] ) ? sanitize_key( wp_unslash( $_GET['status'] ) ) : ''; // phpcs:ignore
+$result = Entries::query( array( 'form_id' => $form_id, 'status' => $status, 'search' => $search, 'paged' => $paged, 'per_page' => 25 ) );
 $rows   = $result['rows'];
 $total  = $result['total'];
 $form   = $form_id ? Form::find( $form_id ) : null;
