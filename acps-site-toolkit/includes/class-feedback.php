@@ -157,29 +157,19 @@ class Feedback {
 		// The persistent floating button opens the "Contact us" message form
 		// (a chat-style entry point — not live chat). Feedback stays available
 		// via the [acps_feedback] page and the inbox.
-		$form = Form::find_by_slug( Help::CONTACT_SLUG );
-		if ( ! $form ) {
-			$form = Help::ensure_contact_form();
-		}
-		if ( ! $form ) {
-			return;
-		}
-
-		$label     = trim( (string) Settings::get( 'trigger_label', 'Chat with us' ) );
+		$label = trim( (string) Settings::get( 'trigger_label', 'Chat with us' ) );
 		if ( '' === $label ) {
 			// The trigger must ALWAYS have an accessible name, even if an admin
 			// clears the label while using an icon-only trigger. Without this the
 			// icon button would be announced only as "button" (WCAG 4.1.2 / 2.4.4).
 			$label = __( 'Open the feedback form', 'acps-site-toolkit' );
 		}
-		$position  = Settings::get( 'trigger_position', 'bottom-right' );
-		$icon_url  = Settings::get( 'trigger_icon_url', '' );
-		$icon_hover = Settings::get( 'trigger_icon_hover_url', '' );
-		$size      = (int) Settings::get( 'trigger_size', 64 );
+		$position    = Settings::get( 'trigger_position', 'bottom-right' );
+		$icon_url    = Settings::get( 'trigger_icon_url', '' );
+		$icon_hover  = Settings::get( 'trigger_icon_hover_url', '' );
 		$bg          = Settings::get( 'trigger_bg', '' );
 		$transparent = (bool) Settings::get( 'trigger_transparent', false );
 		$title       = get_the_title( $post_id );
-		$form_html   = Form_Renderer::render( $form, array( 'post_id' => $post_id ) );
 
 		// Size comes from the per-device CSS variables (see the dynamic block in
 		// Plugin::enqueue_frontend); only the optional background is inline here.
@@ -188,7 +178,46 @@ class Feedback {
 			$trigger_style .= 'background:' . $bg . ';border-color:' . $bg . ';';
 		}
 		$trigger_class = $transparent ? ' acps-trigger--transparent' : '';
-		unset( $size );
+
+		// Popup mode: the floating trigger just OPENS an external popup — e.g. a
+		// Beaver Builder popup placed in the header containing a Gravity Forms
+		// embed — instead of our own feedback modal. We render only the button:
+		// it carries any custom class the popup plugin listens for, plus an
+		// optional CSS selector to click. No modal or contact form of our own.
+		if ( 'popup' === Settings::get( 'trigger_mode', 'feedback' ) ) {
+			$popup_class = trim( (string) Settings::get( 'trigger_popup_class', '' ) );
+			$popup_click = trim( (string) Settings::get( 'trigger_popup_click', '' ) );
+			$extra       = $trigger_class . ( '' !== $popup_class ? ' ' . $popup_class : '' );
+			$click_attr  = '' !== $popup_click ? ' data-acps-popup-click="' . esc_attr( $popup_click ) . '"' : '';
+			?>
+			<div class="acps-feedback-root acps-pos-<?php echo esc_attr( $position ); ?>" data-acps-mode="popup">
+				<?php if ( $icon_url ) : ?>
+					<button type="button" class="acps-feedback-trigger acps-feedback-trigger--icon<?php echo $icon_hover ? ' has-hover-icon' : ''; ?><?php echo esc_attr( $extra ); ?>" aria-haspopup="dialog" style="<?php echo esc_attr( $trigger_style ); ?>"<?php echo $click_attr; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
+						<img class="acps-feedback-trigger__img acps-icon-rest" src="<?php echo esc_url( $icon_url ); ?>" alt="<?php echo esc_attr( $label ); ?>">
+						<?php if ( $icon_hover ) : ?>
+							<img class="acps-feedback-trigger__img acps-icon-hover" src="<?php echo esc_url( $icon_hover ); ?>" alt="" aria-hidden="true">
+						<?php endif; ?>
+					</button>
+				<?php else : ?>
+					<button type="button" class="acps-feedback-trigger<?php echo esc_attr( $extra ); ?>" aria-haspopup="dialog" style="<?php echo esc_attr( $trigger_style ); ?>"<?php echo $click_attr; // phpcs:ignore WordPress.Security.EscapeOutput ?>>
+						<span class="acps-feedback-trigger__icon" aria-hidden="true">&#128172;</span>
+						<span class="acps-feedback-trigger__label"><?php echo esc_html( $label ); ?></span>
+					</button>
+				<?php endif; ?>
+			</div>
+			<?php
+			return;
+		}
+
+		// Feedback mode (default): render the trigger + our own modal + contact form.
+		$form = Form::find_by_slug( Help::CONTACT_SLUG );
+		if ( ! $form ) {
+			$form = Help::ensure_contact_form();
+		}
+		if ( ! $form ) {
+			return;
+		}
+		$form_html = Form_Renderer::render( $form, array( 'post_id' => $post_id ) );
 
 		// Child-theme override (receives $form, $form_html, $label, $position,
 		// $post_id, $title).
@@ -228,6 +257,7 @@ class Feedback {
 				</div>
 			</div>
 		</div>
+
 		<?php
 	}
 

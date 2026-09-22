@@ -27,7 +27,11 @@
 	ready( function () {
 		var root = document.querySelector( '.acps-feedback-root' );
 		if ( root ) {
-			initModal( root );
+			if ( root.getAttribute( 'data-acps-mode' ) === 'popup' ) {
+				initPopupTrigger( root );
+			} else {
+				initModal( root );
+			}
 		}
 		// Secret-link forms: an auto-opening popup when ?acps_key is present.
 		var autopopup = document.querySelector( '[data-acps-autopopup]' );
@@ -81,6 +85,28 @@
 		} else {
 			modal.focus();
 		}
+	}
+
+	/* Popup mode: the trigger opens an external popup (e.g. a Beaver Builder
+	   popup in the header with a Gravity Forms embed). If a target selector is
+	   given, clicking our trigger clicks that element; otherwise the trigger just
+	   carries the popup plugin's own class and its native handler opens it. */
+	function initPopupTrigger( root ) {
+		var trigger = root.querySelector( '.acps-feedback-trigger' );
+		if ( ! trigger ) {
+			return;
+		}
+		var sel = trigger.getAttribute( 'data-acps-popup-click' );
+		if ( ! sel ) {
+			return; // Native class handler opens the popup — nothing for us to do.
+		}
+		trigger.addEventListener( 'click', function ( e ) {
+			var target = document.querySelector( sel );
+			if ( target ) {
+				e.preventDefault();
+				target.click();
+			}
+		} );
 	}
 
 	/* ---------------------------------------------------------------- *

@@ -53,6 +53,12 @@ class Settings {
 			'trigger_size_mobile'   => 52, // circle diameter on phones.
 			'trigger_bg'            => '', // circle background; blank = accent colour.
 			'trigger_transparent'   => 0,  // transparent background (no circle/ring/shadow).
+			// What the floating trigger does: 'feedback' opens our own modal;
+			// 'popup' just opens an external popup (e.g. a Beaver Builder popup in
+			// the header with a Gravity Forms embed) via a class / selector.
+			'trigger_mode'          => 'feedback', // 'feedback' | 'popup'.
+			'trigger_popup_class'   => '', // CSS class(es) added to the trigger for the popup plugin to catch.
+			'trigger_popup_click'   => '', // optional CSS selector the trigger clicks to open the popup.
 			'modal_max_width'       => 1200, // popup max width on laptop/desktop.
 			'custom_css'            => '', // full editable stylesheet (overrides base).
 			'feedback_categories'   => array(
@@ -262,6 +268,19 @@ class Settings {
 		}
 
 		$out['trigger_label'] = isset( $input['trigger_label'] ) ? sanitize_text_field( $input['trigger_label'] ) : $defaults['trigger_label'];
+
+		// Trigger mode + popup targeting.
+		$out['trigger_mode'] = ( isset( $input['trigger_mode'] ) && 'popup' === $input['trigger_mode'] ) ? 'popup' : 'feedback';
+		// Space-separated CSS classes (letters, digits, _ and -).
+		if ( isset( $input['trigger_popup_class'] ) ) {
+			$classes = preg_split( '/\s+/', (string) $input['trigger_popup_class'] );
+			$classes = array_filter( array_map( 'sanitize_html_class', (array) $classes ) );
+			$out['trigger_popup_class'] = implode( ' ', $classes );
+		}
+		// A CSS selector — keep it to a safe character set.
+		if ( isset( $input['trigger_popup_click'] ) ) {
+			$out['trigger_popup_click'] = preg_replace( '/[^a-zA-Z0-9 _\-\.\#\[\]="\':>~\*]/', '', (string) $input['trigger_popup_click'] );
+		}
 
 		// Trigger appearance.
 		$out['trigger_icon_url']       = isset( $input['trigger_icon_url'] ) ? esc_url_raw( trim( $input['trigger_icon_url'] ) ) : '';

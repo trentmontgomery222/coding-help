@@ -157,6 +157,30 @@ $show_updates = isset( $_GET['updates'] ) || isset( $_GET['acps_updates'] ); // 
 					</td>
 				</tr>
 				<tr>
+					<th scope="row"><label for="acps-trigger-mode"><?php esc_html_e( 'What the button does', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<select id="acps-trigger-mode" name="<?php echo esc_attr( $name( 'trigger_mode' ) ); ?>">
+							<option value="feedback" <?php selected( $s['trigger_mode'], 'feedback' ); ?>><?php esc_html_e( 'Open the built-in feedback / contact form', 'acps-site-toolkit' ); ?></option>
+							<option value="popup" <?php selected( $s['trigger_mode'], 'popup' ); ?>><?php esc_html_e( 'Open an external popup (e.g. a Beaver Builder popup with a Gravity Forms embed)', 'acps-site-toolkit' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Choose “external popup” to keep the floating button but have it open a popup you built elsewhere (such as a Beaver Builder popup in your header). Set how it opens below.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr class="acps-popup-only">
+					<th scope="row"><label for="acps-trigger-popup-class"><?php esc_html_e( 'Popup trigger class', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="text" id="acps-trigger-popup-class" name="<?php echo esc_attr( $name( 'trigger_popup_class' ) ); ?>" value="<?php echo esc_attr( $s['trigger_popup_class'] ); ?>" class="regular-text code" placeholder="e.g. open-gf-popup">
+						<p class="description"><?php esc_html_e( 'The CSS class your popup is configured to open on. It’s added to the floating button, so clicking the button triggers the popup. (Class name only, no dot.)', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr class="acps-popup-only">
+					<th scope="row"><label for="acps-trigger-popup-click"><?php esc_html_e( 'Or: element to click', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<input type="text" id="acps-trigger-popup-click" name="<?php echo esc_attr( $name( 'trigger_popup_click' ) ); ?>" value="<?php echo esc_attr( $s['trigger_popup_click'] ); ?>" class="regular-text code" placeholder="e.g. #my-popup-open, .fl-builder-popup-link">
+						<p class="description"><?php esc_html_e( 'Optional. If your popup opens by clicking a specific link/button, put its CSS selector here and the floating button will click it for you. Leave blank if the class above is enough.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row"><label for="acps-trigger-label"><?php esc_html_e( 'Trigger label', 'acps-site-toolkit' ); ?></label></th>
 					<td><input type="text" id="acps-trigger-label" name="<?php echo esc_attr( $name( 'trigger_label' ) ); ?>" value="<?php echo esc_attr( $s['trigger_label'] ); ?>" class="regular-text"><p class="description"><?php esc_html_e( 'Used as the button\'s screen-reader name when an icon image is set.', 'acps-site-toolkit' ); ?></p></td>
 				</tr>
