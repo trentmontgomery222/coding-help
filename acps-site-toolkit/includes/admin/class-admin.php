@@ -376,6 +376,12 @@ class Admin {
 			require ACPS_ST_PATH . 'includes/admin/views/form-builder.php';
 		} elseif ( 'import' === $action ) {
 			require ACPS_ST_PATH . 'includes/admin/views/import-google.php';
+		} elseif ( class_exists( '\\ACPS\\SiteToolkit\\Gravity_Forms' ) && \ACPS\SiteToolkit\Gravity_Forms::is_active() ) {
+			// With Gravity Forms active there is no separate built-in list — the
+			// built-in forms live on Gravity Forms' own Forms page. Send the bare
+			// list URL there instead of showing a duplicate.
+			wp_safe_redirect( admin_url( 'admin.php?page=gf_edit_forms' ) );
+			exit;
 		} else {
 			require ACPS_ST_PATH . 'includes/admin/views/forms-list.php';
 		}

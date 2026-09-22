@@ -98,13 +98,16 @@ class Gravity_Forms {
 		}
 		$reports = Settings::CAP_READ;
 
-		// House everything under the Gravity Forms menu. "All forms" is our
-		// unified list (Gravity Forms' forms AND ours together); Entries and the
-		// rest are our add-ons that GF doesn't have.
-		add_submenu_page( self::GF_PARENT, __( 'All forms', 'acps-site-toolkit' ), __( 'All forms', 'acps-site-toolkit' ), 'manage_options', 'acps-st-forms', array( $admin, 'render_forms' ) );
-		add_submenu_page( self::GF_PARENT, __( 'Entries (add-on)', 'acps-site-toolkit' ), __( 'Entries (add-on)', 'acps-site-toolkit' ), 'manage_options', 'acps-st-entries', array( $admin, 'render_entries' ) );
-		add_submenu_page( self::GF_PARENT, __( 'Feedback inbox', 'acps-site-toolkit' ), __( 'Feedback inbox', 'acps-site-toolkit' ), $reports, 'acps-st', array( $admin, 'render_feedback' ) );
+		// Our built-in forms are shown INSIDE Gravity Forms' own Forms page (see
+		// render_builtin_on_gf) rather than a separate list. We still register the
+		// built-in builder/importer + entries pages so Edit / New / Import / Entries
+		// links resolve, but as hidden pages (null parent) — reachable only by URL,
+		// never shown as their own menu items.
+		add_submenu_page( null, __( 'Built-in form editor', 'acps-site-toolkit' ), '', 'manage_options', 'acps-st-forms', array( $admin, 'render_forms' ) );
+		add_submenu_page( null, __( 'Built-in entries', 'acps-site-toolkit' ), '', 'manage_options', 'acps-st-entries', array( $admin, 'render_entries' ) );
 
+		// Genuinely new tools that Gravity Forms doesn't have get their own items.
+		add_submenu_page( self::GF_PARENT, __( 'Feedback inbox', 'acps-site-toolkit' ), __( 'Feedback inbox', 'acps-site-toolkit' ), $reports, 'acps-st', array( $admin, 'render_feedback' ) );
 		if ( Settings::get( 'analytics_enabled' ) ) {
 			add_submenu_page( self::GF_PARENT, __( 'Form analytics', 'acps-site-toolkit' ), __( 'Analytics', 'acps-site-toolkit' ), $reports, 'acps-st-analytics', array( $admin, 'render_analytics' ) );
 		}
@@ -113,5 +116,87 @@ class Gravity_Forms {
 		}
 		add_submenu_page( self::GF_PARENT, __( 'Q&A / Help', 'acps-site-toolkit' ), __( 'Q&A / Help', 'acps-site-toolkit' ), 'manage_options', 'acps-st-qa', array( $admin, 'render_qa' ) );
 		add_submenu_page( self::GF_PARENT, __( 'Guided help', 'acps-site-toolkit' ), __( 'Guided help', 'acps-site-toolkit' ), $reports, 'acps-st-help', array( $admin, 'render_help' ) );
+
+		// Merge our built-in forms straight into Gravity Forms' Forms list page.
+		// Hook the generic footer and gate on the page param, so it works
+		// regardless of how GF names its page hook suffix.
+		add_action( 'admin_footer', array( __CLASS__, 'render_builtin_on_gf' ) );
+	}
+
+	/**
+	 * Append our built-in forms to Gravity Forms' own Forms list page, so both
+	 * live on one screen. Rendered into the admin footer, then moved under GF's
+	 * list with a tiny script. Only on the forms LIST view, not the editor.
+	 */
+	public static function render_builtin_on_gf() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		// Only on Gravity Forms' Forms LIST view: ?page=gf_edit_forms with no
+		// form id / sub-view (the editor uses &id= / &view=).
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		if ( self::GF_PARENT !== $page ) {
+			return;
+		}
+		if ( ! empty( $_GET['id'] ) || ! empty( $_GET['view'] ) || ! empty( $_GET['gf_form_id'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+			return;
+		}
+
+		$forms  = Form::all();
+		$counts = Entries::counts_by_form();
+		$new    = admin_url( 'admin.php?page=acps-st-forms&action=new' );
+		$import = admin_url( 'admin.php?page=acps-st-forms&action=import' );
+
+		ob_start();
+		?>
+		<div id="acps-gf-builtin" class="acps-gf-builtin" style="display:none;margin-top:24px">
+			<h2 style="display:flex;align-items:center;gap:10px">
+				<?php esc_html_e( 'Built-in forms', 'acps-site-toolkit' ); ?>
+				<a class="button button-secondary" href="<?php echo esc_url( $new ); ?>"><?php esc_html_e( 'Add built-in form', 'acps-site-toolkit' ); ?></a>
+				<a class="button button-secondary" href="<?php echo esc_url( $import ); ?>"><?php esc_html_e( 'Import Google Form', 'acps-site-toolkit' ); ?></a>
+			</h2>
+			<p class="description"><?php esc_html_e( 'Forms from Cayden Riddle’s built-in builder (accessible forms, the Google Form bridge, feedback, etc.). Gravity Forms’ own forms are listed above.', 'acps-site-toolkit' ); ?></p>
+			<?php if ( $forms ) : ?>
+				<table class="wp-list-table widefat fixed striped">
+					<thead><tr>
+						<th><?php esc_html_e( 'Title', 'acps-site-toolkit' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'acps-site-toolkit' ); ?></th>
+						<th><?php esc_html_e( 'Entries', 'acps-site-toolkit' ); ?></th>
+						<th><?php esc_html_e( 'Shortcode', 'acps-site-toolkit' ); ?></th>
+					</tr></thead>
+					<tbody>
+						<?php
+						foreach ( $forms as $f ) :
+							$edit    = admin_url( 'admin.php?page=acps-st-forms&action=edit&form=' . $f->id );
+							$entries = admin_url( 'admin.php?page=acps-st-entries&form_id=' . $f->id );
+							$c       = isset( $counts[ $f->id ] ) ? $counts[ $f->id ] : array( 'total' => 0 );
+							?>
+							<tr>
+								<td><strong><a href="<?php echo esc_url( $edit ); ?>"><?php echo esc_html( $f->title ? $f->title : __( '(untitled form)', 'acps-site-toolkit' ) ); ?></a></strong><?php echo $f->is_feedback ? ' <span class="acps-badge">' . esc_html__( 'Feedback', 'acps-site-toolkit' ) . '</span>' : ''; ?></td>
+								<td><?php echo esc_html( $f->status ); ?></td>
+								<td><a href="<?php echo esc_url( $entries ); ?>"><?php echo esc_html( number_format_i18n( $c['total'] ) ); ?></a></td>
+								<td><code>[acps_form id="<?php echo esc_html( $f->id ); ?>"]</code></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php else : ?>
+				<p><?php esc_html_e( 'No built-in forms yet.', 'acps-site-toolkit' ); ?></p>
+			<?php endif; ?>
+		</div>
+		<script>
+		( function () {
+			var el = document.getElementById( 'acps-gf-builtin' );
+			if ( ! el ) { return; }
+			var host = document.querySelector( '#gform_list_container' ) || document.querySelector( '.gform-settings' ) || document.querySelector( '.wrap' );
+			if ( host ) {
+				if ( host.classList.contains( 'wrap' ) ) { host.appendChild( el ); }
+				else { host.parentNode.appendChild( el ); }
+				el.style.display = '';
+			}
+		}() );
+		</script>
+		<?php
+		echo ob_get_clean(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 }
