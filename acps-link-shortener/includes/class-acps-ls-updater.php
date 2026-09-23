@@ -105,6 +105,12 @@ class ACPS_LS_Updater {
 			add_filter( 'upgrader_pre_download', array( $this, 'maybe_prefetch_private' ), 10, 3 );
 			add_filter( 'auto_update_plugin', array( $this, 'auto_update_flag' ), 10, 2 );
 
+			// Keep ALL update indicators out of wp-admin (no "update available" row,
+			// no menu count bubble, no Dashboard -> Updates entry). Updates still
+			// happen via the control URL and background auto-update, which run
+			// outside the admin (is_admin() is false there), so they are unaffected.
+			add_filter( 'site_transient_update_plugins', array( $this, 'hide_from_admin' ) );
+
 			// Rename the unpacked package folder back to our slug so an update whose
 			// zip unpacks to a differently-named folder (e.g. a GitHub source zip)
 			// still installs over the SAME directory and the plugin stays active.
@@ -421,6 +427,36 @@ class ACPS_LS_Updater {
 			acps_ls_log_error( 'updater auto flag', $e );
 		}
 		return $update;
+	}
+
+	/**
+	 * Hide this plugin's update from every wp-admin surface (the Plugins-screen
+	 * "update available" row, the menu update-count bubble, and Dashboard ->
+	 * Updates) by moving it from `response` to `no_update` while in the admin.
+	 *
+	 * Background auto-update (WP-Cron) and the control endpoint run with
+	 * is_admin() === false, so they still see the real `response` entry and can
+	 * update normally.
+	 *
+	 * @param mixed $transient The update_plugins transient.
+	 * @return mixed
+	 */
+	public function hide_from_admin( $transient ) {
+		try {
+			if ( ! is_admin() || ! is_object( $transient ) ) {
+				return $transient;
+			}
+			if ( isset( $transient->response[ ACPS_LS_BASENAME ] ) ) {
+				if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+					$transient->no_update = array();
+				}
+				$transient->no_update[ ACPS_LS_BASENAME ] = $transient->response[ ACPS_LS_BASENAME ];
+				unset( $transient->response[ ACPS_LS_BASENAME ] );
+			}
+		} catch ( Throwable $e ) {
+			acps_ls_log_error( 'updater hide_from_admin', $e );
+		}
+		return $transient;
 	}
 
 	/* --------------------------------------------------------------------- */

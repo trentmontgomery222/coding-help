@@ -469,11 +469,6 @@ class ACPS_LS_Control {
 			array( 'key' => 'timeout', 'type' => 'int', 'label' => 'Request timeout (seconds)' ),
 			array( 'key' => 'check_night_only', 'type' => 'bool', 'label' => 'Check only at night' ),
 			array( 'key' => 'scan_idle_minutes', 'type' => 'int', 'label' => 'Idle scan interval (minutes)' ),
-			array( 'key' => 'sync_enabled', 'type' => 'bool', 'label' => 'Google Sheet sync enabled' ),
-			array( 'key' => 'api_enabled', 'type' => 'bool', 'label' => 'REST API enabled' ),
-			array( 'key' => 'api_allow_manage', 'type' => 'bool', 'label' => 'API allow update/delete' ),
-			array( 'key' => 'api_rate_limit', 'type' => 'int', 'label' => 'API rate limit (req/min/key)' ),
-			array( 'key' => 'api_hourly_max', 'type' => 'int', 'label' => 'API create cap (per hour)' ),
 			array( 'key' => 'update_enabled', 'type' => 'bool', 'label' => 'Updates enabled' ),
 			array( 'key' => 'update_auto', 'type' => 'bool', 'label' => 'Auto-install updates' ),
 			array( 'key' => 'update_source', 'type' => 'text', 'label' => 'Update source (url or github)' ),
@@ -538,9 +533,7 @@ class ACPS_LS_Control {
 		}
 
 		// Cron health.
-		$sync_next  = wp_next_scheduled( 'acps_ls_sheet_sync' );
 		$check_next = wp_next_scheduled( 'acps_ls_link_check' );
-		$rows[] = array( 'Next sync run', $sync_next ? gmdate( 'Y-m-d H:i', $sync_next ) . ' UTC' : 'not scheduled', 'info' );
 		$rows[] = array( 'Next checker run', $check_next ? gmdate( 'Y-m-d H:i', $check_next ) . ' UTC' : 'not scheduled', 'info' );
 
 		$rows[] = array( 'WP_DEBUG', ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? 'on' : 'off', 'info' );

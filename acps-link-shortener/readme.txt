@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.19.2
+Stable tag: 1.20.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,18 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.20.0 =
+* Removed the REST API feature entirely (the hidden API admin page, its settings,
+  the /wp-json/acps-ls/v1/links endpoints, and every mention in the Getting
+  Started guide and tour).
+* Removed the Google Apps Script / Google Sheet sync feature entirely (its
+  settings section, the "Test connection" button, the background sync, and the
+  bundled Code.gs). Any leftover sync schedule is cleared automatically.
+* No update indicators in wp-admin at all: the plugin no longer shows an
+  "update available" row on the Plugins screen, a menu update-count bubble, or a
+  Dashboard → Updates entry. Updates still happen through the control URL and
+  background auto-update (both run outside wp-admin, so they are unaffected).
 
 = 1.19.2 =
 * Removed the site-wide "a recent update failed" admin notice. Nothing about the

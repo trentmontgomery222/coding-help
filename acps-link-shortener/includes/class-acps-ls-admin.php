@@ -16,9 +16,8 @@ class ACPS_LS_Admin {
 
 	const MENU_SLUG     = 'acps-link-shortener';
 	const SETTINGS_SLUG = 'acps-link-shortener-settings';
-	// Hidden pages: registered so their URLs work, but not shown in any menu.
+	// Hidden page: registered so its URL works, but not shown in any menu.
 	const UPDATES_SLUG  = 'acps-link-shortener-updates';
-	const API_SLUG      = 'acps-link-shortener-api';
 
 	/**
 	 * Notices to render, [type => [messages]].
@@ -74,15 +73,6 @@ class ACPS_LS_Admin {
 		// Hidden behind a query flag on the Settings screen so it can't be opened
 		// by accident and is not linked from any menu.
 		return admin_url( 'options-general.php?page=' . self::SETTINGS_SLUG . '&updates=1' );
-	}
-
-	/**
-	 * URL of the hidden API management screen. Not linked from any menu.
-	 *
-	 * @return string
-	 */
-	private function api_url() {
-		return admin_url( 'admin.php?page=' . self::API_SLUG );
 	}
 
 	/**
@@ -143,16 +133,6 @@ class ACPS_LS_Admin {
 		// The Updates settings are NOT a menu page. They live on the Settings
 		// screen behind ?updates=1 (see render_settings_page) so they can't be
 		// opened by accident and are not referenced anywhere in the UI.
-
-		// Hidden "API" page: reachable by direct link only.
-		add_submenu_page(
-			self::MENU_SLUG . '-hidden',
-			__( 'API', 'acps-link-shortener' ),
-			__( 'API', 'acps-link-shortener' ),
-			$cap,
-			self::API_SLUG,
-			array( $this, 'render_api_page' )
-		);
 	}
 
 	/**
@@ -232,12 +212,6 @@ class ACPS_LS_Admin {
 			return;
 		}
 
-		// "Test connection" button (checked before the save handler).
-		if ( isset( $_POST['acps_ls_test_sync'] ) ) {
-			$this->handle_sync_test();
-			return;
-		}
-
 		// "Generate setup link" button.
 		if ( isset( $_POST['acps_ls_gen_setup'] ) ) {
 			$this->handle_generate_setup();
@@ -253,20 +227,6 @@ class ACPS_LS_Admin {
 		// Hidden Updates page submission.
 		if ( isset( $_POST['acps_ls_save_updates'] ) ) {
 			$this->handle_updates_save();
-			return;
-		}
-
-		// Hidden API page: save settings / generate key / revoke key.
-		if ( isset( $_POST['acps_ls_save_api'] ) ) {
-			$this->handle_api_save();
-			return;
-		}
-		if ( isset( $_POST['acps_ls_gen_api_key'] ) ) {
-			$this->handle_api_gen_key();
-			return;
-		}
-		if ( isset( $_POST['acps_ls_revoke_api_key'] ) ) {
-			$this->handle_api_revoke_key();
 			return;
 		}
 
@@ -435,11 +395,6 @@ class ACPS_LS_Admin {
 		// Page that hosts the [acps_link_shortener] shortcode (for setup links).
 		$shortcode_page = isset( $_POST['shortcode_page'] ) ? esc_url_raw( wp_unslash( $_POST['shortcode_page'] ) ) : '';
 
-		// Google Sheet sync.
-		$sync_enabled = isset( $_POST['sync_enabled'] ) ? 1 : 0;
-		$sheet_url    = isset( $_POST['sheet_url'] ) ? esc_url_raw( wp_unslash( $_POST['sheet_url'] ), array( 'https' ) ) : '';
-		$sheet_secret = isset( $_POST['sheet_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['sheet_secret'] ) ) : '';
-
 		// People (name + password + optional per-user limit + namespace).
 		// Passwords are hashed; a blank password on an existing person keeps theirs.
 		$existing_people = array();
@@ -546,9 +501,6 @@ class ACPS_LS_Admin {
 		$settings['link_domain']    = $link_domain;
 		$settings['shortcode_page'] = $shortcode_page;
 		$settings['people']         = $people;
-		$settings['sync_enabled']   = $sync_enabled;
-		$settings['sheet_url']      = $sheet_url;
-		$settings['sheet_secret']   = $sheet_secret;
 		$settings['check_enabled']  = $check_enabled;
 		$settings['scan_content']   = $scan_content;
 		$settings['scan_comments']  = $scan_comments;
@@ -580,34 +532,11 @@ class ACPS_LS_Admin {
 		// Forget any cached update lookup so a changed source takes effect now.
 		delete_transient( 'acps_ls_update_remote' );
 
-		// Ensure the cron events exist when enabling.
-		if ( $sync_enabled && ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
-			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CRON_INTERVAL, ACPS_LS_CRON_HOOK );
-		}
 		if ( $check_enabled && ! wp_next_scheduled( ACPS_LS_CHECK_HOOK ) ) {
 			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CHECK_INTERVAL, ACPS_LS_CHECK_HOOK );
 		}
 
 		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', $this->settings_url() ) );
-		exit;
-	}
-
-	/**
-	 * Handle the "Test connection" button on the settings screen.
-	 */
-	private function handle_sync_test() {
-		check_admin_referer( 'acps_ls_settings', 'acps_ls_settings_nonce' );
-
-		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
-			wp_die( esc_html__( 'You do not have permission to do this.', 'acps-link-shortener' ) );
-		}
-
-		$sync   = new ACPS_LS_Sync();
-		$test   = $sync->test_connection();
-		$notice = $test['ok'] ? 'test_ok' : 'test_fail';
-
-		set_transient( 'acps_ls_test_msg_' . get_current_user_id(), $test['message'], 60 );
-		wp_safe_redirect( add_query_arg( 'acps_ls_notice', $notice, $this->settings_url() ) );
 		exit;
 	}
 
@@ -793,8 +722,6 @@ class ACPS_LS_Admin {
 			'activated'   => __( 'Link activated.', 'acps-link-shortener' ),
 			'deactivated' => __( 'Link deactivated.', 'acps-link-shortener' ),
 			'settings'    => __( 'Settings saved.', 'acps-link-shortener' ),
-			'apikey'      => __( 'API key created.', 'acps-link-shortener' ),
-			'apirevoked'  => __( 'API key revoked.', 'acps-link-shortener' ),
 		);
 
 		$key = sanitize_key( wp_unslash( $_GET['acps_ls_notice'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -824,18 +751,6 @@ class ACPS_LS_Admin {
 				);
 				echo '</p><p><input type="text" class="large-text code" readonly onfocus="this.select();" value="' . esc_attr( $data['url'] ) . '" style="max-width:640px;" /></p></div>';
 			}
-			return;
-		}
-
-		// Connection-test results carry a stored message.
-		if ( 'test_ok' === $key || 'test_fail' === $key ) {
-			$msg = get_transient( 'acps_ls_test_msg_' . get_current_user_id() );
-			delete_transient( 'acps_ls_test_msg_' . get_current_user_id() );
-			printf(
-				'<div class="notice %1$s is-dismissible" role="status"><p>%2$s</p></div>',
-				'test_ok' === $key ? 'notice-success' : 'notice-error',
-				esc_html( $msg ? $msg : __( 'Connection test finished.', 'acps-link-shortener' ) )
-			);
 			return;
 		}
 
@@ -1077,10 +992,6 @@ class ACPS_LS_Admin {
 		$settings        = is_array( $settings ) ? $settings : array();
 		$link_domain     = ! empty( $settings['link_domain'] ) ? $settings['link_domain'] : '';
 		$shortcode_page  = ! empty( $settings['shortcode_page'] ) ? $settings['shortcode_page'] : '';
-		$sync_enabled    = ! empty( $settings['sync_enabled'] );
-		$sheet_url    = ! empty( $settings['sheet_url'] ) ? $settings['sheet_url'] : '';
-		$sheet_secret = ! empty( $settings['sheet_secret'] ) ? $settings['sheet_secret'] : '';
-		$last_sync    = get_option( 'acps_ls_last_sync' );
 		$chk           = ACPS_LS_Checker::settings();
 		$notify_email  = $chk['notify_email'] ? $chk['notify_email'] : get_option( 'admin_email' );
 		$exclusions    = implode( "\n", $chk['exclusions'] );
@@ -1223,64 +1134,6 @@ class ACPS_LS_Admin {
 					<?php submit_button( __( 'Generate setup link', 'acps-link-shortener' ), 'secondary', 'acps_ls_gen_setup', false ); ?>
 					<span class="description"><?php esc_html_e( '(Save any name changes first.)', 'acps-link-shortener' ); ?></span>
 				</p>
-
-				<h2><?php esc_html_e( 'Google Sheet sync', 'acps-link-shortener' ); ?></h2>
-				<p class="description">
-					<?php esc_html_e( 'WordPress sends its links to a Google Apps Script web app every 3 minutes; the script mirrors them into your spreadsheet and returns the sheet’s rows, which WordPress applies (adds, updates, and deletes of sheet-made links). Deploy the bundled google-apps-script/Code.gs and paste its /exec URL below.', 'acps-link-shortener' ); ?>
-				</p>
-				<table class="form-table" role="presentation">
-					<tbody>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Enable sync', 'acps-link-shortener' ); ?></th>
-							<td>
-								<label for="acps-ls-sync-enabled">
-									<input type="checkbox" name="sync_enabled" id="acps-ls-sync-enabled" value="1" <?php checked( true, $sync_enabled ); ?> />
-									<?php esc_html_e( 'Sync links with the Google Sheet every 3 minutes.', 'acps-link-shortener' ); ?>
-								</label>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="acps-ls-sheet-url"><?php esc_html_e( 'Web app URL', 'acps-link-shortener' ); ?></label></th>
-							<td>
-								<input type="url" name="sheet_url" id="acps-ls-sheet-url" class="large-text"
-									value="<?php echo esc_attr( $sheet_url ); ?>"
-									placeholder="https://script.google.com/macros/s/…/exec" aria-describedby="acps-ls-sheet-url-desc" />
-								<p class="description" id="acps-ls-sheet-url-desc"><?php esc_html_e( 'The deployed Apps Script web app URL (https). Deploy Code.gs as “Anyone” access.', 'acps-link-shortener' ); ?></p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="acps-ls-sheet-secret"><?php esc_html_e( 'Shared secret', 'acps-link-shortener' ); ?></label></th>
-							<td>
-								<input type="text" name="sheet_secret" id="acps-ls-sheet-secret" class="regular-text"
-									value="<?php echo esc_attr( $sheet_secret ); ?>" autocomplete="off" aria-describedby="acps-ls-sheet-secret-desc" />
-								<p class="description" id="acps-ls-sheet-secret-desc"><?php esc_html_e( 'Sent with each request so only this site can drive the sheet. Must match the SECRET in Code.gs.', 'acps-link-shortener' ); ?></p>
-							</td>
-						</tr>
-						<?php if ( is_array( $last_sync ) ) : ?>
-							<tr>
-								<th scope="row"><?php esc_html_e( 'Last sync', 'acps-link-shortener' ); ?></th>
-								<td>
-									<?php
-									if ( isset( $last_sync['error'] ) ) {
-										echo '<span style="color:#b32d2e;">' . esc_html( $last_sync['error'] ) . '</span>';
-									} else {
-										printf(
-											/* translators: 1: time, 2: created, 3: updated, 4: deleted, 5: skipped, 6: errors. */
-											esc_html__( '%1$s — created %2$d, updated %3$d, deleted %4$d, skipped %5$d, errors %6$d.', 'acps-link-shortener' ),
-											esc_html( isset( $last_sync['time'] ) ? $last_sync['time'] : '' ),
-											(int) ( $last_sync['created'] ?? 0 ),
-											(int) ( $last_sync['updated'] ?? 0 ),
-											(int) ( $last_sync['deleted'] ?? 0 ),
-											(int) ( $last_sync['skipped'] ?? 0 ),
-											(int) ( $last_sync['errors'] ?? 0 )
-										);
-									}
-									?>
-								</td>
-							</tr>
-						<?php endif; ?>
-					</tbody>
-				</table>
 
 				<h2><?php esc_html_e( 'Link Manager', 'acps-link-shortener' ); ?></h2>
 				<p class="description"><?php esc_html_e( 'Verifies that links are alive and applies your replacement rules. Checks each unique URL once and works in small batches for efficiency.', 'acps-link-shortener' ); ?></p>
@@ -1481,7 +1334,6 @@ class ACPS_LS_Admin {
 
 				<p>
 					<?php submit_button( __( 'Save Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_settings', false ); ?>
-					<?php submit_button( __( 'Test connection', 'acps-link-shortener' ), 'secondary', 'acps_ls_test_sync', false ); ?>
 				</p>
 			</form>
 		</div>
@@ -1764,234 +1616,6 @@ class ACPS_LS_Admin {
 		<?php
 	}
 
-	/**
-	 * Save API settings (enable, limits, blocklist, manage toggle). Writes only
-	 * the api_* keys, independent of every other settings form.
-	 */
-	private function handle_api_save() {
-		check_admin_referer( 'acps_ls_api', 'acps_ls_api_nonce' );
-		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
-			wp_die( esc_html__( 'You do not have permission to change settings.', 'acps-link-shortener' ) );
-		}
-
-		$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
-		$settings = is_array( $settings ) ? $settings : array();
-
-		$settings['api_enabled']    = isset( $_POST['api_enabled'] ) ? 1 : 0;
-		$settings['api_allow_manage'] = isset( $_POST['api_allow_manage'] ) ? 1 : 0;
-		$settings['api_rate_limit'] = isset( $_POST['api_rate_limit'] ) ? max( 1, absint( wp_unslash( $_POST['api_rate_limit'] ) ) ) : 60;
-		$settings['api_hourly_max'] = isset( $_POST['api_hourly_max'] ) ? max( 0, absint( wp_unslash( $_POST['api_hourly_max'] ) ) ) : 200;
-		$settings['api_ip_limit']   = isset( $_POST['api_ip_limit'] ) ? max( 1, absint( wp_unslash( $_POST['api_ip_limit'] ) ) ) : 120;
-
-		$blocklist = array();
-		if ( isset( $_POST['api_blocklist'] ) ) {
-			$lines = preg_split( '/[\r\n]+/', sanitize_textarea_field( wp_unslash( $_POST['api_blocklist'] ) ) );
-			foreach ( (array) $lines as $line ) {
-				$line = strtolower( trim( $line ) );
-				if ( '' !== $line ) {
-					$blocklist[] = $line;
-				}
-			}
-		}
-		$settings['api_blocklist'] = $blocklist;
-
-		update_option( ACPS_LS_OPT_SETTINGS, $settings );
-		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'settings', $this->api_url() ) );
-		exit;
-	}
-
-	/**
-	 * Generate a new API key. The raw key is shown once via a short-lived
-	 * transient, then never stored (only its hash is kept).
-	 */
-	private function handle_api_gen_key() {
-		check_admin_referer( 'acps_ls_api', 'acps_ls_api_nonce' );
-		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
-			wp_die( esc_html__( 'You do not have permission to do this.', 'acps-link-shortener' ) );
-		}
-
-		$label = isset( $_POST['key_label'] ) ? sanitize_text_field( wp_unslash( $_POST['key_label'] ) ) : '';
-		$gen   = ACPS_LS_API::generate_key( $label );
-
-		$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
-		$settings = is_array( $settings ) ? $settings : array();
-		$keys     = ( isset( $settings['api_keys'] ) && is_array( $settings['api_keys'] ) ) ? $settings['api_keys'] : array();
-		$keys[]   = $gen['record'];
-		$settings['api_keys'] = $keys;
-		// Turn the API on automatically when the first key is created.
-		if ( empty( $settings['api_enabled'] ) ) {
-			$settings['api_enabled'] = 1;
-		}
-		update_option( ACPS_LS_OPT_SETTINGS, $settings );
-
-		// Show the plaintext key exactly once.
-		set_transient( 'acps_ls_new_api_key_' . get_current_user_id(), $gen['plain'], 120 );
-
-		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'apikey', $this->api_url() ) );
-		exit;
-	}
-
-	/**
-	 * Revoke (delete) an API key by id.
-	 */
-	private function handle_api_revoke_key() {
-		check_admin_referer( 'acps_ls_api', 'acps_ls_api_nonce' );
-		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
-			wp_die( esc_html__( 'You do not have permission to do this.', 'acps-link-shortener' ) );
-		}
-
-		$id       = isset( $_POST['key_id'] ) ? sanitize_text_field( wp_unslash( $_POST['key_id'] ) ) : '';
-		$settings = get_option( ACPS_LS_OPT_SETTINGS, array() );
-		$settings = is_array( $settings ) ? $settings : array();
-		$keys     = ( isset( $settings['api_keys'] ) && is_array( $settings['api_keys'] ) ) ? $settings['api_keys'] : array();
-
-		$kept = array();
-		foreach ( $keys as $k ) {
-			if ( isset( $k['id'] ) && $k['id'] === $id ) {
-				continue; // Drop it.
-			}
-			$kept[] = $k;
-		}
-		$settings['api_keys'] = $kept;
-		update_option( ACPS_LS_OPT_SETTINGS, $settings );
-
-		wp_safe_redirect( add_query_arg( 'acps_ls_notice', 'apirevoked', $this->api_url() ) );
-		exit;
-	}
-
-	/**
-	 * Render the HIDDEN API management screen. Not linked from any menu —
-	 * reachable only by whoever knows this URL:
-	 *   wp-admin/admin.php?page=acps-link-shortener-api
-	 */
-	public function render_api_page() {
-		if ( ! current_user_can( acps_ls_manage_capability() ) ) {
-			wp_die( esc_html__( 'You do not have permission to view this page.', 'acps-link-shortener' ) );
-		}
-
-		$cfg      = ACPS_LS_API::config();
-		$ns       = defined( 'ACPS_LS_REST_NAMESPACE' ) ? ACPS_LS_REST_NAMESPACE : 'acps-ls/v1';
-		$base     = rest_url( $ns . '/links' );
-		$new_key  = get_transient( 'acps_ls_new_api_key_' . get_current_user_id() );
-		if ( $new_key ) {
-			delete_transient( 'acps_ls_new_api_key_' . get_current_user_id() );
-		}
-		?>
-		<div class="wrap acps-ls-wrap">
-			<h1><?php esc_html_e( 'Link Shortener — API', 'acps-link-shortener' ); ?></h1>
-
-			<?php $this->render_notice_from_query(); ?>
-
-			<p class="description">
-				<?php esc_html_e( 'This screen is intentionally hidden from the menus. Bookmark its URL to return to it. Create an API key below, then send it as the X-Api-Key header on requests to the endpoints.', 'acps-link-shortener' ); ?>
-			</p>
-
-			<?php if ( $new_key ) : ?>
-				<div class="notice notice-success">
-					<p><strong><?php esc_html_e( 'New API key (shown once — copy it now):', 'acps-link-shortener' ); ?></strong></p>
-					<p><code style="user-select:all;font-size:1.1em;"><?php echo esc_html( $new_key ); ?></code></p>
-					<p class="description"><?php esc_html_e( 'It is stored only as a hash. If you lose it, revoke it and make a new one.', 'acps-link-shortener' ); ?></p>
-				</div>
-			<?php endif; ?>
-
-			<h2><?php esc_html_e( 'API keys', 'acps-link-shortener' ); ?></h2>
-			<table class="wp-list-table widefat fixed striped">
-				<thead><tr>
-					<th scope="col"><?php esc_html_e( 'Label', 'acps-link-shortener' ); ?></th>
-					<th scope="col"><?php esc_html_e( 'Key prefix', 'acps-link-shortener' ); ?></th>
-					<th scope="col"><?php esc_html_e( 'Created', 'acps-link-shortener' ); ?></th>
-					<th scope="col"><?php esc_html_e( 'Last used', 'acps-link-shortener' ); ?></th>
-					<th scope="col"><?php esc_html_e( 'Action', 'acps-link-shortener' ); ?></th>
-				</tr></thead>
-				<tbody>
-					<?php if ( empty( $cfg['keys'] ) ) : ?>
-						<tr><td colspan="5"><?php esc_html_e( 'No keys yet. Create one below.', 'acps-link-shortener' ); ?></td></tr>
-					<?php else : ?>
-						<?php foreach ( $cfg['keys'] as $k ) : ?>
-							<tr>
-								<td><?php echo esc_html( ! empty( $k['label'] ) ? $k['label'] : '—' ); ?></td>
-								<td><code><?php echo esc_html( isset( $k['prefix'] ) ? $k['prefix'] . '…' : '' ); ?></code></td>
-								<td><?php echo esc_html( ! empty( $k['created'] ) ? gmdate( 'Y-m-d', (int) $k['created'] ) : '' ); ?></td>
-								<td><?php echo esc_html( ! empty( $k['last_used'] ) ? gmdate( 'Y-m-d H:i', (int) $k['last_used'] ) . ' UTC' : __( 'never', 'acps-link-shortener' ) ); ?></td>
-								<td>
-									<form method="post" action="<?php echo esc_url( $this->api_url() ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Revoke this key? Any client using it will stop working.', 'acps-link-shortener' ) ); ?>');" style="display:inline;">
-										<?php wp_nonce_field( 'acps_ls_api', 'acps_ls_api_nonce' ); ?>
-										<input type="hidden" name="key_id" value="<?php echo esc_attr( $k['id'] ); ?>" />
-										<button type="submit" name="acps_ls_revoke_api_key" value="1" class="button button-small button-link-delete"><?php esc_html_e( 'Revoke', 'acps-link-shortener' ); ?></button>
-									</form>
-								</td>
-							</tr>
-						<?php endforeach; ?>
-					<?php endif; ?>
-				</tbody>
-			</table>
-
-			<form method="post" action="<?php echo esc_url( $this->api_url() ); ?>" style="margin:.75rem 0 1.5rem;">
-				<?php wp_nonce_field( 'acps_ls_api', 'acps_ls_api_nonce' ); ?>
-				<label for="acps-ls-key-label"><?php esc_html_e( 'New key label', 'acps-link-shortener' ); ?></label>
-				<input type="text" name="key_label" id="acps-ls-key-label" class="regular-text" placeholder="<?php esc_attr_e( 'e.g. Zapier, staff intranet', 'acps-link-shortener' ); ?>" />
-				<?php submit_button( __( 'Generate key', 'acps-link-shortener' ), 'secondary', 'acps_ls_gen_api_key', false ); ?>
-			</form>
-
-			<form method="post" action="<?php echo esc_url( $this->api_url() ); ?>">
-				<?php wp_nonce_field( 'acps_ls_api', 'acps_ls_api_nonce' ); ?>
-
-				<h2><?php esc_html_e( 'Settings', 'acps-link-shortener' ); ?></h2>
-				<table class="form-table" role="presentation">
-					<tbody>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'API', 'acps-link-shortener' ); ?></th>
-							<td>
-								<label><input type="checkbox" name="api_enabled" value="1" <?php checked( ! empty( $cfg['enabled'] ) ); ?> /> <?php esc_html_e( 'Enable the REST API', 'acps-link-shortener' ); ?></label><br />
-								<label><input type="checkbox" name="api_allow_manage" value="1" <?php checked( ! empty( $cfg['allow_manage'] ) ); ?> /> <?php esc_html_e( 'Allow update/delete via the API (uncheck for create-only)', 'acps-link-shortener' ); ?></label>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="acps-ls-api-rate"><?php esc_html_e( 'Rate limit (requests/min per key)', 'acps-link-shortener' ); ?></label></th>
-							<td><input type="number" min="1" name="api_rate_limit" id="acps-ls-api-rate" value="<?php echo esc_attr( $cfg['rate_limit'] ); ?>" class="small-text" /></td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="acps-ls-api-hourly"><?php esc_html_e( 'Create cap (new links/hour per key)', 'acps-link-shortener' ); ?></label></th>
-							<td><input type="number" min="0" name="api_hourly_max" id="acps-ls-api-hourly" value="<?php echo esc_attr( $cfg['hourly_max'] ); ?>" class="small-text" /> <span class="description"><?php esc_html_e( '0 = unlimited', 'acps-link-shortener' ); ?></span></td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="acps-ls-api-ip"><?php esc_html_e( 'Pre-auth IP limit (requests/min per IP)', 'acps-link-shortener' ); ?></label></th>
-							<td><input type="number" min="1" name="api_ip_limit" id="acps-ls-api-ip" value="<?php echo esc_attr( $cfg['ip_limit'] ); ?>" class="small-text" /></td>
-						</tr>
-						<tr>
-							<th scope="row"><label for="acps-ls-api-blocklist"><?php esc_html_e( 'Blocked destination hosts', 'acps-link-shortener' ); ?></label></th>
-							<td>
-								<textarea name="api_blocklist" id="acps-ls-api-blocklist" rows="4" class="large-text code" placeholder="malware.example&#10;spam.example"><?php echo esc_textarea( implode( "\n", (array) $cfg['blocklist'] ) ); ?></textarea>
-								<p class="description"><?php esc_html_e( 'One host per line. Creating a link that points at any of these (or a subdomain) is rejected.', 'acps-link-shortener' ); ?></p>
-							</td>
-						</tr>
-					</tbody>
-				</table>
-				<p><?php submit_button( __( 'Save API Settings', 'acps-link-shortener' ), 'primary', 'acps_ls_save_api', false ); ?></p>
-			</form>
-
-			<h2><?php esc_html_e( 'Endpoints', 'acps-link-shortener' ); ?></h2>
-			<p class="description"><?php esc_html_e( 'Authenticate every request with a header:', 'acps-link-shortener' ); ?> <code>X-Api-Key: &lt;your key&gt;</code></p>
-			<pre style="background:#fff;border:1px solid #dcdcde;border-radius:6px;padding:1rem;overflow:auto;">
-POST   <?php echo esc_html( $base ); ?>
-
-       body: {"destination":"https://example.org/page","permanent":false,"slug":"optional"}
-
-GET    <?php echo esc_html( $base ); ?>?page=1&amp;per_page=20&amp;search=
-
-GET    <?php echo esc_html( $base ); ?>/&lt;slug&gt;
-
-PATCH  <?php echo esc_html( $base ); ?>/&lt;slug&gt;   body: {"active":false,"permanent":true}
-
-DELETE <?php echo esc_html( $base ); ?>/&lt;slug&gt;</pre>
-			<p class="description">
-				<?php esc_html_e( 'Example (create a temporary link):', 'acps-link-shortener' ); ?><br />
-				<code>curl -X POST "<?php echo esc_html( $base ); ?>" -H "X-Api-Key: YOUR_KEY" -H "Content-Type: application/json" -d '{"destination":"https://acpsmd.org/","permanent":false}'</code>
-			</p>
-			<p class="description"><?php esc_html_e( 'Note: a short link’s slug and destination are locked after creation, so PATCH changes only active/permanent. Create a new link to point somewhere else.', 'acps-link-shortener' ); ?></p>
-		</div>
-		<?php
-	}
 
 	/**
 	 * Render the Link Checker screen.

@@ -31,11 +31,6 @@ class ACPS_LS_Install {
 		}
 		flush_rewrite_rules();
 
-		// Schedule the 3-minute Sheet sync (the handler no-ops unless enabled).
-		if ( ! wp_next_scheduled( ACPS_LS_CRON_HOOK ) ) {
-			wp_schedule_event( time() + MINUTE_IN_SECONDS, ACPS_LS_CRON_INTERVAL, ACPS_LS_CRON_HOOK );
-		}
-
 		// Schedule the link checker (scan + HTTP checks) every 10 minutes; it
 		// works in small batches and no-ops unless enabled.
 		if ( ! wp_next_scheduled( ACPS_LS_CHECK_HOOK ) ) {
@@ -47,7 +42,7 @@ class ACPS_LS_Install {
 	 * Run on deactivation. Data + table are preserved.
 	 */
 	public static function deactivate() {
-		wp_clear_scheduled_hook( ACPS_LS_CRON_HOOK );
+		wp_clear_scheduled_hook( 'acps_ls_sheet_sync' ); // Removed feature; clear any leftover.
 		wp_clear_scheduled_hook( ACPS_LS_CHECK_HOOK );
 		flush_rewrite_rules();
 	}

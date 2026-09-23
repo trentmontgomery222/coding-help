@@ -61,7 +61,6 @@ class ACPS_LS_Help {
 			'acps-link-shortener-add'          => 'add',
 			'acps-link-shortener-settings'     => 'settings',
 			'acps-link-shortener-checker'      => 'checker',
-			'acps-link-shortener-api'          => 'api',
 		);
 		return isset( $map[ $page ] ) ? $map[ $page ] : '';
 	}
@@ -120,7 +119,6 @@ class ACPS_LS_Help {
 		$add_url      = admin_url( 'admin.php?page=acps-link-shortener-add' );
 		$settings_url = admin_url( 'options-general.php?page=acps-link-shortener-settings' );
 		$checker_url  = admin_url( 'admin.php?page=acps-link-shortener-checker' );
-		$api_url      = admin_url( 'admin.php?page=acps-link-shortener-api' );
 		$help_url     = admin_url( 'admin.php?page=' . self::HELP_SLUG );
 
 		return array(
@@ -173,14 +171,6 @@ class ACPS_LS_Help {
 					array( 'target' => '.subsubsub', 'title' => __( 'Filter tabs', 'acps-link-shortener' ), 'html' => __( 'Click <strong>Broken</strong> to see only links that need attention. Each broken row shows how long it has been broken.', 'acps-link-shortener' ) ),
 				),
 			),
-			array(
-				'key'   => 'api',
-				'url'   => $api_url,
-				'label' => __( 'API (advanced)', 'acps-link-shortener' ),
-				'steps' => array(
-					array( 'target' => '#acps-ls-key-label', 'title' => __( 'Make an API key', 'acps-link-shortener' ), 'html' => __( 'Advanced: to create links from another program, generate a key here and send it as the <code>X-Api-Key</code> header. Skip this if you don\'t need it.', 'acps-link-shortener' ) ),
-				),
-			),
 		);
 	}
 
@@ -205,7 +195,6 @@ class ACPS_LS_Help {
 				'add'      => __( 'Paste the long URL into Destination, pick a short ending in Slug, keep Active checked, and click Create Link. A link\'s slug and destination are locked after creation.', 'acps-link-shortener' ),
 				'settings' => __( 'Optional: a custom short domain, staff accounts for the front-end form, Google Sheet sync, and the link checker schedule.', 'acps-link-shortener' ),
 				'checker'  => __( 'The Link Manager checks that your links still work. Use the tabs to see Broken ones; each broken row shows how long it has been broken.', 'acps-link-shortener' ),
-				'api'      => __( 'Advanced: a REST API so other programs can create/manage links with an API key. Manage keys and limits here.', 'acps-link-shortener' ),
 			);
 			if ( empty( $map[ $key ] ) ) {
 				return;
@@ -285,7 +274,6 @@ class ACPS_LS_Help {
 		$add_url      = admin_url( 'admin.php?page=acps-link-shortener-add' );
 		$settings_url = admin_url( 'options-general.php?page=acps-link-shortener-settings' );
 		$checker_url  = admin_url( 'admin.php?page=acps-link-shortener-checker' );
-		$api_url      = admin_url( 'admin.php?page=acps-link-shortener-api' );
 		require ACPS_LS_PATH . 'includes/views/help-page.php';
 	}
 }

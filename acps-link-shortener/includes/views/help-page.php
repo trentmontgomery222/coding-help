@@ -2,7 +2,7 @@
 /**
  * Getting Started hub view. Rendered by ACPS_LS_Help::render_page().
  *
- * Available vars: $add_url, $settings_url, $checker_url, $api_url.
+ * Available vars: $add_url, $settings_url, $checker_url.
  *
  * @package ACPS_Link_Shortener
  */
@@ -109,20 +109,6 @@ $acps_ls_short_example = trailingslashit( acps_ls_link_base() ) . 'open-house';
 			?></li>
 			<li><?php esc_html_e( 'Staff visit that page, sign in, and create/manage their own links — no admin access needed.', 'acps-link-shortener' ); ?></li>
 		</ol>
-	</div>
-
-	<!-- API -->
-	<h2 class="acps-ls-h2"><?php esc_html_e( 'Create links from another program (advanced)', 'acps-link-shortener' ); ?></h2>
-	<div class="acps-ls-panel">
-		<p><?php
-			/* translators: %s: API page link. */
-			printf( wp_kses_post( __( 'Open the hidden %s screen, generate an API key, then send it as a header. Example:', 'acps-link-shortener' ) ), '<a href="' . esc_url( $api_url ) . '">' . esc_html__( 'API', 'acps-link-shortener' ) . '</a>' );
-		?></p>
-		<pre class="acps-ls-code">curl -X POST "<?php echo esc_html( rest_url( 'acps-ls/v1/links' ) ); ?>" \
-  -H "X-Api-Key: YOUR_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"destination":"https://acpsmd.org/","permanent":false}'</pre>
-		<p class="description"><?php esc_html_e( 'It has API keys (passwords), rate limits, and anti-spam built in. See the API screen for all endpoints.', 'acps-link-shortener' ); ?></p>
 	</div>
 
 	<!-- FAQ -->

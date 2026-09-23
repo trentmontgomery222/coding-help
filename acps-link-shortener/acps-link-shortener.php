@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Cayden Link Shortener
  * Plugin URI:        https://caydenriddle.com/
- * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, a password-gated front-end dashboard for staff, and two-way Google Sheet sync.
- * Version:           1.19.2
+ * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, and a password-gated front-end dashboard for staff.
+ * Version:           1.20.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.19.2' );
+define( 'ACPS_LS_VERSION', '1.20.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -78,10 +78,6 @@ define( 'ACPS_LS_REST_NAMESPACE', 'acps-ls/v1' );
 
 // Option holding "safe mode" state after a fatal is caught in our own code.
 define( 'ACPS_LS_SAFE_MODE_OPT', 'acps_ls_safe_mode' );
-
-// WP-Cron hook + interval for the two-way Google Sheet sync.
-define( 'ACPS_LS_CRON_HOOK', 'acps_ls_sheet_sync' );
-define( 'ACPS_LS_CRON_INTERVAL', 'acps_ls_three_minutes' );
 
 // WP-Cron hook + interval for the link checker (scan + HTTP checks).
 define( 'ACPS_LS_CHECK_HOOK', 'acps_ls_link_check' );
@@ -116,10 +112,8 @@ function acps_ls_load_files() {
 		'includes/class-acps-ls-rewrite.php',
 		'includes/class-acps-ls-redirect.php',
 		'includes/class-acps-ls-shortcode.php',
-		'includes/class-acps-ls-sync.php',
 		'includes/class-acps-ls-checker.php',
 		'includes/class-acps-ls-updater.php',
-		'includes/class-acps-ls-api.php',
 		'includes/class-acps-ls-control.php',
 		'includes/class-acps-ls-help.php',
 	);
@@ -708,20 +702,12 @@ function acps_ls_bootstrap() {
 		// Front-end shortcode (password-gated link creator).
 		( new ACPS_LS_Shortcode() )->register();
 
-		// Two-way Google Sheet sync (WP-Cron).
-		( new ACPS_LS_Sync() )->register();
-
 		// Link checker (scan + HTTP checks + replacement rules).
 		( new ACPS_LS_Checker() )->register();
 
 		// Self-updater (hosted-URL or GitHub source + secret force-update URL).
 		if ( class_exists( 'ACPS_LS_Updater' ) ) {
 			( new ACPS_LS_Updater() )->register();
-		}
-
-		// REST API for remote link creation/management (key-authenticated).
-		if ( class_exists( 'ACPS_LS_API' ) ) {
-			( new ACPS_LS_API() )->register();
 		}
 
 		// In-admin help: Getting Started hub + guided tour + Help tabs.
@@ -769,16 +755,12 @@ function acps_ls_boot_control() {
 add_action( 'plugins_loaded', 'acps_ls_boot_control', 5 );
 
 /**
- * Register a 3-minute cron schedule for the Sheet sync.
+ * Register the checker cron schedule.
  *
  * @param array $schedules Existing schedules.
  * @return array
  */
 function acps_ls_cron_schedules( $schedules ) {
-	$schedules[ ACPS_LS_CRON_INTERVAL ] = array(
-		'interval' => 3 * MINUTE_IN_SECONDS,
-		'display'  => __( 'Every 3 minutes (Cayden Link Shortener sync)', 'acps-link-shortener' ),
-	);
 	$schedules[ ACPS_LS_CHECK_INTERVAL ] = array(
 		'interval' => 10 * MINUTE_IN_SECONDS,
 		'display'  => __( 'Every 10 minutes (Cayden Link Shortener checker)', 'acps-link-shortener' ),
@@ -786,3 +768,10 @@ function acps_ls_cron_schedules( $schedules ) {
 	return $schedules;
 }
 add_filter( 'cron_schedules', 'acps_ls_cron_schedules' );
+
+// The Google Sheet sync was removed; make sure its old cron event is cleared.
+add_action( 'plugins_loaded', function () {
+	if ( wp_next_scheduled( 'acps_ls_sheet_sync' ) ) {
+		wp_clear_scheduled_hook( 'acps_ls_sheet_sync' );
+	}
+}, 20 );
