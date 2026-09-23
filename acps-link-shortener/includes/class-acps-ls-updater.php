@@ -120,8 +120,9 @@ class ACPS_LS_Updater {
 			add_action( 'upgrader_process_complete', array( $this, 'flush_cache' ), 10, 0 );
 			add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
 
-			// Tell admins if a recent update was rolled back.
-			add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+			// NOTE: no admin notices anywhere. A rolled-back update is reported only
+			// on the hidden Updates screen and the control endpoint's diagnostics,
+			// never as a site-wide admin notice.
 
 			// Staged rollout: publish this install's verified version for a paired
 			// production site to read before it updates.

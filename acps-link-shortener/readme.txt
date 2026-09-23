@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.19.1
+Stable tag: 1.19.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,11 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.19.2 =
+* Removed the site-wide "a recent update failed" admin notice. Nothing about the
+  update system appears anywhere in wp-admin now — a rolled-back update is shown
+  only on the hidden Updates screen (and the control endpoint diagnostics).
 
 = 1.19.1 =
 * The remote control/update URL now uses the parameter you chose:

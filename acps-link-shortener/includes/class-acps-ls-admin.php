@@ -1578,6 +1578,22 @@ class ACPS_LS_Admin {
 				<?php esc_html_e( 'This screen is intentionally hidden. Reach it by adding &updates=1 to the Settings screen address. Bookmark it to return.', 'acps-link-shortener' ); ?>
 			</p>
 
+			<?php
+			// A rolled-back update is reported ONLY here (never as a site-wide notice).
+			$acps_ls_failed = get_option( 'acps_ls_update_failed' );
+			if ( is_array( $acps_ls_failed ) ) :
+				?>
+				<div class="notice notice-warning inline"><p>
+					<?php
+					printf(
+						/* translators: %s: date/time. */
+						esc_html__( 'A recent update failed its load test and was kept disabled to protect the site. %s', 'acps-link-shortener' ),
+						esc_html( isset( $acps_ls_failed['when'] ) ? $acps_ls_failed['when'] : '' )
+					);
+					?>
+				</p></div>
+			<?php endif; ?>
+
 			<form method="post" action="<?php echo esc_url( $this->updates_url() ); ?>">
 				<?php wp_nonce_field( 'acps_ls_updates', 'acps_ls_updates_nonce' ); ?>
 
