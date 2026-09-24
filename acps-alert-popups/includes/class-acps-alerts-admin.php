@@ -46,7 +46,6 @@ class ACPS_Alerts_Admin {
 		ACPS_Alerts_Failsafe::action( 'add_meta_boxes', array( $this, 'register_meta_box' ), 'admin/metabox' );
 		ACPS_Alerts_Failsafe::action( 'save_post', array( $this, 'save_meta_box' ), 'admin/save-post', 10, 2 );
 		ACPS_Alerts_Failsafe::action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 'admin/assets' );
-		ACPS_Alerts_Failsafe::action( 'admin_notices', array( $this, 'render_requirement_notice' ), 'admin/notice' );
 		ACPS_Alerts_Failsafe::filter(
 			'plugin_action_links_' . plugin_basename( ACPS_ALERTS_FILE ),
 			array( $this, 'plugin_action_links' ),
@@ -156,10 +155,10 @@ class ACPS_Alerts_Admin {
 			$html = ACPS_Alerts_Failsafe::capture( array( $this, $method ), array(), 'admin/screen-' . $method );
 
 			if ( '' === trim( $html ) ) {
-				echo '<div class="wrap"><h1>' . esc_html__( 'Site Alerts', 'acps-alert-popups' ) . '</h1>';
-				echo '<div class="notice notice-error"><p>'
-					. esc_html__( 'This screen could not be drawn. The rest of the site is unaffected — check the console or the error log for details.', 'acps-alert-popups' )
-					. '</p></div></div>';
+				// No failure notice on screen, by design: the broken screen just
+				// stays empty until fixed. The failure is in the problem log and
+				// the remote console.
+				echo '<div class="wrap"><h1>' . esc_html__( 'Site Alerts', 'acps-alert-popups' ) . '</h1></div>';
 
 				return;
 			}
@@ -187,30 +186,6 @@ class ACPS_Alerts_Admin {
 		);
 
 		return $links;
-	}
-
-	/**
-	 * Warns when Beaver Builder or its popups cannot be found.
-	 *
-	 * @return void
-	 */
-	public function render_requirement_notice() {
-		if ( ! current_user_can( self::capability() ) || ACPS_Alerts_Source::is_ready() ) {
-			return;
-		}
-
-		$screen = get_current_screen();
-
-		if ( $screen && false === strpos( (string) $screen->id, self::MENU_SLUG ) && 'plugins' !== $screen->id ) {
-			return;
-		}
-
-		$message = __( 'ACPS Alert Popups could not register its alert post type. Try deactivating and reactivating the plugin.', 'acps-alert-popups' );
-		?>
-		<div class="notice notice-warning">
-			<p><?php echo esc_html( $message ); ?></p>
-		</div>
-		<?php
 	}
 
 	/**
@@ -759,19 +734,9 @@ class ACPS_Alerts_Admin {
 			'record-deleted' => __( 'Archive record deleted.', 'acps-alert-popups' ),
 		);
 
-		$errors = array(
-			'post-nocurrent' => __( 'There is no Current Alert to post to yet. Reactivate the plugin if the two alerts were never created.', 'acps-alert-popups' ),
-		);
-
-		if ( isset( $errors[ $message ] ) ) {
-			?>
-			<div class="notice notice-error is-dismissible">
-				<p><?php echo esc_html( $errors[ $message ] ); ?></p>
-			</div>
-			<?php
-			return;
-		}
-
+		// Failures (such as a Current Alert that could not be created) are not
+		// announced on screen, by design: they are in the problem log and the
+		// remote console. Only ordinary confirmations are shown here.
 		if ( ! isset( $messages[ $message ] ) ) {
 			return;
 		}
@@ -840,9 +805,7 @@ class ACPS_Alerts_Admin {
 			<?php $this->render_message(); ?>
 
 			<?php if ( ! $alert ) : ?>
-				<div class="notice notice-error inline">
-					<p><?php esc_html_e( 'There is no Current Alert yet. Reactivate the plugin to create it.', 'acps-alert-popups' ); ?></p>
-				</div>
+				<?php // Could not be created: the form simply is not drawn (no failure notice on screen). ?>
 			<?php else : ?>
 				<p class="description">
 					<?php esc_html_e( 'Set the level, header and message, then post. The popup and the status page update together and the alert goes live straight away.', 'acps-alert-popups' ); ?>
@@ -946,9 +909,7 @@ class ACPS_Alerts_Admin {
 				<p class="description"><?php esc_html_e( 'The resting state, shown on the status page whenever no alert is live.', 'acps-alert-popups' ); ?></p>
 
 				<?php if ( ! $normal ) : ?>
-					<div class="notice notice-error inline">
-						<p><?php esc_html_e( 'The Normal Alert does not exist yet. Reactivate the plugin to create it.', 'acps-alert-popups' ); ?></p>
-					</div>
+					<?php // Could not be created: this part simply is not drawn (no failure notice on screen). ?>
 				<?php else : ?>
 					<table class="form-table" role="presentation">
 						<tr>
@@ -1087,12 +1048,12 @@ class ACPS_Alerts_Admin {
 			</p>
 
 			<?php if ( empty( $popups ) ) : ?>
-				<div class="acps-empty">
-					<h2><?php esc_html_e( 'Setting up', 'acps-alert-popups' ); ?></h2>
-					<p><?php esc_html_e( 'This site has exactly two alerts: the Current Alert, which is the one you switch on and edit, and the Normal Alert, which is the resting state. They are created automatically — if you are seeing this, they have not been created yet.', 'acps-alert-popups' ); ?></p>
-					<p><?php esc_html_e( 'Deactivate and reactivate the plugin to create them.', 'acps-alert-popups' ); ?></p>
-					<p><a class="button" href="<?php echo esc_url( admin_url( 'plugins.php' ) ); ?>"><?php esc_html_e( 'Open Plugins', 'acps-alert-popups' ); ?></a></p>
-				</div>
+				<?php
+				// Both alerts are created automatically on every request, so an
+				// empty list only means creating them failed. That is not
+				// announced on screen (it is in the problem log and the remote
+				// console); the list is simply empty until it is fixed.
+				?>
 			<?php else : ?>
 				<table class="wp-list-table widefat fixed striped acps-alerts-table">
 					<thead>
@@ -1443,13 +1404,6 @@ class ACPS_Alerts_Admin {
 								<p class="description">
 									<?php esc_html_e( 'Status updates set to come down automatically are archived at this time each day, in your site timezone. An update posted after the cut-off runs until the following day.', 'acps-alert-popups' ); ?>
 								</p>
-							</td>
-						</tr>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Alerts per page view', 'acps-alert-popups' ); ?></th>
-							<td>
-								<input type="number" class="small-text" name="acps_settings[max_concurrent]" value="<?php echo esc_attr( $settings['max_concurrent'] ); ?>" min="1" max="5" />
-								<p class="description"><?php esc_html_e( 'Only the Current Alert ever pops up, so in practice this is one.', 'acps-alert-popups' ); ?></p>
 							</td>
 						</tr>
 						<tr>

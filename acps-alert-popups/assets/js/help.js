@@ -107,8 +107,14 @@
 	 * Boots the enhancements.
 	 */
 	function start() {
-		buildContents();
-		buildSearch();
+		// Each enhancement is optional; one failing never takes the other down.
+		try {
+			buildContents();
+		} catch ( e ) {}
+
+		try {
+			buildSearch();
+		} catch ( e ) {}
 	}
 
 	if ( 'loading' === document.readyState ) {

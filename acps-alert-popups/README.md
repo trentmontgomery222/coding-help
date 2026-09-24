@@ -103,9 +103,9 @@ read against its background there, override it just for that placement:
 ### The status page banner
 
 The banner is **the heading and the message, and nothing else** — no badge, no
-level word, no directive. The level shows in the banner's own colour. Anywhere
-those pieces are wanted, `[schoolstatus]` places them, which is what that
-shortcode is for.
+level word, no directive, and it does not change colour with the level. Anywhere
+those pieces are wanted, `[schoolstatus]`, `[statusdot]` or the Status Dot module
+places them, which is what they are for.
 
 On the card treatment the banner is **one surface**: the heading and the message
 sit on the same background, in the same colour. That is two settings on the
@@ -122,7 +122,7 @@ does not read against what it is sitting on. Neither failed loudly — the messa
 simply was not there, and you had to select it with the mouse to prove it
 existed. One pair cannot be got half right.
 
-**The status level is the severity** — there is no second setting. Pick it on the Current Alert module, Popup tab → *Status level*. It decides four things: the word on the banner, the colour of the banner, the colour of the popup's stripe, and the coloured badge drawn above the heading. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. Its size, shape and colour are written into the markup rather than a stylesheet, because the badge prints on pages that may carry neither the board stylesheet nor a freshly rebuilt module stylesheet — an SVG with no dimensions falls back to 300&times;150. Badge size is a setting on both modules (56px on the popup, 64px on the banner). There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
+**The status level is the severity** — there is no second setting. Pick it when posting (Site Alerts → Post an Alert) or on the Current Alert module, Popup tab → *Status level*. It decides the level word and the coloured badge the popup can show above its heading, and the colour of any `[statusdot]` or `[schoolstatus]` placed on a page. It does not change the colour of the status page banner. Each level ships an inline SVG glyph, so the badge cannot 404 and takes the level's colour without a second request. Its size, shape and colour are written into the markup rather than a stylesheet, because the badge prints on pages that may carry neither the board stylesheet nor a freshly rebuilt module stylesheet — an SVG with no dimensions falls back to 300&times;150. Badge size is a setting on the Current Alert module (56px by default). There is no separate severity and no priority — with one Current Alert there is nothing to rank it against.
 
 ### The heading is your title
 
@@ -187,20 +187,40 @@ page — it can never inject markup or script.
 
 ### It cannot take the site down
 
-Every file the plugin loads is guarded: a missing or unreadable file makes that
-feature quietly unavailable instead of raising an error, and a fatal caught
-anywhere in the plugin's own files pauses the whole plugin for the rest of that
-request and the requests that follow. There is **no on-screen notice** that this
-happened and no mention of "safe mode" anywhere in the admin — the broken part
-simply stops working until it is fixed, and the rest of the site is unaffected.
+Every callback the plugin hands WordPress goes through the failsafe — hooks,
+filters, shortcodes, the REST endpoint, the admin screens, and the Beaver
+Builder module templates and layout-save handlers (which Beaver Builder calls
+directly, so each one guards itself). A throw in any of them is caught and
+recorded, and that one part draws nothing; a part that keeps failing is
+switched off for ten minutes by its circuit breaker. A test scans the source so
+a hook registered without the failsafe fails the build.
 
-The single signal is an email, sent once per episode to the operator
-(`cayden@reactallegany.org`, filterable via `acps_alerts_safe_mode_email`), with
-the site URL, the wp-admin login link, the remote console URL and the caught
-error. Sending the mail is best-effort: a host with no mail simply sends
-nothing, and nothing in the notification path can itself break a request.
-Deactivating and reactivating the plugin, or installing a fixed update, clears
-the pause.
+Beyond that, three things put the whole plugin on pause:
+
+| What happened | What the plugin does |
+| --- | --- |
+| A required file is **missing** (a half-finished upload) | Stays dormant; **not** paused, so it comes back by itself the moment the file is restored |
+| A file is present but **does not parse** | Pauses (safe mode) |
+| A **fatal error** in the plugin's own files | Pauses (safe mode) from the next request on |
+
+There is **no on-screen notice** of any of it and no mention of "safe mode"
+anywhere in the admin — the broken part simply stops working until it is fixed,
+and the rest of the site is unaffected. A fatal in the theme or another plugin
+is never blamed on this one.
+
+The single signal is an email to the operator (`cayden@reactallegany.org`,
+filterable via `acps_alerts_safe_mode_email`) with the error or missing files
+and the links needed to deal with it. It is sent **once per episode**, never per
+request. Sending is best-effort: a host with no mail simply sends nothing, and
+nothing in that path can itself break a request.
+
+While paused, ordinary page views don't load the plugin's code at all. The
+pause lifts when:
+
+- **a new version is installed**, by any route. The pause records which version
+  crashed, and different code on disk gets its chance; if it fatals too, it is
+  paused again and a fresh email goes out; or
+- the plugin is deactivated and reactivated in wp-admin.
 
 ### Targeting notes
 

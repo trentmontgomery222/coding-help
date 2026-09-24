@@ -573,10 +573,13 @@
 			start( button.getAttribute( 'data-acps-tour' ), 0 );
 		} );
 
-		// Resume after a cross-screen jump.
-		if ( data.resume && data.resume.tour ) {
-			start( data.resume.tour, parseInt( data.resume.step, 10 ) || 0 );
-		}
+		// Resume after a cross-screen jump. A tour that cannot resume just
+		// does not, rather than throwing into the admin screen.
+		try {
+			if ( data && data.resume && data.resume.tour ) {
+				start( data.resume.tour, parseInt( data.resume.step, 10 ) || 0 );
+			}
+		} catch ( e ) {}
 	}
 
 	window.ACPSAlertsTourApi = {

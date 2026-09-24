@@ -10,8 +10,8 @@
  *
  *   1. File-integrity guard (this class + boot()): before the plugin runs, it
  *      confirms every required file is present. A partial upload or a
- *      half-finished update leaves the plugin dormant with an admin notice
- *      naming the missing files, instead of a "class not found" fatal.
+ *      half-finished update leaves the plugin dormant — silently on screen,
+ *      with one email to the operator — instead of a "class not found" fatal.
  *
  *   2. Guarded callbacks (this class): every hook this plugin registers is
  *      wrapped, so a thrown Error/Exception is caught, recorded, and turned
@@ -24,7 +24,8 @@
  *
  *   4. Boot try/catch + shutdown guard + safe mode (main plugin file): a fatal
  *      that still slips through arms safe mode, so the next request keeps the
- *      site up and the admin gets a Resume control.
+ *      site up. Nothing is shown on screen; the operator is emailed once, and
+ *      the pause lifts on a new version, a console Resume, or reactivation.
  *
  * Everything here is static and dependency-free so it can run even when the
  * rest of the plugin cannot.
@@ -44,6 +45,9 @@ class ACPS_Alerts_Failsafe {
 
 	/** How many problems to keep. */
 	const PROBLEMS_MAX = 30;
+
+	/** Option naming the subsystems whose breakers have tripped. */
+	const TRIPPED_OPTION = 'acps_alerts_tripped';
 
 	/** Failures within the window before a subsystem is switched off. */
 	const BREAKER_LIMIT = 5;
@@ -77,12 +81,6 @@ class ACPS_Alerts_Failsafe {
 	}
 
 	/**
-	 * Files that are nice to have but not fatal if absent. A missing asset
-	 * degrades the look, never the load.
-	 *
-	 * @return string[]
-	 */
-	/**
 	 * A cache-busting version string for one of the plugin's own assets.
 	 *
 	 * The plugin version alone is not enough. A stylesheet edited between two
@@ -109,6 +107,12 @@ class ACPS_Alerts_Failsafe {
 		return ACPS_ALERTS_VERSION;
 	}
 
+	/**
+	 * Files that are nice to have but not fatal if absent. A missing asset
+	 * degrades the look, never the load.
+	 *
+	 * @return string[]
+	 */
 	public static function optional_files() {
 		return array(
 			'assets/css/alerts.css',
@@ -178,26 +182,6 @@ class ACPS_Alerts_Failsafe {
 	 */
 	public static function has_file( $rel ) {
 		return is_readable( ACPS_ALERTS_DIR . ltrim( $rel, '/' ) );
-	}
-
-	/**
-	 * Admin notice naming the missing files.
-	 *
-	 * @param string[] $missing Missing files.
-	 * @return void
-	 */
-	public static function missing_files_notice( $missing ) {
-		if ( ! current_user_can( 'activate_plugins' ) ) {
-			return;
-		}
-
-		echo '<div class="notice notice-error"><p><strong>'
-			. esc_html__( 'ACPS Alert Popups is paused.', 'acps-alert-popups' )
-			. '</strong> '
-			. esc_html__( 'Some of its files are missing, so it stopped loading to keep the site online. Re-upload the plugin to restore it.', 'acps-alert-popups' )
-			. '</p><p><code>'
-			. esc_html( implode( ', ', (array) $missing ) )
-			. '</code></p></div>';
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -364,6 +348,43 @@ class ACPS_Alerts_Failsafe {
 		}
 	}
 
+	/**
+	 * Renders a template file under capture(), with the caller's variables.
+	 *
+	 * For templates that another plugin includes directly — Beaver Builder's
+	 * module frontend.php files — where no hook of ours is on the stack to
+	 * catch a failure. The template calls this on itself as its first line:
+	 *
+	 *     if ( empty( $acps_guarded ) && class_exists( 'ACPS_Alerts_Failsafe' ) ) {
+	 *         echo ACPS_Alerts_Failsafe::render_template( __FILE__, get_defined_vars(), 'module/x' );
+	 *         return;
+	 *     }
+	 *
+	 * The second, guarded include sees $acps_guarded and renders normally; a
+	 * throw anywhere in it discards the half-drawn output and records the
+	 * problem, so the module draws nothing and the page carries on.
+	 *
+	 * @param string $file    Template path.
+	 * @param array  $vars    Variables the template expects ($settings, $id…).
+	 * @param string $context Label.
+	 * @return string
+	 */
+	public static function render_template( $file, array $vars, $context ) {
+		if ( ! is_readable( (string) $file ) ) {
+			return '';
+		}
+
+		return self::capture(
+			function () use ( $file, $vars ) {
+				extract( $vars, EXTR_SKIP ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- The template's own scope, handed back to it.
+				$acps_guarded = true;
+				include $file;
+			},
+			array(),
+			$context
+		);
+	}
+
 	/* ------------------------------------------------------------------ *
 	 * Circuit breakers.
 	 * ------------------------------------------------------------------ */
@@ -379,7 +400,13 @@ class ACPS_Alerts_Failsafe {
 			return false;
 		}
 
-		return (bool) get_transient( 'acps_ap_brk_' . md5( $context ) );
+		// Called before guard()'s try block, so it must not be able to throw —
+		// a broken object-cache backend is exactly when it might.
+		try {
+			return (bool) get_transient( 'acps_ap_brk_' . md5( $context ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
 	}
 
 	/**
@@ -393,6 +420,22 @@ class ACPS_Alerts_Failsafe {
 			return;
 		}
 
+		// This runs inside guard()'s catch block: anything it threw would escape
+		// the very guard that is meant to contain the failure.
+		try {
+			self::count_failure( $context );
+		} catch ( \Throwable $e ) {
+			self::log( 'could not count failure: ' . $e->getMessage(), 'failsafe' );
+		}
+	}
+
+	/**
+	 * The counting behind note_failure().
+	 *
+	 * @param string $context Label.
+	 * @return void
+	 */
+	protected static function count_failure( $context ) {
 		$key   = 'acps_ap_fail_' . md5( $context );
 		$count = (int) get_transient( $key ) + 1;
 
@@ -402,7 +445,43 @@ class ACPS_Alerts_Failsafe {
 			set_transient( 'acps_ap_brk_' . md5( $context ), 1, self::BREAKER_WINDOW );
 			delete_transient( $key );
 			self::record( $context, 'switched off after repeated failures' );
+
+			// Remember the name: the breaker itself is keyed by a hash, which
+			// cannot be read back into "which part is off".
+			$tripped = get_option( self::TRIPPED_OPTION, array() );
+
+			if ( ! is_array( $tripped ) ) {
+				$tripped = array();
+			}
+
+			$tripped[ (string) $context ] = time();
+
+			update_option( self::TRIPPED_OPTION, array_slice( $tripped, -50, null, true ), false );
 		}
+	}
+
+	/**
+	 * Every subsystem currently switched off by its breaker.
+	 *
+	 * @return string[] Context labels.
+	 */
+	public static function tripped_breakers() {
+		$tripped = get_option( self::TRIPPED_OPTION, array() );
+
+		if ( ! is_array( $tripped ) || empty( $tripped ) ) {
+			return array();
+		}
+
+		$out = array();
+
+		foreach ( array_keys( $tripped ) as $context ) {
+			// The name list outlives the breaker; only report what is still off.
+			if ( self::breaker_tripped( (string) $context ) ) {
+				$out[] = (string) $context;
+			}
+		}
+
+		return $out;
 	}
 
 	/**
@@ -413,13 +492,30 @@ class ACPS_Alerts_Failsafe {
 	public static function reset_breakers() {
 		global $wpdb;
 
-		if ( ! isset( $wpdb ) ) {
-			return;
-		}
+		try {
+			// Delete through the transient API too, so a persistent object cache
+			// (where transients never touch the options table) is cleared as well.
+			$tripped = get_option( self::TRIPPED_OPTION, array() );
 
-		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			"DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_acps_ap_brk_%' OR option_name LIKE '_transient_timeout_acps_ap_brk_%' OR option_name LIKE '_transient_acps_ap_fail_%' OR option_name LIKE '_transient_timeout_acps_ap_fail_%'"
-		);
+			if ( is_array( $tripped ) ) {
+				foreach ( array_keys( $tripped ) as $context ) {
+					delete_transient( 'acps_ap_brk_' . md5( (string) $context ) );
+					delete_transient( 'acps_ap_fail_' . md5( (string) $context ) );
+				}
+			}
+
+			delete_option( self::TRIPPED_OPTION );
+
+			if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+				return;
+			}
+
+			$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				"DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_acps_ap_brk_%' OR option_name LIKE '_transient_timeout_acps_ap_brk_%' OR option_name LIKE '_transient_acps_ap_fail_%' OR option_name LIKE '_transient_timeout_acps_ap_fail_%'"
+			);
+		} catch ( \Throwable $e ) {
+			self::log( 'could not reset breakers: ' . $e->getMessage(), 'failsafe' );
+		}
 	}
 
 	/* ------------------------------------------------------------------ *

@@ -9,7 +9,14 @@
 	'use strict';
 
 	var data = window.ACPSAlertsData || {};
-	var alerts = data.alerts || [];
+
+	// A PHP array with gaps in its keys reaches us as an object, not an array,
+	// and an object has no forEach. Take its values either way.
+	var alerts = Array.isArray( data.alerts )
+		? data.alerts
+		: ( data.alerts && 'object' === typeof data.alerts
+			? Object.keys( data.alerts ).map( function ( k ) { return data.alerts[ k ]; } )
+			: [] );
 	var storageKey = 'acps_alert_';
 	var openStack = [];
 	var lastFocused = null;
@@ -550,9 +557,21 @@
 	 * Boots the runtime.
 	 */
 	function start() {
-		bindEvents();
+		// Nothing here may throw into the page: a failure stays inside this
+		// script, and one broken alert never stops the others.
+		try {
+			bindEvents();
+		} catch ( e ) {
+			return;
+		}
 
-		alerts.forEach( schedule );
+		alerts.forEach( function ( alert ) {
+			try {
+				schedule( alert );
+			} catch ( e ) {
+				// This alert just does not show.
+			}
+		} );
 	}
 
 	window.ACPSAlerts = {

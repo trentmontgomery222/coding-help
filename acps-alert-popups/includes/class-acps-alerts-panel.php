@@ -55,7 +55,9 @@ class ACPS_Alerts_Panel {
 	 * @return void
 	 */
 	public function register() {
-		add_action( 'init', array( $this, 'maybe_handle' ), 3 );
+		// Guarded like every other hook: the console runs on a public request,
+		// so nothing it does may be able to fatal the page.
+		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'maybe_handle' ), 'panel/handle', 3 );
 	}
 
 	/**
@@ -71,6 +73,18 @@ class ACPS_Alerts_Panel {
 		$key = trim( (string) ACPS_Alerts_Settings::get( 'console_key' ) );
 
 		return '' !== $key ? $key : trim( (string) ACPS_Alerts_Settings::get( 'update_secret' ) );
+	}
+
+	/**
+	 * The stored safe-mode state, or null when the plugin is not paused.
+	 *
+	 * @return array|null
+	 */
+	public static function safe_mode_state() {
+		$option = defined( 'ACPS_ALERTS_SAFE_MODE_OPT' ) ? ACPS_ALERTS_SAFE_MODE_OPT : 'acps_alerts_safe_mode';
+		$state  = get_option( $option );
+
+		return ( is_array( $state ) && ! empty( $state['time'] ) ) ? $state : null;
 	}
 
 	/**
@@ -177,6 +191,25 @@ class ACPS_Alerts_Panel {
 			ACPS_Alerts_Failsafe::reset_breakers();
 
 			$this->render_console( __( 'Problem log cleared and every switched-off part re-enabled.', 'acps-alert-popups' ), 'ok' );
+
+			return;
+		}
+
+		if ( 'resume' === $action ) {
+			// Lifts safe mode — the console's equivalent of reactivating the
+			// plugin in wp-admin. Not throttled: it changes no setting, and it
+			// widens nothing about this console's own access. If the cause is
+			// not fixed, the next fatal simply pauses the plugin again.
+			$option = defined( 'ACPS_ALERTS_SAFE_MODE_OPT' ) ? ACPS_ALERTS_SAFE_MODE_OPT : 'acps_alerts_safe_mode';
+
+			delete_option( $option );
+			ACPS_Alerts_Failsafe::reset_breakers();
+
+			if ( $this->updater ) {
+				$this->updater->record_health( 'ok', 'Resumed from safe mode via the remote console (' . $ip . ').' );
+			}
+
+			$this->render_console( __( 'Resumed. The plugin runs again from the next request.', 'acps-alert-popups' ), 'ok' );
 
 			return;
 		}
@@ -816,10 +849,6 @@ class ACPS_Alerts_Panel {
 			$out['storage'] = in_array( $storage, array( 'local', 'session', 'cookie' ), true ) ? $storage : $defaults['storage'];
 		}
 
-		if ( isset( $raw['max_concurrent'] ) ) {
-			$out['max_concurrent'] = max( 1, min( 5, absint( $raw['max_concurrent'] ) ) );
-		}
-
 		if ( isset( $raw['z_index'] ) ) {
 			$out['z_index'] = max( 1, absint( $raw['z_index'] ) );
 		}
@@ -857,6 +886,35 @@ class ACPS_Alerts_Panel {
 
 		if ( isset( $raw['update_key'] ) ) {
 			$out['update_key'] = sanitize_text_field( (string) $raw['update_key'] );
+		}
+
+		// Where updates come from, and the staged-rollout role. Credentials (the
+		// GitHub token and the rollout status key) stay wp-admin only: this page
+		// prints its values in plain text, so it must never hold a credential.
+		if ( isset( $raw['update_source'] ) ) {
+			$source               = sanitize_key( (string) $raw['update_source'] );
+			$out['update_source'] = in_array( $source, array( 'manifest', 'github' ), true ) ? $source : $defaults['update_source'];
+		}
+
+		if ( isset( $raw['update_role'] ) ) {
+			$role               = sanitize_key( (string) $raw['update_role'] );
+			$out['update_role'] = in_array( $role, array( 'standalone', 'dev', 'production' ), true ) ? $role : $defaults['update_role'];
+		}
+
+		if ( isset( $raw['gh_owner'] ) ) {
+			$out['gh_owner'] = sanitize_text_field( (string) $raw['gh_owner'] );
+		}
+
+		if ( isset( $raw['gh_repo'] ) ) {
+			$out['gh_repo'] = sanitize_text_field( (string) $raw['gh_repo'] );
+		}
+
+		if ( isset( $raw['gh_asset'] ) ) {
+			$out['gh_asset'] = sanitize_file_name( (string) $raw['gh_asset'] );
+		}
+
+		if ( isset( $raw['verify_status_url'] ) ) {
+			$out['verify_status_url'] = esc_url_raw( trim( (string) $raw['verify_status_url'] ) );
 		}
 
 		return $out;
@@ -918,25 +976,31 @@ class ACPS_Alerts_Panel {
 			);
 		}
 
-		if ( function_exists( 'acps_alerts_is_safe_mode' ) && acps_alerts_is_safe_mode() ) {
+		$safe = self::safe_mode_state();
+
+		if ( $safe ) {
 			$issues[] = array(
 				'level'   => 'error',
-				'message' => __( 'The plugin is in safe mode: it caught a fatal error and is dormant. Resume it from wp-admin once fixed.', 'acps-alert-popups' ),
+				'message' => sprintf(
+					/* translators: 1: time, 2: error message, 3: file:line. */
+					__( 'The plugin is paused (safe mode) since %1$s after a fatal error: %2$s (%3$s). Installing a new version lifts the pause by itself; or press Resume below once the cause is fixed.', 'acps-alert-popups' ),
+					gmdate( 'Y-m-d H:i', (int) $safe['time'] ) . ' UTC',
+					isset( $safe['msg'] ) ? (string) $safe['msg'] : '',
+					( isset( $safe['file'] ) ? str_replace( ABSPATH, '', (string) $safe['file'] ) : '' ) . ':' . ( isset( $safe['line'] ) ? (int) $safe['line'] : 0 )
+				),
 			);
 		}
 
-		// Anything the breakers have switched off after repeated failures.
-		foreach ( array( 'frontend', 'frontend/render', 'frontend/render-one', 'frontend/collect', 'frontend/bb-render', 'builder/register' ) as $context ) {
-			if ( ACPS_Alerts_Failsafe::breaker_tripped( $context ) ) {
-				$issues[] = array(
-					'level'   => 'warn',
-					'message' => sprintf(
-						/* translators: %s: subsystem name. */
-						__( 'Temporarily switched off after repeated failures: %s', 'acps-alert-popups' ),
-						$context
-					),
-				);
-			}
+		// Everything the breakers have switched off after repeated failures.
+		foreach ( ACPS_Alerts_Failsafe::tripped_breakers() as $context ) {
+			$issues[] = array(
+				'level'   => 'warn',
+				'message' => sprintf(
+					/* translators: %s: subsystem name. */
+					__( 'Temporarily switched off after repeated failures: %s', 'acps-alert-popups' ),
+					$context
+				),
+			);
 		}
 
 		if ( is_array( get_option( ACPS_Alerts_Updater::FAILED_OPTION ) ) ) {
@@ -953,7 +1017,7 @@ class ACPS_Alerts_Panel {
 			);
 		}
 
-		if ( '' === trim( (string) ACPS_Alerts_Settings::get( 'update_base' ) ) ) {
+		if ( ! ACPS_Alerts_Updater::source_configured() ) {
 			$issues[] = array(
 				'level'   => 'warn',
 				'message' => __( 'No update source is configured.', 'acps-alert-popups' ),
@@ -1050,6 +1114,11 @@ class ACPS_Alerts_Panel {
 			}
 
 			echo '</ul>';
+		}
+
+		if ( self::safe_mode_state() ) {
+			echo '<form method="post"><input type="hidden" name="acps_console_action" value="resume" />'
+				. '<button type="submit">' . esc_html__( 'Resume (leave safe mode)', 'acps-alert-popups' ) . '</button></form>';
 		}
 
 		// Performance.
@@ -1164,8 +1233,6 @@ class ACPS_Alerts_Panel {
 
 		echo '<label>' . esc_html__( 'Daily cut-off', 'acps-alert-popups' ) . '<br /><input type="time" name="acps_console[archive_time]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'archive_time' ) ) . '"' . $disabled . ' /></label>';
 
-		echo '<label>' . esc_html__( 'Alerts per page view', 'acps-alert-popups' ) . '<br /><input type="number" min="1" max="5" name="acps_console[max_concurrent]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'max_concurrent' ) ) . '"' . $disabled . ' /></label>';
-
 		echo '<label>' . esc_html__( 'z-index', 'acps-alert-popups' ) . '<br /><input type="number" min="1" name="acps_console[z_index]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'z_index' ) ) . '"' . $disabled . ' /></label>';
 
 		echo '<label>' . esc_html__( 'Popup post type (blank to auto-detect)', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_console[popup_post_type]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'popup_post_type' ) ) . '"' . $disabled . ' /></label>';
@@ -1174,16 +1241,31 @@ class ACPS_Alerts_Panel {
 
 		echo '<label class="check"><input type="checkbox" name="acps_console[respect_preview]" value="1" ' . checked( 1, (int) ACPS_Alerts_Settings::get( 'respect_preview' ), false ) . $disabled . ' /> ' . esc_html__( 'Allow editor preview links', 'acps-alert-popups' ) . '</label>';
 
-		echo '<label>' . esc_html__( 'Extra CSS', 'acps-alert-popups' ) . '<br /><textarea name="acps_console[custom_css]" rows="4"' . $disabled . '>' . esc_textarea( (string) ACPS_Alerts_Settings::get( 'custom_css' ) ) . '</textarea></label>';
+		echo '<label>' . esc_html__( 'Main CSS', 'acps-alert-popups' ) . '<br /><textarea name="acps_console[custom_css]" rows="8"' . $disabled . '>' . esc_textarea( (string) ACPS_Alerts_Settings::get( 'custom_css' ) ) . '</textarea></label>';
 
 		echo '<h3>' . esc_html__( 'Update source', 'acps-alert-popups' ) . '</h3>';
 
 		echo '<label class="check"><input type="checkbox" name="acps_console[update_enabled]" value="1" ' . checked( 1, (int) ACPS_Alerts_Settings::get( 'update_enabled' ), false ) . $disabled . ' /> ' . esc_html__( 'Updates enabled', 'acps-alert-popups' ) . '</label>';
 		echo '<label class="check"><input type="checkbox" name="acps_console[update_auto]" value="1" ' . checked( 1, (int) ACPS_Alerts_Settings::get( 'update_auto' ), false ) . $disabled . ' /> ' . esc_html__( 'Install updates automatically', 'acps-alert-popups' ) . '</label>';
 
+		$this->select_field( 'update_source', __( 'Update source', 'acps-alert-popups' ), array(
+			'manifest' => 'manifest URL',
+			'github'   => 'GitHub Releases',
+		), ACPS_Alerts_Settings::get( 'update_source' ), $disabled );
+
+		$this->select_field( 'update_role', __( 'Rollout role', 'acps-alert-popups' ), array(
+			'standalone' => 'standalone',
+			'dev'        => 'dev (verifies first)',
+			'production' => 'production (waits for dev)',
+		), ACPS_Alerts_Settings::get( 'update_role' ), $disabled );
+
 		echo '<label>' . esc_html__( 'Manifest base URL', 'acps-alert-popups' ) . '<br /><input type="url" name="acps_console[update_base]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'update_base' ) ) . '"' . $disabled . ' /></label>';
 		echo '<label>' . esc_html__( 'Plugin path', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_console[update_path]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'update_path' ) ) . '"' . $disabled . ' /></label>';
 		echo '<label>' . esc_html__( 'Key', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_console[update_key]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'update_key' ) ) . '"' . $disabled . ' /></label>';
+		echo '<label>' . esc_html__( 'GitHub owner', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_console[gh_owner]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'gh_owner' ) ) . '"' . $disabled . ' /></label>';
+		echo '<label>' . esc_html__( 'GitHub repository', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_console[gh_repo]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'gh_repo' ) ) . '"' . $disabled . ' /></label>';
+		echo '<label>' . esc_html__( 'GitHub release asset (zip name)', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_console[gh_asset]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'gh_asset' ) ) . '"' . $disabled . ' /></label>';
+		echo '<label>' . esc_html__( 'Dev site status URL (production only)', 'acps-alert-popups' ) . '<br /><input type="url" name="acps_console[verify_status_url]" value="' . esc_attr( ACPS_Alerts_Settings::get( 'verify_status_url' ) ) . '"' . $disabled . ' /></label>';
 
 		if ( ! $locked ) {
 			echo '<p><button type="submit">' . esc_html__( 'Save', 'acps-alert-popups' ) . '</button></p>';

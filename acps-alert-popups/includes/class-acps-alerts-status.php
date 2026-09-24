@@ -1094,6 +1094,34 @@ class ACPS_Alerts_Status {
 	}
 
 	/**
+	 * Records the first time the Current Alert is actually put up.
+	 *
+	 * The setup checklist's last step is "use it once, on a quiet day". Read
+	 * from the live state alone, that step would tick while an alert is up and
+	 * untick the moment it comes down — so the first real use is remembered.
+	 *
+	 * Hooked to both a full save (settings array) and the plain on/off switch
+	 * (a bool), so it takes either.
+	 *
+	 * @param int        $post_id Alert post ID.
+	 * @param array|bool $state   The settings just saved, or the new on/off.
+	 * @return void
+	 */
+	public static function note_first_use( $post_id, $state = array() ) {
+		$on = is_array( $state ) ? ! empty( $state['enabled'] ) : (bool) $state;
+
+		if ( ! $on || get_option( 'acps_alerts_used_once' ) ) {
+			return;
+		}
+
+		if ( class_exists( 'ACPS_Alerts_Post_Type' ) && 'current' !== ACPS_Alerts_Post_Type::role_of( (int) $post_id ) ) {
+			return;
+		}
+
+		update_option( 'acps_alerts_used_once', time(), false );
+	}
+
+	/**
 	 * Rebuilds every cached copy of the site after the status changes.
 	 *
 	 * An alert can appear on any page, so when a new status is posted, taken

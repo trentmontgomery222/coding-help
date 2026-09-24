@@ -138,9 +138,63 @@ if ( ! empty( $GLOBALS['acps_mails'] ) ) {
 acps_alerts_arm_safe_mode( 'A later fatal on the next request', '/x/acps.php', 99 );
 check( 'second arm sends no further email', count( $GLOBALS['acps_mails'] ), 1 );
 
+// ---- the pause records which code crashed ---------------------------------
+check( 'the pause records the crashing version', $GLOBALS['options']['acps_alerts_safe_mode']['version'], ACPS_ALERTS_VERSION );
+
+// ---- missing files: one email per distinct set, never per request ---------
+$GLOBALS['acps_mails'] = array();
+acps_alerts_notify_missing_files( array( 'includes/class-acps-alerts-frontend.php' ) );
+acps_alerts_notify_missing_files( array( 'includes/class-acps-alerts-frontend.php' ) );
+check( 'the same missing file is reported once, not on every request', count( $GLOBALS['acps_mails'] ), 1 );
+
+if ( ! empty( $GLOBALS['acps_mails'] ) ) {
+	$mail = $GLOBALS['acps_mails'][0];
+	check( 'the missing-files email says so in its subject', false !== strpos( $mail['subject'], 'files missing' ), true );
+	check( 'and names the file', false !== strpos( $mail['body'], 'class-acps-alerts-frontend.php' ), true );
+	check( 'and says it recovers by itself once restored', false !== strpos( $mail['body'], 'comes back by itself' ), true );
+}
+
+acps_alerts_notify_missing_files( array( 'includes/class-acps-alerts-status.php' ) );
+check( 'a different breakage is reported afresh', count( $GLOBALS['acps_mails'] ), 2 );
+
+// ---- the safe-mode email names every way out ------------------------------
+$GLOBALS['acps_mails'] = array();
+unset( $GLOBALS['options']['acps_alerts_safe_mode'] );
+acps_alerts_arm_safe_mode( 'boom', '/x/acps.php', 1 );
+check( 'the safe-mode email lists installing a new version as a way out', false !== strpos( $GLOBALS['acps_mails'][0]['body'], 'a new version is installed' ), true );
+check( 'and Resume in the console', false !== strpos( $GLOBALS['acps_mails'][0]['body'], 'Resume' ), true );
+
 // ---- no on-screen safe-mode notice was ever hooked ------------------------
-check( 'no safe-mode admin notice hooked', in_array( 'admin_notices', array_filter( $GLOBALS['acps_hooks'], function ( $h ) { return false; } ), true ), false );
 check( 'safe_mode_notice function removed', function_exists( 'acps_alerts_safe_mode_notice' ), false );
+check( 'the PHP-version notice is gone', function_exists( 'acps_alerts_php_notice' ), false );
+
+// Nothing in wp-admin or on the site may announce a failure, a pause or
+// missing files. Scan every string the plugin can print, outside the two
+// places that are allowed to talk about it: the unlisted console (which only
+// the operator reaches) and the operator email in the main file.
+$acps_dir   = dirname( $acps_plugin_file ) . '/';
+$acps_found = array();
+$acps_it    = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $acps_dir, FilesystemIterator::SKIP_DOTS ) );
+
+foreach ( $acps_it as $acps_f ) {
+	$acps_rel = substr( $acps_f->getPathname(), strlen( $acps_dir ) );
+
+	if ( '.php' !== substr( $acps_rel, -4 ) || in_array( $acps_rel, array( 'includes/class-acps-alerts-panel.php', 'acps-alert-popups.php' ), true ) ) {
+		continue;
+	}
+
+	foreach ( token_get_all( file_get_contents( $acps_f->getPathname() ) ) as $acps_tok ) {
+		if ( ! is_array( $acps_tok ) || ! in_array( $acps_tok[0], array( T_CONSTANT_ENCAPSED_STRING, T_INLINE_HTML, T_ENCAPSED_AND_WHITESPACE ), true ) ) {
+			continue;
+		}
+
+		if ( preg_match( '/safe mode|is paused|could not be drawn|not installed|reactivate the plugin|notice-error|notice-warning|failed its load test/i', $acps_tok[1] ) ) {
+			$acps_found[] = $acps_rel . ':' . $acps_tok[2] . ' ' . trim( substr( $acps_tok[1], 0, 60 ) );
+		}
+	}
+}
+
+check( 'no failure, pause or missing-file notice can be printed anywhere', $acps_found, array() );
 
 // ---- default_css() returns the real plugin CSS ----------------------------
 if ( ! class_exists( 'ACPS_Alerts_Admin', false ) && is_readable( ACPS_ALERTS_DIR . 'includes/class-acps-alerts-admin.php' ) ) {

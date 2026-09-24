@@ -266,6 +266,15 @@ class ACPS_Alerts_Alert {
 		$this->touch();
 
 		$this->settings = null;
+
+		/**
+		 * Fires when an alert is switched on or off on its own, without a full
+		 * save (the list toggle, a restore from the archive).
+		 *
+		 * @param int  $post_id Popup post ID.
+		 * @param bool $enabled Whether it is now on.
+		 */
+		do_action( 'acps_alerts_enabled_changed', $this->get_id(), (bool) $enabled );
 	}
 
 	/**

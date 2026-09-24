@@ -50,8 +50,14 @@ class WP_Error {
 /* ---- the plugin's own classes, stubbed down to what the module touches ---- */
 
 class ACPS_Alerts_Failsafe {
+	// Behaves like the real guard: a throw is contained and the fallback returned.
 	public static function guard( $cb, $args = array(), $ctx = '', $fallback = null ) {
-		return call_user_func_array( $cb, $args );
+		try {
+			return call_user_func_array( $cb, $args );
+		} catch ( \Throwable $e ) {
+			$GLOBALS['guarded'][] = $ctx;
+			return $fallback;
+		}
 	}
 	public static function record( $ctx, $msg ) {}
 }
@@ -105,6 +111,10 @@ class ACPS_Alerts_Alert {
 	public function get( $k, $d = null ) { return array_key_exists( $k, $this->saved ) ? $this->saved[ $k ] : $d; }
 
 	public function save( array $input ) {
+		if ( ! empty( $GLOBALS['save_throws'] ) ) {
+			throw new RuntimeException( 'database went away mid-save' );
+		}
+
 		$this->saves++;
 		$this->saved = $input;
 
@@ -323,6 +333,27 @@ $out = $module->update( settings( array( 'active' => '1', 'heading' => 'Delibera
 
 ok( 'a deliberate post now does write the alert', $alert->saves > 0 );
 check( 'and the switch resets to off, so the next page save is a no-op', $out->active, '0' );
+
+// Beaver Builder calls update() inside the editor's layout save. If writing the
+// alert fails there, the editor's save must still go through: nothing thrown,
+// their settings handed back, and the one-shot switch still reset.
+$GLOBALS['save_throws'] = true;
+$GLOBALS['guarded']     = array();
+$alert                  = new ACPS_Alerts_Alert( 50 );
+$GLOBALS['alert']       = $alert;
+$escaped                = null;
+
+try {
+	$out = $module->update( settings( array( 'active' => '1', 'heading' => 'Save blows up' ) ) );
+} catch ( \Throwable $e ) {
+	$escaped = $e->getMessage();
+}
+
+check( 'a failure while posting never escapes into the layout save', $escaped, null );
+ok( 'the settings still come back to Beaver Builder', is_object( $out ) && 'Save blows up' === $out->heading );
+check( 'and the switch is still reset, so it cannot fire again on the next save', $out->active, '0' );
+ok( 'the failure was contained by the failsafe', in_array( 'alert-popup/update', $GLOBALS['guarded'], true ) );
+$GLOBALS['save_throws'] = false;
 
 /* ---- the status board's two banner treatments ---- */
 

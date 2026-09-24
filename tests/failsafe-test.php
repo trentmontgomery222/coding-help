@@ -10,8 +10,17 @@ define( 'WP_DEBUG', false );
 $GLOBALS['transients'] = array();
 $GLOBALS['options']    = array();
 
-function get_transient( $k ) { return isset( $GLOBALS['transients'][ $k ] ) ? $GLOBALS['transients'][ $k ] : false; }
-function set_transient( $k, $v, $t = 0 ) { $GLOBALS['transients'][ $k ] = $v; return true; }
+// $GLOBALS['cache_broken'] makes the transient API throw, like a persistent
+// object-cache backend that has gone away.
+$GLOBALS['cache_broken'] = false;
+function get_transient( $k ) {
+	if ( $GLOBALS['cache_broken'] ) { throw new RuntimeException( 'cache backend down' ); }
+	return isset( $GLOBALS['transients'][ $k ] ) ? $GLOBALS['transients'][ $k ] : false;
+}
+function set_transient( $k, $v, $t = 0 ) {
+	if ( $GLOBALS['cache_broken'] ) { throw new RuntimeException( 'cache backend down' ); }
+	$GLOBALS['transients'][ $k ] = $v; return true;
+}
 function delete_transient( $k ) { unset( $GLOBALS['transients'][ $k ] ); return true; }
 function get_option( $k, $d = false ) { return isset( $GLOBALS['options'][ $k ] ) ? $GLOBALS['options'][ $k ] : $d; }
 function update_option( $k, $v, $a = null ) { $GLOBALS['options'][ $k ] = $v; return true; }
@@ -99,10 +108,66 @@ $ran = false;
 ACPS_Alerts_Failsafe::guard( function () use ( &$ran ) { $ran = true; return 'x'; }, array(), 'test/brk', 'short' );
 check( 'tripped breaker short-circuits without running the callable', $ran, false );
 
+/* ---- tripped breakers are listed by name ---- */
+check( 'a tripped breaker is listed by name', in_array( 'test/brk', ACPS_Alerts_Failsafe::tripped_breakers(), true ), true );
+check( 'a healthy context is not listed', in_array( 'test/plain', ACPS_Alerts_Failsafe::tripped_breakers(), true ), false );
+
+// Once its breaker lapses, the name is no longer reported.
+unset( $GLOBALS['transients'][ 'acps_ap_brk_' . md5( 'test/brk' ) ] );
+check( 'a lapsed breaker drops off the list', in_array( 'test/brk', ACPS_Alerts_Failsafe::tripped_breakers(), true ), false );
+ACPS_Alerts_Failsafe::reset_breakers();
+check( 'reset forgets every name', ACPS_Alerts_Failsafe::tripped_breakers(), array() );
+
+/* ---- the failsafe itself cannot throw, even when the cache does ---- */
+$GLOBALS['cache_broken'] = true;
+$escaped = null;
+try {
+	$result = ACPS_Alerts_Failsafe::guard( function () { throw new Exception( 'boom' ); }, array(), 'test/cache-down', 'fallback' );
+} catch ( \Throwable $e ) {
+	$escaped = $e->getMessage();
+}
+check( 'guard still contains a failure when the cache backend throws', $escaped, null );
+check( 'and still returns the fallback', isset( $result ) ? $result : 'unset', 'fallback' );
+check( 'breaker_tripped reads as closed when the cache throws', ACPS_Alerts_Failsafe::breaker_tripped( 'test/cache-down' ), false );
+$GLOBALS['cache_broken'] = false;
+
+/* ---- render_template() contains a template that throws ---- */
+$tpl_dir = sys_get_temp_dir() . '/acps-tpl-test';
+@mkdir( $tpl_dir );
+
+// The same self-guarding header the Beaver Builder module templates use.
+$header = "<?php\nif ( empty( \$acps_guarded ) && class_exists( 'ACPS_Alerts_Failsafe' ) ) {\n\techo ACPS_Alerts_Failsafe::render_template( __FILE__, get_defined_vars(), 'test/tpl' );\n\treturn;\n}\n";
+
+file_put_contents( $tpl_dir . '/good.php', $header . "?><p><?php echo \$settings->word; ?></p>\n" );
+file_put_contents( $tpl_dir . '/bad.php', $header . "?><p>half drawn<?php throw new Exception( 'template broke' ); ?></p>\n" );
+
+$settings = (object) array( 'word' => 'hello' );
+
+ob_start();
+include $tpl_dir . '/good.php';
+check( 'a guarded template renders normally with its variables', trim( ob_get_clean() ), '<p>hello</p>' );
+
+$escaped = null;
+ob_start();
+try {
+	include $tpl_dir . '/bad.php';
+} catch ( \Throwable $e ) {
+	$escaped = $e->getMessage();
+}
+$out = ob_get_clean();
+check( 'a throwing template never escapes', $escaped, null );
+check( 'and leaves no half-drawn output behind', $out, '' );
+check( 'render_template of a missing file draws nothing', ACPS_Alerts_Failsafe::render_template( $tpl_dir . '/nope.php', array(), 'test/tpl' ), '' );
+
+unlink( $tpl_dir . '/good.php' );
+unlink( $tpl_dir . '/bad.php' );
+@rmdir( $tpl_dir );
+
 /* ---- problem log ---- */
 $problems = ACPS_Alerts_Failsafe::problems( 50 );
 check( 'problems recorded', count( $problems ) > 0, true );
-check( 'problems newest first', $problems[0]['context'], 'test/brk' );
+// The throwing template above is the most recent problem recorded.
+check( 'problems newest first', $problems[0]['context'], 'test/tpl' );
 ACPS_Alerts_Failsafe::clear_problems();
 check( 'problems cleared', ACPS_Alerts_Failsafe::problems(), array() );
 

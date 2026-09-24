@@ -161,6 +161,22 @@ class ACPS_Alerts_Plugin {
 			array( 'ACPS_Alerts_Status', 'flush_page_caches' ),
 			'plugin/flush-page-caches'
 		);
+
+		// Remember the first real use, for the setup checklist.
+		ACPS_Alerts_Failsafe::action(
+			'acps_alerts_saved',
+			array( 'ACPS_Alerts_Status', 'note_first_use' ),
+			'plugin/first-use',
+			10,
+			2
+		);
+		ACPS_Alerts_Failsafe::action(
+			'acps_alerts_enabled_changed',
+			array( 'ACPS_Alerts_Status', 'note_first_use' ),
+			'plugin/first-use-toggle',
+			10,
+			2
+		);
 	}
 
 	/**

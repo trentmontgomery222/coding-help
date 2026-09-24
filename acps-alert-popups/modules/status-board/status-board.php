@@ -103,49 +103,8 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	}
 
 	/**
-	 * The board's own colour for each level, where one has been picked.
-	 *
-	 * An SRP colour is chosen to read on white. On a dark banner the same
-	 * colour can be nearly invisible, so the board may say what each level
-	 * should look like on it without changing the level anywhere else.
-	 *
-	 * @param object|null $settings Module settings.
-	 * @return array Level key => colour.
-	 */
-	public static function level_overrides( $settings ) {
-		if ( ! is_object( $settings ) ) {
-			return array();
-		}
-
-		$out = array();
-
-		foreach ( self::colourable_levels() as $key => $label ) {
-			$field = 'level_color_' . $key;
-
-			if ( isset( $settings->{$field} ) && '' !== trim( (string) $settings->{$field} ) ) {
-				$out[ $key ] = $settings->{$field};
-			}
-		}
-
-		return $out;
-	}
-
-	/**
-	 * The levels worth offering a colour for: the ones still in the picker.
-	 *
-	 * @return array Level key => label.
-	 */
-	public static function colourable_levels() {
-		return ACPS_Alerts_Status::level_choices();
-	}
-
-	/**
-	 * Inline style for a banner: alignment, plus the SRP colour when the status
-	 * is one of the response actions.
-	 *
-	 * The colour has to be inline rather than in the stylesheet, because it
-	 * comes from the level definition — which a site can change with the
-	 * acps_alerts_status_levels filter.
+	 * Inline style for a banner: its alignment. The banner's colour is the one
+	 * picked in the module and lives in the per-node stylesheet.
 	 *
 	 * @param ACPS_Alerts_Alert|null $alert    Entry, or null for the normal state.
 	 * @param object                 $settings Module settings.
@@ -156,9 +115,10 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 		// and lives in the stylesheet; it no longer changes with the status.
 		unset( $alert );
 
-		$align = isset( $settings->banner_align ) ? $settings->banner_align : 'center';
+		$align = is_object( $settings ) && isset( $settings->banner_align ) ? (string) $settings->banner_align : 'center';
+		$align = in_array( $align, array( 'left', 'center', 'right' ), true ) ? $align : 'center';
 
-		return 'text-align:' . preg_replace( '/[^a-z]/', '', (string) $align ) . ';';
+		return 'text-align:' . $align . ';';
 	}
 
 	/**
@@ -168,10 +128,26 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	 * @return object Settings to store.
 	 */
 	public function update( $settings ) {
-		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) || ! class_exists( 'ACPS_Alerts_Failsafe' ) ) {
 			return $settings;
 		}
 
+		// Beaver Builder calls this on every save of the layout. Whatever goes
+		// wrong in here, the editor's save must still go through with their
+		// settings intact — so the work is guarded and the settings always
+		// come back.
+		ACPS_Alerts_Failsafe::guard( array( $this, 'apply_update' ), array( $settings ), 'status-board/update' );
+
+		return $settings;
+	}
+
+	/**
+	 * The work behind update(), guarded by it.
+	 *
+	 * @param object $settings Submitted module settings.
+	 * @return void
+	 */
+	public function apply_update( $settings ) {
 		// Remember which page carries the board, so the admin can link to it
 		// and the setup checklist knows it has been placed.
 		if ( class_exists( 'FLBuilderModel' ) && method_exists( 'FLBuilderModel', 'get_post_id' ) ) {
@@ -185,12 +161,10 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 		// Only someone who may manage alerts files a record from here, even
 		// though Beaver Builder already gates who can edit the layout.
 		if ( ! current_user_can( ACPS_Alerts_Admin::capability() ) ) {
-			return $settings;
+			return;
 		}
 
 		$this->maybe_add_archive_record( $settings );
-
-		return $settings;
 	}
 
 	/**
@@ -281,7 +255,7 @@ FLBuilder::register_module(
 							'default' => 'card',
 							'options' => array(
 								'card'  => __( 'Card — white, like the popup', 'acps-alert-popups' ),
-								'solid' => __( 'Solid — the whole banner in the level colour', 'acps-alert-popups' ),
+								'solid' => __( 'Solid — the whole banner in the banner colour', 'acps-alert-popups' ),
 							),
 							'help'    => __( 'The banner is the heading and the message, and nothing else, always in the one banner colour set below — it does not change with the status. The card is a rounded panel with a stripe along the top; the solid style is a flat full-width block. For a status dot or the level word, use the [statusdot] or [schoolstatus] shortcode in your content.', 'acps-alert-popups' ),
 						),

@@ -61,10 +61,32 @@ class ACPS_Alert_Popup_Module extends FLBuilderModule {
 	 * @return object Settings to store.
 	 */
 	public function update( $settings ) {
-		if ( ! class_exists( 'ACPS_Alerts_Status' ) || ! class_exists( 'ACPS_Alerts_Alert' ) ) {
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) || ! class_exists( 'ACPS_Alerts_Alert' ) || ! class_exists( 'ACPS_Alerts_Failsafe' ) ) {
 			return $settings;
 		}
 
+		// Beaver Builder calls this on every layout save. Whatever fails in
+		// here, the editor's save must still go through: the work is guarded,
+		// the one-shot switch is always reset, and the settings always return.
+		ACPS_Alerts_Failsafe::guard( array( __CLASS__, 'apply_update' ), array( $settings ), 'alert-popup/update' );
+
+		if ( is_object( $settings ) ) {
+			// Reset the one-shot switch so the same post is not re-applied on
+			// the next layout save, which would clobber anything posted since
+			// from Site Alerts.
+			$settings->active = '0';
+		}
+
+		return $settings;
+	}
+
+	/**
+	 * The work behind update(), guarded by it.
+	 *
+	 * @param object $settings Submitted module settings.
+	 * @return void
+	 */
+	public static function apply_update( $settings ) {
 		// Always worth doing: it costs nothing and keeps the "which page is the
 		// board on" answer correct.
 		self::remember_page();
@@ -90,33 +112,22 @@ class ACPS_Alert_Popup_Module extends FLBuilderModule {
 		$post_now = isset( $settings->active ) && '1' === (string) $settings->active;
 
 		if ( ! $post_now ) {
-			return $settings;
+			return;
 		}
 
 		// Beaver Builder already decides who may edit the layout; this is the
 		// plugin's own check on who may change what the whole site sees.
 		if ( ! current_user_can( ACPS_Alerts_Admin::capability() ) ) {
-			return $settings;
+			return;
 		}
 
 		$alert = ACPS_Alerts_Status::current_alert();
 
 		if ( ! $alert ) {
-			return $settings;
+			return;
 		}
 
-		ACPS_Alerts_Failsafe::guard(
-			array( __CLASS__, 'apply' ),
-			array( $alert, $settings ),
-			'alert-popup/update'
-		);
-
-		// Reset the one-shot switch so the same post is not re-applied on the
-		// next layout save, which would clobber anything posted since from
-		// Site Alerts.
-		$settings->active = '0';
-
-		return $settings;
+		self::apply( $alert, $settings );
 	}
 
 	/**

@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.8.0
+ * Version:           1.9.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.8.0' );
+define( 'ACPS_ALERTS_VERSION', '1.9.0' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -90,28 +90,6 @@ function acps_alerts_duplicate_notice() {
 }
 
 /**
- * Admin notice shown when the host's PHP is too old.
- *
- * @return void
- */
-function acps_alerts_php_notice() {
-	if ( ! current_user_can( 'activate_plugins' ) ) {
-		return;
-	}
-
-	echo '<div class="notice notice-error"><p>'
-		. esc_html(
-			sprintf(
-				/* translators: 1: required PHP version, 2: current PHP version. */
-				__( 'ACPS Alert Popups needs PHP %1$s or newer and is not running. This site has PHP %2$s.', 'acps-alert-popups' ),
-				ACPS_ALERTS_MIN_PHP,
-				PHP_VERSION
-			)
-		)
-		. '</p></div>';
-}
-
-/**
  * Is the plugin held in safe mode (dormant after a caught fatal)?
  *
  * @return bool
@@ -119,7 +97,21 @@ function acps_alerts_php_notice() {
 function acps_alerts_is_safe_mode() {
 	$state = get_option( ACPS_ALERTS_SAFE_MODE_OPT );
 
-	return is_array( $state ) && ! empty( $state['time'] );
+	if ( ! is_array( $state ) || empty( $state['time'] ) ) {
+		return false;
+	}
+
+	// Different code is on disk than the code that crashed — an update was
+	// installed, by any route (Plugins screen, auto-update, the console, or a
+	// re-upload). Give the new code its chance. If it fatals too, the shutdown
+	// guard pauses it again on that first request and a fresh email goes out.
+	if ( ! empty( $state['version'] ) && ACPS_ALERTS_VERSION !== (string) $state['version'] ) {
+		delete_option( ACPS_ALERTS_SAFE_MODE_OPT );
+
+		return false;
+	}
+
+	return true;
 }
 
 /**
@@ -163,9 +155,15 @@ function acps_alerts_notify_safe_mode( array $state ) {
 			}
 		}
 
-		$subject = sprintf( 'ACPS Alert Popups paused (safe mode) on %s', $name ? $name : $site );
+		$missing = ! empty( $state['missing'] ) && is_array( $state['missing'] );
 
-		$body  = "The ACPS Alert Popups plugin caught a fatal error and paused itself to keep the site online.\n\n";
+		$subject = $missing
+			? sprintf( 'ACPS Alert Popups paused (files missing) on %s', $name ? $name : $site )
+			: sprintf( 'ACPS Alert Popups paused (safe mode) on %s', $name ? $name : $site );
+
+		$body  = $missing
+			? "The ACPS Alert Popups plugin found some of its own files missing and paused itself to keep the site online.\n\n"
+			: "The ACPS Alert Popups plugin caught a fatal error and paused itself to keep the site online.\n\n";
 		$body .= 'Site: ' . $site . "\n";
 		$body .= 'wp-admin login: ' . $admin . "\n";
 
@@ -173,10 +171,18 @@ function acps_alerts_notify_safe_mode( array $state ) {
 			$body .= 'Remote status/console: ' . $console . "\n";
 		}
 
-		$body .= "\nError:\n";
-		$body .= '  ' . ( isset( $state['msg'] ) ? $state['msg'] : '' ) . "\n";
-		$body .= '  ' . ( isset( $state['file'] ) ? $state['file'] : '' ) . ':' . ( isset( $state['line'] ) ? $state['line'] : 0 ) . "\n";
-		$body .= "\nThe rest of the site is unaffected. The plugin will stay paused until it is fixed (deactivate and reactivate it, or install a fixed update).\n";
+		if ( $missing ) {
+			$body .= "\nMissing files:\n  " . implode( "\n  ", array_map( 'strval', $state['missing'] ) ) . "\n";
+			$body .= "\nThe rest of the site is unaffected. The plugin comes back by itself as soon as the files are restored (re-upload the plugin).\n";
+		} else {
+			$body .= "\nError:\n";
+			$body .= '  ' . ( isset( $state['msg'] ) ? $state['msg'] : '' ) . "\n";
+			$body .= '  ' . ( isset( $state['file'] ) ? $state['file'] : '' ) . ':' . ( isset( $state['line'] ) ? $state['line'] : 0 ) . "\n";
+			$body .= "\nThe rest of the site is unaffected. The plugin stays paused until one of these:\n";
+			$body .= "  - a new version is installed (any way: Plugins screen, the console's update button, or a re-upload) — it lifts the pause by itself;\n";
+			$body .= "  - Resume is pressed in the remote console;\n";
+			$body .= "  - the plugin is deactivated and reactivated in wp-admin.\n";
+		}
 
 		wp_mail( $to, $subject, $body );
 	} catch ( \Throwable $e ) {
@@ -202,10 +208,13 @@ function acps_alerts_arm_safe_mode( $msg, $file = '', $line = 0 ) {
 			$already = function_exists( 'get_option' ) ? get_option( ACPS_ALERTS_SAFE_MODE_OPT ) : false;
 
 			$state = array(
-				'msg'  => (string) $msg,
-				'file' => (string) $file,
-				'line' => (int) $line,
-				'time' => time(),
+				'msg'     => (string) $msg,
+				'file'    => (string) $file,
+				'line'    => (int) $line,
+				'time'    => time(),
+				// The code that crashed: a different version on disk later means
+				// a fix was installed, which lifts the pause automatically.
+				'version' => ACPS_ALERTS_VERSION,
 			);
 
 			update_option( ACPS_ALERTS_SAFE_MODE_OPT, $state, true );
@@ -258,19 +267,72 @@ function acps_alerts_shutdown_guard() {
 }
 
 /**
- * Clears safe mode (admin action).
+ * Emails the operator once per distinct set of missing required files.
+ *
+ * Missing files do NOT arm safe mode — restoring them brings the plugin back
+ * on the very next request — so this keeps its own "already told" marker,
+ * keyed to exactly which files are missing, to avoid one email per request.
+ *
+ * @param string[] $missing Missing files, relative to the plugin root.
+ * @return void
+ */
+function acps_alerts_notify_missing_files( array $missing ) {
+	try {
+		if ( ! function_exists( 'get_option' ) || ! function_exists( 'update_option' ) ) {
+			return;
+		}
+
+		$sig = md5( implode( '|', $missing ) );
+
+		if ( get_option( 'acps_alerts_missing_notified' ) === $sig ) {
+			return;
+		}
+
+		update_option( 'acps_alerts_missing_notified', $sig, false );
+
+		acps_alerts_notify_safe_mode(
+			array(
+				'missing' => array_values( $missing ),
+				'time'    => time(),
+			)
+		);
+	} catch ( \Throwable $e ) {
+		return; // Non-critical.
+	}
+}
+
+/**
+ * While paused, still answer the remote console — and only the console.
+ *
+ * The safe-mode email links to the console, so it has to work in exactly this
+ * situation. Nothing is loaded unless the request carries the console's query
+ * var, so ordinary page views never touch the paused code at all; the worst a
+ * still-broken file can do is fail the operator's own console request.
  *
  * @return void
  */
-function acps_alerts_resume_from_safe_mode() {
-	if ( ! current_user_can( 'activate_plugins' ) ) {
-		wp_die( esc_html__( 'You do not have permission to do this.', 'acps-alert-popups' ), '', array( 'response' => 403 ) );
+function acps_alerts_boot_console_only() {
+	// Literal on purpose: ACPS_Alerts_Panel::QUERY_VAR is not loaded yet, and
+	// loading it just to read a constant would defeat the point.
+	if ( ! isset( $_GET['acpsupdater'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return;
 	}
 
-	check_admin_referer( 'acps_alerts_resume' );
-	delete_option( ACPS_ALERTS_SAFE_MODE_OPT );
-	wp_safe_redirect( wp_get_referer() ? wp_get_referer() : admin_url() );
-	exit;
+	try {
+		if ( ! acps_alerts_load_files() ) {
+			return;
+		}
+
+		// The updater's hooks are needed for the console's update button: they
+		// tell WordPress where the package is and fix up its folder name.
+		$updater = new ACPS_Alerts_Updater();
+		$panel   = new ACPS_Alerts_Panel( $updater );
+
+		ACPS_Alerts_Failsafe::guard( array( $updater, 'register' ), array(), 'boot/updater' );
+		ACPS_Alerts_Failsafe::guard( array( $panel, 'register' ), array(), 'boot/panel' );
+	} catch ( \Throwable $e ) {
+		return;
+	}
 }
 
 /**
@@ -292,17 +354,32 @@ function acps_alerts_load_files() {
 	$missing = ACPS_Alerts_Failsafe::missing_files();
 
 	if ( ! empty( $missing ) ) {
-		// Stay dormant and silent: no admin notice. The error log is the record,
-		// and the missing piece simply does nothing until the files are restored.
+		// Stay dormant and silent on screen: no admin notice. The operator gets
+		// one email, and the plugin comes back by itself once the files are
+		// restored.
 		if ( function_exists( 'error_log' ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			error_log( '[ACPS Alert Popups] Missing required files — staying dormant: ' . implode( ', ', $missing ) ); // phpcs:ignore
 		}
+
+		acps_alerts_notify_missing_files( $missing );
 
 		return false;
 	}
 
 	foreach ( ACPS_Alerts_Failsafe::required_files() as $rel ) {
+		// Re-checked per file: the list was verified a moment ago, but a file
+		// removed in between (a deploy in progress) must still not fatal.
+		if ( ! is_readable( ACPS_ALERTS_DIR . $rel ) ) {
+			return false;
+		}
+
 		require_once ACPS_ALERTS_DIR . $rel;
+	}
+
+	// Files are whole again: forget the missing-files email so a later,
+	// separate breakage is reported afresh.
+	if ( function_exists( 'get_option' ) && get_option( 'acps_alerts_missing_notified' ) ) {
+		delete_option( 'acps_alerts_missing_notified' );
 	}
 
 	return true;
@@ -339,17 +416,11 @@ function acps_alerts_boot() {
 	$booted = true;
 
 	// Hard stops first: an unsupported PHP version or the wp-config kill switch
-	// means nothing else in this plugin runs at all.
+	// means nothing else in this plugin runs at all. Silently — WordPress itself
+	// refuses to activate on too-old PHP, from the Requires PHP header.
 	if ( ! acps_alerts_may_run() ) {
-		if ( is_admin() && version_compare( PHP_VERSION, ACPS_ALERTS_MIN_PHP, '<' ) ) {
-			add_action( 'admin_notices', 'acps_alerts_php_notice' );
-		}
-
 		return;
 	}
-
-	// The resume control must work even while dormant.
-	add_action( 'admin_post_acps_alerts_resume', 'acps_alerts_resume_from_safe_mode' );
 
 	if ( is_admin() ) {
 		add_action( 'admin_notices', 'acps_alerts_duplicate_notice' );
@@ -358,9 +429,17 @@ function acps_alerts_boot() {
 	if ( acps_alerts_is_safe_mode() ) {
 		// No on-screen notice: the operator is told by email instead, so the
 		// site (and every admin screen) stays clean. Whatever crashed simply
-		// does nothing until the plugin is fixed and reactivated.
+		// does nothing until it is fixed. Only the remote console still
+		// answers, and only on its own URL.
+		acps_alerts_boot_console_only();
+
 		return; // Stay dormant, keep the site up.
 	}
+
+	// Catch a fatal from here on — including an uncatchable compile error while
+	// the files load below — so following requests fall into safe mode instead
+	// of crashing repeatedly. Registered before loading for exactly that reason.
+	register_shutdown_function( 'acps_alerts_shutdown_guard' );
 
 	// Integrity guard: a missing file keeps the plugin dormant rather than
 	// fataling on "class not found".
@@ -369,16 +448,13 @@ function acps_alerts_boot() {
 			return;
 		}
 	} catch ( \Throwable $e ) {
-		if ( function_exists( 'error_log' ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( '[ACPS Alert Popups] Load error: ' . $e->getMessage() ); // phpcs:ignore
-		}
+		// A file that is present but broken (a parse error in a half-uploaded
+		// file, say) is a crash that was caught: pause and tell the operator,
+		// rather than retrying the broken file on every request.
+		acps_alerts_arm_safe_mode( $e->getMessage(), $e->getFile(), $e->getLine() );
 
 		return;
 	}
-
-	// Catch a later fatal (in a hook callback) so following requests fall into
-	// safe mode instead of crashing repeatedly.
-	register_shutdown_function( 'acps_alerts_shutdown_guard' );
 
 	try {
 		acps_alerts()->init();

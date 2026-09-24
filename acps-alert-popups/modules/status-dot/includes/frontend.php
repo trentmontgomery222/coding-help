@@ -7,6 +7,15 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Beaver Builder includes this file directly, with no hook of ours on the
+// stack to catch a failure. So it re-runs itself under the failsafe: a throw
+// anywhere below draws nothing for this module instead of breaking the page.
+if ( empty( $acps_guarded ) && class_exists( 'ACPS_Alerts_Failsafe' ) && method_exists( 'ACPS_Alerts_Failsafe', 'render_template' ) ) {
+	echo ACPS_Alerts_Failsafe::render_template( __FILE__, get_defined_vars(), 'module/status-dot' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- The template escapes its own output.
+
+	return;
+}
+
 if ( ! class_exists( 'ACPS_Alerts_Shortcodes' ) ) {
 	return;
 }

@@ -110,6 +110,7 @@ class ACPS_Alerts_Post_Type {
 	const ROLE_CURRENT = 'current';
 	public static function roles() { return array( 'normal' => 'Normal Alert', 'current' => 'Current Alert' ); }
 	public static function get_alert( $role ) { return 'current' === $role ? 50 : 51; }
+	public static function role_of( $id ) { return 50 === (int) $id ? 'current' : ( 51 === (int) $id ? 'normal' : '' ); }
 }
 
 require ACPS_ALERTS_DIR . 'includes/class-acps-alerts-status.php';
@@ -585,6 +586,23 @@ ACPS_Alerts_Status::flush_page_caches();
 ok( 'a present cache plugin is purged', true === $GLOBALS['flushed'] );
 ok( 'the generic flush hook fires for CDNs and bespoke caches', in_array( 'acps_alerts_flush_caches', $GLOBALS['fired'], true ) );
 ok( 'a hook-driven cache is asked to purge too', in_array( 'litespeed_purge_all', $GLOBALS['fired'], true ) );
+
+/* ---- the checklist's "used it once" is remembered, not read live ---- */
+unset( $GLOBALS['options']['acps_alerts_used_once'] );
+
+ACPS_Alerts_Status::note_first_use( 51, array( 'enabled' => 1 ) );
+check( 'the Normal Alert going up is not "using the alert"', get_option( 'acps_alerts_used_once' ), false );
+
+ACPS_Alerts_Status::note_first_use( 50, array( 'enabled' => 0 ) );
+check( 'saving the Current Alert switched off does not count', get_option( 'acps_alerts_used_once' ), false );
+
+ACPS_Alerts_Status::note_first_use( 50, true );
+ok( 'switching the Current Alert on (list toggle) counts', (int) get_option( 'acps_alerts_used_once' ) > 0 );
+
+$first = get_option( 'acps_alerts_used_once' );
+$GLOBALS['options']['acps_alerts_used_once'] = $first - 100; // Pretend it was a while ago.
+ACPS_Alerts_Status::note_first_use( 50, array( 'enabled' => 1 ) );
+check( 'the first use is kept, not overwritten by later ones', get_option( 'acps_alerts_used_once' ), $first - 100 );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All status cases passed\n";
 exit( $fails ? 1 : 0 );

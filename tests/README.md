@@ -23,7 +23,7 @@ php tests/safe-mode-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
 node tests/frequency-test.js
-for s in healthy admin-healthy missing-file missing-help safe-mode kill-switch; do php tests/boot-test.php "$s"; done
+for s in healthy admin-healthy missing-file missing-help broken-file safe-mode safe-mode-console safe-mode-new-version kill-switch; do php tests/boot-test.php "$s"; done
 ```
 
 All exit non-zero on failure, so they work as a pre-release check.
@@ -51,10 +51,17 @@ assertion):
 |---|---|
 | `healthy` | boots and loads its classes |
 | `admin-healthy` | boots as an admin request, and the help layer loads too |
-| `missing-file` | a required file is deleted mid-flight: stays dormant, no fatal, no false safe-mode |
+| `missing-file` | a required file is deleted mid-flight: stays dormant, no fatal, no false safe-mode, and one email naming the file |
 | `missing-help` | the optional help files are deleted: the plugin still loads fully, only the tutorials go |
-| `safe-mode` | a previous fatal was recorded: stays dormant |
+| `broken-file` | a required file no longer parses: caught, safe mode armed (recording the version), one email |
+| `safe-mode` | a previous fatal was recorded: stays dormant, loads none of the paused code, sends no second email |
+| `safe-mode-console` | paused, but a request on the console's own URL still gets the console (and nothing of the front end) |
+| `safe-mode-new-version` | paused on an older version: the newer code on disk lifts the pause and boots |
 | `kill-switch` | `ACPS_ALERTS_DISABLE` is set in wp-config: never boots |
+
+Each new behaviour above is mutation-checked: removing the version lift, the
+safe-mode console, the console's URL gate, the parse-error arming or the
+missing-files email each turns its scenario red.
 
 `admin-healthy` is the control for `missing-help`. The help layer only loads on
 admin requests, so without it `missing-help` would pass for the wrong reason.
@@ -69,6 +76,10 @@ admin requests, so without it `missing-help` would pass for the wrong reason.
   function is gone, so nothing on any screen announces the failure
 - `ACPS_Alerts_Admin::default_css()` returns the real plugin CSS (both source
   stylesheets) and survives the save-time sanitizer unchanged
+- missing files email once per distinct set of files, and a different breakage
+  is reported afresh
+- a static scan of every string the plugin can print finds no failure, pause or
+  missing-file notice outside the unlisted console and the operator email
 
 The email-once guard is mutation-checked: dropping it makes the second-arm case
 fail.
@@ -318,6 +329,13 @@ whole plugin is checked at once without booting WordPress.
 
 Verified non-vacuous: delete `handle_toggle()` and it fails with
 "ACPS_Alerts_Admin calls handle_toggle(), which nothing declares".
+
+It also scans every plugin file for a raw `add_action()`, `add_filter()` or
+`add_shortcode()` that bypasses the failsafe (only the boot file, which runs
+before the failsafe loads, is exempt). The updater's and the console's public
+request handlers were once registered raw, so a throw in them escaped as a
+fatal. Verified non-vacuous: put the console's `init` hook back to a plain
+`add_action()` and it fails naming that file and line.
 
 `frequency-test.js` — how often a visitor is shown the same alert, with
 `mayShow()` loaded out of the real script rather than restated. The rule needing

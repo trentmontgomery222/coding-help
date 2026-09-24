@@ -27,6 +27,7 @@ function esc_attr__( $s, $d = '' ) { return $s; }
 function esc_textarea( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
 function esc_url( $s ) { return $s; }
 function esc_url_raw( $s ) { return $s; }
+function sanitize_file_name( $s ) { return preg_replace( '/[^A-Za-z0-9._\-]/', '', (string) $s ); }
 function sanitize_key( $s ) { return strtolower( preg_replace( '/[^a-z0-9_\-]/i', '', (string) $s ) ); }
 function sanitize_text_field( $s ) { return trim( strip_tags( (string) $s ) ); }
 function wp_strip_all_tags( $s ) { return strip_tags( (string) $s ); }
@@ -63,6 +64,7 @@ class ACPS_Alerts_Settings {
 			'archive_time' => '17:50', 'popup_post_type' => '', 'render_mode' => 'auto',
 			'storage' => 'local', 'max_concurrent' => 1, 'z_index' => 999999,
 			'custom_css' => '', 'hide_for_admins' => 0, 'respect_preview' => 1,
+			'update_source' => 'manifest', 'update_role' => 'standalone',
 		);
 	}
 	public static function patch( $c ) { $GLOBALS['patched'] = $c; return $c; }
@@ -208,11 +210,24 @@ $clean = $panel->clean(
 		'update_key'      => 'sekret',
 		'update_enabled'  => '1',
 		'update_auto'     => '1',
+		'update_source'   => 'github',
+		'update_role'     => 'production',
+		'gh_owner'        => 'acps',
+		'gh_repo'         => 'alerts',
+		'gh_asset'        => 'acps-alert-popups.zip',
+		'verify_status_url' => 'https://dev.example.org/wp-json/acps-alerts/v1/update-status',
 	)
 );
 
 check( 'the daily cut-off can be changed from the console', $clean['archive_time'], '18:30' );
-check( 'alerts per page view can be changed', $clean['max_concurrent'], 3 );
+// max_concurrent is sent above too: nothing reads it, so it is no longer stored.
+ok( 'the dead alerts-per-page setting is not written', ! array_key_exists( 'max_concurrent', $clean ) );
+check( 'the update source type can be changed', $clean['update_source'], 'github' );
+check( 'the rollout role can be changed', $clean['update_role'], 'production' );
+check( 'the GitHub owner can be changed', $clean['gh_owner'], 'acps' );
+check( 'the GitHub repository can be changed', $clean['gh_repo'], 'alerts' );
+check( 'the GitHub asset can be changed', $clean['gh_asset'], 'acps-alert-popups.zip' );
+check( 'the dev status URL can be changed', $clean['verify_status_url'], 'https://dev.example.org/wp-json/acps-alerts/v1/update-status' );
 check( 'z-index can be changed', $clean['z_index'], 1234 );
 check( 'the rendering mode can be changed', $clean['render_mode'], 'modal' );
 check( 'the update source can be changed', $clean['update_base'], 'https://updates.example.org/' );
@@ -233,10 +248,16 @@ $attack = $panel->clean(
 		'panel_edit_hours'     => '0',
 		'panel_enabled'        => '1',
 		'update_secret'        => 'stolen',
+		// Credentials: this page prints values in plain text, so it must never
+		// accept (or later display) a credential.
+		'console_key'          => 'stolen',
+		'console_links'        => 'Evil | https://evil.example/',
+		'gh_token'             => 'ghp_stolen',
+		'verify_status_key'    => 'stolen',
 	)
 );
 
-foreach ( array( 'panel_password', 'panel_password_new', 'panel_ips', 'panel_ip_mode', 'panel_proxy', 'panel_rate_max', 'panel_rate_win', 'panel_max_fails', 'panel_lock_mins', 'panel_edit_hours', 'panel_enabled', 'update_secret' ) as $key ) {
+foreach ( array( 'panel_password', 'panel_password_new', 'panel_ips', 'panel_ip_mode', 'panel_proxy', 'panel_rate_max', 'panel_rate_win', 'panel_max_fails', 'panel_lock_mins', 'panel_edit_hours', 'panel_enabled', 'update_secret', 'console_key', 'console_links', 'gh_token', 'verify_status_key' ) as $key ) {
 	ok( "the console cannot change '$key' — it guards the console itself", ! array_key_exists( $key, $attack ) );
 }
 
@@ -247,8 +268,9 @@ $bad = $panel->clean(
 		'archive_time'    => '99:99',
 		'render_mode'     => 'nonsense',
 		'storage'         => 'nonsense',
-		'max_concurrent'  => '999',
 		'popup_post_type' => 'no_such_type',
+		'update_source'   => 'ftp',
+		'update_role'     => 'overlord',
 		'custom_css'      => '<script>alert(1)</script>.x{color:red}',
 	)
 );
@@ -256,7 +278,8 @@ $bad = $panel->clean(
 check( 'a bad cut-off falls back to the default', $bad['archive_time'], '17:50' );
 check( 'a bad rendering mode falls back', $bad['render_mode'], 'auto' );
 check( 'a bad storage mode falls back', $bad['storage'], 'local' );
-check( 'an out-of-range count is clamped', $bad['max_concurrent'], 5 );
+check( 'an unknown update source falls back', $bad['update_source'], 'manifest' );
+check( 'an unknown rollout role falls back', $bad['update_role'], 'standalone' );
 check( 'an unregistered post type falls back', $bad['popup_post_type'], '' );
 ok( 'script tags are stripped from extra CSS', false === strpos( $bad['custom_css'], '<script>' ) );
 

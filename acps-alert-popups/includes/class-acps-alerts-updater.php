@@ -45,26 +45,33 @@ class ACPS_Alerts_Updater {
 		// The self-test responder and the request handlers are always wired so
 		// a force run or a crash-check works even if a bad release flipped the
 		// enabled flag; the actual update injection respects the switch.
-		add_action( 'init', array( $this, 'maybe_handle_selftest' ), 1 );
-		add_action( 'init', array( $this, 'maybe_handle_force_update' ), 2 );
+		//
+		// Every callback goes through the failsafe wrappers, so a throw anywhere
+		// in the update path is caught and recorded: an action simply stops, and
+		// a filter hands WordPress back its own value unchanged.
+		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'maybe_handle_selftest' ), 'updater/selftest', 1 );
+		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'maybe_handle_force_update' ), 'updater/force', 2 );
 
 		if ( ! ACPS_Alerts_Settings::get( 'update_enabled' ) ) {
 			return;
 		}
 
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
-		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
-		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
-		add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
-		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
-		add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
-		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
-		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+		ACPS_Alerts_Failsafe::filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ), 'updater/inject' );
+		ACPS_Alerts_Failsafe::filter( 'plugins_api', array( $this, 'plugin_info' ), 'updater/info', 10, 3 );
+		ACPS_Alerts_Failsafe::filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 'updater/download', 10, 3 );
+		ACPS_Alerts_Failsafe::filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 'updater/auto', 10, 2 );
+		ACPS_Alerts_Failsafe::filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 'updater/source-dir', 10, 4 );
+		ACPS_Alerts_Failsafe::action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 'updater/flush', 10, 2 );
+		ACPS_Alerts_Failsafe::action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 'updater/verify', 20, 2 );
+
+		// No admin notice for a rolled-back update: the plugin never announces
+		// its update system on screen. A failed update is reported in the remote
+		// console's issue list instead.
 
 		// Staged rollout: a dev install publishes the version it has verified at
 		// a key-guarded REST endpoint, which a production install checks before
 		// it will offer or apply an update.
-		add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
+		ACPS_Alerts_Failsafe::action( 'rest_api_init', array( $this, 'register_status_route' ), 'updater/rest-route' );
 	}
 
 	/**
@@ -74,6 +81,20 @@ class ACPS_Alerts_Updater {
 	 */
 	private function slug() {
 		return dirname( ACPS_ALERTS_BASENAME );
+	}
+
+	/**
+	 * Whether the selected update source has what it needs to be asked.
+	 *
+	 * @return bool
+	 */
+	public static function source_configured() {
+		if ( 'github' === (string) ACPS_Alerts_Settings::get( 'update_source' ) ) {
+			return '' !== trim( (string) ACPS_Alerts_Settings::get( 'gh_owner' ) )
+				&& '' !== trim( (string) ACPS_Alerts_Settings::get( 'gh_repo' ) );
+		}
+
+		return '' !== trim( (string) ACPS_Alerts_Settings::get( 'update_base' ) );
 	}
 
 	/**
@@ -388,7 +409,10 @@ class ACPS_Alerts_Updater {
 			'/update-status',
 			array(
 				'methods'             => 'GET',
-				'callback'            => array( $this, 'rest_status' ),
+				// Wrapped: a failure answers an empty body, which a production
+				// site reads as "nothing verified" and holds, rather than a fatal
+				// on a public endpoint.
+				'callback'            => ACPS_Alerts_Failsafe::wrap( array( $this, 'rest_status' ), 'updater/rest-status' ),
 				'permission_callback' => '__return_true',
 			)
 		);
@@ -1016,28 +1040,6 @@ class ACPS_Alerts_Updater {
 	/* ------------------------------------------------------------------ *
 	 * Notices, health, logging.
 	 * ------------------------------------------------------------------ */
-
-	/**
-	 * Tells admins when a recent update was rolled back.
-	 *
-	 * @return void
-	 */
-	public function maybe_show_update_failed_notice() {
-		if ( ! current_user_can( 'update_plugins' ) ) {
-			return;
-		}
-
-		$failed = get_option( self::FAILED_OPTION );
-
-		if ( ! is_array( $failed ) ) {
-			return;
-		}
-
-		echo '<div class="notice notice-error is-dismissible"><p>'
-			. esc_html__( 'ACPS Alert Popups: a recent update failed its load test and was kept disabled to protect the site.', 'acps-alert-popups' )
-			. ' ' . esc_html( isset( $failed['when'] ) ? $failed['when'] : '' )
-			. '</p></div>';
-	}
 
 	/**
 	 * Records a health data point, keeping a short rolling history.

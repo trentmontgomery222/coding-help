@@ -7,6 +7,15 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Beaver Builder includes this file directly, with no hook of ours on the
+// stack to catch a failure. So it re-runs itself under the failsafe: a throw
+// anywhere below draws nothing for this module instead of breaking the page.
+if ( empty( $acps_guarded ) && class_exists( 'ACPS_Alerts_Failsafe' ) && method_exists( 'ACPS_Alerts_Failsafe', 'render_template' ) ) {
+	echo ACPS_Alerts_Failsafe::render_template( __FILE__, get_defined_vars(), 'module/status-board' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- The template escapes its own output.
+
+	return;
+}
+
 if ( ! isset( $settings ) || ! is_object( $settings ) || ! class_exists( 'ACPS_Alerts_Status' ) ) {
 	return;
 }
@@ -14,11 +23,6 @@ if ( ! isset( $settings ) || ! is_object( $settings ) || ! class_exists( 'ACPS_A
 // One banner: the Current Alert when it is showing, the resting state when not.
 $acps_live   = ACPS_Alerts_Status::board_entry();
 $acps_normal = ACPS_Alerts_Status::normal_alert();
-
-$acps_show_archive = ! isset( $settings->show_archive ) || '1' === (string) $settings->show_archive;
-$acps_show_dates   = ! isset( $settings->archive_dates ) || '1' === (string) $settings->archive_dates;
-$acps_count        = isset( $settings->archive_count ) ? absint( $settings->archive_count ) : 10;
-$acps_date_format  = get_option( 'date_format' );
 
 // Banner classes come from the module class, not a function declared here: two
 // status boards on one page would redeclare it and fatal.
@@ -41,9 +45,9 @@ $acps_date_format  = get_option( 'date_format' );
 			<?php
 			/*
 			 * The banner is the heading and the message, and nothing else. No
-			 * badge, no level word, no directive — the level shows in the
-			 * banner's colour, and anywhere those pieces are wanted they can be
-			 * placed with [schoolstatus], which is what that shortcode is for.
+			 * badge, no level word, no directive, and no colour change by level
+			 * — anywhere those are wanted they are placed with [schoolstatus],
+			 * [statusdot] or the Status Dot module, which is what they are for.
 			 *
 			 * The head carries its own background so the heading reads as a
 			 * heading rather than as the first line of the message.
@@ -86,20 +90,17 @@ $acps_date_format  = get_option( 'date_format' );
 	<?php endif; ?>
 
 	<?php
-	// The archive is internal now: past updates are kept for the office to look
-	// back on in wp-admin (Site Alerts → Archive), not shown to visitors. The
-	// board on the public page is only the current status.
-	unset( $acps_show_archive, $acps_show_dates, $acps_count );
-	?>
+	// The archive is internal: past updates are kept for the office in
+	// wp-admin (Site Alerts → Archive), never shown to visitors. The board on
+	// the public page is only the current status.
 
-	<?php
 	// Inside the builder, say plainly what this module drives.
-	if ( class_exists( 'FLBuilderModel' ) && FLBuilderModel::is_builder_active() ) :
+	if ( class_exists( 'FLBuilderModel' ) && method_exists( 'FLBuilderModel', 'is_builder_active' ) && FLBuilderModel::is_builder_active() ) :
 		?>
 		<p class="acps-board__hint">
-			<?php esc_html_e( 'Status Board: this is only the template. It draws whatever the Current Alert says, in the colour of its status level.', 'acps-alert-popups' ); ?>
+			<?php esc_html_e( 'Status Board: this is only the template. It draws whatever the Current Alert says, in the board colours picked here.', 'acps-alert-popups' ); ?>
 			<br />
-			<?php esc_html_e( 'To change the alert, edit the Current Alert popup module on this page. This module only holds the normal-day wording, the archive, and the board colours.', 'acps-alert-popups' ); ?>
+			<?php esc_html_e( 'To change the alert, use Site Alerts → Post an Alert, or the Current Alert popup module on this page. This module only holds the normal-day wording and the board colours.', 'acps-alert-popups' ); ?>
 			<?php if ( $acps_live ) : ?>
 				<br /><?php esc_html_e( 'The Current Alert is showing now.', 'acps-alert-popups' ); ?>
 			<?php else : ?>

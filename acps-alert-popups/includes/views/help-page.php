@@ -113,7 +113,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		<p><?php esc_html_e( 'Two modules go on your status page, and between them they are the whole system. You can post an update from either the status page or the quick Post an Alert form in wp-admin — both change the same one alert.', 'acps-alert-popups' ); ?></p>
 		<ul class="acps-help-list">
 			<li><strong><?php esc_html_e( 'Current Alert', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the popup itself. You write the alert here and switch it on here, and every setting it has is on its tabs. It only shows in the builder; visitors see it as a popup on every other page.', 'acps-alert-popups' ); ?></li>
-			<li><strong><?php esc_html_e( 'School Status Board', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the template. It shows the alert\'s heading and message as the banner, in the colour of its status level, and lists the past updates underneath. The banner is those two things and nothing else — for a badge or the level word, put [schoolstatus] wherever you want it.', 'acps-alert-popups' ); ?></li>
+			<li><strong><?php esc_html_e( 'School Status Board', 'acps-alert-popups' ); ?></strong> — <?php esc_html_e( 'the template. It shows the alert\'s heading and message as the banner, in the banner colours picked on the module — it does not change colour with the level. The banner is those two things and nothing else — for a badge, a coloured dot or the level word, put [schoolstatus], [statusdot] or the Status Dot module wherever you want it. Past updates are kept in Site Alerts → Archive for staff, not shown to visitors.', 'acps-alert-popups' ); ?></li>
 		</ul>
 
 		<?php echo ACPS_Alerts_Art::board_flow(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Authored SVG. ?>
@@ -293,10 +293,10 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		</ul>
 
 		<h3><?php esc_html_e( 'When a level colour does not read', 'acps-alert-popups' ); ?></h3>
-		<p><?php esc_html_e( 'The SRP colours are chosen to read on white. On a dark background the same colour can be nearly invisible, so you can say what a level should look like in one place without changing it anywhere else.', 'acps-alert-popups' ); ?></p>
+		<p><?php esc_html_e( 'The SRP colours are chosen to read on white. The banner never uses them, so a level colour only appears where you place a dot or a status badge. When one does not read against its background, override it just for that placement:', 'acps-alert-popups' ); ?></p>
 		<ul class="acps-help-list">
-			<li><?php esc_html_e( 'For the status page: the Status Board module has a "Level colours on this board" section, with one colour per level. That colour is the banner\'s — its head on the card, or the whole banner on the solid style. Leave one empty to keep the standard colour.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'For a shortcode: add color="#ffffff" to that one placement.', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'For a shortcode: add color="#ffffff" to that one [statusdot] or [schoolstatus].', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'For the Status Dot module: set its Colour field for that one dot.', 'acps-alert-popups' ); ?></li>
 		</ul>
 	</div>
 

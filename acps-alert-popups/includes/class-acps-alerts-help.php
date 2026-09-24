@@ -42,14 +42,30 @@ class ACPS_Alerts_Help {
 	 * @return void
 	 */
 	public function register_menu() {
+		// No page to draw means no menu entry, rather than a page that only says
+		// something is missing.
+		if ( ! is_readable( ACPS_ALERTS_DIR . 'includes/views/help-page.php' ) ) {
+			return;
+		}
+
 		add_submenu_page(
 			ACPS_Alerts_Admin::MENU_SLUG,
 			__( 'Help & Tutorials', 'acps-alert-popups' ),
 			__( 'Help & Tutorials', 'acps-alert-popups' ),
 			ACPS_Alerts_Admin::capability(),
 			self::PAGE_SLUG,
-			array( $this, 'render_page' )
+			array( $this, 'render_page_safely' )
 		);
+	}
+
+	/**
+	 * Draws the Help page under the failsafe: a failure anywhere in it draws
+	 * nothing rather than breaking the admin screen around it.
+	 *
+	 * @return void
+	 */
+	public function render_page_safely() {
+		echo ACPS_Alerts_Failsafe::capture( array( $this, 'render_page' ), array(), 'help/page' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped inside render_page().
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -415,16 +431,10 @@ class ACPS_Alerts_Help {
 			}
 		}
 
+		// Setup steps only: things a person does. Whether the plugin's own parts
+		// (its post type, its two alerts) came up is a failure check, reported
+		// in the remote console rather than on screen.
 		return array(
-			array(
-				'key'   => 'type',
-				'done'  => '' !== ACPS_Alerts_Source::post_type(),
-				'label' => __( 'The plugin is ready', 'acps-alert-popups' ),
-				'why'   => __( 'Its alert post type is registered, so alerts can be created and saved.', 'acps-alert-popups' ),
-				'fix'   => __( 'Deactivate and reactivate the plugin.', 'acps-alert-popups' ),
-				'url'   => admin_url( 'plugins.php' ),
-				'cta'   => __( 'Open Plugins', 'acps-alert-popups' ),
-			),
 			array(
 				'key'   => 'builder',
 				'done'  => ACPS_Alerts_Source::builder_active(),
@@ -438,19 +448,10 @@ class ACPS_Alerts_Help {
 				'key'   => 'board',
 				'done'  => (bool) get_option( 'acps_alerts_board_page', 0 ),
 				'label' => __( 'The status page is set up', 'acps-alert-popups' ),
-				'why'   => __( 'Two modules go on it, both in the Site Alerts group: "Current Alert", which is the popup you write and switch on, and "School Status Board", which draws the banner and the archive.', 'acps-alert-popups' ),
+				'why'   => __( 'Two modules go on it, both in the Site Alerts group: "Current Alert", which is the popup you write and switch on, and "School Status Board", which draws the banner.', 'acps-alert-popups' ),
 				'fix'   => __( 'Edit your status page in Beaver Builder and add both modules from the Site Alerts group.', 'acps-alert-popups' ),
 				'url'   => admin_url( 'edit.php?post_type=page' ),
 				'cta'   => __( 'Open Pages', 'acps-alert-popups' ),
-			),
-			array(
-				'key'   => 'alerts',
-				'done'  => count( $popups ) >= 2,
-				'label' => __( 'The two alerts exist', 'acps-alert-popups' ),
-				'why'   => __( 'This site has exactly two: the Current Alert you write and switch on from the status page, and the Normal Alert that is the resting state. They are created for you.', 'acps-alert-popups' ),
-				'fix'   => __( 'Deactivate and reactivate the plugin to create them.', 'acps-alert-popups' ),
-				'url'   => admin_url( 'plugins.php' ),
-				'cta'   => __( 'Open Plugins', 'acps-alert-popups' ),
 			),
 			array(
 				'key'   => 'used',
@@ -620,13 +621,9 @@ class ACPS_Alerts_Help {
 	public function render_page() {
 		$view = ACPS_ALERTS_DIR . 'includes/views/help-page.php';
 
-		// An optional file, so never require it blindly.
+		// An optional file, so never require it blindly. (The menu entry is not
+		// even registered without it; this covers a file removed mid-request.)
 		if ( ! is_readable( $view ) ) {
-			echo '<div class="wrap"><h1>' . esc_html__( 'Help &amp; Tutorials', 'acps-alert-popups' ) . '</h1>';
-			echo '<div class="notice notice-warning"><p>'
-				. esc_html__( 'The help pages are not installed. Re-upload the plugin to get them back — alerts themselves are unaffected.', 'acps-alert-popups' )
-				. '</p></div></div>';
-
 			return;
 		}
 

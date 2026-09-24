@@ -234,5 +234,42 @@ foreach ( $required as $method ) {
 	}
 }
 
-echo $fails ? "\n$fails failing case(s)\n" : "All wiring cases passed ($checked self-calls inspected)\n";
+// Every hook goes through the failsafe. A raw add_action/add_filter/
+// add_shortcode hands WordPress a callback nothing is watching, so a throw in
+// it escapes as a fatal — which is how the updater's and the console's public
+// request handlers once slipped past. Only the boot file itself may register
+// raw hooks, because it runs before the failsafe class is loaded.
+$raw_hooks = 0;
+$it        = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
+
+foreach ( $it as $file ) {
+	$path = $file->getPathname();
+	$rel  = substr( $path, strlen( $root ) );
+
+	if ( '.php' !== substr( $path, -4 ) || 'acps-alert-popups.php' === $rel || 'includes/class-acps-alerts-failsafe.php' === $rel ) {
+		continue;
+	}
+
+	$source = file_get_contents( $path );
+	$lines  = explode( "\n", $source );
+
+	foreach ( token_get_all( $source ) as $tok ) {
+		if ( ! is_array( $tok ) || T_STRING !== $tok[0] || ! in_array( $tok[1], array( 'add_action', 'add_filter', 'add_shortcode' ), true ) ) {
+			continue;
+		}
+
+		// A shortcode is fine when its callback is a Failsafe::wrap(), which
+		// sits on the call's line or the two after it.
+		$call = implode( ' ', array_slice( $lines, $tok[2] - 1, 3 ) );
+
+		if ( 'add_shortcode' === $tok[1] && false !== strpos( $call, 'Failsafe::wrap' ) ) {
+			continue;
+		}
+
+		$raw_hooks++;
+		fail( "{$rel}:{$tok[2]} registers {$tok[1]}() directly — use ACPS_Alerts_Failsafe::action()/filter()/wrap() so a failure in it is contained" );
+	}
+}
+
+echo $fails ? "\n$fails failing case(s)\n" : "All wiring cases passed ($checked self-calls inspected, no unguarded hooks)\n";
 exit( $fails ? 1 : 0 );

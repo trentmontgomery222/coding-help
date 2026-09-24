@@ -2,13 +2,17 @@
 /**
  * End-to-end check of the crash-containment promise.
  *
- * Boots the real plugin file against WordPress stubs in three scenarios and
- * asserts the request survives each one:
+ * Boots the real plugin file against WordPress stubs in each scenario and
+ * asserts the request survives it:
  *
- *   1. healthy      — boots normally
- *   2. missing file — stays dormant, no fatal
- *   3. safe mode    — stays dormant, no fatal
- *   4. kill switch  — never boots at all
+ *   healthy / admin-healthy — boots normally
+ *   missing-file            — dormant, not paused, one email
+ *   missing-help            — boots fully without the tutorials
+ *   broken-file             — a parse error: paused, one email
+ *   safe-mode               — dormant, loads nothing, no second email
+ *   safe-mode-console       — paused, but the console URL still answers
+ *   safe-mode-new-version   — a newer version lifts the pause and boots
+ *   kill-switch             — never boots at all
  *
  * Each scenario runs in its own PHP process, because a real fatal would end
  * the process; the exit status is the assertion.
@@ -47,6 +51,11 @@ if ( 'missing-file' === $scenario ) {
 	unlink( $work . '/includes/class-acps-alerts-frontend.php' );
 }
 
+if ( 'broken-file' === $scenario ) {
+	// Present but broken: a half-uploaded file that no longer parses.
+	file_put_contents( $work . '/includes/class-acps-alerts-conditions.php', "<?php\nclass ACPS_Alerts_Conditions {\n\tpublic function ( {\n" );
+}
+
 if ( 'missing-help' === $scenario ) {
 	// The teaching layer is optional: losing it must cost the tutorials only.
 	unlink( $work . '/includes/class-acps-alerts-help.php' );
@@ -61,8 +70,21 @@ define( 'WP_DEBUG', false );
 $GLOBALS['options'] = array();
 $GLOBALS['actions'] = array();
 
-if ( 'safe-mode' === $scenario ) {
+$GLOBALS['mails'] = array();
+
+if ( in_array( $scenario, array( 'safe-mode', 'safe-mode-console' ), true ) ) {
+	// No 'version' key: a pause recorded by an older release stays paused.
 	$GLOBALS['options']['acps_alerts_safe_mode'] = array( 'msg' => 'previous fatal', 'time' => time() );
+}
+
+if ( 'safe-mode-console' === $scenario ) {
+	// The console's own URL: the one thing that still answers while paused.
+	$_GET['acpsupdater'] = 'anything';
+}
+
+if ( 'safe-mode-new-version' === $scenario ) {
+	// Paused on an older version; this code is newer, so the fix has arrived.
+	$GLOBALS['options']['acps_alerts_safe_mode'] = array( 'msg' => 'previous fatal', 'time' => time(), 'version' => '0.0.1' );
 }
 
 if ( 'kill-switch' === $scenario ) {
@@ -111,6 +133,9 @@ function wp_roles() { return new class { public function get_names() { return ar
 function wp_strip_all_tags( $s ) { return strip_tags( (string) $s ); }
 function wp_nonce_field() {}
 function home_url( $p = '/' ) { return 'https://example.org' . $p; }
+function wp_login_url() { return 'https://example.org/wp-login.php'; }
+function get_bloginfo( $k = 'name' ) { return 'Example'; }
+function wp_mail( $to, $subject, $body ) { $GLOBALS['mails'][] = array( $to, $subject, $body ); return true; }
 function admin_url( $p = '' ) { return 'https://example.org/wp-admin/' . $p; }
 function trailingslashit( $s ) { return rtrim( (string) $s, '/' ) . '/'; }
 function untrailingslashit( $s ) { return rtrim( (string) $s, '/' ); }
@@ -148,8 +173,35 @@ switch ( $scenario ) {
 		$why = 'plugin should have loaded its classes';
 		break;
 	case 'missing-file':
-		$ok  = ! $booted && ! isset( $GLOBALS['options']['acps_alerts_safe_mode'] );
-		$why = 'plugin should stay dormant without arming safe mode';
+		// Dormant, NOT in safe mode (restoring the file must bring it straight
+		// back), and the operator told exactly once, naming the file.
+		$ok  = ! $booted
+			&& ! isset( $GLOBALS['options']['acps_alerts_safe_mode'] )
+			&& 1 === count( $GLOBALS['mails'] )
+			&& false !== strpos( $GLOBALS['mails'][0][2], 'class-acps-alerts-frontend.php' );
+		$why = 'plugin should stay dormant without arming safe mode, and email once';
+		break;
+	case 'broken-file':
+		// A file that is there but does not parse: caught, paused, one email.
+		$ok  = ! $booted
+			&& isset( $GLOBALS['options']['acps_alerts_safe_mode']['version'] )
+			&& 1 === count( $GLOBALS['mails'] )
+			&& 'cayden@reactallegany.org' === $GLOBALS['mails'][0][0];
+		$why = 'a parse error should arm safe mode and email the operator once';
+		break;
+	case 'safe-mode-console':
+		// Paused, but the console's own URL still gets the console: its class
+		// loads and it hooks init. Nothing of the front end is wired.
+		$ok  = class_exists( 'ACPS_Alerts_Panel', false )
+			&& ! empty( $GLOBALS['actions']['init'] )
+			&& empty( $GLOBALS['actions']['wp_footer'] )
+			&& empty( $GLOBALS['actions']['wp'] )
+			&& isset( $GLOBALS['options']['acps_alerts_safe_mode'] );
+		$why = 'the console should still answer while the rest stays paused';
+		break;
+	case 'safe-mode-new-version':
+		$ok  = $booted && ! isset( $GLOBALS['options']['acps_alerts_safe_mode'] );
+		$why = 'a new version on disk should lift the pause and boot';
 		break;
 	case 'admin-healthy':
 		// The control for missing-help: with the files present the help layer
@@ -163,6 +215,11 @@ switch ( $scenario ) {
 		$why = 'plugin should load fully, just without the help system';
 		break;
 	case 'safe-mode':
+		// An ordinary request while paused must not even load the paused code:
+		// no console class, no hooks beyond the boot itself.
+		$ok  = ! $booted && ! class_exists( 'ACPS_Alerts_Panel', false ) && empty( $GLOBALS['mails'] );
+		$why = 'plugin should stay dormant, load nothing, and not re-send the email';
+		break;
 	case 'kill-switch':
 		$ok  = ! $booted;
 		$why = 'plugin should stay dormant';

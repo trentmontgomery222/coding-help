@@ -179,9 +179,15 @@
 		var forms = document.querySelectorAll( '.acps-alert-fields' );
 
 		Array.prototype.forEach.call( forms, function ( root ) {
-			sync( root );
-			buildPreview( root );
-			checkEscapeRoutes( root );
+			// A failure here costs this form its live preview, never the form
+			// itself: the fields still post normally without this script.
+			try {
+				sync( root );
+				buildPreview( root );
+				checkEscapeRoutes( root );
+			} catch ( e ) {
+				return;
+			}
 
 			root.addEventListener( 'change', function () {
 				sync( root );
