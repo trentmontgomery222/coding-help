@@ -155,11 +155,13 @@
 
 		var record = readRecord( config.id );
 
-		// Being shown it is what counts, not closing it. A record written by an
-		// older version only has the dismissal, so that still reads as seen.
-		var seenAt = record ? ( record.seenAt || record.dismissedAt ) : 0;
+		// Only pressing the X dismisses the popup. Closing it with the
+		// background or Escape records nothing, so it comes back until the X is
+		// clicked. (An older version also wrote seenAt on open; it still counts,
+		// so a visitor is not shown a popup they already dismissed.)
+		var dismissedAt = record ? ( record.dismissedAt || record.seenAt ) : 0;
 
-		if ( ! seenAt ) {
+		if ( ! dismissedAt ) {
 			return true;
 		}
 
@@ -189,7 +191,7 @@
 		}
 
 		if ( 'days' === config.frequency ) {
-			var elapsed = Date.now() - seenAt;
+			var elapsed = Date.now() - dismissedAt;
 
 			return elapsed > config.frequencyDays * 86400000;
 		}
@@ -291,11 +293,6 @@
 
 		var native = resolveCallback( data.nativeOpen );
 
-		// Written before anything is shown, because from here on the visitor
-		// has seen it — whether they close it, follow the link inside it, or
-		// just click away to another page.
-		remember( id, { seenAt: Date.now() } );
-
 		if ( native ) {
 			// Beaver Builder owns the popup chrome in this mode.
 			native( id );
@@ -318,6 +315,10 @@
 
 	/**
 	 * Closes an alert and remembers the dismissal.
+	 *
+	 * Only a real dismissal — the X button — passes store true. Closing by the
+	 * background or Escape passes false, so the popup returns until the visitor
+	 * actually presses the X.
 	 *
 	 * @param {number}  id    Alert ID.
 	 * @param {boolean} store Whether to record the dismissal.
@@ -512,7 +513,10 @@
 				var overlayCfg = overlayEl ? config( overlayEl.getAttribute( 'data-alert' ) ) : null;
 
 				if ( overlayCfg && overlayCfg.overlayClose ) {
-					close( overlayEl.getAttribute( 'data-alert' ), true );
+					// Clicking the background closes the popup for now but does
+					// NOT count as dismissing it: it comes back until the X is
+					// clicked.
+					close( overlayEl.getAttribute( 'data-alert' ), false );
 				}
 
 				return;
@@ -532,7 +536,9 @@
 				var cfg = config( id );
 
 				if ( ! cfg || cfg.escClose ) {
-					close( id, true );
+					// Escape closes it for now but does not dismiss it — same as
+					// the background. Only the X button makes it stay away.
+					close( id, false );
 				}
 			}
 

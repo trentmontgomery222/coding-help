@@ -170,21 +170,14 @@ check(
 	true
 );
 
-/* ---- being shown it is what counts, not closing it ---- */
+/* ---- only the X records a dismissal ---- */
 
 /*
- * mayShow() was right all along; nothing was ever written for it to read.
- *
- * The dismissal was recorded in close(), so it only landed if the visitor
- * actually pressed the X. Everyone who read the popup and then clicked the
- * "View updates" link inside it — or any link on the page — left without a
- * record, and got the same popup again on the very next page. To a visitor,
- * and to the person who set it to show once, that is simply "it keeps coming
- * back".
- *
- * So the whole script is booted against a stub DOM and the real open() is let
- * run, because this is a question about what reaches storage, and reading
- * either function on its own does not answer it.
+ * The popup keeps coming back until the visitor physically clicks the X.
+ * Being shown it records nothing; closing it with Escape or the background
+ * records nothing; only the X writes the dismissal that gates future showings.
+ * The whole script is booted against a stub DOM and the real open()/close()
+ * are let run, because this is a question about what reaches storage.
  */
 
 /**
@@ -254,44 +247,110 @@ function boot( cfg ) {
 
 const editMode = { id: 7, frequency: 'edit', trigger: 'load', version: '4-1700000000' };
 
+// Opening records nothing now, so a visitor shown the popup who then navigates
+// away has no record and is shown it again.
 const shown = boot( editMode );
+check( 'opening the alert records nothing on its own', shown.record(), null );
+check( 'so a visitor who never pressed the X is shown it again', mayShow( editMode, shown.record(), {} ), true );
 
-check( 'opening the alert records that it was seen', !! shown.record(), true );
-check( 'and stamps it with the version on show', shown.record() && shown.record().version, '4-1700000000' );
+// Escape (or a background click) closes it for now but records nothing.
+const escd = boot( editMode );
+escd.api.close( editMode.id, false );
+check( 'closing with Escape records nothing', escd.record(), null );
+check( 'so it comes back on the next page', mayShow( editMode, escd.record(), {} ), true );
 
-// The visitor read it and clicked the link inside it. Nothing was closed.
-check(
-	'a visitor who never pressed the X is not shown it again',
-	mayShow( editMode, shown.record(), {} ),
-	false
-);
+// The X records the dismissal, and only then does it stay away.
+const xed = boot( editMode );
+xed.api.close( editMode.id, true );
+check( 'the X records the dismissal', !! ( xed.record() && xed.record().dismissedAt ), true );
+check( 'and stamps it with the version', xed.record() && xed.record().version, '4-1700000000' );
+check( 'and now it stays away', mayShow( editMode, xed.record(), {} ), false );
 
-// Closing still works, and must not throw away the moment it was shown.
-const closed = boot( editMode );
-closed.api.close( editMode.id, true );
+// Editing the alert moves the version on, and the dismissed visitor sees it again.
+check( 'until the alert is edited', mayShow( { ...editMode, version: '5-1700000000' }, xed.record(), {} ), true );
 
-check( 'closing records the dismissal', !! ( closed.record() && closed.record().dismissedAt ), true );
-check( 'without losing when it was shown', !! ( closed.record() && closed.record().seenAt ), true );
-check( 'and it stays away', mayShow( editMode, closed.record(), {} ), false );
+// The days window runs from the dismissal (the X), not from being shown.
+check( 'the days window runs from the dismissal', mayShow( { ...days, id: 7 }, { dismissedAt: Date.now() - ( 8 * 86400000 ), version: days.version, session: 'session-1' }, {} ), true );
+check( 'and not yet inside it', mayShow( { ...days, id: 7 }, { dismissedAt: Date.now() - ( 2 * 86400000 ), version: days.version, session: 'session-1' }, {} ), false );
 
-// An editMode moves the version on, and the same visitor sees the new one.
-check(
-	'until the alert is edited',
-	mayShow( { ...editMode, version: '5-1700000000' }, shown.record(), {} ),
-	true
-);
+// A second alert's X records under its own key, not the first's.
+const second = boot( { ...editMode, id: 8 } );
+second.api.close( 8, true );
+check( 'a second alert records under its own key', !! second.store[ 'acps_alert_8' ], true );
 
-// A preview must not write anything, or an editor checking their work would
-// stop the popup reaching the people it was written for.
-const preview = ( () => {
-	const b = boot( { ...editMode, id: 8 } );
+/* ---- the real bindings: X dismisses, Escape and background do not ---- */
 
-	return b;
-} )();
+/*
+ * The rule lives in the event handlers, so this captures the real document
+ * listeners the script registers, then fires an X click, an Escape key and an
+ * overlay click, and checks which one actually wrote a dismissal. Calling
+ * close() directly would not prove the bindings pass the right flag.
+ */
+function bootEvents() {
+	const store = {};
+	const storage = {
+		getItem: ( k ) => ( k in store ? store[ k ] : null ),
+		setItem: ( k, v ) => { store[ k ] = String( v ); }
+	};
+	const set = new Set();
+	const el = {
+		hidden: true,
+		classList: { contains: ( c ) => set.has( c ), add: ( c ) => set.add( c ), remove: ( c ) => set.delete( c ) },
+		querySelectorAll: () => [],
+		setAttribute: () => {},
+		focus: () => {},
+		getAttribute: () => '1'
+	};
+	const listeners = {};
+	const doc = {
+		readyState: 'complete', activeElement: null, cookie: '',
+		body: { classList: { contains: () => false, add: () => {}, remove: () => {} } },
+		documentElement: { scrollHeight: 1000 },
+		addEventListener: ( type, fn ) => { ( listeners[ type ] = listeners[ type ] || [] ).push( fn ); },
+		dispatchEvent: () => {},
+		getElementById: ( id ) => ( id === 'acps-alert-1' ? el : null )
+	};
+	const cfg = { id: 1, trigger: 'load', frequency: 'edit', version: '4-1700000000', escClose: true, overlayClose: true, dismissible: true };
+	const win = {
+		ACPSAlertsData: { alerts: [ cfg ], storage: 'local', isPreview: '0' },
+		localStorage: storage, sessionStorage: storage,
+		addEventListener: () => {}, setTimeout: () => {}, scrollY: 0, innerHeight: 800
+	};
 
-check( 'the days window runs from when it was shown', mayShow( { ...days, id: 7 }, { seenAt: Date.now() - ( 8 * 86400000 ), version: days.version, session: 'session-1' }, {} ), true );
-check( 'and not yet inside it', mayShow( { ...days, id: 7 }, { seenAt: Date.now() - ( 2 * 86400000 ), version: days.version, session: 'session-1' }, {} ), false );
-check( 'a second alert records under its own key', !! preview.store[ 'acps_alert_8' ], true );
+	new Function( 'window', 'document', 'CustomEvent', source )( win, doc, function () {} );
+
+	const fire = ( type, event ) => ( listeners[ type ] || [] ).forEach( ( fn ) => fn( event ) );
+	const record = () => ( store[ 'acps_alert_1' ] ? JSON.parse( store[ 'acps_alert_1' ] ) : null );
+
+	return { fire, record, el, alertNode: { getAttribute: () => '1' } };
+}
+
+// A node whose closest() answers for one selector, standing in for the DOM.
+function targetFor( selector, alertNode ) {
+	return {
+		closest: ( sel ) => {
+			if ( sel === selector ) {
+				return { closest: ( s ) => ( s === '.acps-alert' ? alertNode : null ) };
+			}
+			return null;
+		}
+	};
+}
+
+// The X button carries data-acps-close.
+const xClick = bootEvents();
+xClick.fire( 'click', { target: targetFor( '[data-acps-close]', xClick.alertNode ), preventDefault: () => {} } );
+check( 'clicking the X records the dismissal', !! ( xClick.record() && xClick.record().dismissedAt ), true );
+
+// Escape closes it but records nothing.
+const escKey = bootEvents();
+escKey.fire( 'keydown', { key: 'Escape', preventDefault: () => {} } );
+check( 'pressing Escape records nothing', escKey.record(), null );
+
+// Clicking the background (overlay) records nothing either.
+const bgClick = bootEvents();
+bgClick.fire( 'click', { target: targetFor( '[data-acps-overlay]', bgClick.alertNode ), preventDefault: () => {} } );
+check( 'clicking the background records nothing', bgClick.record(), null );
 
 /* ---- two real page loads, sharing one browser's storage ---- */
 
@@ -303,8 +362,10 @@ check( 'a second alert records under its own key', !! preview.store[ 'acps_alert
  * alone. This is the exact "it shows every time" report, reproduced or ruled
  * out against the shipped code rather than a restatement of it.
  */
-function twoLoads( freq, preview ) {
-	if ( undefined === preview ) { preview = '0'; } // what wp_localize_script sends for a non-preview visitor.
+function twoLoads( freq, opts ) {
+	opts = opts || {};
+	const preview = undefined === opts.preview ? '0' : opts.preview; // what wp_localize_script sends for a non-preview visitor.
+	const dismiss = opts.dismiss || 'none'; // 'none' | 'x' | 'esc'
 	const local = {};
 	const session = {};
 
@@ -340,32 +401,61 @@ function twoLoads( freq, preview ) {
 
 		new Function( 'window', 'document', 'CustomEvent', source )( win, doc, function () {} );
 
-		return el.set.has( 'is-open' );
+		return { opened: el.set.has( 'is-open' ), api: win.ACPSAlerts };
 	}
 
 	const cfg = { id: 1, trigger: 'load', frequency: freq, frequencyDays: 7, version: '4-1700000000' };
 
-	return { first: pageLoad( cfg ), second: pageLoad( cfg ), local };
+	const first = pageLoad( cfg );
+
+	// Between the two page loads, maybe the visitor closes the popup. The X
+	// dismisses it (store true); Escape and the background do not (store false).
+	if ( 'x' === dismiss ) {
+		first.api.close( cfg.id, true );
+	} else if ( 'esc' === dismiss ) {
+		first.api.close( cfg.id, false );
+	}
+
+	const second = pageLoad( cfg );
+
+	return { first: first.opened, second: second.opened, local };
 }
 
-[ 'session', 'edit', 'once' ].forEach( function ( freq ) {
-	const r = twoLoads( freq );
+/* ---- only the X makes it stay away ---- */
 
-	check( `${ freq }: the popup opens on the first visit`, r.first, true );
-	check( `${ freq }: and does NOT open again on the next page`, r.second, false );
+/*
+ * The rule: the popup keeps coming back until the visitor physically clicks the
+ * X. Closing it with Escape or by clicking the background dismisses it for that
+ * moment only — it returns on the next page. Being shown it, or navigating
+ * away, records nothing at all.
+ */
+[ 'session', 'edit', 'once' ].forEach( function ( freq ) {
+	// Shown, then navigated away without touching the X: it comes back.
+	const seen = twoLoads( freq, { dismiss: 'none' } );
+	check( `${ freq }: opens on the first visit`, seen.first, true );
+	check( `${ freq }: and comes back on the next page when the X was not clicked`, seen.second, true );
+
+	// Closed with the X: now it stays away.
+	const xed = twoLoads( freq, { dismiss: 'x' } );
+	check( `${ freq }: opens the first time`, xed.first, true );
+	check( `${ freq }: and does NOT come back once the X is clicked`, xed.second, false );
+
+	// Closed with Escape (or the background): it still comes back.
+	const esc = twoLoads( freq, { dismiss: 'esc' } );
+	check( `${ freq }: Escape closes it for now`, esc.first, true );
+	check( `${ freq }: but it returns, because Escape is not the X`, esc.second, true );
 } );
 
-// "always" is the one mode that keeps showing, on purpose.
-const always2 = twoLoads( 'always' );
+// "always" is the one mode that keeps showing regardless, X or no X.
+const always2 = twoLoads( 'always', { dismiss: 'x' } );
 check( 'always: opens on the first visit', always2.first, true );
-check( 'always: and opens again, by design', always2.second, true );
+check( 'always: and opens again even after the X, by design', always2.second, true );
 
-// A frequency that was never written, or an unknown one, must not behave like
-// "always". Once seen, it leaves the visitor alone — this is the exact
-// "shows every time no matter what" failure, pinned shut.
-const blank = twoLoads( '' );
+// A blank/unknown frequency, once dismissed with the X, must not keep coming
+// back like "always".
+const blank = twoLoads( '', { dismiss: 'x' } );
 check( 'blank frequency: opens once', blank.first, true );
-check( 'blank frequency: does not keep reappearing', blank.second, false );
+check( 'blank frequency: does not keep reappearing after the X', blank.second, false );
 
 /* ---- the "0" that WordPress sends is not a preview ---- */
 
@@ -373,19 +463,20 @@ check( 'blank frequency: does not keep reappearing', blank.second, false );
  * wp_localize_script stringifies everything, so a non-preview visitor arrives
  * with isPreview === "0" — and "0" is truthy. Read naively that made every
  * visitor look like an editor previewing: the popup showed on every page and
- * nothing was ever written to storage. These loads pass the real string.
+ * nothing was ever written to storage. Here the visitor clicks the X, which for
+ * a real visitor must record the dismissal.
  */
-const notPreview = twoLoads( 'session', '0' );
+const notPreview = twoLoads( 'session', { preview: '0', dismiss: 'x' } );
 check( 'isPreview "0": opens on the first visit', notPreview.first, true );
-check( 'isPreview "0": and is gated on the next, because "0" is not a preview', notPreview.second, false );
-check( 'isPreview "0": and it actually recorded the visit', !! notPreview.local[ 'acps_alert_1' ], true );
+check( 'isPreview "0": and is gated after the X, because "0" is not a preview', notPreview.second, false );
+check( 'isPreview "0": and the X actually recorded the dismissal', !! notPreview.local[ 'acps_alert_1' ], true );
 
-// A genuine preview ("1") is meant to show every time and record nothing, so an
-// editor checking their work never burns the visitor's "seen once".
-const realPreview = twoLoads( 'session', '1' );
+// A genuine preview ("1") shows every time and records nothing, even on an X,
+// so an editor checking their work never burns the visitor's dismissal.
+const realPreview = twoLoads( 'session', { preview: '1', dismiss: 'x' } );
 check( 'isPreview "1": shows on the first visit', realPreview.first, true );
 check( 'isPreview "1": and again, because previewing ignores frequency', realPreview.second, true );
-check( 'isPreview "1": and writes nothing to storage', undefined, realPreview.local[ 'acps_alert_1' ] );
+check( 'isPreview "1": and writes nothing to storage even on an X', undefined, realPreview.local[ 'acps_alert_1' ] );
 
 console.log( failures ? `\n${ failures } failing case(s)` : 'All frequency cases passed' );
 process.exit( failures ? 1 : 0 );

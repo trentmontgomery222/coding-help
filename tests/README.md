@@ -233,20 +233,19 @@ whole set at once, so the risks are the ones a complete save creates:
 - start and end dates apply on the custom schedule and are ignored on the others
 - the link text, the link itself, the badge toggle and the level-word toggle all
   reach the alert, and switching a toggle off really clears it
-- being shown an alert is what counts, not closing it. The whole front end
-  script is booted against a stub DOM and the real `open()` is let run, because
-  this is a question about what reaches storage and neither `mayShow()` nor
-  `close()` answers it alone. The dismissal used to be written only in
-  `close()`, so a visitor who read the popup and followed the link inside it
-  left no record and got the same popup on the very next page — "it keeps
-  coming back", with `mayShow()` behaving perfectly the whole time. Closing
-  still records the dismissal on top, and a record from before this that only
-  carries a dismissal still reads as seen.
+- only the X dismisses the popup. It keeps coming back until the visitor
+  physically clicks the close button; Escape and a background click close it
+  for the moment but record nothing, and being shown it records nothing. The
+  test captures the real document event listeners the script registers and
+  fires an X click, an Escape key and an overlay click, checking which one
+  actually wrote a dismissal — calling `close()` directly would not prove the
+  bindings pass the right flag. It also boots two page loads and checks the
+  popup returns until the X is pressed.
 
-  Verified non-vacuous: drop the write from `open()` and it fails five ways,
-  including "a visitor who never pressed the X is not shown it again"; narrow
-  the read to `record.seenAt` and the older records stop counting, failing
-  "session: not again in the same session".
+  Verified non-vacuous: make the Escape or overlay binding record a dismissal
+  and it fails ("pressing Escape records nothing" / "clicking the background
+  records nothing"); record on `open()` and it fails ten ways, including
+  "opening the alert records nothing on its own".
 - a background and its text colour are one decision, and the card is one
   surface. The card states both, neither inherited; the head and the message are
   spacing only and carry no colour of their own; and there is one pair of

@@ -160,7 +160,7 @@ Settings, whether on the Current Alert module's tabs or the Normal Alert's admin
 
 **"Once, until I change this alert"** is worth calling out. The visitor sees it once and is then left alone — not for a day, not for a session, but until you edit the alert. Any change counts: the wording, the level, the targeting, when it comes down. The moment you save, everybody who has seen it sees it again.
 
-**Being shown it is what counts, not closing it.** The visit is recorded when the popup opens, so somebody who reads it and then follows the link inside it — or just clicks away to another page — is not shown it again on the next one. Recording it on the close button meant only the people who pressed the X were remembered, and to everybody else the popup simply kept coming back.
+**Only the X dismisses it.** The popup keeps coming back until the visitor physically clicks the close button. Closing it with the Escape key or by clicking the background dims it for that moment only — it returns on the next page. Being shown it, or navigating away, records nothing at all. So "show once" means once the visitor has actually dismissed it with the X, not merely seen it.
 
 It works off a revision counter bumped on every write, paired with the post's modified time, because most of an alert is post meta and `post_modified` sits still while the level or the schedule changes underneath it. **"Once, then never again"** is deliberately exempt from that reset — otherwise the two options would be the same thing.
 | Appearance | Position, max width, overlay, close button, overlay click, Escape key, screen reader label |
