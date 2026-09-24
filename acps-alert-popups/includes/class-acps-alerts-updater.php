@@ -555,6 +555,15 @@ class ACPS_Alerts_Updater {
 				return $transient;
 			}
 
+			if ( ! ACPS_Alerts_Settings::get( 'update_notice' ) ) {
+				// Updates are managed from the hidden Updates screen and the
+				// console, not the Plugins screen. Don't inject an "Update now"
+				// entry (and clear any stale one).
+				unset( $transient->response[ ACPS_ALERTS_BASENAME ] );
+
+				return $transient;
+			}
+
 			if ( version_compare( $remote['version'], ACPS_ALERTS_VERSION, '>' ) && $this->rollout_allows( $remote['version'] ) ) {
 				if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
 					$transient->response = array();
@@ -936,20 +945,36 @@ class ACPS_Alerts_Updater {
 			header( 'Content-Type: text/plain; charset=utf-8' );
 		}
 
+		echo $this->install_now();
+		exit;
+	}
+
+	/**
+	 * Checks the source and installs an update if there is a newer version.
+	 *
+	 * Returns a plain-text log instead of printing, so the secret force-update
+	 * URL and the remote console can both use it. Public because the console
+	 * calls it.
+	 *
+	 * @return string
+	 */
+	public function install_now() {
 		self::flush_cache();
 		$remote = $this->remote( true );
 
 		if ( ! $remote ) {
-			echo "Could not reach the configured update source.\n";
-			exit;
+			return "Could not reach the configured update source.\n";
 		}
 
-		echo 'Installed version: ' . esc_html( ACPS_ALERTS_VERSION ) . "\n";
-		echo 'Latest version:    ' . esc_html( $remote['version'] ) . "\n";
+		$out  = 'Installed version: ' . ACPS_ALERTS_VERSION . "\n";
+		$out .= 'Latest version:    ' . $remote['version'] . "\n";
 
 		if ( ! version_compare( $remote['version'], ACPS_ALERTS_VERSION, '>' ) ) {
-			echo "Already up to date.\n";
-			exit;
+			return $out . "Already up to date.\n";
+		}
+
+		if ( ! $this->rollout_allows( $remote['version'] ) ) {
+			return $out . "Held: the paired dev site has not verified this version yet.\n";
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -967,11 +992,10 @@ class ACPS_Alerts_Updater {
 		$messages = $skin->get_upgrade_messages();
 
 		if ( $messages ) {
-			echo "\n" . esc_html( implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) ) . "\n";
+			$out .= "\n" . implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) . "\n";
 		}
 
-		echo "\n" . ( ( ! is_wp_error( $result ) && $result ) ? 'SUCCESS' : 'FAILED' ) . "\n";
-		exit;
+		return $out . "\n" . ( ( ! is_wp_error( $result ) && $result ) ? 'SUCCESS' : 'FAILED' ) . "\n";
 	}
 
 	/**

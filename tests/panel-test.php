@@ -166,6 +166,23 @@ check( 'a listed address is blocked', $panel->allowed( '203.0.113.9' ), false );
 check( 'a listed prefix is blocked', $panel->allowed( '10.1.2.3' ), false );
 check( 'everyone else gets through', $panel->allowed( '167.102.110.1' ), true );
 
+/* ---- a ! block rule always wins, even inside an allow list ---- */
+$GLOBALS['settings'] = array( 'panel_ip_mode' => 'allow', 'panel_ips' => "196.168
+!196.168.5.5" );
+check( 'the office range is allowed', $panel->allowed( '196.168.44.7' ), true );
+check( 'but the blocked address is refused despite the allow', $panel->allowed( '196.168.5.5' ), false );
+
+// A block rule wins in deny mode too (redundant belt-and-braces).
+$GLOBALS['settings'] = array( 'panel_ip_mode' => 'deny', 'panel_ips' => "!8.8.8.8" );
+check( 'a ! rule blocks even in deny mode', $panel->allowed( '8.8.8.8' ), false );
+check( 'and deny mode still lets others through', $panel->allowed( '1.1.1.1' ), true );
+
+/* ---- the console access key: acpsupdater=<key> ---- */
+$GLOBALS['settings'] = array( 'console_key' => 'mychosenkey', 'update_secret' => 'thesecret' );
+check( 'the set console key is what reaches the console', ACPS_Alerts_Panel::access_key(), 'mychosenkey' );
+$GLOBALS['settings'] = array( 'console_key' => '', 'update_secret' => 'thesecret' );
+check( 'with no console key it falls back to the update secret', ACPS_Alerts_Panel::access_key(), 'thesecret' );
+
 /* ---- empty lists: allow fails CLOSED, deny fails open ---- */
 $GLOBALS['settings'] = array( 'panel_ip_mode' => 'allow', 'panel_ips' => '' );
 check( 'allow mode with no rules blocks everyone', $panel->allowed( '167.102.110.1' ), false );

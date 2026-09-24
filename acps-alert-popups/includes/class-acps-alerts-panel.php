@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class ACPS_Alerts_Panel {
 
-	const QUERY_VAR    = 'acps_ap_console';
+	const QUERY_VAR    = 'acpsupdater';
 	const COOKIE       = 'acps_ap_console_sess';
 	const SESSION_TTL  = 1800; // 30 minutes.
 	const LAST_EDIT    = 'acps_alerts_panel_last_edit';
@@ -59,6 +59,21 @@ class ACPS_Alerts_Panel {
 	}
 
 	/**
+	 * The key that reaches the console: acpsupdater=<key>.
+	 *
+	 * The operator sets it in wp-admin (console_key). It falls back to the
+	 * update secret when unset, so an upgrade does not lock anyone out before
+	 * they pick their own key.
+	 *
+	 * @return string
+	 */
+	public static function access_key() {
+		$key = trim( (string) ACPS_Alerts_Settings::get( 'console_key' ) );
+
+		return '' !== $key ? $key : trim( (string) ACPS_Alerts_Settings::get( 'update_secret' ) );
+	}
+
+	/**
 	 * Detects a console request and dispatches it.
 	 *
 	 * @return void
@@ -68,10 +83,10 @@ class ACPS_Alerts_Panel {
 			return;
 		}
 
-		$secret = trim( (string) ACPS_Alerts_Settings::get( 'update_secret' ) );
+		$secret = self::access_key();
 		$given  = sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		// A wrong or absent secret is indistinguishable from any other URL: 404,
+		// A wrong or absent key is indistinguishable from any other URL: 404,
 		// so the console leaks nothing about its own existence.
 		if ( '' === $secret || ! hash_equals( $secret, $given ) ) {
 			return;
@@ -136,6 +151,24 @@ class ACPS_Alerts_Panel {
 			return;
 		}
 
+		if ( 'post' === $action ) {
+			$this->handle_post( $ip );
+
+			return;
+		}
+
+		if ( 'wording' === $action ) {
+			$this->handle_wording( $ip );
+
+			return;
+		}
+
+		if ( 'update' === $action ) {
+			$this->handle_update();
+
+			return;
+		}
+
 		if ( 'clear' === $action ) {
 			// Not throttled like a settings write: clearing the log and closing
 			// the breakers changes no configuration, and is exactly what an
@@ -148,7 +181,249 @@ class ACPS_Alerts_Panel {
 			return;
 		}
 
+		$view = isset( $_GET['acps_console_view'] ) ? sanitize_key( wp_unslash( $_GET['acps_console_view'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( 'post' === $view ) {
+			$this->render_post_form();
+
+			return;
+		}
+
+		if ( 'wording' === $view ) {
+			$this->render_wording_form();
+
+			return;
+		}
+
 		$this->render_console();
+	}
+
+	/**
+	 * A console URL carrying the access key, plus any extra query args.
+	 *
+	 * @param array $args Extra query args.
+	 * @return string
+	 */
+	protected function console_url( array $args = array() ) {
+		return add_query_arg( array_merge( array( self::QUERY_VAR => self::access_key() ), $args ), home_url( '/' ) );
+	}
+
+	/**
+	 * The navigation line shown at the top of every authenticated view.
+	 *
+	 * Plain links, so a script can follow them.
+	 *
+	 * @return void
+	 */
+	protected function nav() {
+		$links = array(
+			$this->console_url()                                  => __( 'Dashboard & settings', 'acps-alert-popups' ),
+			$this->console_url( array( 'acps_console_view' => 'post' ) )    => __( 'Post an alert', 'acps-alert-popups' ),
+			$this->console_url( array( 'acps_console_view' => 'wording' ) ) => __( 'Wording', 'acps-alert-popups' ),
+		);
+
+		echo '<p>';
+
+		$parts = array();
+
+		foreach ( $links as $url => $label ) {
+			$parts[] = '<a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a>';
+		}
+
+		// Custom links added in wp-admin.
+		foreach ( $this->custom_links() as $link ) {
+			$parts[] = '<a href="' . esc_url( $link['url'] ) . '">' . esc_html( $link['label'] ) . '</a>';
+		}
+
+		echo implode( ' | ', $parts );
+		echo '</p>';
+
+		// Update now, as a form so it is a deliberate POST.
+		echo '<form method="post" action="' . esc_url( $this->console_url() ) . '" style="display:inline">';
+		echo '<input type="hidden" name="acps_console_action" value="update" />';
+		echo '<button type="submit">' . esc_html__( 'Check & install update now', 'acps-alert-popups' ) . '</button>';
+		echo '</form>';
+	}
+
+	/**
+	 * The operator's custom console links, parsed from settings.
+	 *
+	 * @return array[] Each { label, url }.
+	 */
+	protected function custom_links() {
+		$raw   = (string) ACPS_Alerts_Settings::get( 'console_links' );
+		$out   = array();
+
+		foreach ( preg_split( '/[\r\n]+/', $raw ) as $line ) {
+			$line = trim( (string) $line );
+
+			if ( '' === $line ) {
+				continue;
+			}
+
+			$parts = array_map( 'trim', explode( '|', $line, 2 ) );
+
+			if ( isset( $parts[1] ) && '' !== $parts[0] && '' !== $parts[1] ) {
+				$out[] = array( 'label' => $parts[0], 'url' => $parts[1] );
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Posts an alert from the console, reusing the admin quick-post logic.
+	 *
+	 * @param string $ip Client address, for the health note.
+	 * @return void
+	 */
+	protected function handle_post( $ip ) {
+		if ( ! class_exists( 'ACPS_Alerts_Admin' ) || ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			$this->render_console( __( 'The alert system is not available.', 'acps-alert-popups' ), 'error' );
+
+			return;
+		}
+
+		$alert = ACPS_Alerts_Status::current_alert();
+
+		if ( ! $alert ) {
+			$this->render_console( __( 'There is no Current Alert to post to.', 'acps-alert-popups' ), 'error' );
+
+			return;
+		}
+
+		$raw     = isset( $_POST['acps_post'] ) ? (array) wp_unslash( $_POST['acps_post'] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$level   = isset( $raw['level'] ) ? sanitize_key( $raw['level'] ) : '';
+		$heading = isset( $raw['heading'] ) ? sanitize_text_field( $raw['heading'] ) : '';
+		$text    = isset( $raw['text'] ) ? wp_kses_post( $raw['text'] ) : '';
+		$start   = isset( $raw['start'] ) ? (string) $raw['start'] : '';
+		$end     = isset( $raw['end'] ) ? (string) $raw['end'] : '';
+
+		if ( '' === $level || ! in_array( $level, ACPS_Alerts_Status::level_keys(), true ) ) {
+			$level = (string) $alert->get( 'status_level' );
+		}
+
+		ACPS_Alerts_Failsafe::guard(
+			array( 'ACPS_Alerts_Admin', 'apply_quick_post' ),
+			array( $alert, $level, $heading, $text, $start, $end ),
+			'console/post'
+		);
+
+		if ( $this->updater ) {
+			$this->updater->record_health( 'ok', 'Alert posted from the console (' . $ip . ').' );
+		}
+
+		$this->render_console( __( 'Alert posted. It is live now.', 'acps-alert-popups' ), 'ok' );
+	}
+
+	/**
+	 * Saves the site's wording from the console, reusing the admin logic.
+	 *
+	 * @param string $ip Client address, for the health note.
+	 * @return void
+	 */
+	protected function handle_wording( $ip ) {
+		if ( ! class_exists( 'ACPS_Alerts_Admin' ) ) {
+			$this->render_console( __( 'The alert system is not available.', 'acps-alert-popups' ), 'error' );
+
+			return;
+		}
+
+		ACPS_Alerts_Failsafe::guard( array( 'ACPS_Alerts_Admin', 'apply_wording' ), array(), 'console/wording' );
+
+		if ( $this->updater ) {
+			$this->updater->record_health( 'ok', 'Wording changed from the console (' . $ip . ').' );
+		}
+
+		$this->render_console( __( 'Wording saved.', 'acps-alert-popups' ), 'ok' );
+	}
+
+	/**
+	 * Runs an update from the console and prints the plain-text log.
+	 *
+	 * @return void
+	 */
+	protected function handle_update() {
+		$log = $this->updater ? $this->updater->install_now() : "No updater available.\n";
+
+		$this->page_head( __( 'Update', 'acps-alert-popups' ) );
+		$this->nav();
+		echo '<h2>' . esc_html__( 'Update', 'acps-alert-popups' ) . '</h2>';
+		echo '<pre>' . esc_html( $log ) . '</pre>';
+		$this->page_foot();
+	}
+
+	/**
+	 * The console's post-an-alert form.
+	 *
+	 * @return void
+	 */
+	protected function render_post_form() {
+		$this->page_head( __( 'Post an alert', 'acps-alert-popups' ) );
+		$this->nav();
+
+		$alert   = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::current_alert() : null;
+		$level   = $alert ? (string) $alert->get( 'status_level' ) : 'normal';
+		$choices = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::level_choices() : array();
+
+		echo '<h2>' . esc_html__( 'Post an alert', 'acps-alert-popups' ) . '</h2>';
+		echo '<form method="post" action="' . esc_url( $this->console_url() ) . '">';
+		echo '<input type="hidden" name="acps_console_action" value="post" />';
+
+		echo '<p><label>' . esc_html__( 'Level', 'acps-alert-popups' ) . '<br /><select name="acps_post[level]">';
+		foreach ( $choices as $key => $label ) {
+			echo '<option value="' . esc_attr( $key ) . '" ' . selected( $level, $key, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select></label></p>';
+
+		echo '<p><label>' . esc_html__( 'Header', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_post[heading]" size="60" /></label></p>';
+		echo '<p><label>' . esc_html__( 'Text', 'acps-alert-popups' ) . '<br /><textarea name="acps_post[text]" rows="5" cols="60"></textarea></label></p>';
+		echo '<p><label>' . esc_html__( 'Starts (YYYY-MM-DDTHH:MM, optional)', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_post[start]" size="24" /></label></p>';
+		echo '<p><label>' . esc_html__( 'Ends (optional)', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_post[end]" size="24" /></label></p>';
+		echo '<p><button type="submit">' . esc_html__( 'Post alert', 'acps-alert-popups' ) . '</button></p>';
+		echo '</form>';
+
+		$this->page_foot();
+	}
+
+	/**
+	 * The console's wording form (resting message + level words).
+	 *
+	 * @return void
+	 */
+	protected function render_wording_form() {
+		$this->page_head( __( 'Wording', 'acps-alert-popups' ) );
+		$this->nav();
+
+		$normal = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::normal_alert() : null;
+		$rest_h = $normal ? (string) $normal->get_title() : '';
+		$rest_m = $normal ? (string) $normal->get( 'status_message' ) : '';
+
+		echo '<h2>' . esc_html__( 'Wording', 'acps-alert-popups' ) . '</h2>';
+		echo '<form method="post" action="' . esc_url( $this->console_url() ) . '">';
+		echo '<input type="hidden" name="acps_console_action" value="wording" />';
+		echo '<h3>' . esc_html__( 'When nothing is happening', 'acps-alert-popups' ) . '</h3>';
+		echo '<p><label>' . esc_html__( 'Heading', 'acps-alert-popups' ) . '<br /><input type="text" name="acps_rest[heading]" size="60" value="' . esc_attr( $rest_h ) . '" /></label></p>';
+		echo '<p><label>' . esc_html__( 'Message', 'acps-alert-popups' ) . '<br /><textarea name="acps_rest[message]" rows="4" cols="60">' . esc_textarea( $rest_m ) . '</textarea></label></p>';
+
+		echo '<h3>' . esc_html__( 'Level words', 'acps-alert-popups' ) . '</h3>';
+		if ( class_exists( 'ACPS_Alerts_Status' ) ) {
+			foreach ( ACPS_Alerts_Status::levels() as $key => $level ) {
+				if ( ! empty( $level['legacy'] ) ) {
+					continue;
+				}
+
+				echo '<p>' . esc_html( $level['label'] ) . ': ';
+				echo '<input type="text" name="acps_words[' . esc_attr( $key ) . '][banner]" value="' . esc_attr( $level['banner'] ) . '" /> ';
+				echo '<input type="text" name="acps_words[' . esc_attr( $key ) . '][directive]" value="' . esc_attr( wp_strip_all_tags( $level['directive'] ) ) . '" size="40" />';
+				echo '</p>';
+			}
+		}
+
+		echo '<p><button type="submit">' . esc_html__( 'Save wording', 'acps-alert-popups' ) . '</button></p>';
+		echo '</form>';
+
+		$this->page_foot();
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -198,9 +473,19 @@ class ACPS_Alerts_Panel {
 		$matched = false;
 
 		foreach ( $rules as $rule ) {
+			// A rule beginning with ! is an explicit BLOCK that always wins,
+			// whatever the mode. This is what lets an allow list carry
+			// exceptions ("allow 196.168, but never 196.168.5.5").
+			if ( '!' === substr( $rule, 0, 1 ) ) {
+				if ( self::ip_matches( $ip, ltrim( substr( $rule, 1 ) ) ) ) {
+					return false;
+				}
+
+				continue;
+			}
+
 			if ( self::ip_matches( $ip, $rule ) ) {
 				$matched = true;
-				break;
 			}
 		}
 
@@ -745,6 +1030,7 @@ class ACPS_Alerts_Panel {
 	 */
 	protected function render_console( $message = '', $level = 'ok' ) {
 		$this->page_head( __( 'Console', 'acps-alert-popups' ) );
+		$this->nav();
 
 		if ( '' !== $message ) {
 			echo '<p class="msg msg-' . esc_attr( $level ) . '">' . esc_html( $message ) . '</p>';
@@ -944,17 +1230,9 @@ class ACPS_Alerts_Panel {
 
 		echo '<!doctype html><html><head><meta charset="utf-8" /><meta name="robots" content="noindex,nofollow" />';
 		echo '<meta name="viewport" content="width=device-width, initial-scale=1" />';
-		echo '<title>' . esc_html( $title ) . '</title><style>';
-		echo 'body{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;color:#1d2327;background:#f6f7f7}';
-		echo 'h1{font-size:20px}h2{font-size:16px;margin-top:28px;border-bottom:1px solid #dcdcde;padding-bottom:4px}h3{font-size:14px;margin:18px 0 6px}';
-		echo 'table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:4px 8px;border-bottom:1px solid #eee;vertical-align:top}th{width:45%}';
-		echo 'label{display:block;margin:10px 0}label.check{display:block}input,select,textarea{font:inherit;padding:6px;max-width:100%;box-sizing:border-box}input[type=url],input[type=text],input[type=password],textarea{width:100%}textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}';
-		echo 'button{font:inherit;padding:8px 16px;background:#2271b1;color:#fff;border:0;border-radius:3px;cursor:pointer}';
-		echo '.msg{padding:8px 12px;border-radius:3px}.msg-ok{background:#d5f5dd}.msg-warn{background:#fcf3d4}.msg-error{background:#f7d7d7}';
-		echo 'ul.issues{list-style:none;padding:0}ul.issues li{padding:6px 10px;border-left:4px solid #ccc;margin:4px 0;background:#fff}';
-		echo '.lvl-error{border-left-color:#d63638}.lvl-warn{border-left-color:#dba617}.lvl-ok{border-left-color:#00a32a}';
-		echo 'form.logout{margin-top:24px}form.logout button{background:#50575e}';
-		echo '</style></head><body><h1>' . esc_html__( 'ACPS Alert Popups — Console', 'acps-alert-popups' ) . '</h1>';
+		// No styling on purpose: this page is meant to be read as plain text and
+		// driven by a script, so it stays simple and predictable.
+		echo '<title>' . esc_html( $title ) . '</title></head><body><h1>' . esc_html__( 'ACPS Alert Popups — Console', 'acps-alert-popups' ) . '</h1>';
 	}
 
 	/**
@@ -973,8 +1251,7 @@ class ACPS_Alerts_Panel {
 	 * @return void
 	 */
 	protected function redirect_self() {
-		$secret = trim( (string) ACPS_Alerts_Settings::get( 'update_secret' ) );
-		wp_safe_redirect( add_query_arg( self::QUERY_VAR, $secret, home_url( '/' ) ) );
+		wp_safe_redirect( add_query_arg( self::QUERY_VAR, self::access_key(), home_url( '/' ) ) );
 		exit;
 	}
 

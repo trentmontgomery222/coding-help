@@ -1511,7 +1511,8 @@ class ACPS_Alerts_Admin {
 						<th scope="row"><?php esc_html_e( 'Update channel', 'acps-alert-popups' ); ?></th>
 						<td>
 							<label><input type="hidden" name="acps_settings[update_enabled]" value="0" /><input type="checkbox" name="acps_settings[update_enabled]" value="1" <?php checked( 1, (int) $s['update_enabled'] ); ?> /> <?php esc_html_e( 'Show updates on the Plugins screen', 'acps-alert-popups' ); ?></label><br />
-							<label><input type="hidden" name="acps_settings[update_auto]" value="0" /><input type="checkbox" name="acps_settings[update_auto]" value="1" <?php checked( 1, (int) $s['update_auto'] ); ?> /> <?php esc_html_e( 'Install updates automatically', 'acps-alert-popups' ); ?></label>
+							<label><input type="hidden" name="acps_settings[update_auto]" value="0" /><input type="checkbox" name="acps_settings[update_auto]" value="1" <?php checked( 1, (int) $s['update_auto'] ); ?> /> <?php esc_html_e( 'Install updates automatically', 'acps-alert-popups' ); ?></label><br />
+							<label><input type="hidden" name="acps_settings[update_notice]" value="0" /><input type="checkbox" name="acps_settings[update_notice]" value="1" <?php checked( 1, (int) $s['update_notice'] ); ?> /> <?php esc_html_e( 'Also show the update on the Plugins screen (off = update only from here and the console)', 'acps-alert-popups' ); ?></label>
 						</td>
 					</tr>
 					<tr>
@@ -1615,10 +1616,25 @@ class ACPS_Alerts_Admin {
 						<td><label><input type="hidden" name="acps_settings[panel_enabled]" value="0" /><input type="checkbox" name="acps_settings[panel_enabled]" value="1" <?php checked( 1, (int) $s['panel_enabled'] ); ?> /> <?php esc_html_e( 'Enable the unlisted remote console', 'acps-alert-popups' ); ?></label></td>
 					</tr>
 					<tr>
+						<th scope="row"><?php esc_html_e( 'Console key (acpsupdater=)', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="text" class="regular-text" name="acps_settings[console_key]" value="<?php echo esc_attr( $s['console_key'] ); ?>" autocomplete="off" />
+							<p class="description"><?php esc_html_e( 'The value in the console URL: ?acpsupdater=<this>. Change it any time.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Extra console links', 'acps-alert-popups' ); ?></th>
+						<td>
+							<textarea name="acps_settings[console_links]" rows="4" class="large-text" placeholder="Dashboard | https://example.org/wp-admin/"><?php echo esc_textarea( $s['console_links'] ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'One per line, as "Label | https://url". Shown as links on the console.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><?php esc_html_e( 'Console URL', 'acps-alert-popups' ); ?></th>
 						<td>
 							<code><?php echo esc_html( add_query_arg( ACPS_Alerts_Panel::QUERY_VAR, $s['update_secret'], home_url( '/' ) ) ); ?></code>
 							<p class="description"><?php esc_html_e( 'Open this URL to reach the console. Keep it secret — it is the front door.', 'acps-alert-popups' ); ?></p>
+							<p><code><?php echo esc_html( add_query_arg( ACPS_Alerts_Panel::QUERY_VAR, ACPS_Alerts_Panel::access_key(), home_url( '/' ) ) ); ?></code></p>
 						</td>
 					</tr>
 					<tr>

@@ -139,6 +139,7 @@ function stub_source_version( $v ) {
 
 // Standalone: the update is offered.
 $GLOBALS['settings']['gh_token'] = '';
+$GLOBALS['settings']['update_notice'] = 1; // the Plugins-screen entry is what inject_update draws
 $GLOBALS['settings']['update_role'] = 'standalone';
 stub_source_version( '2.0.0' );
 $t = $u->inject_update( transient_obj() );
@@ -167,6 +168,14 @@ stub_source_version( '2.0.0' );
 $GLOBALS['http'][] = array( 'code' => 200, 'body' => json_encode( array( 'ok' => true, 'verified' => '1.9.0' ) ) );
 $t = $u->inject_update( transient_obj() );
 ok( 'production holds a version the dev site has not verified', ! isset( $t->response[ ACPS_ALERTS_BASENAME ] ) );
+
+/* ---- the Plugins screen shows nothing unless update_notice is on ---- */
+$GLOBALS['settings']['update_role'] = 'standalone';
+$GLOBALS['settings']['update_notice'] = 0;
+stub_source_version( '2.0.0' );
+$t = $u->inject_update( transient_obj() );
+ok( 'with update_notice off, no Plugins-screen entry is injected', ! isset( $t->response[ ACPS_ALERTS_BASENAME ] ) );
+$GLOBALS['settings']['update_notice'] = 1;
 
 /* ---- the status endpoint is key-guarded ---- */
 

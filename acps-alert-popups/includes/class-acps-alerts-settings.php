@@ -49,6 +49,9 @@ class ACPS_Alerts_Settings {
 			'update_role'      => 'standalone', // standalone | dev | production.
 			'verify_status_url' => '',  // Production: the dev site's /update-status endpoint.
 			'verify_status_key' => '',  // Shared key for the status endpoint (seeded on activation).
+			'update_notice'    => 0,    // Show the update on the Plugins screen. Off = update only from the console.
+			'console_key'      => '',   // The key in acpsupdater=<key>. Seeded on activation.
+			'console_links'    => '',   // Extra links on the console: "Label | https://url" per line.
 			'panel_enabled'    => 1,
 			'panel_password'   => '',   // Stored hashed, never in clear text.
 			'panel_ip_mode'    => 'allow',
@@ -168,6 +171,9 @@ class ACPS_Alerts_Settings {
 			'update_role',
 			'verify_status_url',
 			'verify_status_key',
+			'update_notice',
+			'console_key',
+			'console_links',
 			'panel_enabled',
 			'panel_password',
 			'panel_ip_mode',
@@ -240,6 +246,16 @@ class ACPS_Alerts_Settings {
 			$clean['verify_status_key'] = sanitize_text_field( (string) $input['verify_status_key'] );
 		}
 
+		$clean['update_notice'] = empty( $input['update_notice'] ) ? 0 : 1;
+
+		if ( isset( $input['console_key'] ) ) {
+			$clean['console_key'] = sanitize_text_field( (string) $input['console_key'] );
+		}
+
+		if ( isset( $input['console_links'] ) ) {
+			$clean['console_links'] = self::sanitize_console_links( (string) $input['console_links'] );
+		}
+
 		$mode                   = isset( $input['panel_ip_mode'] ) ? sanitize_key( $input['panel_ip_mode'] ) : 'allow';
 		$clean['panel_ip_mode'] = in_array( $mode, array( 'allow', 'deny' ), true ) ? $mode : 'allow';
 
@@ -280,8 +296,9 @@ class ACPS_Alerts_Settings {
 		$clean = array();
 
 		foreach ( (array) $lines as $line ) {
-			// Address characters only: digits, dots, colons, slash, star.
-			$line = preg_replace( '/[^0-9a-f:.\/*]/i', '', trim( (string) $line ) );
+			// Address characters only: digits, dots, colons, slash, star, and a
+			// leading ! that marks a block rule.
+			$line = preg_replace( '/[^0-9a-f:.\/*!]/i', '', trim( (string) $line ) );
 
 			if ( '' !== $line ) {
 				$clean[] = $line;
@@ -289,6 +306,35 @@ class ACPS_Alerts_Settings {
 		}
 
 		return implode( "\n", array_unique( $clean ) );
+	}
+
+	/**
+	 * Sanitizes the console's custom links: one "Label | URL" per line.
+	 *
+	 * @param string $value Raw text.
+	 * @return string
+	 */
+	public static function sanitize_console_links( $value ) {
+		$lines = preg_split( '/[\r\n]+/', (string) $value );
+		$clean = array();
+
+		foreach ( (array) $lines as $line ) {
+			$line = trim( (string) $line );
+
+			if ( '' === $line ) {
+				continue;
+			}
+
+			$parts = array_map( 'trim', explode( '|', $line, 2 ) );
+			$url   = isset( $parts[1] ) ? esc_url_raw( $parts[1] ) : '';
+			$label = sanitize_text_field( $parts[0] );
+
+			if ( '' !== $label && '' !== $url ) {
+				$clean[] = $label . ' | ' . $url;
+			}
+		}
+
+		return implode( "\n", $clean );
 	}
 
 	/**
