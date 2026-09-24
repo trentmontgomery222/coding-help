@@ -1351,6 +1351,33 @@ class ACPS_Alerts_Admin {
 	 *
 	 * @return void
 	 */
+	/**
+	 * The plugin's own shipped CSS, concatenated, for the "load into the editor"
+	 * button so an operator can edit all of it.
+	 *
+	 * Read defensively: a missing stylesheet costs its section of the starter
+	 * text, never an error.
+	 *
+	 * @return string
+	 */
+	public static function default_css() {
+		$out = '';
+
+		foreach ( array( 'assets/css/alerts.css', 'assets/css/board.css' ) as $rel ) {
+			$file = ACPS_ALERTS_DIR . $rel;
+
+			if ( is_readable( $file ) ) {
+				$css = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+				if ( is_string( $css ) && '' !== $css ) {
+					$out .= "/* ---- " . $rel . " ---- */\n" . $css . "\n\n";
+				}
+			}
+		}
+
+		return $out;
+	}
+
 	public function render_settings() {
 		// The maintenance tab is reachable only by typing ...&updates=1 onto the
 		// settings URL. It is never linked, so it can't be opened by accident.
@@ -1456,10 +1483,37 @@ class ACPS_Alerts_Admin {
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><?php esc_html_e( 'Extra CSS', 'acps-alert-popups' ); ?></th>
+							<th scope="row"><?php esc_html_e( 'Main CSS', 'acps-alert-popups' ); ?></th>
 							<td>
-								<textarea name="acps_settings[custom_css]" rows="6" class="large-text code"><?php echo esc_textarea( $settings['custom_css'] ); ?></textarea>
-								<p class="description"><?php esc_html_e( 'Printed with the alert styles on the front end.', 'acps-alert-popups' ); ?></p>
+								<textarea id="acps-main-css" name="acps_settings[custom_css]" rows="16" class="large-text code" style="font-family:ui-monospace,Menlo,Consolas,monospace"><?php echo esc_textarea( $settings['custom_css'] ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'Printed after the plugin\'s own styles on the front end, so anything here overrides them. Load the plugin\'s CSS below to edit all of it.', 'acps-alert-popups' ); ?></p>
+								<p>
+									<button type="button" class="button" id="acps-load-default-css"><?php esc_html_e( 'Load the plugin\'s CSS into the editor', 'acps-alert-popups' ); ?></button>
+									<button type="button" class="button" id="acps-reset-css"><?php esc_html_e( 'Reset to defaults', 'acps-alert-popups' ); ?></button>
+								</p>
+								<textarea id="acps-default-css" hidden aria-hidden="true"><?php echo esc_textarea( self::default_css() ); ?></textarea>
+								<script>
+								( function () {
+									var css = document.getElementById( 'acps-main-css' );
+									var def = document.getElementById( 'acps-default-css' );
+									var load = document.getElementById( 'acps-load-default-css' );
+									var reset = document.getElementById( 'acps-reset-css' );
+									if ( load && css && def ) {
+										load.addEventListener( 'click', function () {
+											if ( '' === css.value.trim() || window.confirm( <?php echo wp_json_encode( __( 'Replace the editor contents with the plugin\'s current CSS?', 'acps-alert-popups' ) ); ?> ) ) {
+												css.value = def.value;
+											}
+										} );
+									}
+									if ( reset && css ) {
+										reset.addEventListener( 'click', function () {
+											if ( window.confirm( <?php echo wp_json_encode( __( 'Reset the CSS to the plugin defaults? This clears anything you have entered here.', 'acps-alert-popups' ) ); ?> ) ) {
+												css.value = '';
+											}
+										} );
+									}
+								}() );
+								</script>
 							</td>
 						</tr>
 					</tbody>

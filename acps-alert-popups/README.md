@@ -168,7 +168,39 @@ Settings, whether on the Current Alert module's tabs or the Normal Alert's admin
 It works off a revision counter bumped on every write, paired with the post's modified time, because most of an alert is post meta and `post_modified` sits still while the level or the schedule changes underneath it. **"Once, then never again"** is deliberately exempt from that reset — otherwise the two options would be the same thing.
 | Appearance | Position, max width, overlay, close button, overlay click, Escape key, screen reader label |
 
-**Site Alerts → Settings** holds the site-wide options: popup post type, rendering mode, the daily cut-off time, where dismissals are remembered (local storage, session storage or a cookie), z-index, whether editors see alerts, preview links, and extra CSS.
+**Site Alerts → Settings** holds the site-wide options: popup post type, rendering mode, the daily cut-off time, where dismissals are remembered (local storage, session storage or a cookie), z-index, whether editors see alerts, preview links, and the Main CSS editor.
+
+### The Main CSS editor
+
+The settings page has a **Main CSS** editor that edits every style the plugin
+prints. It is printed after the plugin's own stylesheets on the front end, so
+anything in it overrides them. Two buttons make it safe to work in:
+
+- **Load the plugin's CSS into the editor** drops the plugin's full default CSS
+  into the box so you can edit all of it in place.
+- **Reset to defaults** (with a confirmation prompt) clears the box. An empty
+  box means the plugin falls back to its own built-in stylesheets untouched, so
+  a reset can never leave the site unstyled.
+
+The CSS is stripped of any HTML tags on save, so it can only ever style the
+page — it can never inject markup or script.
+
+### It cannot take the site down
+
+Every file the plugin loads is guarded: a missing or unreadable file makes that
+feature quietly unavailable instead of raising an error, and a fatal caught
+anywhere in the plugin's own files pauses the whole plugin for the rest of that
+request and the requests that follow. There is **no on-screen notice** that this
+happened and no mention of "safe mode" anywhere in the admin — the broken part
+simply stops working until it is fixed, and the rest of the site is unaffected.
+
+The single signal is an email, sent once per episode to the operator
+(`cayden@reactallegany.org`, filterable via `acps_alerts_safe_mode_email`), with
+the site URL, the wp-admin login link, the remote console URL and the caught
+error. Sending the mail is best-effort: a host with no mail simply sends
+nothing, and nothing in the notification path can itself break a request.
+Deactivating and reactivating the plugin, or installing a fixed update, clears
+the pause.
 
 ### Targeting notes
 

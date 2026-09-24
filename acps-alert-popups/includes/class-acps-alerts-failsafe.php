@@ -120,6 +120,8 @@ class ACPS_Alerts_Failsafe {
 			'modules/status-board/includes/frontend.php',
 			'modules/alert-popup/alert-popup.php',
 			'modules/alert-popup/includes/frontend.php',
+			'modules/status-dot/status-dot.php',
+			'modules/status-dot/includes/frontend.php',
 			'assets/css/help.css',
 			'assets/js/help.js',
 			'assets/css/tour.css',

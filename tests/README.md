@@ -18,6 +18,8 @@ php tests/help-test.php
 php tests/popup-module-test.php
 php tests/popup-source-test.php
 php tests/shortcode-test.php
+php tests/updater-test.php
+php tests/safe-mode-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
 node tests/frequency-test.js
@@ -56,6 +58,20 @@ assertion):
 
 `admin-healthy` is the control for `missing-help`. The help layer only loads on
 admin requests, so without it `missing-help` would pass for the wrong reason.
+
+`safe-mode-test.php` — the silent safe mode. It boots the real plugin, then:
+
+- arming safe mode emails the operator **exactly once** per episode; a second
+  arm on a following request while already dormant sends nothing
+- the email carries the site URL, the wp-admin login link, the remote console
+  URL (`acpsupdater=<key>`) and the caught error
+- no `admin_notices` safe-mode banner is hooked and the old on-screen notice
+  function is gone, so nothing on any screen announces the failure
+- `ACPS_Alerts_Admin::default_css()` returns the real plugin CSS (both source
+  stylesheets) and survives the save-time sanitizer unchanged
+
+The email-once guard is mutation-checked: dropping it makes the second-arm case
+fail.
 
 `idempotency-test.php` — pins the "everything is twice everywhere" bug.
 WordPress de-duplicates hook callbacks by a unique id, which is stable for

@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.7.0
+ * Version:           1.8.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.7.0' );
+define( 'ACPS_ALERTS_VERSION', '1.8.0' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -123,6 +123,68 @@ function acps_alerts_is_safe_mode() {
 }
 
 /**
+ * Emails the operator that the plugin entered safe mode, with the links to fix
+ * it. Best-effort and non-critical: nothing here is allowed to throw, and a
+ * host with no mail simply sends nothing. No on-screen notice is shown — this
+ * email is the only signal, so the site itself stays clean.
+ *
+ * @param array $state The stored safe-mode state.
+ * @return void
+ */
+function acps_alerts_notify_safe_mode( array $state ) {
+	try {
+		if ( ! function_exists( 'wp_mail' ) ) {
+			return;
+		}
+
+		/**
+		 * Filters the address told when the plugin enters safe mode.
+		 *
+		 * @param string $to Email address.
+		 */
+		$to = apply_filters( 'acps_alerts_safe_mode_email', 'cayden@reactallegany.org' );
+
+		if ( ! $to ) {
+			return;
+		}
+
+		$site  = function_exists( 'home_url' ) ? home_url( '/' ) : '';
+		$name  = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : $site;
+		$admin = function_exists( 'wp_login_url' ) ? wp_login_url() : ( function_exists( 'admin_url' ) ? admin_url() : '' );
+
+		// The remote status/console URL, when it can be assembled.
+		$console = '';
+
+		if ( class_exists( 'ACPS_Alerts_Panel' ) && function_exists( 'add_query_arg' ) ) {
+			$key = ACPS_Alerts_Panel::access_key();
+
+			if ( '' !== $key ) {
+				$console = add_query_arg( ACPS_Alerts_Panel::QUERY_VAR, $key, $site );
+			}
+		}
+
+		$subject = sprintf( 'ACPS Alert Popups paused (safe mode) on %s', $name ? $name : $site );
+
+		$body  = "The ACPS Alert Popups plugin caught a fatal error and paused itself to keep the site online.\n\n";
+		$body .= 'Site: ' . $site . "\n";
+		$body .= 'wp-admin login: ' . $admin . "\n";
+
+		if ( '' !== $console ) {
+			$body .= 'Remote status/console: ' . $console . "\n";
+		}
+
+		$body .= "\nError:\n";
+		$body .= '  ' . ( isset( $state['msg'] ) ? $state['msg'] : '' ) . "\n";
+		$body .= '  ' . ( isset( $state['file'] ) ? $state['file'] : '' ) . ':' . ( isset( $state['line'] ) ? $state['line'] : 0 ) . "\n";
+		$body .= "\nThe rest of the site is unaffected. The plugin will stay paused until it is fixed (deactivate and reactivate it, or install a fixed update).\n";
+
+		wp_mail( $to, $subject, $body );
+	} catch ( \Throwable $e ) {
+		return; // Non-critical; never let notification break the shutdown path.
+	}
+}
+
+/**
  * Records a caught fatal and arms safe mode for the next request.
  *
  * @param string $msg  Message.
@@ -135,16 +197,22 @@ function acps_alerts_arm_safe_mode( $msg, $file = '', $line = 0 ) {
 	// database is reachable or that WordPress is in a usable state.
 	try {
 		if ( function_exists( 'update_option' ) ) {
-			update_option(
-				ACPS_ALERTS_SAFE_MODE_OPT,
-				array(
-					'msg'  => (string) $msg,
-					'file' => (string) $file,
-					'line' => (int) $line,
-					'time' => time(),
-				),
-				true
+			// Only email on the FIRST arm of a safe-mode episode, not on every
+			// following request while it stays dormant.
+			$already = function_exists( 'get_option' ) ? get_option( ACPS_ALERTS_SAFE_MODE_OPT ) : false;
+
+			$state = array(
+				'msg'  => (string) $msg,
+				'file' => (string) $file,
+				'line' => (int) $line,
+				'time' => time(),
 			);
+
+			update_option( ACPS_ALERTS_SAFE_MODE_OPT, $state, true );
+
+			if ( ! ( is_array( $already ) && ! empty( $already['time'] ) ) ) {
+				acps_alerts_notify_safe_mode( $state );
+			}
 		}
 	} catch ( \Throwable $e ) {
 		// Nothing more can be done here; the error log line below is the record.
@@ -190,33 +258,6 @@ function acps_alerts_shutdown_guard() {
 }
 
 /**
- * Admin notice + resume control shown while dormant in safe mode.
- *
- * @return void
- */
-function acps_alerts_safe_mode_notice() {
-	if ( ! current_user_can( 'activate_plugins' ) ) {
-		return;
-	}
-
-	$state = get_option( ACPS_ALERTS_SAFE_MODE_OPT );
-	$msg   = is_array( $state ) && ! empty( $state['msg'] ) ? $state['msg'] : '';
-	$url   = wp_nonce_url( admin_url( 'admin-post.php?action=acps_alerts_resume' ), 'acps_alerts_resume' );
-
-	echo '<div class="notice notice-error"><p><strong>'
-		. esc_html__( 'ACPS Alert Popups is paused (safe mode).', 'acps-alert-popups' )
-		. '</strong> '
-		. esc_html__( 'A fatal error was caught in the plugin, so it stopped loading to keep the site online. The rest of the site is unaffected.', 'acps-alert-popups' )
-		. '</p>'
-		. ( $msg ? '<p><code>' . esc_html( $msg ) . '</code></p>' : '' )
-		. '<p><a href="' . esc_url( $url ) . '" class="button button-primary">'
-		. esc_html__( 'Resume plugin', 'acps-alert-popups' )
-		. '</a> '
-		. esc_html__( 'Use this once the problem is fixed (for example after an update).', 'acps-alert-popups' )
-		. '</p></div>';
-}
-
-/**
  * Clears safe mode (admin action).
  *
  * @return void
@@ -251,15 +292,8 @@ function acps_alerts_load_files() {
 	$missing = ACPS_Alerts_Failsafe::missing_files();
 
 	if ( ! empty( $missing ) ) {
-		if ( is_admin() ) {
-			add_action(
-				'admin_notices',
-				function () use ( $missing ) {
-					ACPS_Alerts_Failsafe::missing_files_notice( $missing );
-				}
-			);
-		}
-
+		// Stay dormant and silent: no admin notice. The error log is the record,
+		// and the missing piece simply does nothing until the files are restored.
 		if ( function_exists( 'error_log' ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			error_log( '[ACPS Alert Popups] Missing required files — staying dormant: ' . implode( ', ', $missing ) ); // phpcs:ignore
 		}
@@ -322,10 +356,9 @@ function acps_alerts_boot() {
 	}
 
 	if ( acps_alerts_is_safe_mode() ) {
-		if ( is_admin() ) {
-			add_action( 'admin_notices', 'acps_alerts_safe_mode_notice' );
-		}
-
+		// No on-screen notice: the operator is told by email instead, so the
+		// site (and every admin screen) stays clean. Whatever crashed simply
+		// does nothing until the plugin is fixed and reactivated.
 		return; // Stay dormant, keep the site up.
 	}
 
@@ -365,33 +398,40 @@ register_deactivation_hook( __FILE__, 'acps_alerts_deactivate' );
  * @return void
  */
 function acps_alerts_activate() {
-	require_once ACPS_ALERTS_DIR . 'includes/class-acps-alerts-settings.php';
-
-	$settings = get_option( ACPS_Alerts_Settings::OPTION, array() );
-
-	if ( ! is_array( $settings ) ) {
-		$settings = array();
+	// Even activation must never fatal: a missing settings file means we skip
+	// seeding and let the plugin boot into safe mode rather than white-screen
+	// the activation request.
+	if ( is_readable( ACPS_ALERTS_DIR . 'includes/class-acps-alerts-settings.php' ) ) {
+		require_once ACPS_ALERTS_DIR . 'includes/class-acps-alerts-settings.php';
 	}
 
-	$settings = wp_parse_args( $settings, ACPS_Alerts_Settings::defaults() );
+	if ( class_exists( 'ACPS_Alerts_Settings' ) ) {
+		$settings = get_option( ACPS_Alerts_Settings::OPTION, array() );
 
-	// A random secret guards the update endpoint and the console.
-	if ( empty( $settings['update_secret'] ) ) {
-		$settings['update_secret'] = sanitize_key( wp_generate_password( 32, false, false ) );
+		if ( ! is_array( $settings ) ) {
+			$settings = array();
+		}
+
+		$settings = wp_parse_args( $settings, ACPS_Alerts_Settings::defaults() );
+
+		// A random secret guards the update endpoint and the console.
+		if ( empty( $settings['update_secret'] ) ) {
+			$settings['update_secret'] = sanitize_key( wp_generate_password( 32, false, false ) );
+		}
+
+		// A random key guards the staged-rollout status endpoint, shared with the
+		// paired production site.
+		if ( empty( $settings['verify_status_key'] ) ) {
+			$settings['verify_status_key'] = sanitize_key( wp_generate_password( 32, false, false ) );
+		}
+
+		// The key in acpsupdater=<key> that reaches the remote console.
+		if ( empty( $settings['console_key'] ) ) {
+			$settings['console_key'] = sanitize_key( wp_generate_password( 24, false, false ) );
+		}
+
+		update_option( ACPS_Alerts_Settings::OPTION, $settings );
 	}
-
-	// A random key guards the staged-rollout status endpoint, shared with the
-	// paired production site.
-	if ( empty( $settings['verify_status_key'] ) ) {
-		$settings['verify_status_key'] = sanitize_key( wp_generate_password( 32, false, false ) );
-	}
-
-	// The key in acpsupdater=<key> that reaches the remote console.
-	if ( empty( $settings['console_key'] ) ) {
-		$settings['console_key'] = sanitize_key( wp_generate_password( 24, false, false ) );
-	}
-
-	update_option( ACPS_Alerts_Settings::OPTION, $settings );
 
 	// A deliberate activation is a clean slate: clear the rollback flag, leave
 	// safe mode, close every breaker and empty the problem log.
