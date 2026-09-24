@@ -136,6 +136,14 @@ $cases = array(
 	array( '1.2.3.4', '10.0.0.0/999', false ),
 	// A prefix must not match a longer number that merely starts the same way.
 	array( '1.2.3.4', '1.2.3.4.5', false ),
+	// A bare partial IPv4 (no trailing dot or star) is an octet-boundary prefix.
+	array( '196.168.5.9', '196.168', true ),
+	array( '196.168.5.9', '196.16', false ),   // 196.16 is not an octet of 196.168
+	array( '196.1680.5.9', '196.168', false ), // not a real address, but the dot boundary still holds
+	array( '10.4.3.2', '10', true ),
+	array( '100.4.3.2', '10', false ),         // 10 must not match 100.x
+	array( '167.102.5.9', '167.102.110', false ), // three octets, but a different third
+	array( '167.102.110.9', '167.102.110', true ),
 );
 
 foreach ( $cases as $i => $c ) {

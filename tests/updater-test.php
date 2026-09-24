@@ -203,5 +203,16 @@ check( 'and the signed redirect is what was downloaded', $GLOBALS['downloads'][0
 $GLOBALS['settings']['gh_token'] = '';
 check( 'with no token the resolver stands down', $u->maybe_resolve_private_download( false, 'https://api.github.com/repos/acme/widget/releases/assets/42', null ), false );
 
+/* ---- a degraded update channel is recorded, not swallowed ---- */
+
+// When an update installs but the plugin's own updater/console did not come up
+// cleanly, verify_after_upgrade records health status 'degraded'. record_health
+// used to coerce anything but ok/warn/error to 'ok', which would have hidden it.
+$GLOBALS['options'] = array();
+$u->record_health( 'degraded', 'channel did not re-initialise' );
+$log = $GLOBALS['options']['acps_alerts_health'];
+$last = end( $log );
+check( 'a degraded channel is kept as degraded, not softened to ok', $last['status'], 'degraded' );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All updater cases passed\n";
 exit( $fails ? 1 : 0 );

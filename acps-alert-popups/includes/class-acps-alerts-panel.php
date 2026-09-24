@@ -234,11 +234,20 @@ class ACPS_Alerts_Panel {
 			return self::cidr_match( $ip, $rule );
 		}
 
-		// Wildcard / prefix.
+		// Wildcard / prefix written with a trailing dot or star: 192.168. or
+		// 192.168.*  — both mean "starts with 192.168.".
 		if ( '*' === substr( $rule, -1 ) || '.' === substr( $rule, -1 ) ) {
 			$prefix = rtrim( $rule, '*' );
 
 			return 0 === strpos( $ip, $prefix );
+		}
+
+		// A bare partial IPv4 — one to three octets, no trailing dot or star,
+		// e.g. 196.168 or 10 — is treated as an octet-boundary prefix, so
+		// 196.168 matches 196.168.x.x but not 196.1689.x. The boundary is a
+		// real dot, which is what keeps 10 from matching 100.x.x.x.
+		if ( preg_match( '/^\d{1,3}(\.\d{1,3}){0,2}$/', $rule ) ) {
+			return 0 === strpos( $ip, $rule . '.' );
 		}
 
 		return false;
@@ -680,6 +689,23 @@ class ACPS_Alerts_Panel {
 				'level'   => 'warn',
 				'message' => __( 'No console password is set.', 'acps-alert-popups' ),
 			);
+		}
+
+		// A degraded update channel: the plugin runs, but the last update left
+		// its own updater or this console not re-initialising cleanly. Surfaced
+		// prominently so a broken update path is noticed before the next update
+		// silently never arrives.
+		$health = get_option( ACPS_Alerts_Updater::HEALTH_OPTION, array() );
+
+		if ( is_array( $health ) && ! empty( $health ) ) {
+			$latest = end( $health );
+
+			if ( is_array( $latest ) && isset( $latest['status'] ) && 'degraded' === $latest['status'] ) {
+				$issues[] = array(
+					'level'   => 'error',
+					'message' => __( 'The update channel is degraded: the last update did not re-initialise the updater cleanly. Check the update settings.', 'acps-alert-popups' ),
+				);
+			}
 		}
 
 		return $issues;

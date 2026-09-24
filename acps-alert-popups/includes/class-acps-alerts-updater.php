@@ -789,6 +789,14 @@ class ACPS_Alerts_Updater {
 					array( 'version' => ACPS_ALERTS_VERSION, 'time' => time() ),
 					false
 				);
+			} elseif ( 'degraded' === $result ) {
+				// The plugin runs, so it is not pulled back, but its own update
+				// channel or console did not come up cleanly on the new code.
+				// Record it so the hidden Updates screen and the console show it
+				// rather than the operator finding out when the next update
+				// silently never arrives.
+				$this->record_health( 'degraded', 'Update installed, but the update channel did not re-initialise cleanly. Check the update settings.' );
+				self::log( 'verify_after_upgrade: new version loaded but the update channel is degraded.' );
 			} else {
 				self::log( 'verify_after_upgrade: self-test inconclusive; left the plugin enabled.' );
 			}
@@ -830,7 +838,20 @@ class ACPS_Alerts_Updater {
 		}
 
 		if ( '' !== $secret ) {
-			return ( false !== strpos( (string) wp_remote_retrieve_body( $resp ), 'ACPS_ALERTS_OK' ) ) ? 'ok' : 'unknown';
+			$body = (string) wp_remote_retrieve_body( $resp );
+
+			if ( false !== strpos( $body, 'ACPS_ALERTS_OK' ) ) {
+				return 'ok';
+			}
+
+			// The plugin loaded (no 5xx) but its own update channel or console
+			// did not re-initialise cleanly — the update itself broke the way
+			// the plugin updates. Not a crash, but the operator must know.
+			if ( false !== strpos( $body, 'ACPS_ALERTS_DEGRADED' ) ) {
+				return 'degraded';
+			}
+
+			return 'unknown';
 		}
 
 		return 'ok';
@@ -856,11 +877,18 @@ class ACPS_Alerts_Updater {
 			return;
 		}
 
-		// Prove the update machinery itself is intact on the new code: the class
-		// loads, the secret round-trips, and the manifest URL still assembles.
+		// Prove the whole update path survived the new code, not just that the
+		// plugin loaded: the updater and the remote console both class-load, the
+		// settings still read, the secret round-trips, and both the update
+		// request URL and the force-update URL still assemble. A release that
+		// breaks or resets any of these prints DEGRADED, which the post-update
+		// check surfaces instead of quietly passing.
 		$healthy = class_exists( 'ACPS_Alerts_Updater' )
+			&& class_exists( 'ACPS_Alerts_Panel' )
+			&& class_exists( 'ACPS_Alerts_Settings' )
 			&& '' !== $secret
-			&& is_string( $this->manifest_url() );
+			&& is_string( $this->manifest_url() )
+			&& is_string( $this->force_update_url() );
 
 		nocache_headers();
 		status_header( 200 );
@@ -1003,7 +1031,7 @@ class ACPS_Alerts_Updater {
 
 		$log[] = array(
 			'time'   => time(),
-			'status' => in_array( $status, array( 'ok', 'warn', 'error' ), true ) ? $status : 'ok',
+			'status' => in_array( $status, array( 'ok', 'warn', 'error', 'degraded' ), true ) ? $status : 'ok',
 			'note'   => sanitize_text_field( $note ),
 		);
 
