@@ -454,5 +454,40 @@ ok( 'a plain alert is not marked as built', false === strpos( $plain, 'acps-aler
 ok( 'and keeps the width it was given', false !== strpos( $plain, 'max-width:640px' ) );
 ok( 'and gets our heading, since nothing else supplies one', false !== strpos( $plain, 'acps-alert__heading' ) );
 
+/* ---- previewing a NON-current alert while a popup exists ---- */
+
+/*
+ * The lifted popup is the CURRENT alert's body only. Previewing the Normal
+ * alert (or any non-current alert) while a Beaver Builder popup exists must not
+ * give it the "built" treatment — that strips our card, and with no popup of
+ * its own behind it the box renders transparent. This is the preview-page bug.
+ */
+$GLOBALS['bb_popup']    = true;   // a current popup is available on the site
+$GLOBALS['role_of'][53] = 'normal'; // but THIS alert is not the current one
+$GLOBALS['content'][53] = '<p>resting words</p>';
+$GLOBALS['meta'][53]    = array();
+
+$probe->queue_alerts( array( new ACPS_Alerts_Alert( 53 ) ) );
+
+ob_start();
+$probe->render_alerts();
+$normal = ob_get_clean();
+
+ok( 'a non-current alert is not marked built just because a popup exists', false === strpos( $normal, 'acps-alert--built' ) );
+ok( 'so it keeps our card (a background, not transparent)', false !== strpos( $normal, 'acps-alert__heading' ) );
+
+// The current alert, with the same popup available, is still built.
+$GLOBALS['role_of'][54] = 'current';
+$GLOBALS['content'][54] = '';
+$GLOBALS['meta'][54]    = array();
+
+$probe->queue_alerts( array( new ACPS_Alerts_Alert( 54 ) ) );
+
+ob_start();
+$probe->render_alerts();
+$cur = ob_get_clean();
+
+ok( 'the current alert is still built when a popup is available', false !== strpos( $cur, 'acps-alert--built' ) );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All render cases passed\n";
 exit( $fails ? 1 : 0 );

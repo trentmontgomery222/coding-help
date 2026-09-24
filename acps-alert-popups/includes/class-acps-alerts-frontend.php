@@ -403,8 +403,17 @@ class ACPS_Alerts_Frontend {
 		// Whether the body of this alert is a popup somebody designed in Beaver
 		// Builder, rather than plain text this plugin is laying out. Worked out
 		// before the classes, because it decides one of them.
+		//
+		// The lifted Popup module only counts for the CURRENT alert, whose body
+		// IS that popup (see resolve_popup_content). Any other alert — the Normal
+		// alert in a preview, say — has its own body, so it must not be given the
+		// "built" treatment that strips our chrome: that left the popup with no
+		// background of its own and no popup behind it, i.e. transparent.
+		$is_current = class_exists( 'ACPS_Alerts_Post_Type' )
+			&& ACPS_Alerts_Post_Type::ROLE_CURRENT === ACPS_Alerts_Post_Type::role_of( $id );
+
 		$built = self::has_builder_layout( $id )
-			|| ( class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available() );
+			|| ( $is_current && class_exists( 'ACPS_Alerts_Popup_Source' ) && ACPS_Alerts_Popup_Source::available() );
 
 		// Resolved before anything is printed, because whether the alert needs a
 		// close button of its own — and how the dialog is sized — both depend on
