@@ -82,7 +82,7 @@ Changes are live everywhere the text appears the moment you save, and page cache
 
 ### Status levels are SRP
 
-The levels are the five Standard Response Protocol actions from the "I Love U Guys" Foundation — **Hold**, **Secure**, **Shelter**, **Evacuate**, **Lockdown** — each with its directive and its colour, so the site says exactly what the drill says. Two everyday levels sit alongside them: **Normal** and **Information**, which are deliberately *not* marked as response actions.
+The levels are the five Standard Response Protocol actions from the "I Love U Guys" Foundation — **Hold**, **Secure**, **Shelter**, **Evacuate**, **Lockdown** — each with its directive and its colour, so the site says exactly what the drill says. Three everyday levels sit alongside them: **Normal**, **Information**, and **Bus** (for transport delays and route changes), which are deliberately *not* marked as response actions.
 
 Urgency runs Lockdown > Evacuate > Shelter > Secure > Hold > Information.
 

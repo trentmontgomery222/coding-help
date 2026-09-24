@@ -59,6 +59,16 @@ class ACPS_Alerts_Status {
 				'srp'       => false,
 				'rank'      => 1,
 			),
+			'bus'       => array(
+				'label'     => __( 'Bus', 'acps-alert-popups' ),
+				'banner'    => __( 'BUS', 'acps-alert-popups' ),
+				'directive' => '',
+				'color'     => '#c47f00',
+				'severity'  => 'warning',
+				'icon'      => 'M5 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8H5z M5 10h14 M6 16.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0 M15 16.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0',
+				'srp'       => false,
+				'rank'      => 1,
+			),
 			'hold'      => array(
 				'label'     => __( 'Hold', 'acps-alert-popups' ),
 				'banner'    => __( 'HOLD', 'acps-alert-popups' ),

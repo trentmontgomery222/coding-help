@@ -297,6 +297,19 @@ ok( 'the picker offers every SRP action', 5 === count( array_intersect( array_ke
 ok( 'the picker hides retired wording', ! isset( $choices['advisory'] ) && ! isset( $choices['closure'] ) );
 ok( 'an SRP choice shows its directive in the label', false !== strpos( $choices['lockdown'], 'Locks, Lights, Out of Sight' ) );
 
+/* ---- the Bus status level ---- */
+$bus = ACPS_Alerts_Status::level( 'bus' );
+check( 'there is a Bus level', $bus['label'], 'Bus' );
+check( 'it shows BUS on the banner', $bus['banner'], 'BUS' );
+ok( 'it has its own colour', '' !== ACPS_Alerts_Status::colour( $bus['color'] ) );
+ok( 'it is an everyday level, not an SRP action', empty( $bus['srp'] ) );
+ok( 'the picker offers Bus', isset( $choices['bus'] ) );
+ok( 'and it is not hidden as retired', empty( $bus['legacy'] ) );
+
+$bus_icon = ACPS_Alerts_Status::level_icon( 'bus', 56 );
+ok( 'the Bus badge renders', '' !== $bus_icon && false !== strpos( $bus_icon, '<svg' ) );
+ok( 'in the Bus colour', false !== strpos( $bus_icon, ACPS_Alerts_Status::colour( $bus['color'] ) ) );
+
 /* ---- entries written before the move to SRP still render ---- */
 foreach ( array( 'advisory', 'warning', 'closure', 'emergency' ) as $old ) {
 	$l = ACPS_Alerts_Status::level( $old );
