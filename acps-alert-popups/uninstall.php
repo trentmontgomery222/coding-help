@@ -23,6 +23,8 @@ try {
 		wp_clear_scheduled_hook( 'acps_alerts_daily_archive' );
 	}
 	delete_transient( 'acps_alerts_update_remote' );
+	delete_transient( 'acps_alerts_update_devstatus' );
+	delete_option( 'acps_alerts_update_verified' );
 
 	global $wpdb;
 

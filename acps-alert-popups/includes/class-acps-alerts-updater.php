@@ -26,6 +26,9 @@ defined( 'ABSPATH' ) || exit;
 class ACPS_Alerts_Updater {
 
 	const CACHE_KEY      = 'acps_alerts_update_remote';
+	const DEVSTATUS_KEY  = 'acps_alerts_update_devstatus';
+	const VERIFIED_OPTION = 'acps_alerts_update_verified';
+	const REST_NAMESPACE = 'acps-alerts/v1';
 	const CACHE_TTL      = 21600; // 6 hours.
 	const CACHE_TTL_FAIL = 900;   // 15 minutes.
 	const FAILED_OPTION  = 'acps_alerts_update_failed';
@@ -51,11 +54,17 @@ class ACPS_Alerts_Updater {
 
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
+		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
 		add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
 		add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
 		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
 		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+
+		// Staged rollout: a dev install publishes the version it has verified at
+		// a key-guarded REST endpoint, which a production install checks before
+		// it will offer or apply an update.
+		add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
 	}
 
 	/**
@@ -114,7 +123,8 @@ class ACPS_Alerts_Updater {
 			}
 		}
 
-		$data = $this->fetch_manifest();
+		$source = (string) ACPS_Alerts_Settings::get( 'update_source' );
+		$data   = ( 'github' === $source ) ? $this->fetch_from_github() : $this->fetch_manifest();
 
 		// Cache a failure briefly (as an empty array) so a broken source is not
 		// hammered on every admin page load.
@@ -180,12 +190,321 @@ class ACPS_Alerts_Updater {
 	}
 
 	/**
+	 * The `github` source: the latest GitHub release for a configured repo.
+	 *
+	 * The tag name (minus a leading v) is the version, and a named asset is the
+	 * download. For a private repo a token is sent, and the asset\'s API url is
+	 * stored so maybe_resolve_private_download() can turn it into a signed link
+	 * at download time — GitHub rejects a forwarded auth header on the signed S3
+	 * URL, so the redirect has to be resolved ourselves.
+	 *
+	 * @return array|false
+	 */
+	private function fetch_from_github() {
+		try {
+			$owner = trim( (string) ACPS_Alerts_Settings::get( 'gh_owner' ) );
+			$repo  = trim( (string) ACPS_Alerts_Settings::get( 'gh_repo' ) );
+
+			if ( '' === $owner || '' === $repo ) {
+				return false;
+			}
+
+			$token = trim( (string) ACPS_Alerts_Settings::get( 'gh_token' ) );
+			$asset = trim( (string) ACPS_Alerts_Settings::get( 'gh_asset' ) );
+
+			if ( '' === $asset ) {
+				$asset = $this->slug() . '.zip';
+			}
+
+			$headers = array(
+				'Accept'               => 'application/vnd.github+json',
+				'X-GitHub-Api-Version' => '2022-11-28',
+				'User-Agent'           => 'ACPS-Alerts-Updater',
+			);
+
+			if ( '' !== $token ) {
+				$headers['Authorization'] = 'Bearer ' . $token;
+			}
+
+			$url  = sprintf( 'https://api.github.com/repos/%s/%s/releases/latest', rawurlencode( $owner ), rawurlencode( $repo ) );
+			$resp = wp_remote_get( $url, array( 'timeout' => 15, 'headers' => $headers ) );
+
+			if ( is_wp_error( $resp ) ) {
+				self::log( 'github release fetch failed: ' . $resp->get_error_message() );
+
+				return false;
+			}
+
+			if ( 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+				self::log( 'github release fetch returned HTTP ' . wp_remote_retrieve_response_code( $resp ) );
+
+				return false;
+			}
+
+			$release = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+			if ( ! is_array( $release ) || empty( $release['tag_name'] ) ) {
+				self::log( 'github release missing tag_name' );
+
+				return false;
+			}
+
+			$package = '';
+
+			if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
+				foreach ( $release['assets'] as $item ) {
+					if ( ! isset( $item['name'] ) || $item['name'] !== $asset ) {
+						continue;
+					}
+
+					if ( '' !== $token && ! empty( $item['url'] ) ) {
+						// Private repo: the API asset url, resolved to a signed
+						// link at download time.
+						$package = (string) $item['url'];
+					} elseif ( ! empty( $item['browser_download_url'] ) ) {
+						$package = (string) $item['browser_download_url'];
+					}
+
+					break;
+				}
+			}
+
+			if ( '' === $package ) {
+				self::log( "github release has no asset named '{$asset}'" );
+
+				return false;
+			}
+
+			return array(
+				'version'      => ltrim( (string) $release['tag_name'], 'vV' ),
+				'package'      => esc_url_raw( $package ),
+				'html_url'     => ! empty( $release['html_url'] ) ? esc_url_raw( (string) $release['html_url'] ) : '',
+				'body'         => ! empty( $release['body'] ) ? (string) $release['body'] : '',
+				'requires_php' => '',
+				'requires_wp'  => '',
+			);
+		} catch ( \Throwable $e ) {
+			self::log( 'fetch_from_github: ' . $e->getMessage() );
+
+			return false;
+		}
+	}
+
+	/**
+	 * Turns a private GitHub asset API url into a downloadable signed link.
+	 *
+	 * WordPress downloads the package url directly, but a private asset needs an
+	 * auth header that GitHub then refuses to have forwarded onto the signed S3
+	 * URL it redirects to. So the redirect is resolved here — with the header —
+	 * and the signed URL (which carries its own auth) is downloaded plainly.
+	 *
+	 * @param mixed  $reply    Short-circuit value, false to let WordPress handle it.
+	 * @param string $package  The package url being downloaded.
+	 * @param object $upgrader Upgrader instance.
+	 * @return mixed
+	 */
+	public function maybe_resolve_private_download( $reply, $package, $upgrader ) {
+		try {
+			if ( false !== $reply || ! is_string( $package ) ) {
+				return $reply;
+			}
+
+			$token = trim( (string) ACPS_Alerts_Settings::get( 'gh_token' ) );
+
+			if ( '' === $token ) {
+				return $reply;
+			}
+
+			// Only our own GitHub API asset urls, the shape fetch_from_github()
+			// stores for a private repo.
+			if ( false === strpos( $package, 'api.github.com' ) || false === strpos( $package, '/releases/assets/' ) ) {
+				return $reply;
+			}
+
+			$resp = wp_remote_get(
+				$package,
+				array(
+					'timeout'     => 30,
+					'redirection' => 0, // We want the redirect itself.
+					'headers'     => array(
+						'Accept'        => 'application/octet-stream',
+						'Authorization' => 'Bearer ' . $token,
+						'User-Agent'    => 'ACPS-Alerts-Updater',
+					),
+				)
+			);
+
+			if ( is_wp_error( $resp ) ) {
+				self::log( 'private asset redirect failed: ' . $resp->get_error_message() );
+
+				return $reply;
+			}
+
+			$location = wp_remote_retrieve_header( $resp, 'location' );
+
+			if ( ! $location ) {
+				self::log( 'private asset returned no redirect (HTTP ' . wp_remote_retrieve_response_code( $resp ) . ')' );
+
+				return $reply;
+			}
+
+			if ( ! function_exists( 'download_url' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+			}
+
+			// No auth header — the signed URL carries its own.
+			$tmp = download_url( $location );
+
+			if ( is_wp_error( $tmp ) ) {
+				self::log( 'signed asset download failed: ' . $tmp->get_error_message() );
+
+				return $reply;
+			}
+
+			return $tmp;
+		} catch ( \Throwable $e ) {
+			self::log( 'maybe_resolve_private_download: ' . $e->getMessage() );
+
+			return $reply;
+		}
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * Staged rollout: dev verifies, production follows.
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Registers the key-guarded status endpoint a dev install publishes on.
+	 *
+	 * @return void
+	 */
+	public function register_status_route() {
+		if ( ! function_exists( 'register_rest_route' ) ) {
+			return;
+		}
+
+		register_rest_route(
+			self::REST_NAMESPACE,
+			'/update-status',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'rest_status' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+
+	/**
+	 * Reports the version this install has verified, to a paired production site.
+	 *
+	 * Key-guarded so only the site holding the shared key can read it.
+	 *
+	 * @param object $req REST request.
+	 * @return object REST response.
+	 */
+	public function rest_status( $req ) {
+		nocache_headers();
+
+		$key   = trim( (string) ACPS_Alerts_Settings::get( 'verify_status_key' ) );
+		$given = is_object( $req ) && method_exists( $req, 'get_param' ) ? (string) $req->get_param( 'key' ) : '';
+
+		if ( '' === $key || ! hash_equals( $key, $given ) ) {
+			return new WP_REST_Response( array( 'ok' => false ), 403 );
+		}
+
+		$verified = get_option( self::VERIFIED_OPTION );
+
+		return new WP_REST_Response(
+			array(
+				'ok'       => true,
+				'role'     => ACPS_Alerts_Settings::get( 'update_role' ),
+				'running'  => ACPS_ALERTS_VERSION,
+				'verified' => is_array( $verified ) && ! empty( $verified['version'] ) ? (string) $verified['version'] : '',
+				'tested'   => is_array( $verified ) && ! empty( $verified['time'] ) ? (int) $verified['time'] : 0,
+			),
+			200
+		);
+	}
+
+	/**
+	 * The version the paired dev site has verified, for a production install.
+	 *
+	 * Cached briefly. Empty when this is not a production install, is not
+	 * configured, or the dev site cannot be reached — in which case production
+	 * deliberately holds rather than updating blind.
+	 *
+	 * @return string
+	 */
+	private function dev_verified_version() {
+		if ( 'production' !== ACPS_Alerts_Settings::get( 'update_role' ) ) {
+			return '';
+		}
+
+		$url = trim( (string) ACPS_Alerts_Settings::get( 'verify_status_url' ) );
+		$key = trim( (string) ACPS_Alerts_Settings::get( 'verify_status_key' ) );
+
+		if ( '' === $url || '' === $key ) {
+			return '';
+		}
+
+		$cached = get_transient( self::DEVSTATUS_KEY );
+
+		if ( false !== $cached ) {
+			return (string) $cached;
+		}
+
+		$resp = wp_remote_get(
+			add_query_arg( 'key', rawurlencode( $key ), $url ),
+			array( 'timeout' => 12, 'sslverify' => true )
+		);
+
+		$verified = '';
+
+		if ( ! is_wp_error( $resp ) && 200 === (int) wp_remote_retrieve_response_code( $resp ) ) {
+			$body = json_decode( (string) wp_remote_retrieve_body( $resp ), true );
+
+			if ( is_array( $body ) && ! empty( $body['verified'] ) ) {
+				$verified = (string) $body['verified'];
+			}
+		}
+
+		set_transient( self::DEVSTATUS_KEY, $verified, 10 * MINUTE_IN_SECONDS );
+
+		return $verified;
+	}
+
+	/**
+	 * Whether this install may offer or apply an update to $version.
+	 *
+	 * Only a production install is gated: it updates to a version only once the
+	 * paired dev site has verified that version (or newer). Standalone and dev
+	 * installs are never gated.
+	 *
+	 * @param string $version Candidate version.
+	 * @return bool
+	 */
+	private function rollout_allows( $version ) {
+		if ( 'production' !== ACPS_Alerts_Settings::get( 'update_role' ) ) {
+			return true;
+		}
+
+		$verified = $this->dev_verified_version();
+
+		if ( '' === $verified ) {
+			return false; // No confirmation yet — hold.
+		}
+
+		return version_compare( $verified, (string) $version, '>=' );
+	}
+
+	/**
 	 * Clears the cached lookup so a changed setting takes effect at once.
 	 *
 	 * @return void
 	 */
 	public static function flush_cache() {
 		delete_transient( self::CACHE_KEY );
+		delete_transient( self::DEVSTATUS_KEY );
 	}
 
 	/**
@@ -236,7 +555,7 @@ class ACPS_Alerts_Updater {
 				return $transient;
 			}
 
-			if ( version_compare( $remote['version'], ACPS_ALERTS_VERSION, '>' ) ) {
+			if ( version_compare( $remote['version'], ACPS_ALERTS_VERSION, '>' ) && $this->rollout_allows( $remote['version'] ) ) {
 				if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
 					$transient->response = array();
 				}
@@ -325,6 +644,12 @@ class ACPS_Alerts_Updater {
 		try {
 			if ( empty( $item->plugin ) || ACPS_ALERTS_BASENAME !== $item->plugin ) {
 				return $update;
+			}
+
+			$version = isset( $item->new_version ) ? (string) $item->new_version : '';
+
+			if ( '' !== $version && ! $this->rollout_allows( $version ) ) {
+				return false; // Production holds until the dev site has verified it.
 			}
 
 			return (bool) ACPS_Alerts_Settings::get( 'update_auto' );
@@ -456,6 +781,14 @@ class ACPS_Alerts_Updater {
 			if ( 'ok' === $result ) {
 				delete_option( self::FAILED_OPTION );
 				$this->record_health( 'ok', 'Update verified on load.' );
+
+				// Publish that this exact version passed here, so a production
+				// site paired to this (dev) install can read it before updating.
+				update_option(
+					self::VERIFIED_OPTION,
+					array( 'version' => ACPS_ALERTS_VERSION, 'time' => time() ),
+					false
+				);
 			} else {
 				self::log( 'verify_after_upgrade: self-test inconclusive; left the plugin enabled.' );
 			}

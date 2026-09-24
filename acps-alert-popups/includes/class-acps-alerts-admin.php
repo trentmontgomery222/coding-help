@@ -1515,6 +1515,16 @@ class ACPS_Alerts_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><?php esc_html_e( 'Source', 'acps-alert-popups' ); ?></th>
+						<td>
+							<select name="acps_settings[update_source]">
+								<option value="manifest" <?php selected( 'manifest', $s['update_source'] ); ?>><?php esc_html_e( 'Manifest URL', 'acps-alert-popups' ); ?></option>
+								<option value="github" <?php selected( 'github', $s['update_source'] ); ?>><?php esc_html_e( 'GitHub Releases', 'acps-alert-popups' ); ?></option>
+							</select>
+							<p class="description"><?php esc_html_e( 'Where updates are fetched from. Fill the matching fields below.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><?php esc_html_e( 'Manifest base URL', 'acps-alert-popups' ); ?></th>
 						<td><input type="url" class="regular-text" name="acps_settings[update_base]" value="<?php echo esc_attr( $s['update_base'] ); ?>" placeholder="https://updates.example.org/" /></td>
 					</tr>
@@ -1530,6 +1540,56 @@ class ACPS_Alerts_Admin {
 						<td>
 							<input type="text" class="regular-text" name="acps_settings[update_key]" value="<?php echo esc_attr( $s['update_key'] ); ?>" />
 							<p class="description"><?php esc_html_e( 'Sent as ?key= on every update request. The request is: base URL + plugin path + key.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr><th scope="row" colspan="2"><hr /><?php esc_html_e( 'GitHub Releases (when Source is GitHub)', 'acps-alert-popups' ); ?></th></tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Owner / Repo', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="text" class="regular-text" name="acps_settings[gh_owner]" value="<?php echo esc_attr( $s['gh_owner'] ); ?>" placeholder="owner" />
+							<input type="text" class="regular-text" name="acps_settings[gh_repo]" value="<?php echo esc_attr( $s['gh_repo'] ); ?>" placeholder="repo" />
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Release asset', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="text" class="regular-text" name="acps_settings[gh_asset]" value="<?php echo esc_attr( $s['gh_asset'] ); ?>" placeholder="<?php echo esc_attr( dirname( ACPS_ALERTS_BASENAME ) . '.zip' ); ?>" />
+							<p class="description"><?php esc_html_e( 'The exact filename of the .zip attached to the release. Build it so it unpacks to the plugin folder.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Access token', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="text" class="regular-text" name="acps_settings[gh_token]" value="<?php echo esc_attr( $s['gh_token'] ); ?>" autocomplete="off" />
+							<p class="description"><?php esc_html_e( 'Only for a private repo. A fine-grained PAT with read access to releases.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr><th scope="row" colspan="2"><hr /><?php esc_html_e( 'Staged rollout (optional)', 'acps-alert-popups' ); ?></th></tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Role', 'acps-alert-popups' ); ?></th>
+						<td>
+							<select name="acps_settings[update_role]">
+								<option value="standalone" <?php selected( 'standalone', $s['update_role'] ); ?>><?php esc_html_e( 'Standalone — update freely', 'acps-alert-popups' ); ?></option>
+								<option value="dev" <?php selected( 'dev', $s['update_role'] ); ?>><?php esc_html_e( 'Dev — update freely and publish what it verifies', 'acps-alert-popups' ); ?></option>
+								<option value="production" <?php selected( 'production', $s['update_role'] ); ?>><?php esc_html_e( 'Production — only update once the dev site has verified', 'acps-alert-popups' ); ?></option>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'This site\'s status URL', 'acps-alert-popups' ); ?></th>
+						<td><code><?php echo esc_html( rest_url( ACPS_Alerts_Updater::REST_NAMESPACE . '/update-status' ) ); ?></code>
+							<p class="description"><?php esc_html_e( 'On the dev site, give this URL and the key below to the production site.', 'acps-alert-popups' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Dev status URL (production)', 'acps-alert-popups' ); ?></th>
+						<td><input type="url" class="regular-text" name="acps_settings[verify_status_url]" value="<?php echo esc_attr( $s['verify_status_url'] ); ?>" placeholder="https://dev.example.org/wp-json/acps-alerts/v1/update-status" /></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Shared status key', 'acps-alert-popups' ); ?></th>
+						<td>
+							<input type="text" class="regular-text" name="acps_settings[verify_status_key]" value="<?php echo esc_attr( $s['verify_status_key'] ); ?>" autocomplete="off" />
+							<p class="description"><?php esc_html_e( 'The same value on both sites. Guards the status URL so only the paired site can read it.', 'acps-alert-popups' ); ?></p>
 						</td>
 					</tr>
 					<tr>

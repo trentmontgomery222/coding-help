@@ -41,6 +41,14 @@ class ACPS_Alerts_Settings {
 			'update_path'      => '',   // Plugin segment; defaults to the plugin slug.
 			'update_key'       => '',   // Shared key sent with every request.
 			'update_secret'    => '',   // Seeded on activation; guards the endpoint.
+			'update_source'    => 'manifest', // manifest | github.
+			'gh_owner'         => '',
+			'gh_repo'          => '',
+			'gh_asset'         => '',   // Exact release asset filename; defaults to <slug>.zip.
+			'gh_token'         => '',   // PAT for a private repo.
+			'update_role'      => 'standalone', // standalone | dev | production.
+			'verify_status_url' => '',  // Production: the dev site's /update-status endpoint.
+			'verify_status_key' => '',  // Shared key for the status endpoint (seeded on activation).
 			'panel_enabled'    => 1,
 			'panel_password'   => '',   // Stored hashed, never in clear text.
 			'panel_ip_mode'    => 'allow',
@@ -152,6 +160,14 @@ class ACPS_Alerts_Settings {
 			'update_path',
 			'update_key',
 			'update_secret',
+			'update_source',
+			'gh_owner',
+			'gh_repo',
+			'gh_asset',
+			'gh_token',
+			'update_role',
+			'verify_status_url',
+			'verify_status_key',
 			'panel_enabled',
 			'panel_password',
 			'panel_ip_mode',
@@ -192,6 +208,36 @@ class ACPS_Alerts_Settings {
 
 		if ( ! empty( $input['update_secret'] ) ) {
 			$clean['update_secret'] = sanitize_key( (string) $input['update_secret'] );
+		}
+
+		$source                 = isset( $input['update_source'] ) ? sanitize_key( (string) $input['update_source'] ) : 'manifest';
+		$clean['update_source'] = in_array( $source, array( 'manifest', 'github' ), true ) ? $source : 'manifest';
+
+		$role                 = isset( $input['update_role'] ) ? sanitize_key( (string) $input['update_role'] ) : 'standalone';
+		$clean['update_role'] = in_array( $role, array( 'standalone', 'dev', 'production' ), true ) ? $role : 'standalone';
+
+		if ( isset( $input['gh_owner'] ) ) {
+			$clean['gh_owner'] = sanitize_text_field( (string) $input['gh_owner'] );
+		}
+
+		if ( isset( $input['gh_repo'] ) ) {
+			$clean['gh_repo'] = sanitize_text_field( (string) $input['gh_repo'] );
+		}
+
+		if ( isset( $input['gh_asset'] ) ) {
+			$clean['gh_asset'] = sanitize_file_name( (string) $input['gh_asset'] );
+		}
+
+		if ( isset( $input['gh_token'] ) ) {
+			$clean['gh_token'] = trim( sanitize_text_field( (string) $input['gh_token'] ) );
+		}
+
+		if ( isset( $input['verify_status_url'] ) ) {
+			$clean['verify_status_url'] = esc_url_raw( trim( (string) $input['verify_status_url'] ) );
+		}
+
+		if ( isset( $input['verify_status_key'] ) ) {
+			$clean['verify_status_key'] = sanitize_text_field( (string) $input['verify_status_key'] );
 		}
 
 		$mode                   = isset( $input['panel_ip_mode'] ) ? sanitize_key( $input['panel_ip_mode'] ) : 'allow';

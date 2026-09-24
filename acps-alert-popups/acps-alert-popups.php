@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.5.1
+ * Version:           1.6.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.5.1' );
+define( 'ACPS_ALERTS_VERSION', '1.6.0' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -378,6 +378,12 @@ function acps_alerts_activate() {
 	// A random secret guards the update endpoint and the console.
 	if ( empty( $settings['update_secret'] ) ) {
 		$settings['update_secret'] = sanitize_key( wp_generate_password( 32, false, false ) );
+	}
+
+	// A random key guards the staged-rollout status endpoint, shared with the
+	// paired production site.
+	if ( empty( $settings['verify_status_key'] ) ) {
+		$settings['verify_status_key'] = sanitize_key( wp_generate_password( 32, false, false ) );
 	}
 
 	update_option( ACPS_Alerts_Settings::OPTION, $settings );
