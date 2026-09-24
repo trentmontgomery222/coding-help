@@ -16,16 +16,6 @@ if ( empty( $acps_guarded ) && class_exists( 'ACPS_Alerts_Failsafe' ) && method_
 	return;
 }
 
-// Switched off in Settings → Features: nothing on the live page. Inside the
-// builder, one line in place of the module says why it is empty.
-if ( class_exists( 'ACPS_Alerts_Settings' ) && ! ACPS_Alerts_Settings::feature( 'board' ) ) {
-	if ( class_exists( 'FLBuilderModel' ) && method_exists( 'FLBuilderModel', 'is_builder_active' ) && FLBuilderModel::is_builder_active() ) {
-		echo '<p class="acps-feature-off">' . esc_html__( 'This module is switched off in Site Alerts → Settings → Features.', 'acps-alert-popups' ) . '</p>';
-	}
-
-	return;
-}
-
 if ( ! isset( $settings ) || ! is_object( $settings ) || ! class_exists( 'ACPS_Alerts_Status' ) ) {
 	return;
 }

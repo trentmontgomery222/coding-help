@@ -1387,29 +1387,6 @@ class ACPS_Alerts_Admin {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ); ?>">
 				<?php wp_nonce_field( 'acps_alerts_save_settings', 'acps_settings_nonce' ); ?>
 
-				<div class="acps-features" id="acps-features">
-					<h2><?php esc_html_e( 'Features', 'acps-alert-popups' ); ?></h2>
-					<p class="description"><?php esc_html_e( 'Each part of the plugin can be switched off on its own. If one part is causing trouble, or is not wanted, turn it off here — the rest keeps working, and nothing is deleted. Turn it back on any time.', 'acps-alert-popups' ); ?></p>
-					<table class="form-table" role="presentation">
-						<tbody>
-							<?php foreach ( ACPS_Alerts_Settings::features() as $acps_key => $acps_feature ) : ?>
-								<tr id="acps-feature-<?php echo esc_attr( $acps_key ); ?>">
-									<th scope="row"><?php echo esc_html( $acps_feature['label'] ); ?></th>
-									<td>
-										<label>
-											<input type="hidden" name="acps_settings[feature_<?php echo esc_attr( $acps_key ); ?>]" value="0" />
-											<input type="checkbox" name="acps_settings[feature_<?php echo esc_attr( $acps_key ); ?>]" value="1" <?php checked( ACPS_Alerts_Settings::feature( $acps_key ) ); ?> />
-											<?php esc_html_e( 'On', 'acps-alert-popups' ); ?>
-										</label>
-										<p class="description"><?php echo esc_html( $acps_feature['description'] ); ?></p>
-									</td>
-								</tr>
-							<?php endforeach; ?>
-						</tbody>
-					</table>
-				</div>
-
-				<h2><?php esc_html_e( 'General', 'acps-alert-popups' ); ?></h2>
 				<table class="form-table" role="presentation" id="acps-settings-general">
 					<tbody>
 						<tr id="acps-set-post-type">
@@ -1856,13 +1833,13 @@ class ACPS_Alerts_Admin {
 			'ACPSAlertsPlugins',
 			array(
 				'basename'     => plugin_basename( ACPS_ALERTS_FILE ),
-				'settingsUrl'  => admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) . '#acps-features',
+				'settingsUrl'  => admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ),
 				'title'        => __( 'Deleting ACPS Alert Popups is not advised', 'acps-alert-popups' ),
 				'body'         => array(
 					__( 'Features that depend on it will stop working: the alert popup across the site, the status page banner, status dots, alert buttons and the [schoolstatus] shortcode. Its settings, your wording and the alert archive will be removed and cannot be recovered.', 'acps-alert-popups' ),
-					__( 'If you are having a problem, or want to turn one part off, you do not need to delete the plugin: every feature can be switched off on its own in Site Alerts → Settings → Features, and switched back on any time.', 'acps-alert-popups' ),
+					__( 'If you are experiencing issues, you do not need to delete the plugin: the alert can be switched off from Site Alerts, and how it behaves can be changed in Site Alerts → Settings.', 'acps-alert-popups' ),
 				),
-				'openSettings' => __( 'Open Settings → Features', 'acps-alert-popups' ),
+				'openSettings' => __( 'Open Site Alerts Settings', 'acps-alert-popups' ),
 				'cancel'       => __( 'Cancel', 'acps-alert-popups' ),
 				'deleteAnyway' => __( 'Delete anyway', 'acps-alert-popups' ),
 			)

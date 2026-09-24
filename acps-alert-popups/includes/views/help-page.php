@@ -22,8 +22,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		<?php esc_html_e( 'Everything you need to run site alerts, in plain language. Start with the complete guided tour — it takes you to each screen in turn, points at the real controls and explains them one at a time.', 'acps-alert-popups' ); ?>
 	</p>
 
-	<?php // ---------- Guided tours (unless switched off in Settings → Features) ---------- ?>
-	<?php if ( ACPS_Alerts_Settings::feature( 'tours' ) ) : ?>
+	<?php // ---------- Guided tours ---------- ?>
 	<div class="acps-help-tours">
 		<?php foreach ( $acps_tours as $acps_tour_id => $acps_tour ) : ?>
 			<?php $acps_done = ACPS_Alerts_Help::tour_done( $acps_tour_id ); ?>
@@ -60,7 +59,6 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 			</div>
 		<?php endforeach; ?>
 	</div>
-	<?php endif; ?>
 
 	<?php // ---------- Setup checklist ---------- ?>
 	<div class="acps-help-checklist">

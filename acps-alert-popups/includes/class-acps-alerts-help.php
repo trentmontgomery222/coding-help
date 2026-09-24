@@ -156,8 +156,6 @@ class ACPS_Alerts_Help {
 			return;
 		}
 
-		$tours_on = ACPS_Alerts_Settings::feature( 'tours' );
-
 		// Assets are optional files; a missing one costs the tour, not the page.
 		if ( ACPS_Alerts_Failsafe::has_file( 'assets/css/tour.css' ) ) {
 			wp_enqueue_style( 'acps-alerts-tour', ACPS_ALERTS_URL . 'assets/css/tour.css', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/css/tour.css' ) );
@@ -172,8 +170,7 @@ class ACPS_Alerts_Help {
 			wp_enqueue_script( 'acps-alerts-help', ACPS_ALERTS_URL . 'assets/js/help.js', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/js/help.js' ), true );
 		}
 
-		// Guided tours switched off in Settings → Features.
-		if ( ! $tours_on || ! ACPS_Alerts_Failsafe::has_file( 'assets/js/tour.js' ) ) {
+		if ( ! ACPS_Alerts_Failsafe::has_file( 'assets/js/tour.js' ) ) {
 			return;
 		}
 
@@ -420,10 +417,10 @@ class ACPS_Alerts_Help {
 				'screen'   => 'settings',
 				'url'      => $settings_url,
 				'goLabel'  => __( 'Open Settings with me', 'acps-alert-popups' ),
-				'selector' => '#acps-features|.wrap h1',
-				'title'    => __( 'Features: switch any part off', 'acps-alert-popups' ),
-				'html'     => '<p>' . esc_html__( 'Every part of the plugin has its own switch: the popup, the status board, the dots, the shortcodes, the buttons, the daily cut-off, cache clearing and these tours.', 'acps-alert-popups' ) . '</p>'
-					. '<p>' . esc_html__( 'If one part ever causes trouble, turn just that part off here. The rest keeps working and nothing is deleted — there is never a need to remove the plugin.', 'acps-alert-popups' ) . '</p>',
+				'selector' => '#acps-settings-general|.wrap h1',
+				'title'    => __( 'Settings: how the whole site behaves', 'acps-alert-popups' ),
+				'html'     => '<p>' . esc_html__( 'These settings apply to every alert: when alerts come down each day, how a visitor\'s browser remembers closing one, what staff see, how the popup is drawn, and how everything looks.', 'acps-alert-popups' ) . '</p>'
+					. '<p>' . esc_html__( 'Nothing here is needed to post an alert; the defaults work for most sites.', 'acps-alert-popups' ) . '</p>',
 			),
 			array(
 				'screen'   => 'settings',
@@ -531,7 +528,7 @@ class ACPS_Alerts_Help {
 
 		$tours['full-setup'] = array(
 			'title'       => __( 'The complete guided tour', 'acps-alert-popups' ),
-			'description' => __( 'Every feature, start to finish: posting an alert, wording, the archive, the status page and its modules, dots and shortcodes, settings and feature switches.', 'acps-alert-popups' ),
+			'description' => __( 'Every feature, start to finish: posting an alert, wording, the archive, the status page and its modules, dots and shortcodes, and settings.', 'acps-alert-popups' ),
 			'steps'       => array_merge( array( $intro ), $list, $post, $wording, $archive, $status_page, $anywhere, $settings, $details, $finish ),
 		);
 
@@ -554,8 +551,8 @@ class ACPS_Alerts_Help {
 		);
 
 		$tours['settings-tour'] = array(
-			'title'       => __( 'Settings and feature switches', 'acps-alert-popups' ),
-			'description' => __( 'Switch parts off, set the daily cut-off, previews, and the Main CSS editor.', 'acps-alert-popups' ),
+			'title'       => __( 'Settings', 'acps-alert-popups' ),
+			'description' => __( 'The daily cut-off, dismissals, staff and previews, rendering, and the Main CSS editor.', 'acps-alert-popups' ),
 			'steps'       => $settings,
 		);
 
@@ -569,8 +566,8 @@ class ACPS_Alerts_Help {
 
 		$tours['troubleshoot'] = array(
 			'title'       => __( 'When something is not working', 'acps-alert-popups' ),
-			'description' => __( 'The quickest checks, and how to switch one part off without touching the rest.', 'acps-alert-popups' ),
-			'steps'       => array_merge( array( $finish[1] + array( 'url' => $help_url ) ), array( $settings[0], $settings[3] ), array( $list[1] + array( 'url' => $list_url ) ) ),
+			'description' => __( 'The quickest checks when an alert is not showing as expected.', 'acps-alert-popups' ),
+			'steps'       => array_merge( array( $finish[1] + array( 'url' => $help_url ) ), array( $settings[3] + array( 'url' => $settings_url ) ), array( $list[1] + array( 'url' => $list_url ) ) ),
 		);
 
 		/**
@@ -755,11 +752,6 @@ class ACPS_Alerts_Help {
 	 * @return void
 	 */
 	public function welcome_notice() {
-		// The welcome box is part of the guided tours; off with them.
-		if ( ! ACPS_Alerts_Settings::feature( 'tours' ) ) {
-			return;
-		}
-
 		$key = self::current_screen_key();
 
 		if ( ! in_array( $key, array( 'list', 'edit', 'new' ), true ) ) {

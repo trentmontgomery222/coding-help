@@ -115,11 +115,6 @@ class ACPS_Alerts_Shortcodes {
 	 * @return string
 	 */
 	public function render( $atts ) {
-		// Switched off in Settings → Features: the shortcode prints nothing.
-		if ( ! ACPS_Alerts_Settings::feature( 'status_code' ) ) {
-			return '';
-		}
-
 		$atts = shortcode_atts(
 			array(
 				// Which parts to draw, in the order they are listed. "icon",
@@ -322,7 +317,7 @@ class ACPS_Alerts_Shortcodes {
 	 * @return string
 	 */
 	public function render_dot( $atts ) {
-		if ( ! class_exists( 'ACPS_Alerts_Status' ) || ! ACPS_Alerts_Settings::feature( 'dots' ) ) {
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
 			return '';
 		}
 

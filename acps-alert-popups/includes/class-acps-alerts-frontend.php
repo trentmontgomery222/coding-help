@@ -67,11 +67,6 @@ class ACPS_Alerts_Frontend {
 			return false;
 		}
 
-		// Switched off in Settings → Features.
-		if ( ! ACPS_Alerts_Settings::feature( 'popup' ) ) {
-			return false;
-		}
-
 		// A REST, AJAX, cron or XML-RPC request never shows an alert.
 		if ( wp_doing_ajax() || wp_doing_cron() ) {
 			return false;
@@ -664,11 +659,6 @@ class ACPS_Alerts_Frontend {
 	 * @return string
 	 */
 	public function trigger_shortcode( $atts ) {
-		// Switched off in Settings → Features: the shortcode prints nothing.
-		if ( ! ACPS_Alerts_Settings::feature( 'trigger' ) ) {
-			return '';
-		}
-
 		$atts = shortcode_atts(
 			array(
 				'id'    => 0,

@@ -2,10 +2,10 @@
  * The Plugins screen: a warning before this plugin is deleted.
  *
  * Deleting the plugin removes the site's alerts, its settings and the archive,
- * and switches off everything built on it. Almost always the better answer is
- * to switch off the one part that is misbehaving, which Settings → Features
- * does without removing anything. So before WordPress's own delete runs, this
- * says so and offers the way there.
+ * and switches off everything built on it. Almost always the better answer to
+ * a problem is to switch the alert off or change a setting, which removes
+ * nothing. So before WordPress's own delete runs, this says so and offers the
+ * way to Settings.
  *
  * It adds nothing to the screen until someone asks to delete this plugin — no
  * notice, no banner — and a failure in here never gets in the way of the

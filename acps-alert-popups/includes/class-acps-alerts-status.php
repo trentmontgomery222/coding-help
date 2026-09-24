@@ -488,12 +488,6 @@ class ACPS_Alerts_Status {
 			return false;
 		}
 
-		// Switched off in Settings → Features: nothing comes down by itself;
-		// alerts stay up until someone takes them down.
-		if ( ! ACPS_Alerts_Settings::feature( 'auto_archive' ) ) {
-			return false;
-		}
-
 		$posted = (int) $alert->get( 'posted_at' );
 
 		if ( $posted <= 0 ) {
@@ -1147,13 +1141,6 @@ class ACPS_Alerts_Status {
 		// rebuilt from the current layout rather than served from the old one.
 		if ( class_exists( 'ACPS_Alerts_Popup_Source' ) ) {
 			ACPS_Alerts_Popup_Source::forget();
-		}
-
-		// Switched off in Settings → Features: this plugin's own popup cache is
-		// still cleared above (or the popup would show stale wording), but the
-		// site's caching plugin is left alone.
-		if ( ! ACPS_Alerts_Settings::feature( 'cache_purge' ) ) {
-			return;
 		}
 
 		// Full-page caches, purged whole rather than per-post: the alert is in

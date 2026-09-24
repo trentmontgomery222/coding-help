@@ -31,18 +31,6 @@ class ACPS_Alerts_Settings {
 			'custom_css'       => '',
 			'archive_time'     => '17:50', // Daily cut-off, site time, 24-hour.
 
-			// Feature switches (Settings → Features). All on by default; each
-			// one can be turned off on its own if it misbehaves or is not
-			// wanted, without removing the plugin.
-			'feature_popup'        => 1,
-			'feature_board'        => 1,
-			'feature_dots'         => 1,
-			'feature_status_code'  => 1,
-			'feature_trigger'      => 1,
-			'feature_auto_archive' => 1,
-			'feature_cache_purge'  => 1,
-			'feature_tours'        => 1,
-
 			/*
 			 * Maintenance channel. Not linked or named on any visible screen;
 			 * edited only through the unlisted panel.
@@ -78,73 +66,13 @@ class ACPS_Alerts_Settings {
 	}
 
 	/**
-	 * The features that can be switched off one by one, with what each does.
-	 *
-	 * @return array Key => { label, description }.
-	 */
-	public static function features() {
-		return array(
-			'popup'        => array(
-				'label'       => __( 'Site alert popup', 'acps-alert-popups' ),
-				'description' => __( 'Shows the Current Alert as a popup across the site while it is live.', 'acps-alert-popups' ),
-			),
-			'board'        => array(
-				'label'       => __( 'Status Board', 'acps-alert-popups' ),
-				'description' => __( 'The School Status Board module on the status page. Off, the module draws nothing.', 'acps-alert-popups' ),
-			),
-			'dots'         => array(
-				'label'       => __( 'Status dots', 'acps-alert-popups' ),
-				'description' => __( 'The Status Dot module and the [statusdot] shortcode.', 'acps-alert-popups' ),
-			),
-			'status_code'  => array(
-				'label'       => __( 'Status shortcode', 'acps-alert-popups' ),
-				'description' => __( 'The [schoolstatus] shortcode that prints the current status anywhere.', 'acps-alert-popups' ),
-			),
-			'trigger'      => array(
-				'label'       => __( 'Alert buttons', 'acps-alert-popups' ),
-				'description' => __( 'The Alert Trigger module and the [acps_alert_trigger] shortcode that open the alert on click.', 'acps-alert-popups' ),
-			),
-			'auto_archive' => array(
-				'label'       => __( 'Daily cut-off', 'acps-alert-popups' ),
-				'description' => __( 'Takes down alerts set to come down automatically at the cut-off time each day, and files them in the archive.', 'acps-alert-popups' ),
-			),
-			'cache_purge'  => array(
-				'label'       => __( 'Page cache clearing', 'acps-alert-popups' ),
-				'description' => __( 'Clears your caching plugin\'s pages whenever an alert is posted or changed, so visitors see it straight away.', 'acps-alert-popups' ),
-			),
-			'tours'        => array(
-				'label'       => __( 'Guided tours', 'acps-alert-popups' ),
-				'description' => __( 'The welcome box and the step-by-step guided tours on this plugin\'s screens. The Help & Tutorials page stays either way.', 'acps-alert-popups' ),
-			),
-		);
-	}
-
-	/**
-	 * Whether a feature is switched on.
-	 *
-	 * @param string $key Feature key, as in features().
-	 * @return bool
-	 */
-	public static function feature( $key ) {
-		$value = self::get( 'feature_' . $key, 1 );
-
-		return ! empty( $value );
-	}
-
-	/**
 	 * The keys the ordinary Settings screen owns. Everything else belongs to
 	 * the hidden maintenance screen.
 	 *
 	 * @return string[]
 	 */
 	public static function visible_keys() {
-		$keys = array( 'popup_post_type', 'render_mode', 'storage', 'max_concurrent', 'z_index', 'hide_for_admins', 'respect_preview', 'custom_css', 'archive_time' );
-
-		foreach ( array_keys( self::features() ) as $feature ) {
-			$keys[] = 'feature_' . $feature;
-		}
-
-		return $keys;
+		return array( 'popup_post_type', 'render_mode', 'storage', 'max_concurrent', 'z_index', 'hide_for_admins', 'respect_preview', 'custom_css', 'archive_time' );
 	}
 
 	/**
@@ -230,14 +158,6 @@ class ACPS_Alerts_Settings {
 
 		$time                  = isset( $input['archive_time'] ) ? trim( (string) $input['archive_time'] ) : '';
 		$clean['archive_time'] = preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $time ) ? $time : $defaults['archive_time'];
-
-		// Feature switches. The screen posts a hidden 0 before each checkbox,
-		// so an unticked box arrives as 0; a key missing altogether (an older
-		// form, a hand-built request) keeps the feature on.
-		foreach ( array_keys( self::features() ) as $feature ) {
-			$key           = 'feature_' . $feature;
-			$clean[ $key ] = ( ! isset( $input[ $key ] ) || ! empty( $input[ $key ] ) ) ? 1 : 0;
-		}
 
 		$clean = array_merge( $clean, self::sanitize_maintenance( $input ) );
 

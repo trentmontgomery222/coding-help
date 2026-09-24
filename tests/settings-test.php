@@ -1,6 +1,6 @@
 <?php
 /**
- * The settings: feature switches, and each screen saving only its own half.
+ * The settings: each screen saves only its own half.
  *
  * Runs the real ACPS_Alerts_Settings against WordPress stubs.
  */
@@ -35,35 +35,6 @@ function check( $label, $actual, $expected ) {
 	}
 }
 
-$features = array_keys( ACPS_Alerts_Settings::features() );
-
-/* ---- every feature is on out of the box ---- */
-check( 'there are feature switches', count( $features ) >= 8, true );
-
-foreach ( $features as $key ) {
-	check( "feature '$key' is on by default", ACPS_Alerts_Settings::feature( $key ), true );
-	check( "feature '$key' has a label and a description", ! empty( ACPS_Alerts_Settings::features()[ $key ]['label'] ) && ! empty( ACPS_Alerts_Settings::features()[ $key ]['description'] ), true );
-}
-
-/* ---- the Settings screen: an unticked box switches its feature off ---- */
-$posted = array( 'archive_time' => '16:00' );
-
-foreach ( $features as $key ) {
-	$posted[ 'feature_' . $key ] = '1';
-}
-
-$posted['feature_popup'] = '0'; // The hidden input posted for an unticked box.
-
-ACPS_Alerts_Settings::save( $posted );
-
-check( 'an unticked feature is saved off', ACPS_Alerts_Settings::feature( 'popup' ), false );
-check( 'the others stay on', ACPS_Alerts_Settings::feature( 'board' ), true );
-
-// A form or request that leaves a feature out entirely keeps it on: nothing is
-// switched off by accident.
-ACPS_Alerts_Settings::save( array( 'archive_time' => '16:00' ) );
-check( 'a feature missing from the request is left on', ACPS_Alerts_Settings::feature( 'popup' ), true );
-
 /* ---- saving the hidden maintenance screen keeps the ordinary settings ---- */
 $GLOBALS['options'] = array();
 
@@ -76,7 +47,6 @@ ACPS_Alerts_Settings::save(
 		'hide_for_admins' => '1',
 		'respect_preview' => '0',
 		'custom_css'      => '.acps-board{color:red}',
-		'feature_dots'    => '0',
 	)
 );
 
@@ -98,31 +68,11 @@ check( 'dismissal storage survives', $after['storage'], 'session' );
 check( 'z-index survives', $after['z_index'], 5000 );
 check( 'hide-for-editors survives', $after['hide_for_admins'], 1 );
 check( 'previews stay as set (off), not reset', $after['respect_preview'], 0 );
-check( 'a switched-off feature stays off', ACPS_Alerts_Settings::feature( 'dots' ), false );
 check( 'and the maintenance change itself is saved', $after['update_base'], 'https://updates.example.org/' );
 
 // And the other way round: the ordinary screen never touches maintenance keys.
 ACPS_Alerts_Settings::save( array( 'archive_time' => '14:00' ) );
 check( 'an ordinary save keeps the maintenance settings', ACPS_Alerts_Settings::get( 'update_base' ), 'https://updates.example.org/' );
-
-/* ---- every switch is actually enforced somewhere ---- */
-// A switch nothing reads would be a lie on the Settings screen, and in the
-// uninstall warning that sends people to it.
-$code = '';
-$it   = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( ACPS_ALERTS_DIR, FilesystemIterator::SKIP_DOTS ) );
-
-foreach ( $it as $file ) {
-	$rel = substr( $file->getPathname(), strlen( ACPS_ALERTS_DIR ) );
-
-	// The screens that only display or edit the switches do not count.
-	if ( '.php' === substr( $rel, -4 ) && ! in_array( $rel, array( 'includes/class-acps-alerts-settings.php', 'includes/class-acps-alerts-admin.php', 'includes/class-acps-alerts-panel.php' ), true ) ) {
-		$code .= file_get_contents( $file->getPathname() );
-	}
-}
-
-foreach ( $features as $key ) {
-	check( "feature '$key' is enforced in the code", false !== strpos( $code, "feature( '" . $key . "' )" ), true );
-}
 
 echo $fails ? "\n$fails failing case(s)\n" : "All settings cases passed\n";
 exit( $fails ? 1 : 0 );

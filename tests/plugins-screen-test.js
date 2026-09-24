@@ -27,6 +27,18 @@ try {
 }
 
 const script = fs.readFileSync( path.join( __dirname, '..', 'acps-alert-popups', 'assets', 'js', 'plugins-screen.js' ), 'utf8' );
+
+// The warning's real wording, read out of the PHP that sends it, so the test
+// checks what users will actually see rather than a copy of it.
+const adminPhp = fs.readFileSync( path.join( __dirname, '..', 'acps-alert-popups', 'includes', 'class-acps-alerts-admin.php' ), 'utf8' );
+const warningPhp = adminPhp.slice( adminPhp.indexOf( 'function enqueue_delete_warning' ), adminPhp.indexOf( 'public function enqueue_assets' ) );
+const phpStrings = [ ...warningPhp.matchAll( /__\(\s*'((?:[^'\\]|\\.)*)'/g ) ].map( ( m ) => m[ 1 ].replace( /\\'/g, "'" ) );
+const [ realTitle, realBody1, realBody2, realOpen, realCancel, realDelete ] = phpStrings;
+
+if ( phpStrings.length !== 6 ) {
+	console.log( `FAIL expected the six warning strings in enqueue_delete_warning(), found ${ phpStrings.length }` );
+	process.exit( 1 );
+}
 const OURS = 'acps-alert-popups/acps-alert-popups.php';
 
 const html = `<!doctype html><html><head><meta charset="utf-8"></head><body>
@@ -53,12 +65,12 @@ const html = `<!doctype html><html><head><meta charset="utf-8"></head><body>
 	} );
 	window.ACPSAlertsPlugins = {
 		basename: ${ JSON.stringify( OURS ) },
-		settingsUrl: 'https://example.org/wp-admin/admin.php?page=acps-alerts-settings#acps-features',
-		title: 'Deleting ACPS Alert Popups is not advised',
-		body: [ 'Features that depend on it will stop working.', 'Every feature can be switched off on its own in Site Alerts → Settings → Features.' ],
-		openSettings: 'Open Settings → Features',
-		cancel: 'Cancel',
-		deleteAnyway: 'Delete anyway'
+		settingsUrl: 'https://example.org/wp-admin/admin.php?page=acps-alerts-settings',
+		title: ${ JSON.stringify( realTitle ) },
+		body: ${ JSON.stringify( [ realBody1, realBody2 ] ) },
+		openSettings: ${ JSON.stringify( realOpen ) },
+		cancel: ${ JSON.stringify( realCancel ) },
+		deleteAnyway: ${ JSON.stringify( realDelete ) }
 	};
 </script>
 <script>${ script }</script>
@@ -103,8 +115,11 @@ function check( label, actual, expected ) {
 	const text = await page.textContent( '.acps-del' );
 	check( 'the warning says it is not advised', text.includes( 'not advised' ), true );
 	check( 'that features will stop working', text.includes( 'stop working' ), true );
-	check( 'and that features can be switched off in Settings instead', text.includes( 'Settings → Features' ), true );
-	check( 'it offers the way to Settings → Features', await page.getAttribute( '.acps-del a.button-primary', 'href' ), 'https://example.org/wp-admin/admin.php?page=acps-alerts-settings#acps-features' );
+	check( 'that issues can be dealt with without deleting it', text.includes( 'experiencing issues' ) && text.includes( 'do not need to delete' ), true );
+	check( 'and where: switching the alert off, or Settings', text.includes( 'switched off from Site Alerts' ) && text.includes( 'Site Alerts → Settings' ), true );
+	check( 'it no longer mentions feature switches that do not exist', text.includes( 'Settings → Features' ) || text.includes( 'switched off on its own' ), false );
+	check( 'it offers the way to Settings', await page.getAttribute( '.acps-del a.button-primary', 'href' ), 'https://example.org/wp-admin/admin.php?page=acps-alerts-settings' );
+	check( 'labelled as such', await page.textContent( '.acps-del a.button-primary' ), 'Open Site Alerts Settings' );
 	check( 'the safe choice has the focus', await page.evaluate( () => document.activeElement.classList.contains( 'button-primary' ) ), true );
 
 	// Cancel: nothing deleted.

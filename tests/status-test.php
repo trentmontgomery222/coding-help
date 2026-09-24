@@ -62,8 +62,6 @@ function wp_unschedule_event() { return true; }
 
 class ACPS_Alerts_Settings {
 	public static function get( $k, $d = null ) { return isset( $GLOBALS['settings'][ $k ] ) ? $GLOBALS['settings'][ $k ] : $d; }
-	// A feature is on unless a test lists it in $GLOBALS['features_off'].
-	public static function feature( $k ) { return empty( $GLOBALS['features_off'][ $k ] ); }
 }
 class ACPS_Alerts_Failsafe {
 	public static function action() {}
@@ -589,24 +587,6 @@ ok( 'a present cache plugin is purged', true === $GLOBALS['flushed'] );
 ok( 'the generic flush hook fires for CDNs and bespoke caches', in_array( 'acps_alerts_flush_caches', $GLOBALS['fired'], true ) );
 ok( 'a hook-driven cache is asked to purge too', in_array( 'litespeed_purge_all', $GLOBALS['fired'], true ) );
 
-// Settings → Features → Page cache clearing off: the site's caching plugin is
-// left alone.
-$GLOBALS['fired']        = array();
-$GLOBALS['flushed']      = false;
-$GLOBALS['features_off'] = array( 'cache_purge' => true );
-
-ACPS_Alerts_Status::flush_page_caches();
-
-ok( 'with cache clearing switched off, the cache plugin is not purged', false === $GLOBALS['flushed'] );
-ok( 'nor is the generic flush hook fired', ! in_array( 'acps_alerts_flush_caches', $GLOBALS['fired'], true ) );
-$GLOBALS['features_off'] = array();
-
-// Settings → Features → Daily cut-off off: nothing comes down by itself.
-$stale                   = new ACPS_Alerts_Alert( array( 'expires_mode' => 'daily', 'posted_at' => time() - 3 * DAY_IN_SECONDS ) );
-$GLOBALS['features_off'] = array( 'auto_archive' => true );
-check( 'with the daily cut-off switched off, an old daily entry stays up', ACPS_Alerts_Status::past_cutoff( $stale ), false );
-$GLOBALS['features_off'] = array();
-check( 'and switched back on, it comes down again', ACPS_Alerts_Status::past_cutoff( $stale ), true );
 
 /* ---- the checklist's "used it once" is remembered, not read live ---- */
 unset( $GLOBALS['options']['acps_alerts_used_once'] );

@@ -89,27 +89,19 @@ admin requests, so without it `missing-help` would pass for the wrong reason.
 The email-once guard is mutation-checked: dropping it makes the second-arm case
 fail.
 
-`settings-test.php` — the settings class itself:
-
-- every feature switch is on by default and has a label and a description
-- an unticked switch saves off; a switch missing from the request stays on, so
-  nothing is switched off by accident
-- **saving the hidden maintenance screen keeps every ordinary setting** — it
-  used to reset the Main CSS, the cut-off, the rendering mode and the rest to
-  their defaults, and turn previews off. Mutation-checked.
-- every switch is actually read somewhere in the plugin (outside the screens
-  that display it), so none is decorative. Mutation-checked.
-
-The switches' effects are tested where they act: `render-test.php` (the popup),
-`shortcode-test.php` (`[schoolstatus]`, `[statusdot]`), `status-test.php` (the
-daily cut-off, page cache clearing) and `popup-module-test.php` (the three
-Beaver Builder modules draw nothing, and say why inside the builder).
+`settings-test.php` — the settings class itself: **saving the hidden
+maintenance screen keeps every ordinary setting.** It used to reset the Main
+CSS, the cut-off, the rendering mode and the rest to their defaults, and turn
+previews off. The reverse holds too: an ordinary save keeps the maintenance
+settings. Mutation-checked.
 
 `plugins-screen-test.js` — the warning before this plugin is deleted, in real
 Chromium, against a stand-in Plugins screen with a stand-in for WordPress's own
 delete handler: nothing shows until a delete of *this* plugin is asked for (row
-link, top or bottom bulk button); the warning says it is not advised and points
-to Settings → Features; Cancel and Escape delete nothing; "Delete anyway" hands
+link, top or bottom bulk button); the warning — its real wording, read out of
+the PHP that sends it — says it is not advised, that features will stop working,
+and that issues can be handled by switching the alert off or in Settings, with
+Settings as the first choice; Cancel and Escape delete nothing; "Delete anyway" hands
 over to WordPress exactly once; other plugins are never touched. It caught a
 real bug on its first run: the dialog's `display:flex` overrode `hidden`, so a
 cancelled warning left an invisible overlay blocking every click on the screen.
