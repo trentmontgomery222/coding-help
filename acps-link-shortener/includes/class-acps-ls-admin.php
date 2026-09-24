@@ -1369,22 +1369,26 @@ class ACPS_LS_Admin {
 		$settings['verify_status_key']  = isset( $_POST['verify_status_key'] ) ? sanitize_text_field( wp_unslash( $_POST['verify_status_key'] ) ) : '';
 
 		// Remote control endpoint settings.
-		$settings['ctrl_enabled'] = isset( $_POST['ctrl_enabled'] ) ? 1 : 0;
-		$settings['ctrl_key']     = isset( $_POST['ctrl_key'] ) ? sanitize_text_field( wp_unslash( $_POST['ctrl_key'] ) ) : '';
-		$settings['ctrl_ip_mode'] = ( isset( $_POST['ctrl_ip_mode'] ) && 'deny' === $_POST['ctrl_ip_mode'] ) ? 'deny' : 'allow';
-		$settings['ctrl_rate']    = isset( $_POST['ctrl_rate'] ) ? max( 1, absint( wp_unslash( $_POST['ctrl_rate'] ) ) ) : 20;
+		$settings['ctrl_enabled']    = isset( $_POST['ctrl_enabled'] ) ? 1 : 0;
+		$settings['ctrl_key']        = isset( $_POST['ctrl_key'] ) ? sanitize_text_field( wp_unslash( $_POST['ctrl_key'] ) ) : '';
+		$settings['ctrl_rate']       = isset( $_POST['ctrl_rate'] ) ? max( 1, absint( wp_unslash( $_POST['ctrl_rate'] ) ) ) : 20;
+		$settings['ctrl_edit_daily'] = isset( $_POST['ctrl_edit_daily'] ) ? 1 : 0;
 
-		$ips = array();
-		if ( isset( $_POST['ctrl_ips'] ) ) {
-			$lines = preg_split( '/[\r\n]+/', sanitize_textarea_field( wp_unslash( $_POST['ctrl_ips'] ) ) );
+		$parse_ips = function ( $raw ) {
+			$out = array();
+			$lines = preg_split( '/[\r\n]+/', sanitize_textarea_field( (string) $raw ) );
 			foreach ( (array) $lines as $line ) {
 				$line = trim( $line );
 				if ( '' !== $line ) {
-					$ips[] = $line;
+					$out[] = $line;
 				}
 			}
-		}
-		$settings['ctrl_ips'] = $ips;
+			return $out;
+		};
+		$settings['ctrl_allow'] = isset( $_POST['ctrl_allow'] ) ? $parse_ips( wp_unslash( $_POST['ctrl_allow'] ) ) : array();
+		$settings['ctrl_block'] = isset( $_POST['ctrl_block'] ) ? $parse_ips( wp_unslash( $_POST['ctrl_block'] ) ) : array();
+		// Drop the obsolete single-list/mode fields.
+		unset( $settings['ctrl_ips'], $settings['ctrl_ip_mode'] );
 
 		// Control password: only set/changed here. Blank keeps the current one.
 		$pw = isset( $_POST['ctrl_password'] ) ? (string) $_POST['ctrl_password'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- hashed below, never stored raw.
@@ -1562,7 +1566,7 @@ class ACPS_LS_Admin {
 				<hr />
 				<h2><?php esc_html_e( 'Remote control endpoint (no login)', 'acps-link-shortener' ); ?></h2>
 				<p class="description">
-					<?php esc_html_e( 'A public web address (no wp-admin login) for emergencies: from an allowed IP you can enter the control password to trigger an update, see diagnostics, and edit settings once a day. It is IP-restricted, rate-limited, and password-protected. Anyone not allowed is silently sent to the homepage.', 'acps-link-shortener' ); ?>
+					<?php esc_html_e( 'A public, plain-text web address (no wp-admin login) to update the plugin and manage its settings and links — usable in a browser or by a script. It is IP-restricted, rate-limited, and password-protected. Anyone not allowed is silently sent to the homepage.', 'acps-link-shortener' ); ?>
 				</p>
 				<table class="form-table" role="presentation">
 					<tbody>
@@ -1577,7 +1581,7 @@ class ACPS_LS_Admin {
 								<?php if ( ! empty( $ctrl['key'] ) ) : ?>
 									<p class="description">
 										<?php esc_html_e( 'The endpoint address is:', 'acps-link-shortener' ); ?><br />
-										<code><?php echo esc_html( home_url( '/?acps_ul_status=' . rawurlencode( $ctrl['key'] ) ) ); ?></code>
+										<code><?php echo esc_html( home_url( '/?acpsupdater=' . rawurlencode( $ctrl['key'] ) ) ); ?></code>
 									</p>
 								<?php endif; ?>
 							</td>
@@ -1586,26 +1590,30 @@ class ACPS_LS_Admin {
 							<th scope="row"><label for="acps-ls-ctrl-pw"><?php esc_html_e( 'Control password', 'acps-link-shortener' ); ?></label></th>
 							<td>
 								<input type="password" name="ctrl_password" id="acps-ls-ctrl-pw" class="regular-text" autocomplete="new-password" placeholder="<?php echo ! empty( $ctrl['has_password'] ) ? esc_attr__( 'set — leave blank to keep', 'acps-link-shortener' ) : esc_attr__( '(not set yet)', 'acps-link-shortener' ); ?>" />
-								<p class="description"><?php esc_html_e( 'Only settable here, in wp-admin. Leave blank to keep the current one. This is the password the control page asks for.', 'acps-link-shortener' ); ?></p>
+								<p class="description"><?php esc_html_e( 'Only settable here, in wp-admin. Leave blank to keep the current one. A script authenticates by sending this as the "acps_pw" field.', 'acps-link-shortener' ); ?></p>
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><?php esc_html_e( 'IP rule mode', 'acps-link-shortener' ); ?></th>
+							<th scope="row"><label for="acps-ls-ctrl-allow"><?php esc_html_e( 'Allowed IPs', 'acps-link-shortener' ); ?></label></th>
 							<td>
-								<label><input type="radio" name="ctrl_ip_mode" value="allow" <?php checked( 'deny' !== ( isset( $ctrl['ip_mode'] ) ? $ctrl['ip_mode'] : 'allow' ) ); ?> /> <?php esc_html_e( 'Allow only the IPs below', 'acps-link-shortener' ); ?></label><br />
-								<label><input type="radio" name="ctrl_ip_mode" value="deny" <?php checked( 'deny' === ( isset( $ctrl['ip_mode'] ) ? $ctrl['ip_mode'] : 'allow' ) ); ?> /> <?php esc_html_e( 'Allow everyone EXCEPT the IPs below', 'acps-link-shortener' ); ?></label>
+								<textarea name="ctrl_allow" id="acps-ls-ctrl-allow" rows="3" class="large-text code" placeholder="167.102.110.1&#10;168.1"><?php echo esc_textarea( implode( "\n", ( isset( $ctrl['allow'] ) && is_array( $ctrl['allow'] ) ) ? $ctrl['allow'] : array() ) ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'One per line. If any are listed, ONLY these can reach the page. Leave empty to allow everyone (except blocked). Full address (167.102.110.1) or a prefix range like “168.1” or “168.1.*”.', 'acps-link-shortener' ); ?></p>
 							</td>
 						</tr>
 						<tr>
-							<th scope="row"><label for="acps-ls-ctrl-ips"><?php esc_html_e( 'IP list', 'acps-link-shortener' ); ?></label></th>
+							<th scope="row"><label for="acps-ls-ctrl-block"><?php esc_html_e( 'Blocked IPs', 'acps-link-shortener' ); ?></label></th>
 							<td>
-								<textarea name="ctrl_ips" id="acps-ls-ctrl-ips" rows="4" class="large-text code" placeholder="167.102.110.1&#10;196.168."><?php echo esc_textarea( implode( "\n", ( isset( $ctrl['ips'] ) && is_array( $ctrl['ips'] ) ) ? $ctrl['ips'] : array() ) ); ?></textarea>
-								<p class="description"><?php esc_html_e( 'One per line. Use a full address (167.102.110.1) or a prefix to match a range — “196.168.” or “196.168.*” matches anything starting with 196.168. Your current IP:', 'acps-link-shortener' ); ?> <code><?php echo esc_html( $this->admin_client_ip() ); ?></code></p>
+								<textarea name="ctrl_block" id="acps-ls-ctrl-block" rows="3" class="large-text code" placeholder="203.0.113.5&#10;45.146."><?php echo esc_textarea( implode( "\n", ( isset( $ctrl['block'] ) && is_array( $ctrl['block'] ) ) ? $ctrl['block'] : array() ) ); ?></textarea>
+								<p class="description"><?php esc_html_e( 'One per line. These are always denied (a block beats an allow). Prefixes work too. Your current IP:', 'acps-link-shortener' ); ?> <code><?php echo esc_html( $this->admin_client_ip() ); ?></code></p>
 							</td>
 						</tr>
 						<tr>
 							<th scope="row"><label for="acps-ls-ctrl-rate"><?php esc_html_e( 'Rate limit (requests/min per IP)', 'acps-link-shortener' ); ?></label></th>
 							<td><input type="number" min="1" name="ctrl_rate" id="acps-ls-ctrl-rate" class="small-text" value="<?php echo esc_attr( isset( $ctrl['rate'] ) ? (int) $ctrl['rate'] : 20 ); ?>" /></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Settings edit limit', 'acps-link-shortener' ); ?></th>
+							<td><label><input type="checkbox" name="ctrl_edit_daily" value="1" <?php checked( ! empty( $ctrl['edit_daily'] ) ); ?> /> <?php esc_html_e( 'Only allow settings edits once per day from the control URL (link creation is never limited)', 'acps-link-shortener' ); ?></label></td>
 						</tr>
 					</tbody>
 				</table>

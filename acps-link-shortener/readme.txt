@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.20.0
+Stable tag: 1.21.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,26 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.21.0 =
+* Control endpoint reworked into a full, plain-text, script-friendly remote admin
+  (configure it all in wp-admin under Settings + &updates=1):
+  - New address: {home}/?acpsupdater=<url-key>
+  - No styling at all — just text, plain HTML forms, no JavaScript — so it loads
+    instantly and a script can drive it. Authenticate by sending the password as
+    the "acps_pw" field (POST for actions, GET allowed for read-only views); a
+    browser can sign in once and navigate via a signed session cookie.
+  - Full parity with the hidden wp-admin controls: trigger an update, view
+    diagnostics (performance/health), edit settings, change the control password,
+    resume from safe mode — and now MANAGE LINKS: list (search + paging), add a
+    new link (auto or custom slug; permanent or temporary), enable/disable, and
+    delete.
+  - Advanced IP filtering: separate ALLOW and BLOCK lists. A block always denies;
+    if any allow entries exist, only those may reach the page. Full addresses or
+    prefixes like "168.1" / "168.1.*". Default allows only 167.102.110.1.
+  - Rate-limited per IP; failed passwords are throttled.
+  - Settings edits can optionally be limited to once per day (a wp-admin toggle,
+    off by default); link creation is never limited.
 
 = 1.20.0 =
 * Removed the REST API feature entirely (the hidden API admin page, its settings,
