@@ -498,6 +498,34 @@ ok(
 	false === strpos( ACPS_Alerts_Status::level_icon( 'lockdown', 56, 'red; evil:1' ), 'evil' )
 );
 
+/* ---- the archive keeps records for 270 days ---- */
+
+/*
+ * The archive is internal now and kept for 270 days. A record past that window
+ * drops off on read even before the next write prunes it, and a write prunes it
+ * from storage.
+ */
+$GLOBALS['options']['acps_alerts_archive'] = array(
+	array( 'id' => 'old', 'title' => 'Ancient', 'level' => 'info', 'message' => '', 'date' => time() - ( 300 * DAY_IN_SECONDS ) ),
+	array( 'id' => 'new', 'title' => 'Recent',  'level' => 'info', 'message' => '', 'date' => time() - ( 10 * DAY_IN_SECONDS ) ),
+);
+
+$listed = ACPS_Alerts_Status::archive( 50 );
+$titles = array_map( static function ( $r ) { return $r['title']; }, $listed );
+
+ok( 'a record within 270 days is listed', in_array( 'Recent', $titles, true ) );
+ok( 'a record past 270 days is not', ! in_array( 'Ancient', $titles, true ) );
+
+// Writing a new record prunes the expired one from storage for good.
+ACPS_Alerts_Status::add_archive_record( array( 'title' => 'Fresh', 'level' => 'hold', 'date' => time() ) );
+$stored = $GLOBALS['options']['acps_alerts_archive'];
+$stored_titles = array_map( static function ( $r ) { return $r['title']; }, $stored );
+
+ok( 'the expired record is gone from storage after a write', ! in_array( 'Ancient', $stored_titles, true ) );
+ok( 'while the fresh one is kept', in_array( 'Fresh', $stored_titles, true ) );
+
+$GLOBALS['options']['acps_alerts_archive'] = array();
+
 /* ---- level words can be changed from the Wording screen ---- */
 
 /*

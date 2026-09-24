@@ -32,6 +32,13 @@ class ACPS_Alerts_Shortcodes {
 		foreach ( array( 'schoolstatus', 'school_status' ) as $tag ) {
 			add_shortcode( $tag, ACPS_Alerts_Failsafe::wrap( array( $this, 'render' ), 'shortcode/status' ) );
 		}
+
+		// A single coloured dot for a status level, to place inline in text.
+		// Several can sit on one line, so a sentence can carry three statuses
+		// at once.
+		foreach ( array( 'statusdot', 'status_dot' ) as $tag ) {
+			add_shortcode( $tag, ACPS_Alerts_Failsafe::wrap( array( $this, 'render_dot' ), 'shortcode/dot' ) );
+		}
 	}
 
 	/**
@@ -292,6 +299,91 @@ class ACPS_Alerts_Shortcodes {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Renders a single coloured status dot, optionally with a label.
+	 *
+	 * The colour comes from the status level (Hold purple, Lockdown red, and so
+	 * on), or from a colour you give it. Put several on one line to show more
+	 * than one status at once:
+	 *
+	 *   [statusdot level="lockdown" label="West Side"]
+	 *   [statusdot level="hold" label="Eckhart"]
+	 *
+	 * Public because the failsafe calls it from outside the class.
+	 *
+	 * @param array $atts Shortcode attributes.
+	 * @return string
+	 */
+	public function render_dot( $atts ) {
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			return '';
+		}
+
+		$atts = shortcode_atts(
+			array(
+				// Which level's colour to use.
+				'level' => 'normal',
+
+				// Text to show beside the dot. Optional.
+				'label' => '',
+
+				// Dot diameter in pixels.
+				'size'  => 12,
+
+				// Override the colour for this one dot.
+				'color' => '',
+
+				// Draw the level's word as the label when none is given.
+				'word'  => 'no',
+			),
+			(array) $atts,
+			'statusdot'
+		);
+
+		$key   = sanitize_key( $atts['level'] );
+		$level = ACPS_Alerts_Status::level( $key );
+
+		$color = ACPS_Alerts_Status::colour( $atts['color'] );
+
+		if ( '' === $color ) {
+			$color = ACPS_Alerts_Status::colour( isset( $level['color'] ) ? $level['color'] : '' );
+		}
+
+		if ( '' === $color ) {
+			$color = '#1b2f5e';
+		}
+
+		$size  = max( 6, min( 48, absint( $atts['size'] ) ) );
+		$label = (string) $atts['label'];
+
+		if ( '' === trim( $label ) && in_array( strtolower( (string) $atts['word'] ), array( 'yes', '1', 'true', 'on' ), true ) ) {
+			$label = isset( $level['banner'] ) ? (string) $level['banner'] : '';
+		}
+
+		$dot = sprintf(
+			'<span class="acps-dot" style="display:inline-block;width:%1$dpx;height:%1$dpx;border-radius:50%%;background:%2$s;vertical-align:middle;flex:0 0 auto" aria-hidden="true"></span>',
+			$size,
+			esc_attr( $color )
+		);
+
+		// A screen reader gets the level word even when the dot is decorative.
+		$sr = isset( $level['banner'] ) ? (string) $level['banner'] : '';
+
+		if ( '' === trim( $label ) ) {
+			return sprintf(
+				'<span class="acps-dot-wrap" style="display:inline-flex;align-items:center;gap:6px">%1$s<span class="screen-reader-text">%2$s</span></span>',
+				$dot,
+				esc_html( $sr )
+			);
+		}
+
+		return sprintf(
+			'<span class="acps-dot-wrap" style="display:inline-flex;align-items:center;gap:6px;line-height:1.3">%1$s<span class="acps-dot-label">%2$s</span></span>',
+			$dot,
+			esc_html( $label )
+		);
 	}
 
 	/**

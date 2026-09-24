@@ -116,6 +116,14 @@ class ACPS_Alerts_Admin {
 
 		add_submenu_page(
 			self::MENU_SLUG,
+			__( 'Archive', 'acps-alert-popups' ),
+			__( 'Archive', 'acps-alert-popups' ),
+			$cap,
+			'admin.php?page=' . self::MENU_SLUG . '&acps_view=archive'
+		);
+
+		add_submenu_page(
+			self::MENU_SLUG,
 			__( 'Alert Settings', 'acps-alert-popups' ),
 			__( 'Settings', 'acps-alert-popups' ),
 			'manage_options',
@@ -259,6 +267,12 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
+		if ( 'archive-delete' === $action ) {
+			$this->handle_archive_delete();
+
+			return;
+		}
+
 	}
 
 	/**
@@ -381,6 +395,8 @@ class ACPS_Alerts_Admin {
 		$level   = isset( $raw['level'] ) ? sanitize_key( $raw['level'] ) : '';
 		$heading = isset( $raw['heading'] ) ? sanitize_text_field( $raw['heading'] ) : '';
 		$text    = isset( $raw['text'] ) ? wp_kses_post( $raw['text'] ) : '';
+		$start   = isset( $raw['start'] ) ? (string) $raw['start'] : '';
+		$end     = isset( $raw['end'] ) ? (string) $raw['end'] : '';
 
 		// A level typed into the URL that is not one we know is dropped rather
 		// than stored, so the popup can never end up on a colour with no name.
@@ -390,7 +406,7 @@ class ACPS_Alerts_Admin {
 
 		ACPS_Alerts_Failsafe::guard(
 			array( __CLASS__, 'apply_quick_post' ),
-			array( $alert, $level, $heading, $text ),
+			array( $alert, $level, $heading, $text, $start, $end ),
 			'admin/quick-post'
 		);
 
@@ -411,7 +427,7 @@ class ACPS_Alerts_Admin {
 	 * @param string            $text    Body HTML, or '' to leave it.
 	 * @return void
 	 */
-	public static function apply_quick_post( ACPS_Alerts_Alert $alert, $level, $heading, $text ) {
+	public static function apply_quick_post( ACPS_Alerts_Alert $alert, $level, $heading, $text, $start = '', $end = '' ) {
 		$post_id = $alert->get_id();
 		$prefix  = ACPS_Alerts_Alert::META_PREFIX;
 
@@ -442,6 +458,18 @@ class ACPS_Alerts_Admin {
 		}
 
 		update_post_meta( $post_id, $prefix . 'status_level', $level );
+
+		// Start and end times, when either is given, put the alert on a custom
+		// schedule; with both blank it keeps whatever schedule it already had
+		// (the daily cut-off by default).
+		$start = ACPS_Alerts_Alert::sanitize_datetime( $start );
+		$end   = ACPS_Alerts_Alert::sanitize_datetime( $end );
+
+		if ( '' !== $start || '' !== $end ) {
+			update_post_meta( $post_id, $prefix . 'expires_mode', 'custom' );
+			update_post_meta( $post_id, $prefix . 'start', $start );
+			update_post_meta( $post_id, $prefix . 'end', $end );
+		}
 
 		// Switch it on. Its clock only (re)starts when it was not already live,
 		// so changing the wording of an alert that is already up does not push
@@ -538,6 +566,29 @@ class ACPS_Alerts_Admin {
 
 		// Wording is visible text, so cached pages must be rebuilt.
 		ACPS_Alerts_Status::flush_page_caches();
+	}
+
+	/**
+	 * Deletes one internal archive record.
+	 *
+	 * @return void
+	 */
+	protected function handle_archive_delete() {
+		$id = isset( $_REQUEST['record'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['record'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce checked below.
+
+		if ( '' === $id || ! current_user_can( self::capability() ) ) {
+			return;
+		}
+
+		$nonce = isset( $_REQUEST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['_wpnonce'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $nonce, 'acps_alerts_archive_delete_' . $id ) || ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			return;
+		}
+
+		ACPS_Alerts_Status::delete_archive_record( $id );
+
+		$this->redirect_back( 'record-deleted', array( 'acps_view' => 'archive' ) );
 	}
 
 	/**
@@ -679,6 +730,12 @@ class ACPS_Alerts_Admin {
 			return;
 		}
 
+		if ( 'archive' === $view ) {
+			$this->render_archive();
+
+			return;
+		}
+
 		$this->render_list();
 	}
 
@@ -699,6 +756,7 @@ class ACPS_Alerts_Admin {
 			'restored'       => __( 'Switched back on. Its daily cut-off starts again from now.', 'acps-alert-popups' ),
 			'posted'         => __( 'Alert posted. It is live now, and the popup shows the new message.', 'acps-alert-popups' ),
 			'wording-saved'  => __( 'Wording saved. The changes are live everywhere the text appears.', 'acps-alert-popups' ),
+			'record-deleted' => __( 'Archive record deleted.', 'acps-alert-popups' ),
 		);
 
 		$errors = array(
@@ -761,6 +819,17 @@ class ACPS_Alerts_Admin {
 			: ( $alert ? (string) $alert->get( 'status_message' ) : '' );
 
 		$level   = $alert ? (string) $alert->get( 'status_level' ) : 'normal';
+
+		// Stored as "Y-m-d H:i"; a datetime-local control wants "Y-m-dTH:i".
+		$to_input = static function ( $stored ) {
+			$stored = trim( (string) $stored );
+
+			return '' === $stored ? '' : str_replace( ' ', 'T', $stored );
+		};
+
+		$start = $alert ? $to_input( $alert->get( 'start' ) ) : '';
+		$end   = $alert ? $to_input( $alert->get( 'end' ) ) : '';
+
 		$choices = ACPS_Alerts_Status::level_choices();
 		$page_url = ACPS_Alerts_Status::board_edit_url();
 		?>
@@ -806,6 +875,20 @@ class ACPS_Alerts_Admin {
 							<td>
 								<textarea name="acps_post[text]" id="acps-post-text" rows="6" class="large-text"><?php echo esc_textarea( $text ); ?></textarea>
 								<p class="description"><?php esc_html_e( 'The message body. Basic formatting is allowed. Leave blank to keep the current text.', 'acps-alert-popups' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-post-start"><?php esc_html_e( 'Starts', 'acps-alert-popups' ); ?></label></th>
+							<td>
+								<input name="acps_post[start]" id="acps-post-start" type="datetime-local" value="<?php echo esc_attr( $start ); ?>" />
+								<p class="description"><?php esc_html_e( 'When it should begin showing. Leave blank to start now.', 'acps-alert-popups' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="acps-post-end"><?php esc_html_e( 'Ends', 'acps-alert-popups' ); ?></label></th>
+							<td>
+								<input name="acps_post[end]" id="acps-post-end" type="datetime-local" value="<?php echo esc_attr( $end ); ?>" />
+								<p class="description"><?php esc_html_e( 'When it should stop on its own. Leave both blank to use the daily cut-off; fill either one to schedule it exactly.', 'acps-alert-popups' ); ?></p>
 							</td>
 						</tr>
 					</table>
@@ -914,6 +997,75 @@ class ACPS_Alerts_Admin {
 	}
 
 	/**
+	 * The internal archive: past updates, for the office to look back on.
+	 *
+	 * Not shown to visitors any more — the public status page shows only the
+	 * current status. Records are kept for 270 days and then drop off on their
+	 * own.
+	 *
+	 * @return void
+	 */
+	protected function render_archive() {
+		$records = class_exists( 'ACPS_Alerts_Status' ) ? ACPS_Alerts_Status::archive( 500 ) : array();
+		$format  = get_option( 'date_format', 'Y-m-d' ) . ' ' . get_option( 'time_format', 'H:i' );
+		?>
+		<div class="wrap acps-alerts-wrap">
+			<h1 class="wp-heading-inline"><?php esc_html_e( 'Archive', 'acps-alert-popups' ); ?></h1>
+			<hr class="wp-header-end" />
+
+			<?php $this->render_message(); ?>
+
+			<p class="description">
+				<?php esc_html_e( 'Past updates, kept internally for reference. Visitors do not see these — the status page shows only the current status. Records are kept for 270 days.', 'acps-alert-popups' ); ?>
+			</p>
+
+			<?php if ( empty( $records ) ) : ?>
+				<p><?php esc_html_e( 'Nothing has been archived yet.', 'acps-alert-popups' ); ?></p>
+			<?php else : ?>
+				<table class="wp-list-table widefat fixed striped">
+					<thead>
+						<tr>
+							<th scope="col"><?php esc_html_e( 'When', 'acps-alert-popups' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Heading', 'acps-alert-popups' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Level', 'acps-alert-popups' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Message', 'acps-alert-popups' ); ?></th>
+							<th scope="col"></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $records as $record ) : ?>
+							<?php
+							$rec_id    = isset( $record['id'] ) ? (string) $record['id'] : '';
+							$rec_date  = isset( $record['date'] ) ? (int) $record['date'] : 0;
+							$rec_level = ACPS_Alerts_Status::level( isset( $record['level'] ) ? $record['level'] : 'info' );
+							$delete    = wp_nonce_url(
+								add_query_arg(
+									array(
+										'page'        => self::MENU_SLUG,
+										'acps_action' => 'archive-delete',
+										'record'      => rawurlencode( $rec_id ),
+									),
+									admin_url( 'admin.php' )
+								),
+								'acps_alerts_archive_delete_' . $rec_id
+							);
+							?>
+							<tr>
+								<td><?php echo esc_html( $rec_date ? date_i18n( $format, $rec_date ) : '—' ); ?></td>
+								<td><strong><?php echo esc_html( isset( $record['title'] ) ? $record['title'] : '' ); ?></strong></td>
+								<td><?php echo esc_html( $rec_level['banner'] ); ?></td>
+								<td><?php echo esc_html( isset( $record['message'] ) ? $record['message'] : '' ); ?></td>
+								<td><a href="<?php echo esc_url( $delete ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Delete this archive record?', 'acps-alert-popups' ) ); ?>');"><?php esc_html_e( 'Delete', 'acps-alert-popups' ); ?></a></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
 	 * The list of every popup, with its alert status.
 	 *
 	 * @return void
@@ -925,6 +1077,7 @@ class ACPS_Alerts_Admin {
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Site Alerts', 'acps-alert-popups' ); ?></h1>
 			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'post' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Post an Alert', 'acps-alert-popups' ); ?></a>
 			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'wording' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Edit wording', 'acps-alert-popups' ); ?></a>
+			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'archive' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Archive', 'acps-alert-popups' ); ?></a>
 			<hr class="wp-header-end" />
 
 			<?php $this->render_message(); ?>

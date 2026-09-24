@@ -86,50 +86,11 @@ $acps_date_format  = get_option( 'date_format' );
 	<?php endif; ?>
 
 	<?php
-	if ( $acps_show_archive ) :
-		$acps_archive = ACPS_Alerts_Status::archive( $acps_count );
-		?>
-		<?php if ( ! empty( $acps_archive ) ) : ?>
-			<div class="acps-board__archive">
-				<h3 class="screen-reader-text"><?php esc_html_e( 'Past updates', 'acps-alert-popups' ); ?></h3>
-
-				<?php foreach ( $acps_archive as $acps_item ) : ?>
-					<?php
-					$acps_item_level = ACPS_Alerts_Status::level( isset( $acps_item['level'] ) ? $acps_item['level'] : 'info' );
-					$acps_item_msg   = isset( $acps_item['message'] ) ? (string) $acps_item['message'] : '';
-					$acps_item_date  = isset( $acps_item['date'] ) ? (int) $acps_item['date'] : 0;
-					$acps_item_label = isset( $acps_item['title'] ) ? (string) $acps_item['title'] : '';
-
-					if ( $acps_show_dates && $acps_item_date ) {
-						$acps_item_label .= ' ' . date_i18n( $acps_date_format, $acps_item_date );
-					}
-					?>
-					<details class="acps-board__entry acps-board__entry--<?php echo esc_attr( sanitize_html_class( isset( $acps_item['level'] ) ? $acps_item['level'] : 'info' ) ); ?>">
-						<summary>
-							<span class="acps-board__entry-title"><?php echo esc_html( $acps_item_label ); ?></span>
-							<span class="acps-board__entry-mark" aria-hidden="true"></span>
-						</summary>
-						<div class="acps-board__entry-body">
-							<p class="acps-board__entry-level" style="color:<?php echo esc_attr( $acps_item_level['color'] ); ?>">
-								<?php
-								echo esc_html( $acps_item_level['banner'] );
-
-								if ( '' !== $acps_item_level['directive'] ) {
-									echo ' — ' . esc_html( wp_strip_all_tags( $acps_item_level['directive'] ) );
-								}
-								?>
-							</p>
-							<?php if ( '' !== trim( $acps_item_msg ) ) : ?>
-								<?php echo wp_kses_post( wpautop( $acps_item_msg ) ); ?>
-							<?php else : ?>
-								<p><?php esc_html_e( 'No further detail was recorded for this update.', 'acps-alert-popups' ); ?></p>
-							<?php endif; ?>
-						</div>
-					</details>
-				<?php endforeach; ?>
-			</div>
-		<?php endif; ?>
-	<?php endif; ?>
+	// The archive is internal now: past updates are kept for the office to look
+	// back on in wp-admin (Site Alerts → Archive), not shown to visitors. The
+	// board on the public page is only the current status.
+	unset( $acps_show_archive, $acps_show_dates, $acps_count );
+	?>
 
 	<?php
 	// Inside the builder, say plainly what this module drives.

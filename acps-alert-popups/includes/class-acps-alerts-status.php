@@ -629,6 +629,30 @@ class ACPS_Alerts_Status {
 	/** How many records to keep. */
 	const ARCHIVE_MAX = 200;
 
+	/** How long a record is kept before it is dropped, in days. */
+	const ARCHIVE_TTL_DAYS = 270;
+
+	/**
+	 * Drops records older than the retention window.
+	 *
+	 * @param array $records Archive records.
+	 * @return array Records still within the window.
+	 */
+	protected static function within_ttl( array $records ) {
+		$cutoff = time() - ( self::ARCHIVE_TTL_DAYS * DAY_IN_SECONDS );
+
+		return array_values(
+			array_filter(
+				$records,
+				static function ( $record ) use ( $cutoff ) {
+					$date = isset( $record['date'] ) ? (int) $record['date'] : 0;
+
+					return $date <= 0 || $date >= $cutoff;
+				}
+			)
+		);
+	}
+
 	/**
 	 * The archive, newest first.
 	 *
@@ -639,6 +663,14 @@ class ACPS_Alerts_Status {
 		$records = get_option( self::ARCHIVE_OPTION, array() );
 
 		if ( ! is_array( $records ) || empty( $records ) ) {
+			return array();
+		}
+
+		// Records past the retention window are treated as gone even before the
+		// next write prunes them from storage.
+		$records = self::within_ttl( $records );
+
+		if ( empty( $records ) ) {
 			return array();
 		}
 
@@ -695,6 +727,10 @@ class ACPS_Alerts_Status {
 		);
 
 		$records[] = $record;
+
+		// Drop anything past the retention window on every write, so the store
+		// never carries records older than the site is meant to keep.
+		$records = self::within_ttl( $records );
 
 		// Keep the newest, so a long-running site cannot grow this without end.
 		if ( count( $records ) > self::ARCHIVE_MAX ) {

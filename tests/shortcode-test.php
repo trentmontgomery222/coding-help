@@ -296,5 +296,38 @@ $linked = sc( array( 'link' => 'yes' ) );
 
 ok( 'with a status page it links there', false !== strpos( $linked, 'https://example.org/school-status/' ) );
 
+/* ---- [statusdot]: a coloured dot to place inline ---- */
+
+/*
+ * The dot is how status colour is shown now that the banner and popup stay
+ * neutral. Several can sit on one line, so a sentence can carry three statuses.
+ */
+function dot( array $atts = array() ) {
+	return call_user_func( $GLOBALS['registered_shortcodes']['statusdot'], $atts );
+}
+
+$hold_dot = dot( array( 'level' => 'hold' ) );
+
+ok( 'the dot is a round element', false !== strpos( $hold_dot, 'border-radius:50%' ) );
+ok( 'in the level colour', false !== strpos( $hold_dot, '#7a1c82' ) );
+ok( 'and names the level for a screen reader', false !== strpos( $hold_dot, 'HOLD' ) );
+
+$labelled = dot( array( 'level' => 'hold', 'label' => 'West Side' ) );
+ok( 'a label is shown beside the dot', false !== strpos( $labelled, 'West Side' ) );
+
+$override = dot( array( 'level' => 'hold', 'color' => '#00ff00' ) );
+ok( 'a colour override wins over the level colour', false !== strpos( $override, '#00ff00' ) && false === strpos( $override, '#7a1c82' ) );
+
+$word = dot( array( 'level' => 'hold', 'word' => 'yes' ) );
+ok( 'word="yes" labels the dot with the level word', false !== strpos( $word, 'HOLD' ) );
+
+// Three on one line is just three shortcodes, which is the whole point.
+$row = dot( array( 'level' => 'hold', 'label' => 'West Side' ) ) . dot( array( 'level' => 'normal', 'label' => 'Eckhart' ) );
+ok( 'three statuses can sit together', false !== strpos( $row, 'West Side' ) && false !== strpos( $row, 'Eckhart' ) );
+
+// An oversized dot is clamped, so a typo cannot blow the layout out.
+$huge = dot( array( 'level' => 'hold', 'size' => '9999' ) );
+ok( 'the dot size is clamped', false === strpos( $huge, '9999px' ) );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All shortcode cases passed\n";
 exit( $fails ? 1 : 0 );

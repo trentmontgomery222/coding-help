@@ -39,8 +39,8 @@ $acps_text = ( preg_match( '/^[0-9a-f]{3,8}$/i', $acps_text ) ) ? '#' . $acps_te
 
 /* The card is one surface, so the two pickers describe the whole of it: the
    heading and the message sit on the same background, in the same colour. The
-   stripe along the top takes that colour too, and a live alert overrides the
-   stripe inline with its own level colour. */
+   stripe along the top takes that colour too. The banner does not change
+   colour with the status. */
 .fl-node-<?php echo esc_html( $id ); ?> .acps-board__banner--card {
 	border-top-color: <?php echo esc_html( $acps_bg ); ?>;
 	background: <?php echo esc_html( $acps_bg ); ?>;

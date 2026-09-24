@@ -350,59 +350,28 @@ ok(
 		&& false !== strpos( $css, '.acps-board__banner--solid {' )
 );
 
-// The card takes the level colour as a stripe; the solid one floods it.
+/* ---- the banner does not change colour by status ---- */
+
+/*
+ * Status colour lives in the [statusdot] and [schoolstatus] shortcodes now, so
+ * the banner keeps the one colour picked in the module whatever the status.
+ * banner_style() never emits a level colour, and there are no per-level colour
+ * pickers left to disagree with that.
+ */
 $card_style = ACPS_Status_Board_Module::banner_style( $live, $board );
 
-ok( 'the card puts the level colour in its top stripe', false !== strpos( $card_style, 'border-top-color:#d81440' ) );
-ok( 'and never floods its background', false === strpos( $card_style, 'background:' ) );
+ok( 'the card takes no level stripe', false === strpos( $card_style, 'border-top-color:#' ) );
+ok( 'and does not flood its background by level', false === strpos( $card_style, 'background:' ) );
 
 $solid_style = ACPS_Status_Board_Module::banner_style( $live, $solid );
 
-ok( 'the solid banner floods its background instead', false !== strpos( $solid_style, 'background:#d81440' ) );
-ok( 'and has no stripe', false === strpos( $solid_style, 'border-top-color' ) );
+ok( 'the solid banner is not flooded by level either', false === strpos( $solid_style, 'background:#' ) );
 
-// The resting state has no level, so neither treatment may invent a colour.
-ok( 'the resting card gets no level stripe', false === strpos( ACPS_Status_Board_Module::banner_style( null, $board ), 'border-top-color' ) );
-check( 'and level_color() has nothing to give', ACPS_Status_Board_Module::level_color( null ), '' );
+check( 'level_color() gives nothing for a live alert', ACPS_Status_Board_Module::level_color( $live, (object) array() ), '' );
+check( 'nor for the resting state', ACPS_Status_Board_Module::level_color( null, (object) array() ), '' );
 
-/* ---- the board's own colour for a level ---- */
-
-/*
- * An SRP colour is chosen to read on white. The same colour on a dark banner
- * can be nearly invisible, so the board may say what a level should look like
- * on it — without changing that level anywhere else on the site.
- */
-$live = new ACPS_Alerts_Alert( 50 );
-$live->saved['status_level'] = 'lockdown';
-
-check(
-    'with nothing picked the level keeps its own colour',
-    ACPS_Status_Board_Module::level_color( $live, (object) array() ),
-    '#d81440'
-);
-
-check(
-    'a colour picked for that level on this board wins',
-    ACPS_Status_Board_Module::level_color( $live, (object) array( 'level_color_lockdown' => 'ffffff' ) ),
-    '#ffffff'
-);
-
-check(
-    'one picked for a different level is ignored',
-    ACPS_Status_Board_Module::level_color( $live, (object) array( 'level_color_hold' => 'ffffff' ) ),
-    '#d81440'
-);
-
-check(
-    'an empty picker is not a choice',
-    ACPS_Status_Board_Module::level_color( $live, (object) array( 'level_color_lockdown' => '' ) ),
-    '#d81440'
-);
-
-// The resting state has no level of its own to colour.
-check( 'the resting state has no level colour', ACPS_Status_Board_Module::level_color( null, (object) array() ), '' );
-
-// Every level in the picker gets a field, or one of them cannot be recoloured.
+// The per-level colour pickers are gone: nothing on the board changes with the
+// status any more.
 $board_fields = array();
 
 foreach ( $GLOBALS['registered']['ACPS_Status_Board_Module'] as $tab ) {
@@ -414,8 +383,11 @@ foreach ( $GLOBALS['registered']['ACPS_Status_Board_Module'] as $tab ) {
 }
 
 foreach ( array_keys( ACPS_Alerts_Status::level_choices() ) as $level_key ) {
-    ok( "the board offers a colour for '$level_key'", isset( $board_fields[ 'level_color_' . $level_key ] ) );
+    ok( "there is no per-level colour field for '$level_key'", ! isset( $board_fields[ 'level_color_' . $level_key ] ) );
 }
+
+ok( 'and no colour-by-level toggle', ! isset( $board_fields['use_level_color'] ) );
+ok( 'the one banner colour field is still there', isset( $board_fields['banner_color'] ) );
 
 /* ---- the banner is the heading and the message, and nothing else ---- */
 

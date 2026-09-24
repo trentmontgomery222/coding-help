@@ -440,12 +440,10 @@ class ACPS_Alerts_Frontend {
 		}
 
 		// Colour the popup's stripe to match the status level, so the popup and
-		// the status board say the same thing at a glance.
+		// The popup chrome no longer changes colour by status. Status colour is
+		// shown by the [statusdot] and [schoolstatus] shortcodes now, placed in
+		// the content, so the box itself stays the site's own neutral look.
 		$stripe = '';
-
-		if ( ! empty( $level['color'] ) && preg_match( '/^#[0-9a-f]{3,8}$/i', $level['color'] ) ) {
-			$stripe = $level['color'];
-		}
 
 		// The badge, the heading and the link below it are only drawn for an
 		// alert whose body is plain content. A popup built in Beaver Builder —
@@ -486,7 +484,7 @@ class ACPS_Alerts_Frontend {
 				<div class="acps-alert__content">
 					<?php if ( $furniture ) : ?>
 						<?php if ( $alert->get( 'show_icon' ) ) : ?>
-							<?php echo ACPS_Alerts_Status::level_icon( $alert->get( 'status_level' ), $alert->get( 'icon_size' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
+							<?php echo ACPS_Alerts_Status::level_icon( $alert->get( 'status_level' ), $alert->get( 'icon_size' ), '#1b2f5e' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped at source. ?>
 						<?php endif; ?>
 
 						<?php if ( $alert->get( 'show_word' ) && '' !== (string) $level['banner'] ) : ?>

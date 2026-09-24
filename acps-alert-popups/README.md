@@ -11,7 +11,7 @@ The split is deliberate:
 
 - **Beaver Builder's own Popup module** on the status page *is* the alert. You build it there like any other popup. The plugin finds that node, hides it on the status page, and renders it — with the status page's generated CSS and JS — on every other page while the alert is on. It does not draw a popup of its own.
 - **The Current Alert module** is the switch and the settings: on/off, level, when it comes down, which pages show it, who sees it, how it opens, how often it comes back. Its heading and text boxes are for the status page *banner* only, and if you leave them empty the banner takes the popup's own heading and text.
-- **The Status Board module** is the template. It turns that heading and text into the status page banner, in the colour of the status level, and lists past updates underneath.
+- **The Status Board module** is the template. It turns that heading and text into the status page banner, in your one fixed banner colour. Past updates are kept internally (wp-admin), not shown to visitors.
 - **wp-admin** is for checking state and for the Normal Alert. You do not post from there.
 
 The popup never opens on the status page itself — that page shows the banner instead. Everywhere else, the plugin shows the popup while the alert is on.
@@ -44,17 +44,30 @@ Your status page carries three things: Beaver Builder's **Popup** module (the al
 - **Show this alert now**, on its On/off tab, is the switch. On means visitors see it; off means the wording sits there ready for next time.
 - **Every setting is on that module**, across its Popup, On/off, Where & who, How it opens and Style tabs. Posting an alert is one screen and under a minute.
 - The popup is **hidden on the status page itself**, so somebody who went there to read the status does not get it covered by a box saying the same thing. The banner says it instead.
-- The board renders the **current status banner** plus the **archive** of past updates, as an expandable list. The banner has two treatments, set by *Banner style*: **Card** (the default) matches the popup — a white card with the level colour as a top stripe and a badge, heading in ordinary dark text — and **Solid** floods the whole banner with the level colour. The board's two colour pickers describe the solid treatment only. With the Current Alert off, the banner shows the Normal Alert wording.
+- The board renders the **current status banner** only — the archive is internal now (see below). The banner has two treatments, set by *Banner style*: **Card** (the default) is a white/coloured panel with a stripe along the top, and **Solid** floods the whole banner. Either way the banner is **one fixed colour** and does not change with the status — status colour is shown by the `[statusdot]` shortcode you place in your content. With the Current Alert off, the banner shows the Normal Alert wording.
 - It **archives itself and switches itself off at 5:50pm** (configurable) unless you chose "Keep it up until I switch it off". The archive entry is a separate record; the alert's own wording is left intact. An update posted after the cut-off runs until the following day.
 - Set **Who can see it → Staff only** to stage an update on the live site where only people who can manage alerts see it. The board shows a dashed "Staff preview" strip so you can't forget.
 
-Archived updates are stored as records in their own list, not as posts, so the archive can grow without the site ever gaining a third alert.
+### The archive is internal
+
+Past updates are kept for the office to look back on in **Site Alerts → Archive**, not shown to visitors — the public status page shows only the current status. Records are stored in their own list (not as posts, so the site never gains a third alert) and are **kept for 270 days**, after which they drop off on their own. Delete any record from the Archive screen.
+
+### Status is shown with coloured dots
+
+The banner and popup stay in your own neutral colours; status colour lives in a shortcode you place wherever you want it:
+
+- `[statusdot level="lockdown"]` — a single coloured dot in that level's colour.
+- `[statusdot level="hold" label="West Side"]` — a dot with a label beside it.
+- `[statusdot level="hold" word="yes"]` — a dot labelled with the level word (HOLD).
+- `[statusdot level="secure" color="#ffffff" size="16"]` — override the colour and size.
+
+Because it is just a shortcode, you can line up several to show more than one status at once, e.g. *West Side* `[statusdot level="lockdown"]`, *Eckhart* `[statusdot level="hold"]`, *Restart* `[statusdot level="normal"]`.
 
 ### The quick way: Post an Alert
 
 There is also a one-screen shortcut in wp-admin, for when you just need the words changed fast and do not want to open Beaver Builder. **Site Alerts → Post an Alert** (there is a button on the alerts list too) is a short form: a **Level**, a **Header**, and a **Text** box, and one **Post alert** button.
 
-Submitting it does three things at once: it writes the header and text straight into the popup — the heading and rich-text modules inside the Beaver Builder Popup module on the status page, the very ones the popup already shows — sets the level, and switches the alert on. The popup, the status board and the `[schoolstatus]` shortcode all update together.
+You can also set **Starts** and **Ends** times here to schedule it exactly (leave both blank to use the daily cut-off). Submitting it does three things at once: it writes the header and text straight into the popup — the heading and rich-text modules inside the Beaver Builder Popup module on the status page, the very ones the popup already shows — sets the level, and switches the alert on. The popup, the status board and the `[schoolstatus]` shortcode all update together.
 
 It only touches those three things. Everything else about the popup — any extra modules you added, the styling, the layout — is exactly as you built it in Beaver Builder, because the form edits the same popup rather than replacing it. So the two ways of working fit together: post the everyday changes from this form in a few seconds, and open Beaver Builder when you want to change how the popup is built. The boxes come pre-filled with what the popup says right now, so a small change is a small edit, and an empty box leaves that piece alone. Changing the wording of an alert that is already up does not restart its daily cut-off.
 
@@ -75,16 +88,14 @@ Urgency runs Lockdown > Evacuate > Shelter > Secure > Hold > Information.
 
 ### When a level colour does not read
 
-The SRP colours are chosen to read on white, and the same colour on a dark
-banner can be nearly invisible. Each place that draws a level may override it
-without changing that level anywhere else:
+The banner and popup no longer colour by status, so a level colour only ever
+appears where you place a `[statusdot]` or `[schoolstatus]`. When one does not
+read against its background there, override it just for that placement:
 
-- **The status board** has a *Level colours on this board* section, one colour
-  per level — that colour is the banner's, being the head on the card or the
-  whole banner on the solid style. Empty keeps the standard colour.
-- **A shortcode** takes `color="#ffffff"` for that one placement.
+- **A shortcode** takes `color="#ffffff"` — on both `[statusdot]` and
+  `[schoolstatus]` — for that one dot or badge.
 - **A developer** can filter `acps_alerts_level_color`, which receives the
-  colour, the level key and the context (`board`, `shortcode`, `popup`).
+  colour, the level key and the context (`shortcode`, `popup`).
 
 ### The status page banner
 

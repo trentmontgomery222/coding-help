@@ -50,8 +50,7 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	 * @return string
 	 */
 	public static function banner_classes( $alert, $settings ) {
-		$level    = $alert ? $alert->get( 'status_level' ) : 'normal';
-		$by_level = ! isset( $settings->use_level_color ) || '1' === (string) $settings->use_level_color;
+		$level = $alert ? $alert->get( 'status_level' ) : 'normal';
 
 		$classes = array(
 			'acps-board__banner',
@@ -59,10 +58,9 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 			'acps-board__banner--' . self::style_of( $settings ),
 		);
 
-		// The normal state always uses the colour picked in the module, and so
-		// does everything else when colour-by-level is switched off. Only the
-		// solid treatment floods a background, so only it can be overridden.
-		if ( self::is_solid( $settings ) && ( ! $by_level || ! $alert ) ) {
+		// The solid treatment floods its background with the one banner colour
+		// picked in the module, whatever the status. The card does not flood.
+		if ( self::is_solid( $settings ) ) {
 			$classes[] = 'acps-board__banner--custom';
 		}
 
@@ -96,15 +94,12 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	 * @return string Hex colour, or an empty string.
 	 */
 	public static function level_color( $alert, $settings = null ) {
-		if ( ! $alert ) {
-			return '';
-		}
+		// The board no longer changes colour by status. The banner uses the one
+		// colour picked in the module, and status colour is shown by the
+		// [statusdot] and [schoolstatus] shortcodes placed in the content.
+		unset( $alert, $settings );
 
-		return ACPS_Alerts_Status::level_color(
-			$alert->get( 'status_level' ),
-			'board',
-			self::level_overrides( $settings )
-		);
+		return '';
 	}
 
 	/**
@@ -157,24 +152,13 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 	 * @return string
 	 */
 	public static function banner_style( $alert, $settings ) {
+		// Alignment only. The banner's colour is the one picked in the module
+		// and lives in the stylesheet; it no longer changes with the status.
+		unset( $alert );
+
 		$align = isset( $settings->banner_align ) ? $settings->banner_align : 'center';
-		$style = 'text-align:' . preg_replace( '/[^a-z]/', '', (string) $align ) . ';';
-		$color = self::level_color( $alert, $settings );
 
-		// The card treatment matches the popup: a white card with the level
-		// colour as a stripe along the top, rather than flooding the whole
-		// banner. The heading stays dark, so it reads as a heading.
-		if ( ! self::is_solid( $settings ) ) {
-			return '' !== $color ? $style . 'border-top-color:' . $color . ';' : $style;
-		}
-
-		$by_level = ! isset( $settings->use_level_color ) || '1' === (string) $settings->use_level_color;
-
-		if ( ! $alert || ! $by_level || '' === $color ) {
-			return $style; // The module's own colour applies, from its stylesheet.
-		}
-
-		return $style . 'background:' . $color . ';';
+		return 'text-align:' . preg_replace( '/[^a-z]/', '', (string) $align ) . ';';
 	}
 
 	/**
@@ -241,22 +225,6 @@ class ACPS_Status_Board_Module extends FLBuilderModule {
 
 }
 
-/*
- * One colour field per status level, built from the levels themselves so a site
- * that filters in a new one gets a field for it without touching this file.
- */
-$acps_board_level_fields = array();
-
-foreach ( ACPS_Status_Board_Module::colourable_levels() as $acps_level_key => $acps_level_label ) {
-	$acps_board_level_fields[ 'level_color_' . $acps_level_key ] = array(
-		'type'        => 'color',
-		'label'       => $acps_level_label,
-		'default'     => '',
-		'show_reset'  => true,
-		'show_alpha'  => false,
-	);
-}
-
 FLBuilder::register_module(
 	'ACPS_Status_Board_Module',
 	array(
@@ -315,24 +283,19 @@ FLBuilder::register_module(
 								'card'  => __( 'Card — white, like the popup', 'acps-alert-popups' ),
 								'solid' => __( 'Solid — the whole banner in the level colour', 'acps-alert-popups' ),
 							),
-							'help'    => __( 'The banner is the heading and the message, and nothing else. The card is a rounded panel with a stripe along the top; the solid style is a flat full-width block. Either way the whole banner is one colour. For a badge or the level word anywhere on the page, use the [schoolstatus] shortcode.', 'acps-alert-popups' ),
+							'help'    => __( 'The banner is the heading and the message, and nothing else, always in the one banner colour set below — it does not change with the status. The card is a rounded panel with a stripe along the top; the solid style is a flat full-width block. For a status dot or the level word, use the [statusdot] or [schoolstatus] shortcode in your content.', 'acps-alert-popups' ),
 						),
 					),
-				),
-				'levels'  => array(
-					'title'       => __( 'Level colours on this board', 'acps-alert-popups' ),
-					'description' => __( 'Each status level has a colour staff are trained on, and that is what the board uses. Set one here only when a level needs to look different on this board — an SRP colour is chosen to read on white, and the same colour on a dark banner can be nearly invisible. Leave one empty to keep the standard colour.', 'acps-alert-popups' ),
-					'fields'      => $acps_board_level_fields,
 				),
 				'style'   => array(
 					'title'  => __( 'Style', 'acps-alert-popups' ),
 					'fields' => array(
 						'banner_color'   => array(
 							'type'       => 'color',
-							'label'      => __( 'Normal banner colour', 'acps-alert-popups' ),
+							'label'      => __( 'Banner colour', 'acps-alert-popups' ),
 							'default'    => '1b2f5e',
 							'show_reset' => true,
-							'help'       => __( 'Used when the status is normal. Other levels use their own colour.', 'acps-alert-popups' ),
+							'help'       => __( 'The one colour the banner uses, whatever the status. Status colour is shown by the [statusdot] shortcode, placed in the content.', 'acps-alert-popups' ),
 						),
 						'text_color'     => array(
 							'type'       => 'color',
@@ -345,15 +308,6 @@ FLBuilder::register_module(
 							'type'    => 'align',
 							'label'   => __( 'Banner text alignment', 'acps-alert-popups' ),
 							'default' => 'center',
-						),
-						'use_level_color' => array(
-							'type'    => 'select',
-							'label'   => __( 'Colour by status level', 'acps-alert-popups' ),
-							'default' => '1',
-							'options' => array(
-								'1' => __( 'Yes — warnings amber, closures red', 'acps-alert-popups' ),
-								'0' => __( 'No — always use the colour above', 'acps-alert-popups' ),
-							),
 						),
 					),
 				),
