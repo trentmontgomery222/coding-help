@@ -917,6 +917,15 @@ class ACPS_Alerts_Panel {
 			$out['verify_status_url'] = esc_url_raw( trim( (string) $raw['verify_status_url'] ) );
 		}
 
+		// Feature switches. An unticked box is simply not posted, so the
+		// switches are only read when the form says it carries them — a script
+		// posting a few other fields must not switch every feature off.
+		if ( ! empty( $raw['_features'] ) ) {
+			foreach ( array_keys( ACPS_Alerts_Settings::features() ) as $feature ) {
+				$out[ 'feature_' . $feature ] = empty( $raw[ 'feature_' . $feature ] ) ? 0 : 1;
+			}
+		}
+
 		return $out;
 	}
 
@@ -987,6 +996,26 @@ class ACPS_Alerts_Panel {
 					gmdate( 'Y-m-d H:i', (int) $safe['time'] ) . ' UTC',
 					isset( $safe['msg'] ) ? (string) $safe['msg'] : '',
 					( isset( $safe['file'] ) ? str_replace( ABSPATH, '', (string) $safe['file'] ) : '' ) . ':' . ( isset( $safe['line'] ) ? (int) $safe['line'] : 0 )
+				),
+			);
+		}
+
+		// Features someone switched off in Settings → Features.
+		$off = array();
+
+		foreach ( ACPS_Alerts_Settings::features() as $key => $feature ) {
+			if ( ! ACPS_Alerts_Settings::feature( $key ) ) {
+				$off[] = $feature['label'];
+			}
+		}
+
+		if ( $off ) {
+			$issues[] = array(
+				'level'   => 'warn',
+				'message' => sprintf(
+					/* translators: %s: feature names. */
+					__( 'Switched off in Settings → Features: %s', 'acps-alert-popups' ),
+					implode( ', ', $off )
 				),
 			);
 		}
@@ -1218,6 +1247,15 @@ class ACPS_Alerts_Panel {
 		$disabled = $locked ? ' disabled' : '';
 
 		echo '<form method="post"><input type="hidden" name="acps_console_action" value="save" />';
+
+		echo '<h3>' . esc_html__( 'Features', 'acps-alert-popups' ) . '</h3>';
+		echo '<input type="hidden" name="acps_console[_features]" value="1" />';
+
+		foreach ( ACPS_Alerts_Settings::features() as $key => $feature ) {
+			echo '<label class="check"><input type="checkbox" name="acps_console[feature_' . esc_attr( $key ) . ']" value="1" ' . checked( ACPS_Alerts_Settings::feature( $key ), true, false ) . $disabled . ' /> ' . esc_html( $feature['label'] ) . ' — ' . esc_html( $feature['description'] ) . '</label>';
+		}
+
+		echo '<h3>' . esc_html__( 'General', 'acps-alert-popups' ) . '</h3>';
 
 		$this->select_field( 'render_mode', __( 'Rendering', 'acps-alert-popups' ), array(
 			'auto'   => 'auto',

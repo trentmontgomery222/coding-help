@@ -20,9 +20,12 @@ php tests/popup-source-test.php
 php tests/shortcode-test.php
 php tests/updater-test.php
 php tests/safe-mode-test.php
+php tests/settings-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
 node tests/frequency-test.js
+node tests/plugins-screen-test.js   # real browser (Playwright + Chromium)
+node tests/tour-test.js             # real browser (Playwright + Chromium)
 for s in healthy admin-healthy missing-file missing-help broken-file safe-mode safe-mode-console safe-mode-new-version kill-switch; do php tests/boot-test.php "$s"; done
 ```
 
@@ -80,9 +83,44 @@ admin requests, so without it `missing-help` would pass for the wrong reason.
   is reported afresh
 - a static scan of every string the plugin can print finds no failure, pause or
   missing-file notice outside the unlisted console and the operator email
+- `ACPS_Alerts_Admin::is_own_screen()` recognises exactly the plugin's own
+  screens, and nothing else
 
 The email-once guard is mutation-checked: dropping it makes the second-arm case
 fail.
+
+`settings-test.php` — the settings class itself:
+
+- every feature switch is on by default and has a label and a description
+- an unticked switch saves off; a switch missing from the request stays on, so
+  nothing is switched off by accident
+- **saving the hidden maintenance screen keeps every ordinary setting** — it
+  used to reset the Main CSS, the cut-off, the rendering mode and the rest to
+  their defaults, and turn previews off. Mutation-checked.
+- every switch is actually read somewhere in the plugin (outside the screens
+  that display it), so none is decorative. Mutation-checked.
+
+The switches' effects are tested where they act: `render-test.php` (the popup),
+`shortcode-test.php` (`[schoolstatus]`, `[statusdot]`), `status-test.php` (the
+daily cut-off, page cache clearing) and `popup-module-test.php` (the three
+Beaver Builder modules draw nothing, and say why inside the builder).
+
+`plugins-screen-test.js` — the warning before this plugin is deleted, in real
+Chromium, against a stand-in Plugins screen with a stand-in for WordPress's own
+delete handler: nothing shows until a delete of *this* plugin is asked for (row
+link, top or bottom bulk button); the warning says it is not advised and points
+to Settings → Features; Cancel and Escape delete nothing; "Delete anyway" hands
+over to WordPress exactly once; other plugins are never touched. It caught a
+real bug on its first run: the dialog's `display:flex` overrode `hidden`, so a
+cancelled warning left an invisible overlay blocking every click on the screen.
+Mutation-checked (a bubble-phase listener lets the delete through first).
+
+`tour-test.js` — the guided-tour engine in real Chromium across real page loads:
+the button on a step that lives elsewhere really navigates there, carrying the
+tour and step; the tour resumes on arrival; a step whose element is missing on
+the right screen is explained in place instead of reloading the page for ever;
+Back walks back across screens; and the well-done note is only ever added to
+the plugin's own screens. Each of the three engine fixes is mutation-checked.
 
 `idempotency-test.php` — pins the "everything is twice everywhere" bug.
 WordPress de-duplicates hook callbacks by a unique id, which is stable for
@@ -241,6 +279,16 @@ front door, so the edge cases matter:
 - every step anchored to `[data-acps-section="…"]` points at a section the
   settings form really renders — so a renamed section breaks the test rather
   than silently breaking the tour
+- the complete tour visits every screen (alerts list, Post an Alert, Wording,
+  Archive, the Pages list, Help, Settings, an alert's settings), and each
+  feature has its own tour
+- **any** step that moves to a different screen from the step before carries
+  the url to get there, or the tour would dead-end on the old screen
+- every `#acps-…` id and `.acps-…` class a step points at exists in the
+  plugin's markup
+- no tour names the update system or the console
+
+Each of those four is mutation-checked.
 
 `popup-module-test.php` — the Current Alert module, which is the one place the
 alert is edited. The module holds every setting the alert has, and saves the
@@ -336,6 +384,10 @@ before the failsafe loads, is exempt). The updater's and the console's public
 request handlers were once registered raw, so a throw in them escaped as a
 fatal. Verified non-vacuous: put the console's `init` hook back to a plain
 `add_action()` and it fails naming that file and line.
+
+And every callback on a notice hook (`admin_notices` and its relatives) must
+check it is on one of the plugin's own screens, so no plugin message can appear
+at the top of any other page. Removing the check from either notice fails it.
 
 `frequency-test.js` — how often a visitor is shown the same alert, with
 `mayShow()` loaded out of the real script rather than restated. The rule needing

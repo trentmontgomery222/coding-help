@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.9.0
+ * Version:           1.10.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.9.0' );
+define( 'ACPS_ALERTS_VERSION', '1.10.0' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -66,7 +66,7 @@ function acps_alerts_may_run() {
 }
 
 /**
- * Warns when a second copy of this plugin is installed and active.
+ * Warns, on this plugin's own screens, when a second copy is installed.
  *
  * Two copies is the usual reason for "everything appears twice": both get
  * loaded, both wire their hooks, and every menu and notice prints twice. The
@@ -77,6 +77,12 @@ function acps_alerts_may_run() {
  */
 function acps_alerts_duplicate_notice() {
 	if ( empty( $GLOBALS['acps_alerts_duplicate_load'] ) || ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
+	// Only ever on this plugin's own screens, never at the top of any other
+	// page in wp-admin.
+	if ( ! class_exists( 'ACPS_Alerts_Admin' ) || ! ACPS_Alerts_Admin::is_own_screen() ) {
 		return;
 	}
 

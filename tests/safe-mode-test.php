@@ -105,6 +105,7 @@ function register_uninstall_hook() {}
 function get_bloginfo_url() { return 'https://example.org'; }
 function wp_normalize_path( $p ) { return str_replace( '\\', '/', (string) $p ); }
 function did_action() { return 0; }
+function wp_unslash( $v ) { return is_string( $v ) ? stripslashes( $v ) : $v; }
 
 // A console key so access_key() yields a URL in the email.
 $GLOBALS['options']['acps_alerts_settings'] = array( 'console_key' => 'consolekey123' );
@@ -222,6 +223,22 @@ if ( class_exists( 'ACPS_Alerts_Admin', false ) && method_exists( 'ACPS_Alerts_A
 } else {
 	$fails++;
 	echo "FAIL default_css method missing\n";
+}
+
+// ---- notices only ever on the plugin's own screens ----------------------
+if ( class_exists( 'ACPS_Alerts_Admin', false ) ) {
+	foreach ( array( 'acps-alerts', 'acps-alerts-settings', 'acps-alerts-help' ) as $acps_page ) {
+		$_GET['page'] = $acps_page;
+		check( "the plugin's own page '$acps_page' is its own screen", ACPS_Alerts_Admin::is_own_screen(), true );
+	}
+
+	foreach ( array( '', 'some-other-plugin', 'acps-alerts-evil' ) as $acps_page ) {
+		$_GET['page'] = $acps_page;
+		check( "'$acps_page' is not the plugin's screen", ACPS_Alerts_Admin::is_own_screen(), false );
+	}
+
+	unset( $_GET['page'] );
+	check( 'the Dashboard, Plugins or any other WordPress screen is not the plugin\'s', ACPS_Alerts_Admin::is_own_screen(), false );
 }
 
 if ( $fails ) {

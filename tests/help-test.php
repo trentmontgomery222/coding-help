@@ -24,6 +24,7 @@ function esc_html__( $s, $d = '' ) { return htmlspecialchars( (string) $s, ENT_Q
 function esc_attr( $s ) { return htmlspecialchars( (string) $s, ENT_QUOTES ); }
 function esc_url( $s ) { return $s; }
 function admin_url( $p = '' ) { return 'https://example.org/wp-admin/' . $p; }
+function get_permalink( $id ) { return 'https://example.org/?page_id=' . (int) $id; }
 function add_query_arg( $args, $url = '' ) {
 	$q = http_build_query( is_array( $args ) ? $args : array() );
 	return $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . $q;
@@ -237,6 +238,81 @@ foreach ( $tours as $id => $tour ) {
 }
 
 ok( 'section-anchored steps were actually checked', $checked > 0 );
+
+/* ---- the complete tour physically visits every feature's screen ---- */
+ok( 'there is a complete guided tour', isset( $tours['full-setup'] ) );
+
+$visited = array();
+
+foreach ( $tours['full-setup']['steps'] as $step ) {
+	if ( ! empty( $step['screen'] ) ) {
+		$visited[ $step['screen'] ] = true;
+	}
+}
+
+foreach ( array( 'list', 'post', 'wording', 'archive', 'wp:edit-page', 'help', 'settings', 'edit' ) as $screen ) {
+	ok( "the complete tour visits the '$screen' screen", isset( $visited[ $screen ] ) );
+}
+
+// Every feature has a tour of its own as well.
+foreach ( array( 'first-alert', 'status-page', 'wording-archive', 'settings-tour', 'settings-deep', 'troubleshoot' ) as $id ) {
+	ok( "there is a '$id' tour", isset( $tours[ $id ] ) );
+}
+
+/*
+ * Any step that moves to a different screen from the step before it must carry
+ * a url — not just a tour's first step. Without one the engine has nowhere to
+ * take the user, and the tour dead-ends on the old screen.
+ */
+foreach ( $tours as $id => $tour ) {
+	$prev = null;
+
+	foreach ( $tour['steps'] as $n => $step ) {
+		$screen = isset( $step['screen'] ) ? $step['screen'] : null;
+
+		if ( null !== $screen && $screen !== $prev ) {
+			ok( "tour '$id' step $n moves to '$screen' and carries the url to get there", ! empty( $step['url'] ) );
+		}
+
+		if ( null !== $screen ) {
+			$prev = $screen;
+		}
+	}
+}
+
+// Every id and plugin class a tour points at really exists in the markup, so
+// no step silently falls back to a centred box on a real install.
+$view_markup = file_get_contents( ACPS_ALERTS_DIR . 'includes/views/help-page.php' );
+$all_markup  = $markup . $view_markup;
+$anchors     = 0;
+
+foreach ( $tours as $id => $tour ) {
+	foreach ( $tour['steps'] as $n => $step ) {
+		if ( empty( $step['selector'] ) ) {
+			continue;
+		}
+
+		preg_match_all( '/#(acps-[a-z0-9-]+)|\.(acps-[a-z0-9_-]+)/', $step['selector'], $m, PREG_SET_ORDER );
+
+		foreach ( $m as $hit ) {
+			$anchors++;
+
+			if ( ! empty( $hit[1] ) ) {
+				ok( "tour '$id' step $n points at an id that exists: #" . $hit[1], false !== strpos( $all_markup, 'id="' . $hit[1] . '"' ) );
+			} else {
+				ok( "tour '$id' step $n points at a class that exists: ." . $hit[2], 1 === preg_match( '/class="[^"]*\b' . preg_quote( $hit[2], '/' ) . '\b/', $all_markup ) );
+			}
+		}
+	}
+}
+
+ok( 'the id and class anchors were actually checked', $anchors > 20 );
+
+// The update system and the remote console are never named in anything a
+// visitor to the admin can read, and the tours are no exception.
+foreach ( array( 'acpsupdater', 'console', 'update secret', 'updates=1', 'manifest' ) as $hidden ) {
+	ok( "no tour mentions '$hidden'", false === stripos( $tour_blob . ' ' . json_encode( $tours ), $hidden ) );
+}
 
 echo $fails ? "\n$fails failing case(s)\n" : "All help cases passed\n";
 exit( $fails ? 1 : 0 );

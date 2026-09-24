@@ -142,10 +142,12 @@ The popup's look is the Current Alert module's **Style** tab: where the box sits
 
 You should not need this file. The plugin teaches itself:
 
-- **A guided tour.** Open **Site Alerts** and start the guided tour. It dims the screen, spotlights one real control at a time and explains it, walking you from the alerts list through the quick **Post an Alert** form and on to the illustrated guides — across screens, picking up where it left off. Escape leaves at any point; you can replay it whenever. A second, optional tour walks the fine-grained settings in detail.
+- **Guided tours that take you there.** Open **Site Alerts → Help & Tutorials** and start **The complete guided tour**. It dims the screen, spotlights one real control at a time and explains it — and when the next feature lives on another screen, its button takes you there and the tour picks up where it left off. In order it walks: the alerts list and the on/off switch, **Post an Alert** field by field, **Wording**, the **Archive**, your status page in **Pages** (and the four Beaver Builder modules), the shortcodes, **Settings** including the feature switches and the Main CSS editor, an alert's fine-grained settings, and finally the setup checklist and troubleshooting. Back walks back across screens too. Escape leaves at any point; you can replay any tour whenever.
+
+  Each feature also has a short tour of its own: *Post an alert*, *Set up the status page*, *Wording and the archive*, *Settings and feature switches*, *An alert's fine-grained settings*, and *When something is not working*.
 - **Site Alerts → Help & Tutorials.** A setup checklist that ticks itself off as you go, illustrated guides for every setting, ready-made recipes (snow day, event, staff-only, click-to-open), troubleshooting, an FAQ and a glossary.
-- **The Help tab** at the top right of every plugin screen, with a "my alert isn't showing" checklist.
-- **A live preview** on the alert settings screen that redraws as you change position, width, severity and overlay — plus a warning if you switch off every way of closing the alert.
+- **The Help tab** at the top right of the plugin's own screens, with a "my alert isn't showing" checklist.
+- **A live preview** on the alert settings screen that redraws as you change position, width, level and overlay — plus a warning if you switch off every way of closing the alert.
 
 ## Using it
 
@@ -169,6 +171,34 @@ It works off a revision counter bumped on every write, paired with the post's mo
 | Appearance | Position, max width, overlay, close button, overlay click, Escape key, screen reader label |
 
 **Site Alerts → Settings** holds the site-wide options: popup post type, rendering mode, the daily cut-off time, where dismissals are remembered (local storage, session storage or a cookie), z-index, whether editors see alerts, preview links, and the Main CSS editor.
+
+### Switching a feature off
+
+**Site Alerts → Settings → Features** has a switch for each part of the plugin:
+the site alert popup, the Status Board, status dots (module and `[statusdot]`),
+the `[schoolstatus]` shortcode, alert buttons (module and
+`[acps_alert_trigger]`), the daily cut-off, page cache clearing, and the guided
+tours. All are on by default. Turning one off stops just that part — a switched
+off module draws nothing on the live page (inside Beaver Builder it says it is
+switched off), a switched-off shortcode prints nothing — and nothing is deleted,
+so turning it back on restores it exactly. This is the answer to "one part is
+causing trouble"; there is never a need to remove the plugin.
+
+### Deleting the plugin
+
+Deleting it from the Plugins screen — its Delete link, or a bulk delete with it
+ticked — first shows a warning: it is not advised, the features built on it will
+stop working, and its settings, wording and archive will be removed. The warning
+offers **Open Settings → Features** as the first choice, since any single part
+can be switched off there instead; **Delete anyway** goes ahead with WordPress's
+normal delete. Nothing is added to the Plugins screen otherwise.
+
+### Notices stay on the plugin's own screens
+
+The plugin never puts a message at the top of a page that is not its own — not
+the Dashboard, not Plugins, not another plugin's screens. Anything it does say
+(the welcome box, a confirmation after saving) appears only on the Site Alerts
+screens and its own alert editor. A test checks every notice the plugin hooks.
 
 ### The Main CSS editor
 

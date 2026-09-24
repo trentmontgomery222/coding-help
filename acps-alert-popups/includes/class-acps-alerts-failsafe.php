@@ -130,6 +130,7 @@ class ACPS_Alerts_Failsafe {
 			'assets/js/help.js',
 			'assets/css/tour.css',
 			'assets/js/tour.js',
+			'assets/js/plugins-screen.js',
 			'modules/alert-trigger/alert-trigger.php',
 			'modules/alert-trigger/includes/frontend.php',
 			// The whole teaching layer is optional on purpose: losing it costs

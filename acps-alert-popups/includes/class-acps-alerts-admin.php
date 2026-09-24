@@ -68,6 +68,34 @@ class ACPS_Alerts_Admin {
 	}
 
 	/**
+	 * Whether the screen being drawn is one this plugin made: its own menu
+	 * pages, or its own alert post type's list and editor.
+	 *
+	 * The plugin never puts a message on any other screen — not the
+	 * Dashboard, not Plugins, not another plugin's pages — so every notice it
+	 * prints checks this first.
+	 *
+	 * @return bool
+	 */
+	public static function is_own_screen() {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( in_array( $page, array( self::MENU_SLUG, self::SETTINGS_SLUG, 'acps-alerts-help' ), true ) ) {
+			return true;
+		}
+
+		if ( function_exists( 'get_current_screen' ) && class_exists( 'ACPS_Alerts_Post_Type' ) ) {
+			$screen = get_current_screen();
+
+			if ( $screen && ACPS_Alerts_Post_Type::SLUG === (string) $screen->post_type ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Registers the admin menu.
 	 *
 	 * @return void
@@ -983,7 +1011,7 @@ class ACPS_Alerts_Admin {
 			<?php if ( empty( $records ) ) : ?>
 				<p><?php esc_html_e( 'Nothing has been archived yet.', 'acps-alert-popups' ); ?></p>
 			<?php else : ?>
-				<table class="wp-list-table widefat fixed striped">
+				<table class="wp-list-table widefat fixed striped acps-archive-table">
 					<thead>
 						<tr>
 							<th scope="col"><?php esc_html_e( 'When', 'acps-alert-popups' ); ?></th>
@@ -1036,9 +1064,9 @@ class ACPS_Alerts_Admin {
 		?>
 		<div class="wrap acps-alerts-wrap">
 			<h1 class="wp-heading-inline"><?php esc_html_e( 'Site Alerts', 'acps-alert-popups' ); ?></h1>
-			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'post' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Post an Alert', 'acps-alert-popups' ); ?></a>
-			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'wording' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Edit wording', 'acps-alert-popups' ); ?></a>
-			<a class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'archive' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Archive', 'acps-alert-popups' ); ?></a>
+			<a id="acps-go-post" class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'post' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Post an Alert', 'acps-alert-popups' ); ?></a>
+			<a id="acps-go-wording" class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'wording' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Edit wording', 'acps-alert-popups' ); ?></a>
+			<a id="acps-go-archive" class="page-title-action" href="<?php echo esc_url( add_query_arg( array( 'page' => self::MENU_SLUG, 'acps_view' => 'archive' ), admin_url( 'admin.php' ) ) ); ?>"><?php esc_html_e( 'Archive', 'acps-alert-popups' ); ?></a>
 			<hr class="wp-header-end" />
 
 			<?php $this->render_message(); ?>
@@ -1059,7 +1087,7 @@ class ACPS_Alerts_Admin {
 					<thead>
 						<tr>
 							<th scope="col" class="column-primary"><?php esc_html_e( 'Popup', 'acps-alert-popups' ); ?></th>
-							<th scope="col"><?php esc_html_e( 'Status', 'acps-alert-popups' ); ?></th>
+							<th id="acps-col-status" scope="col"><?php esc_html_e( 'Status', 'acps-alert-popups' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Level', 'acps-alert-popups' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Schedule', 'acps-alert-popups' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Where', 'acps-alert-popups' ); ?></th>
@@ -1154,7 +1182,7 @@ class ACPS_Alerts_Admin {
 				<?php if ( 'publish' !== get_post_status( $id ) ) : ?>
 					<span class="acps-badge acps-badge--draft"><?php echo esc_html( get_post_status( $id ) ); ?></span>
 				<?php endif; ?>
-				<div class="row-actions">
+				<div class="row-actions acps-row-actions">
 					<?php if ( $on_page ) : ?>
 						<?php if ( '' !== $page_url ) : ?>
 							<span><a href="<?php echo esc_url( $page_url ); ?>"><?php esc_html_e( 'Edit on the status page', 'acps-alert-popups' ); ?></a> | </span>
@@ -1359,9 +1387,32 @@ class ACPS_Alerts_Admin {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) ); ?>">
 				<?php wp_nonce_field( 'acps_alerts_save_settings', 'acps_settings_nonce' ); ?>
 
-				<table class="form-table" role="presentation">
+				<div class="acps-features" id="acps-features">
+					<h2><?php esc_html_e( 'Features', 'acps-alert-popups' ); ?></h2>
+					<p class="description"><?php esc_html_e( 'Each part of the plugin can be switched off on its own. If one part is causing trouble, or is not wanted, turn it off here — the rest keeps working, and nothing is deleted. Turn it back on any time.', 'acps-alert-popups' ); ?></p>
+					<table class="form-table" role="presentation">
+						<tbody>
+							<?php foreach ( ACPS_Alerts_Settings::features() as $acps_key => $acps_feature ) : ?>
+								<tr id="acps-feature-<?php echo esc_attr( $acps_key ); ?>">
+									<th scope="row"><?php echo esc_html( $acps_feature['label'] ); ?></th>
+									<td>
+										<label>
+											<input type="hidden" name="acps_settings[feature_<?php echo esc_attr( $acps_key ); ?>]" value="0" />
+											<input type="checkbox" name="acps_settings[feature_<?php echo esc_attr( $acps_key ); ?>]" value="1" <?php checked( ACPS_Alerts_Settings::feature( $acps_key ) ); ?> />
+											<?php esc_html_e( 'On', 'acps-alert-popups' ); ?>
+										</label>
+										<p class="description"><?php echo esc_html( $acps_feature['description'] ); ?></p>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				</div>
+
+				<h2><?php esc_html_e( 'General', 'acps-alert-popups' ); ?></h2>
+				<table class="form-table" role="presentation" id="acps-settings-general">
 					<tbody>
-						<tr>
+						<tr id="acps-set-post-type">
 							<th scope="row"><?php esc_html_e( 'Popup post type', 'acps-alert-popups' ); ?></th>
 							<td>
 								<select name="acps_settings[popup_post_type]">
@@ -1386,7 +1437,7 @@ class ACPS_Alerts_Admin {
 								</p>
 							</td>
 						</tr>
-						<tr>
+						<tr id="acps-set-rendering">
 							<th scope="row"><?php esc_html_e( 'Rendering', 'acps-alert-popups' ); ?></th>
 							<td>
 								<select name="acps_settings[render_mode]">
@@ -1397,7 +1448,7 @@ class ACPS_Alerts_Admin {
 								<p class="description"><?php esc_html_e( 'Automatic uses Beaver Builder&rsquo;s own popup engine when it exposes one, and falls back to this plugin&rsquo;s accessible modal.', 'acps-alert-popups' ); ?></p>
 							</td>
 						</tr>
-						<tr>
+						<tr id="acps-set-cutoff">
 							<th scope="row"><?php esc_html_e( 'Daily cut-off', 'acps-alert-popups' ); ?></th>
 							<td>
 								<input type="time" name="acps_settings[archive_time]" value="<?php echo esc_attr( $settings['archive_time'] ); ?>" />
@@ -1406,7 +1457,7 @@ class ACPS_Alerts_Admin {
 								</p>
 							</td>
 						</tr>
-						<tr>
+						<tr id="acps-set-storage">
 							<th scope="row"><?php esc_html_e( 'Remember dismissals in', 'acps-alert-popups' ); ?></th>
 							<td>
 								<select name="acps_settings[storage]">
@@ -1416,11 +1467,11 @@ class ACPS_Alerts_Admin {
 								</select>
 							</td>
 						</tr>
-						<tr>
+						<tr id="acps-set-zindex">
 							<th scope="row"><?php esc_html_e( 'z-index', 'acps-alert-popups' ); ?></th>
 							<td><input type="number" class="small-text" name="acps_settings[z_index]" value="<?php echo esc_attr( $settings['z_index'] ); ?>" min="1" /></td>
 						</tr>
-						<tr>
+						<tr id="acps-set-editors">
 							<th scope="row"><?php esc_html_e( 'Editors', 'acps-alert-popups' ); ?></th>
 							<td>
 								<label>
@@ -1436,7 +1487,7 @@ class ACPS_Alerts_Admin {
 								</label>
 							</td>
 						</tr>
-						<tr>
+						<tr id="acps-set-css">
 							<th scope="row"><?php esc_html_e( 'Main CSS', 'acps-alert-popups' ); ?></th>
 							<td>
 								<textarea id="acps-main-css" name="acps_settings[custom_css]" rows="16" class="large-text code" style="font-family:ui-monospace,Menlo,Consolas,monospace"><?php echo esc_textarea( $settings['custom_css'] ); ?></textarea>
@@ -1789,12 +1840,50 @@ class ACPS_Alerts_Admin {
 	}
 
 	/**
+	 * The Plugins screen's warning before this plugin is deleted.
+	 *
+	 * @return void
+	 */
+	protected function enqueue_delete_warning() {
+		if ( ! current_user_can( 'delete_plugins' ) || ! ACPS_Alerts_Failsafe::has_file( 'assets/js/plugins-screen.js' ) ) {
+			return;
+		}
+
+		wp_enqueue_script( 'acps-alerts-plugins', ACPS_ALERTS_URL . 'assets/js/plugins-screen.js', array(), ACPS_Alerts_Failsafe::asset_version( 'assets/js/plugins-screen.js' ), true );
+
+		wp_localize_script(
+			'acps-alerts-plugins',
+			'ACPSAlertsPlugins',
+			array(
+				'basename'     => plugin_basename( ACPS_ALERTS_FILE ),
+				'settingsUrl'  => admin_url( 'admin.php?page=' . self::SETTINGS_SLUG ) . '#acps-features',
+				'title'        => __( 'Deleting ACPS Alert Popups is not advised', 'acps-alert-popups' ),
+				'body'         => array(
+					__( 'Features that depend on it will stop working: the alert popup across the site, the status page banner, status dots, alert buttons and the [schoolstatus] shortcode. Its settings, your wording and the alert archive will be removed and cannot be recovered.', 'acps-alert-popups' ),
+					__( 'If you are having a problem, or want to turn one part off, you do not need to delete the plugin: every feature can be switched off on its own in Site Alerts → Settings → Features, and switched back on any time.', 'acps-alert-popups' ),
+				),
+				'openSettings' => __( 'Open Settings → Features', 'acps-alert-popups' ),
+				'cancel'       => __( 'Cancel', 'acps-alert-popups' ),
+				'deleteAnyway' => __( 'Delete anyway', 'acps-alert-popups' ),
+			)
+		);
+	}
+
+	/**
 	 * Loads admin CSS and JS on the plugin screens and the popup editor.
 	 *
 	 * @param string $hook Current admin page hook.
 	 * @return void
 	 */
 	public function enqueue_assets( $hook ) {
+		// The Plugins screen gets only the delete warning: nothing is shown
+		// there unless someone asks to delete this plugin.
+		if ( 'plugins.php' === $hook ) {
+			$this->enqueue_delete_warning();
+
+			return;
+		}
+
 		$screen    = get_current_screen();
 		$types     = ACPS_Alerts_Source::source_post_types();
 		$is_popup  = $screen && in_array( (string) $screen->post_type, $types, true ) && in_array( $screen->base, array( 'post' ), true );

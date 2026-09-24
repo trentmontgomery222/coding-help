@@ -19,10 +19,11 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 
 	<h1><?php esc_html_e( 'Help &amp; Tutorials', 'acps-alert-popups' ); ?></h1>
 	<p class="acps-help__lede">
-		<?php esc_html_e( 'Everything you need to run site alerts, in plain language. Start with the guided tour — it points at the real controls and explains them one at a time.', 'acps-alert-popups' ); ?>
+		<?php esc_html_e( 'Everything you need to run site alerts, in plain language. Start with the complete guided tour — it takes you to each screen in turn, points at the real controls and explains them one at a time.', 'acps-alert-popups' ); ?>
 	</p>
 
-	<?php // ---------- Guided tours ---------- ?>
+	<?php // ---------- Guided tours (unless switched off in Settings → Features) ---------- ?>
+	<?php if ( ACPS_Alerts_Settings::feature( 'tours' ) ) : ?>
 	<div class="acps-help-tours">
 		<?php foreach ( $acps_tours as $acps_tour_id => $acps_tour ) : ?>
 			<?php $acps_done = ACPS_Alerts_Help::tour_done( $acps_tour_id ); ?>
@@ -36,6 +37,9 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 				</div>
 				<div class="acps-tour-card__body">
 					<h2><?php echo esc_html( $acps_tour['title'] ); ?></h2>
+					<?php if ( ! empty( $acps_tour['description'] ) ) : ?>
+						<p class="acps-tour-card__desc"><?php echo esc_html( $acps_tour['description'] ); ?></p>
+					<?php endif; ?>
 					<p>
 						<?php
 						printf(
@@ -56,6 +60,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 			</div>
 		<?php endforeach; ?>
 	</div>
+	<?php endif; ?>
 
 	<?php // ---------- Setup checklist ---------- ?>
 	<div class="acps-help-checklist">
@@ -108,7 +113,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- The status board ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-status-page" class="acps-help-section">
 		<h2><?php esc_html_e( 'The status page is the control panel', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'Two modules go on your status page, and between them they are the whole system. You can post an update from either the status page or the quick Post an Alert form in wp-admin — both change the same one alert.', 'acps-alert-popups' ); ?></p>
 		<ul class="acps-help-list">
@@ -183,7 +188,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- How it works ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-post" class="acps-help-section">
 		<h2><?php esc_html_e( 'The quick way: Post an Alert', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'When you just need to change the words fast, you do not have to open Beaver Builder. Site Alerts → Post an Alert (there is a button on the alerts list too) is a one-screen form.', 'acps-alert-popups' ); ?></p>
 		<ol class="acps-help-list">
@@ -254,7 +259,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- The status shortcode ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-anywhere" class="acps-help-section">
 		<h2><?php esc_html_e( 'Putting the status anywhere', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'The shortcode below prints the current status wherever you type it — at the top of the popup, in a header, in a sidebar, in a post. It reads the same Current Alert the status board reads, so every place that shows the status is showing the same thing, and all of them change the moment you change the alert.', 'acps-alert-popups' ); ?></p>
 
@@ -307,7 +312,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- Frequency ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-frequency" class="acps-help-section">
 		<h2><?php esc_html_e( 'How often it comes back', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'This is the setting people most often get wrong. "Once per browser session" is right nearly every time.', 'acps-alert-popups' ); ?></p>
 		<?php echo ACPS_Alerts_Art::frequency(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Authored SVG. ?>
@@ -324,7 +329,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- Targeting ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-where" class="acps-help-section">
 		<h2><?php esc_html_e( 'Choosing which pages show it', 'acps-alert-popups' ); ?></h2>
 		<?php echo ACPS_Alerts_Art::targeting(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Authored SVG. ?>
 
@@ -346,7 +351,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- SRP ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-levels" class="acps-help-section">
 		<h2><?php esc_html_e( 'Status levels use the Standard Response Protocol', 'acps-alert-popups' ); ?></h2>
 		<p class="acps-callout">
 			<?php esc_html_e( 'The status level IS the severity — there is no second setting. You pick it on the Current Alert module, on its Popup tab under "Status level". It sets the word on the banner, the colour of the banner and the popup stripe, and the coloured badge above the heading.', 'acps-alert-popups' ); ?>
@@ -474,7 +479,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- Opening from a page ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-button" class="acps-help-section">
 		<h2><?php esc_html_e( 'Opening an alert from a button', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'Three ways to do the same thing — use whichever suits you.', 'acps-alert-popups' ); ?></p>
 		<ol class="acps-help-list">
@@ -497,7 +502,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 	</div>
 
 	<?php // ---------- Troubleshooting ---------- ?>
-	<div class="acps-help-section">
+	<div id="acps-guide-trouble" class="acps-help-section">
 		<h2><?php esc_html_e( 'My alert is not showing', 'acps-alert-popups' ); ?></h2>
 		<p><?php esc_html_e( 'Work down this list in order. It is nearly always one of the first three.', 'acps-alert-popups' ); ?></p>
 

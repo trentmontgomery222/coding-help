@@ -99,7 +99,14 @@
 			return true;
 		}
 
-		return null !== target( step );
+		if ( null !== target( step ) ) {
+			return true;
+		}
+
+		// On the right screen but the element is not showing (collapsed, or
+		// not on this site): explain it in the middle of the screen. Treating it
+		// as "elsewhere" would send the user to this same page again, forever.
+		return !! step.screen;
 	}
 
 	/* ----------------------------------------------------------------- *
@@ -180,7 +187,7 @@
 		document.body.appendChild( el.root );
 
 		el.next.addEventListener( 'click', onNext );
-		el.back.addEventListener( 'click', function () { go( state.index - 1 ); } );
+		el.back.addEventListener( 'click', function () { go( state.index - 1, -1 ); } );
 		el.skip.addEventListener( 'click', function () { stop( false ); } );
 		el.close.addEventListener( 'click', function () { stop( false ); } );
 		el.scrim.addEventListener( 'click', function () { stop( false ); } );
@@ -324,10 +331,14 @@
 	 * Moves to a step, skipping any that cannot run here.
 	 *
 	 * @param {number} index Step index.
+	 * @param {number} dir   1 walking forward (the default), -1 going back.
 	 */
-	function go( index ) {
+	function go( index, dir ) {
+		dir = -1 === dir ? -1 : 1;
+
 		if ( index < 0 ) {
 			index = 0;
+			dir = 1;
 		}
 
 		if ( index >= state.steps.length ) {
@@ -336,12 +347,18 @@
 			return;
 		}
 
-		// Walk forward past steps whose target is not on this screen, unless the
-		// step knows where it lives and can offer to take the user there.
+		// Walk past steps whose target is not on this screen, unless the step
+		// knows where it lives and can offer to take the user there. Going
+		// back, walk backwards — to the start of the previous screen's steps,
+		// which carries the way back there.
 		var i = index;
 
-		while ( i < state.steps.length && ! stepIsHere( state.steps[ i ] ) && ! state.steps[ i ].url ) {
-			i++;
+		while ( i >= 0 && i < state.steps.length && ! stepIsHere( state.steps[ i ] ) && ! state.steps[ i ].url ) {
+			i += dir;
+		}
+
+		if ( i < 0 ) {
+			i = state.index;
 		}
 
 		if ( i >= state.steps.length ) {
@@ -453,6 +470,12 @@
 	 * A short well-done message after finishing.
 	 */
 	function celebrate() {
+		// Never add anything to a screen that is not the plugin's own; a tour
+		// ending elsewhere simply closes.
+		if ( ! data.own ) {
+			return;
+		}
+
 		var note = make( 'div', 'acps-tour-done notice notice-success is-dismissible' );
 		var text = make( 'p', '', data.i18n.done );
 		note.appendChild( text );
@@ -493,7 +516,7 @@
 
 		if ( 'ArrowLeft' === event.key ) {
 			event.preventDefault();
-			go( state.index - 1 );
+			go( state.index - 1, -1 );
 
 			return;
 		}

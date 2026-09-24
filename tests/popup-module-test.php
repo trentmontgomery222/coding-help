@@ -553,5 +553,53 @@ ok( 'the picker is the real level list', isset( $dot_fields['level']['options'][
 ok( 'it has a label field', isset( $dot_fields['label'] ) );
 ok( 'and a colour override', isset( $dot_fields['color'] ) );
 
+/* ---- Settings → Features: a switched-off module draws nothing ---- */
+
+// Declared here, conditionally, so they exist only for these cases and do not
+// change how anything above behaved.
+if ( ! class_exists( 'ACPS_Alerts_Settings' ) ) {
+	class ACPS_Alerts_Settings {
+		public static function feature( $k ) { return empty( $GLOBALS['features_off'][ $k ] ); }
+	}
+}
+if ( ! class_exists( 'FLBuilderModel' ) ) {
+	class FLBuilderModel {
+		public static function is_builder_active() { return ! empty( $GLOBALS['builder_active'] ); }
+	}
+}
+
+if ( ! function_exists( 'esc_html__' ) ) { function esc_html__( $s, $d = '' ) { return htmlspecialchars( (string) $s ); } }
+if ( ! function_exists( 'esc_attr' ) ) { function esc_attr( $s ) { return htmlspecialchars( (string) $s ); } }
+if ( ! function_exists( 'esc_html' ) ) { function esc_html( $s ) { return htmlspecialchars( (string) $s ); } }
+if ( ! function_exists( 'absint' ) ) { function absint( $v ) { return abs( (int) $v ); } }
+
+function acps_render_template( $rel, $settings ) {
+	$id = 'node1';
+	ob_start();
+	include ACPS_ALERTS_DIR . $rel;
+	return trim( ob_get_clean() );
+}
+
+$templates = array(
+	'board'   => 'modules/status-board/includes/frontend.php',
+	'dots'    => 'modules/status-dot/includes/frontend.php',
+	'trigger' => 'modules/alert-trigger/includes/frontend.php',
+);
+
+foreach ( $templates as $feature => $rel ) {
+	$GLOBALS['features_off']   = array( $feature => true );
+	$GLOBALS['builder_active'] = false;
+	check( "'$feature' switched off: the module draws nothing on the live page", acps_render_template( $rel, (object) array() ), '' );
+
+	$GLOBALS['builder_active'] = true;
+	ok( "'$feature' switched off: inside the builder it says why it is empty", false !== strpos( acps_render_template( $rel, (object) array() ), 'switched off in Site Alerts' ) );
+}
+
+// Switched on, the trigger module is back to its normal builder prompt.
+$GLOBALS['features_off']   = array();
+$GLOBALS['builder_active'] = true;
+ok( 'switched back on, the module draws as normal', false === strpos( acps_render_template( $templates['trigger'], (object) array() ), 'switched off' ) );
+$GLOBALS['builder_active'] = false;
+
 echo $fails ? "\n$fails failing case(s)\n" : "All popup module cases passed\n";
 exit( $fails ? 1 : 0 );

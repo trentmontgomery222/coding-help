@@ -271,5 +271,46 @@ foreach ( $it as $file ) {
 	}
 }
 
-echo $fails ? "\n$fails failing case(s)\n" : "All wiring cases passed ($checked self-calls inspected, no unguarded hooks)\n";
+// A notice at the top of a page is only ever printed on this plugin's own
+// screens. So every callback on a notice hook must check where it is, through
+// ACPS_Alerts_Admin::is_own_screen() or the help layer's current_screen_key(),
+// which only recognises the plugin's own screens.
+$notice_callbacks = 0;
+$notice_hooks     = 'admin_notices|all_admin_notices|network_admin_notices|user_admin_notices|in_admin_header';
+
+$it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
+
+foreach ( $it as $file ) {
+	$path = $file->getPathname();
+
+	if ( '.php' !== substr( $path, -4 ) ) {
+		continue;
+	}
+
+	$source = file_get_contents( $path );
+
+	// Both add_action( 'admin_notices', 'fn' ) and
+	// ACPS_Alerts_Failsafe::action( 'admin_notices', array( $this, 'fn' ), ...).
+	preg_match_all( "/(?:add_action|Failsafe::action)\(\s*'(?:$notice_hooks)'\s*,\s*(?:array\(\s*[^,]+,\s*)?'([a-z0-9_]+)'/i", $source, $found );
+
+	foreach ( $found[1] as $callback ) {
+		$notice_callbacks++;
+
+		// The body runs to the closing brace at the function's own indent.
+		if ( ! preg_match( '/^(\t*)(?:(?:public|protected|private|static)\s+)*function\s+' . preg_quote( $callback, '/' ) . '\s*\([^)]*\)\s*\{(.*?)\n\1\}/ms', $source, $body ) ) {
+			fail( "notice callback {$callback}() could not be found in " . basename( $path ) );
+			continue;
+		}
+
+		if ( false === strpos( $body[2], 'is_own_screen' ) && false === strpos( $body[2], 'current_screen_key' ) ) {
+			fail( "notice callback {$callback}() in " . basename( $path ) . ' does not check it is on one of the plugin\'s own screens, so it could show at the top of any page' );
+		}
+	}
+}
+
+if ( 0 === $notice_callbacks ) {
+	fail( 'no notice callbacks were found to check — the scan is broken' );
+}
+
+echo $fails ? "\n$fails failing case(s)\n" : "All wiring cases passed ($checked self-calls inspected, no unguarded hooks, $notice_callbacks notice callbacks confined to the plugin's screens)\n";
 exit( $fails ? 1 : 0 );

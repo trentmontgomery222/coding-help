@@ -88,7 +88,11 @@ class ACPS_Alerts_Failsafe {
 		return ob_get_clean();
 	}
 }
-class ACPS_Alerts_Settings { public static function get( $k, $d = null ) { return $d; } }
+class ACPS_Alerts_Settings {
+	public static function get( $k, $d = null ) { return $d; }
+	// A feature is on unless a test lists it in $GLOBALS['features_off'].
+	public static function feature( $k ) { return empty( $GLOBALS['features_off'][ $k ] ); }
+}
 class ACPS_Alerts_Source {
 	public static function is_ready() { return true; }
 	public static function is_popup( $id ) { return true; }
@@ -198,6 +202,7 @@ class Probe extends ACPS_Alerts_Frontend {
 	}
 	public function queue_alerts( array $alerts ) { $this->queue = $alerts; }
 	public function config() { return $this->get_js_config(); }
+	public function runs() { return $this->should_run(); }
 }
 
 $fails = 0;
@@ -488,6 +493,22 @@ $probe->render_alerts();
 $cur = ob_get_clean();
 
 ok( 'the current alert is still built when a popup is available', false !== strpos( $cur, 'acps-alert--built' ) );
+
+/* ---- Settings → Features → Site alert popup ---- */
+// An ordinary front-end page view, for should_run().
+if ( ! function_exists( 'is_admin' ) ) { function is_admin() { return false; } }
+if ( ! function_exists( 'is_feed' ) ) { function is_feed() { return false; } }
+if ( ! function_exists( 'is_embed' ) ) { function is_embed() { return false; } }
+if ( ! function_exists( 'wp_doing_ajax' ) ) { function wp_doing_ajax() { return false; } }
+if ( ! function_exists( 'wp_doing_cron' ) ) { function wp_doing_cron() { return false; } }
+
+$switch_probe = new Probe();
+$runs_on      = $switch_probe->runs();
+ok( 'with the popup on, a normal page view runs the front end', true === $runs_on );
+
+$GLOBALS['features_off'] = array( 'popup' => true );
+ok( 'with the popup switched off, the front end does nothing at all', false === $switch_probe->runs() );
+$GLOBALS['features_off'] = array();
 
 echo $fails ? "\n$fails failing case(s)\n" : "All render cases passed\n";
 exit( $fails ? 1 : 0 );

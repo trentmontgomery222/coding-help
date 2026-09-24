@@ -92,6 +92,11 @@ class ACPS_Alerts_Status {
 	}
 }
 
+// A feature is on unless a test lists it in $GLOBALS['features_off'].
+class ACPS_Alerts_Settings {
+	public static function feature( $k ) { return empty( $GLOBALS['features_off'][ $k ] ); }
+}
+
 require ACPS_ALERTS_DIR . 'includes/class-acps-alerts-shortcodes.php';
 
 $fails = 0;
@@ -339,6 +344,19 @@ ok( 'and shows the label', false !== strpos( $shared, 'West Side' ) );
 
 $shared_override = ACPS_Alerts_Shortcodes::dot_markup( 'hold', '', 14, '#00ff00', false );
 ok( 'a colour override is honoured', false !== strpos( $shared_override, '#00ff00' ) );
+
+/* ---- Settings → Features switches ---- */
+ok( 'with everything on, [schoolstatus] prints', '' !== sc() );
+ok( 'and [statusdot] prints', '' !== $acps_shortcodes->render_dot( array() ) );
+
+$GLOBALS['features_off'] = array( 'status_code' => true );
+check( 'status shortcode switched off: [schoolstatus] prints nothing', sc(), '' );
+ok( 'but the dots are a separate switch and still print', '' !== $acps_shortcodes->render_dot( array() ) );
+
+$GLOBALS['features_off'] = array( 'dots' => true );
+check( 'dots switched off: [statusdot] prints nothing', $acps_shortcodes->render_dot( array() ), '' );
+ok( 'and [schoolstatus] still prints', '' !== sc() );
+$GLOBALS['features_off'] = array();
 
 echo $fails ? "\n$fails failing case(s)\n" : "All shortcode cases passed\n";
 exit( $fails ? 1 : 0 );
