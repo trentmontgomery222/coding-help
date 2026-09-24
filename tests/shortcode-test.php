@@ -329,5 +329,16 @@ ok( 'three statuses can sit together', false !== strpos( $row, 'West Side' ) && 
 $huge = dot( array( 'level' => 'hold', 'size' => '9999' ) );
 ok( 'the dot size is clamped', false === strpos( $huge, '9999px' ) );
 
+/* ---- the shared renderer the module and shortcode both use ---- */
+
+// The [statusdot] shortcode and the Status Dot Beaver Builder module render the
+// same markup because both call dot_markup(). Prove it produces a dot.
+$shared = ACPS_Alerts_Shortcodes::dot_markup( 'hold', 'West Side', 14, '', false );
+ok( 'dot_markup draws a round dot in the level colour', false !== strpos( $shared, 'border-radius:50%' ) && false !== strpos( $shared, '#7a1c82' ) );
+ok( 'and shows the label', false !== strpos( $shared, 'West Side' ) );
+
+$shared_override = ACPS_Alerts_Shortcodes::dot_markup( 'hold', '', 14, '#00ff00', false );
+ok( 'a colour override is honoured', false !== strpos( $shared_override, '#00ff00' ) );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All shortcode cases passed\n";
 exit( $fails ? 1 : 0 );

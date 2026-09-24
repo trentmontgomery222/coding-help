@@ -342,10 +342,34 @@ class ACPS_Alerts_Shortcodes {
 			'statusdot'
 		);
 
-		$key   = sanitize_key( $atts['level'] );
+		$word = in_array( strtolower( (string) $atts['word'] ), array( 'yes', '1', 'true', 'on' ), true );
+
+		return self::dot_markup( $atts['level'], $atts['label'], absint( $atts['size'] ), $atts['color'], $word );
+	}
+
+	/**
+	 * Builds the markup for one status dot.
+	 *
+	 * The single source of truth for a dot, shared by the [statusdot] shortcode
+	 * and the Status Dot Beaver Builder module, so both look identical. Styles
+	 * itself inline so it works on any page.
+	 *
+	 * @param string $level_key      Status level key.
+	 * @param string $label          Text beside the dot; empty for none.
+	 * @param int    $size           Diameter in pixels.
+	 * @param string $color_override Colour to use instead of the level's.
+	 * @param bool   $word           Use the level word as the label when none given.
+	 * @return string
+	 */
+	public static function dot_markup( $level_key, $label = '', $size = 12, $color_override = '', $word = false ) {
+		if ( ! class_exists( 'ACPS_Alerts_Status' ) ) {
+			return '';
+		}
+
+		$key   = sanitize_key( (string) $level_key );
 		$level = ACPS_Alerts_Status::level( $key );
 
-		$color = ACPS_Alerts_Status::colour( $atts['color'] );
+		$color = ACPS_Alerts_Status::colour( (string) $color_override );
 
 		if ( '' === $color ) {
 			$color = ACPS_Alerts_Status::colour( isset( $level['color'] ) ? $level['color'] : '' );
@@ -355,10 +379,10 @@ class ACPS_Alerts_Shortcodes {
 			$color = '#1b2f5e';
 		}
 
-		$size  = max( 6, min( 48, absint( $atts['size'] ) ) );
-		$label = (string) $atts['label'];
+		$size  = max( 6, min( 48, absint( $size ) ) );
+		$label = (string) $label;
 
-		if ( '' === trim( $label ) && in_array( strtolower( (string) $atts['word'] ), array( 'yes', '1', 'true', 'on' ), true ) ) {
+		if ( '' === trim( $label ) && $word ) {
 			$label = isset( $level['banner'] ) ? (string) $level['banner'] : '';
 		}
 

@@ -118,6 +118,7 @@ class ACPS_Alerts_Builder {
 			'ACPS_Alert_Trigger_Module' => 'modules/alert-trigger/alert-trigger.php',
 			'ACPS_Status_Board_Module'  => 'modules/status-board/status-board.php',
 			'ACPS_Alert_Popup_Module'   => 'modules/alert-popup/alert-popup.php',
+			'ACPS_Status_Dot_Module'    => 'modules/status-dot/status-dot.php',
 		);
 
 		foreach ( $modules as $class => $rel ) {

@@ -502,5 +502,25 @@ ok( 'the banner has one text colour setting', isset( $board_fields['text_color']
 ok( 'and one background setting', isset( $board_fields['banner_color'] ) );
 ok( 'with no second colour to disagree with them', ! isset( $board_fields['body_color'] ) );
 
+/* ---- the Status Dot module: dots without typing a shortcode ---- */
+
+require ACPS_ALERTS_DIR . 'modules/status-dot/status-dot.php';
+
+ok( 'the Status Dot module registers with Beaver Builder', isset( $GLOBALS['registered']['ACPS_Status_Dot_Module'] ) );
+
+$dot_fields = array();
+foreach ( $GLOBALS['registered']['ACPS_Status_Dot_Module'] as $tab ) {
+	foreach ( $tab['sections'] as $section ) {
+		foreach ( $section['fields'] as $key => $field ) {
+			$dot_fields[ $key ] = $field;
+		}
+	}
+}
+
+ok( 'it has a level picker', isset( $dot_fields['level'] ) && 'select' === $dot_fields['level']['type'] );
+ok( 'the picker is the real level list', isset( $dot_fields['level']['options']['lockdown'] ) );
+ok( 'it has a label field', isset( $dot_fields['label'] ) );
+ok( 'and a colour override', isset( $dot_fields['color'] ) );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All popup module cases passed\n";
 exit( $fails ? 1 : 0 );

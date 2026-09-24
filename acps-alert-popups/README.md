@@ -54,7 +54,10 @@ Past updates are kept for the office to look back on in **Site Alerts → Archiv
 
 ### Status is shown with coloured dots
 
-The banner and popup stay in your own neutral colours; status colour lives in a shortcode you place wherever you want it:
+The banner and popup stay in your own neutral colours; status colour is shown by a dot you place wherever you want it. Two ways to add one:
+
+- **The Status Dot module** (Beaver Builder → Site Alerts group). Drag it in, pick a level from the dropdown, type a label — no shortcode to type. Drop several in a row to show more than one status at once.
+- **The `[statusdot]` shortcode**, for anywhere you are typing content:
 
 - `[statusdot level="lockdown"]` — a single coloured dot in that level's colour.
 - `[statusdot level="hold" label="West Side"]` — a dot with a label beside it.
