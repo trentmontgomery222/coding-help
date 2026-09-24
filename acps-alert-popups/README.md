@@ -10,7 +10,7 @@ There are exactly **two alerts**, always, and neither can be created or deleted:
 The split is deliberate:
 
 - **Beaver Builder's own Popup module** on the status page *is* the alert. You build it there like any other popup. The plugin finds that node, hides it on the status page, and renders it — with the status page's generated CSS and JS — on every other page while the alert is on. It does not draw a popup of its own.
-- **The Current Alert module** is the switch and the settings: on/off, level, when it comes down, which pages show it, who sees it, how it opens, how often it comes back. Its heading and text boxes are for the status page *banner* only, and if you leave them empty the banner takes the popup's own heading and text.
+- **The Current Alert module** marks the status page and carries a one-time *Post this alert now* switch. Saving the page never changes the alert on its own — day to day you post and switch it on or off from **Site Alerts → Post an Alert**.
 - **The Status Board module** is the template. It turns that heading and text into the status page banner, in your one fixed banner colour. Past updates are kept internally (wp-admin), not shown to visitors.
 - **wp-admin** is for checking state and for the Normal Alert. You do not post from there.
 
@@ -40,8 +40,8 @@ It does not rely on Beaver Builder registering a popup post type, because that f
 Your status page carries three things: Beaver Builder's **Popup** module (the alert itself), and two from the Site Alerts group — **Current Alert** (the switch and settings) and **School Status Board** (the banner and archive). From then on that page is where you work:
 
 - **The popup is Beaver Builder's, not the plugin's.** Build it in the Popup module. The plugin's job is to decide when it is shown and to whom, and to put it on every other page.
-- **The Current Alert module is the switch and the settings.** Editing it changes the one alert in place — it never creates a second one.
-- **Show this alert now**, on its On/off tab, is the switch. On means visitors see it; off means the wording sits there ready for next time.
+- **The Current Alert module does not change the alert when you save the page.** It carries a one-time *Post this alert now* switch for posting from the builder; otherwise the alert is posted and switched on or off from Site Alerts → Post an Alert.
+- **Post this alert now** on the module is a one-time action: set it to Yes and save to post from the builder, and it flips back to No afterwards. Saving the page with it off leaves the alert untouched.
 - **Every setting is on that module**, across its Popup, On/off, Where & who, How it opens and Style tabs. Posting an alert is one screen and under a minute.
 - The popup is **hidden on the status page itself**, so somebody who went there to read the status does not get it covered by a box saying the same thing. The banner says it instead.
 - The board renders the **current status banner** only — the archive is internal now (see below). The banner has two treatments, set by *Banner style*: **Card** (the default) is a white/coloured panel with a stripe along the top, and **Solid** floods the whole banner. Either way the banner is **one fixed colour** and does not change with the status — status colour is shown by the `[statusdot]` shortcode you place in your content. With the Current Alert off, the banner shows the Normal Alert wording.

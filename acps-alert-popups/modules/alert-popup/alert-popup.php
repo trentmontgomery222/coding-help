@@ -65,7 +65,33 @@ class ACPS_Alert_Popup_Module extends FLBuilderModule {
 			return $settings;
 		}
 
+		// Always worth doing: it costs nothing and keeps the "which page is the
+		// board on" answer correct.
 		self::remember_page();
+
+		/*
+		 * The switch on this module is a one-shot "post this now", NOT a live
+		 * on/off state.
+		 *
+		 * Beaver Builder calls update() every time the layout is saved — which
+		 * happens whenever anyone edits ANYTHING on the status page (the board,
+		 * the popup, an unrelated module) and clicks Done. If this module wrote
+		 * the alert on every one of those saves, saving the page to fix a typo
+		 * elsewhere would blank the alert and switch it off, because the stored
+		 * switch here reads "off". That is exactly the bug this guards against.
+		 *
+		 * So a save only touches the alert when the switch is explicitly set to
+		 * "post now", and even then the switch is immediately reset to off in
+		 * the stored settings, so the next incidental page save is a no-op. The
+		 * alert's real on/off, wording and settings live in Site Alerts (Post an
+		 * Alert, the on/off toggle, Wording) and are never disturbed by saving
+		 * the page.
+		 */
+		$post_now = isset( $settings->active ) && '1' === (string) $settings->active;
+
+		if ( ! $post_now ) {
+			return $settings;
+		}
 
 		// Beaver Builder already decides who may edit the layout; this is the
 		// plugin's own check on who may change what the whole site sees.
@@ -84,6 +110,11 @@ class ACPS_Alert_Popup_Module extends FLBuilderModule {
 			array( $alert, $settings ),
 			'alert-popup/update'
 		);
+
+		// Reset the one-shot switch so the same post is not re-applied on the
+		// next layout save, which would clobber anything posted since from
+		// Site Alerts.
+		$settings->active = '0';
 
 		return $settings;
 	}
@@ -381,13 +412,13 @@ FLBuilder::register_module(
 					'fields' => array(
 						'active'     => array(
 							'type'    => 'select',
-							'label'   => __( 'Show this alert now', 'acps-alert-popups' ),
+							'label'   => __( 'Post this alert now', 'acps-alert-popups' ),
 							'default' => '0',
 							'options' => array(
-								'1' => __( 'Yes — it is live', 'acps-alert-popups' ),
-								'0' => __( 'No — off', 'acps-alert-popups' ),
+								'1' => __( 'Yes — post it from this module on save', 'acps-alert-popups' ),
+								'0' => __( 'No — leave the alert alone', 'acps-alert-popups' ),
 							),
-							'help'    => __( 'The one switch that matters. Off leaves the wording here ready for next time.', 'acps-alert-popups' ),
+							'help'    => __( 'A one-time action: set to Yes and save to post this module\'s wording and settings as the current alert. It switches itself back to No afterwards. Day to day, post and switch the alert on or off from Site Alerts → Post an Alert — saving this page never changes the alert unless you set this to Yes.', 'acps-alert-popups' ),
 						),
 						'as_popup'   => array(
 							'type'    => 'select',

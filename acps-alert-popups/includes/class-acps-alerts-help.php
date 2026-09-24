@@ -266,7 +266,7 @@ class ACPS_Alerts_Help {
 						'selector' => '[data-acps-section="status"]',
 						'title'    => __( 'Status', 'acps-alert-popups' ),
 						'html'     => '<p>' . esc_html__( 'This walks the settings on the Normal Alert, where you can see them safely without touching anything live. The Current Alert has the same settings on its popup on the status page.', 'acps-alert-popups' ) . '</p>'
-							. '<p>' . esc_html__( 'Status is whether the alert is live. On the Current Alert this same switch is the first thing on its module, labelled "Show this alert now".', 'acps-alert-popups' ) . '</p>',
+							. '<p>' . esc_html__( 'Status is whether the alert is live. Post an alert or switch it on and off from Site Alerts → Post an Alert; saving the status page never changes it.', 'acps-alert-popups' ) . '</p>',
 					),
 					array(
 						'screen'   => 'edit',

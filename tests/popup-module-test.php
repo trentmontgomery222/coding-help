@@ -293,15 +293,36 @@ check( 'and so does switching the level word off', $alert->get( 'show_word' ), 0
 
 /* ---- somebody who may not manage alerts changes nothing ---- */
 
+/* ---- saving the page must not clobber the alert ---- */
+
+/*
+ * Beaver Builder calls update() on EVERY layout save — whenever anyone edits
+ * anything on the status page and clicks Done. With the module switch off (its
+ * default, and its state right after a one-shot post), that save must not touch
+ * the alert, or saving the page to fix something else would blank the alert and
+ * switch it off. That was the reported bug.
+ */
 $alert            = new ACPS_Alerts_Alert( 50 );
 $GLOBALS['alert'] = $alert;
-$GLOBALS['can']   = false;
+$GLOBALS['can']   = true;
 
-$module->update( settings( array( 'heading' => 'Posted by someone without the capability' ) ) );
+$module->update( settings( array( 'active' => '0', 'heading' => 'Ignored on a page save' ) ) );
+check( 'a page save with the switch off writes nothing to the alert', $alert->saves, 0 );
 
-check( 'a user without the capability saves nothing', $alert->saves, 0 );
+// "Post now" without the capability still writes nothing.
+$GLOBALS['can'] = false;
+$module->update( settings( array( 'active' => '1', 'heading' => 'No capability' ) ) );
+check( 'a user without the capability posts nothing', $alert->saves, 0 );
 
-$GLOBALS['can'] = true;
+// "Post now" with the capability is the one deliberate case that writes.
+$GLOBALS['can']   = true;
+$alert            = new ACPS_Alerts_Alert( 50 );
+$GLOBALS['alert'] = $alert;
+
+$out = $module->update( settings( array( 'active' => '1', 'heading' => 'Deliberate post' ) ) );
+
+ok( 'a deliberate post now does write the alert', $alert->saves > 0 );
+check( 'and the switch resets to off, so the next page save is a no-op', $out->active, '0' );
 
 /* ---- the status board's two banner treatments ---- */
 

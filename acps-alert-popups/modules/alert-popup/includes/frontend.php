@@ -97,7 +97,7 @@ if ( '' === trim( $acps_heading ) ) {
 	<p class="acps-popup-edit__note">
 		<?php if ( $acps_has_bb ) : ?>
 			<strong><?php esc_html_e( 'The popup people see is the Beaver Builder Popup module on this page.', 'acps-alert-popups' ); ?></strong>
-			<?php esc_html_e( 'Build it there. This module does not draw the popup — it is the switch and the settings, and the box above is only a sketch of the status page banner.', 'acps-alert-popups' ); ?>
+			<?php esc_html_e( 'Build it there. This module does not draw the popup, and saving this page never changes the alert on its own. Post and switch the alert on or off from Site Alerts → Post an Alert. The one-time "Post this alert now" switch here is the only thing that writes the alert on save.', 'acps-alert-popups' ); ?>
 		<?php else : ?>
 			<strong><?php esc_html_e( 'No Beaver Builder Popup module found on this page.', 'acps-alert-popups' ); ?></strong>
 			<?php esc_html_e( 'Add one and build the alert in it. Until then the plugin falls back to showing the heading and text below, so an alert still reaches people.', 'acps-alert-popups' ); ?>

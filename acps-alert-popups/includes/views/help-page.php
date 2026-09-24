@@ -131,7 +131,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 		<ol class="acps-help-list">
 			<li><?php esc_html_e( 'Edit the status page in Beaver Builder and open the Current Alert module.', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'On the Popup tab, rewrite the heading and the text, and pick the status level — that is the severity.', 'acps-alert-popups' ); ?></li>
-			<li><?php esc_html_e( 'On the On/off tab, set "Show this alert now" to "Yes — it is live".', 'acps-alert-popups' ); ?></li>
+			<li><?php esc_html_e( 'Post it from Site Alerts → Post an Alert (level, header, text, then Post). Saving the status page does not post it.', 'acps-alert-popups' ); ?></li>
 			<li><?php esc_html_e( 'Save. That is it — under a minute, start to finish.', 'acps-alert-popups' ); ?></li>
 		</ol>
 		<p class="acps-callout">
@@ -238,7 +238,7 @@ $acps_list_url  = admin_url( 'admin.php?page=' . ACPS_Alerts_Admin::MENU_SLUG );
 			</li>
 			<li>
 				<h3><?php esc_html_e( 'Switch it on and save', 'acps-alert-popups' ); ?></h3>
-				<p><?php esc_html_e( 'Set "Show this alert now" to "Yes — it is live" and save the page. That single choice is what puts it in front of visitors.', 'acps-alert-popups' ); ?></p>
+				<p><?php esc_html_e( 'Post it from Site Alerts → Post an Alert, or set this module\'s one-time "Post this alert now" switch to Yes and save. Either one puts it in front of visitors.', 'acps-alert-popups' ); ?></p>
 			</li>
 			<li>
 				<h3><?php esc_html_e( 'Leave it to come down on its own', 'acps-alert-popups' ); ?></h3>
