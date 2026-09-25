@@ -305,6 +305,40 @@ on the current status as well as the page's modified time: a shortcode baked
 into cached markup would otherwise be frozen at whatever it said when that
 markup was stored.
 
+### Showing or hiding a Beaver Builder module by state
+
+To show one module when an alert is up and another when things are normal — or
+to key a module's **Advanced → Visibility** conditional-logic rule off this
+plugin — there are two shortcodes:
+
+- **`[acps_active]`** prints `1` when the plugin is running, and nothing
+  otherwise. Point a module's conditional-logic display rule at it: *show when
+  the shortcode result equals `1`* is "show while the plugin is enabled". With
+  `state="live"` it prints `1` only while an alert is showing, and
+  `state="normal"` prints `1` only while none is. The `yes` and `no` attributes
+  change the words it prints (`[acps_active state="live" yes="ON" no="OFF"]`),
+  for logic tools that compare a word rather than a truthy value.
+- **`[acps_if when="live"]…[/acps_if]`** wraps content and shows it only in that
+  state — `when="live"`, `when="normal"`, or `when="active"` (the default, which
+  always shows because the plugin is running). This needs no conditional-logic
+  add-on: put it in a Text or HTML module, or around a whole module's content.
+
+| State word | Shows / prints when |
+| --- | --- |
+| `active` (default) | the plugin is running at all |
+| `live` (or `alert`) | an alert is currently showing |
+| `normal` (or `resting`) | no alert is showing |
+
+**One thing these cannot do: detect the plugin being _deactivated_.** A
+deactivated (or paused) plugin runs no code, so its shortcodes are not even
+registered — `[acps_active]` is left on the page as literal text, printing
+nothing useful. That is fine for *"show while enabled"* (the result is `1` only
+when the plugin is live). For *"show while disabled"*, rely on your
+conditional-logic rule treating a non-`1` / empty result as "off", and test it
+with the plugin actually deactivated — or simply make the disabled-state content
+plain page content that is always there and let the enabled-state module cover
+it when the plugin is on.
+
 ### Opening an alert from a page
 
 Three ways, all equivalent:

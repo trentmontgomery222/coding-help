@@ -340,5 +340,62 @@ ok( 'and shows the label', false !== strpos( $shared, 'West Side' ) );
 $shared_override = ACPS_Alerts_Shortcodes::dot_markup( 'hold', '', 14, '#00ff00', false );
 ok( 'a colour override is honoured', false !== strpos( $shared_override, '#00ff00' ) );
 
+/* ---- the conditional shortcodes: [acps_active] and [acps_if] ---- */
+
+// A minimal do_shortcode so the enclosing shortcode can expand its content.
+if ( ! function_exists( 'do_shortcode' ) ) {
+	function do_shortcode( $s ) { return (string) $s; }
+}
+
+ok( 'the value shortcode is registered', isset( $GLOBALS['registered_shortcodes']['acps_active'] ) );
+ok( 'under its enabled alias too', isset( $GLOBALS['registered_shortcodes']['acps_enabled'] ) );
+ok( 'and the enclosing conditional is registered', isset( $GLOBALS['registered_shortcodes']['acps_if'] ) );
+
+function acps_active( array $atts = array() ) {
+	return call_user_func( $GLOBALS['registered_shortcodes']['acps_active'], $atts );
+}
+function acps_if( array $atts, $content ) {
+	return call_user_func( $GLOBALS['registered_shortcodes']['acps_if'], $atts, $content );
+}
+
+// [acps_active] prints "1" simply because it ran — that is the "plugin is
+// enabled" signal (a switched-off plugin registers nothing, so it stays blank
+// or literal on the page).
+check( 'the bare value shortcode prints 1 when the plugin is running', acps_active(), '1' );
+check( 'the enabled alias behaves the same', call_user_func( $GLOBALS['registered_shortcodes']['acps_enabled'], array() ), '1' );
+
+// state="live" / "normal" reflect whether an alert is showing.
+$GLOBALS['entry'] = null;
+check( 'state=live prints nothing when no alert is live', acps_active( array( 'state' => 'live' ) ), '' );
+check( 'state=normal prints 1 when no alert is live', acps_active( array( 'state' => 'normal' ) ), '1' );
+
+$GLOBALS['entry'] = new StubAlert( 'West Side', 'hold', 'x' );
+check( 'state=live prints 1 while an alert is live', acps_active( array( 'state' => 'live' ) ), '1' );
+check( 'state=normal prints nothing while an alert is live', acps_active( array( 'state' => 'normal' ) ), '' );
+
+// The yes/no words can be customised for logic tools that compare a word.
+check( 'a custom yes word is honoured', acps_active( array( 'state' => 'live', 'yes' => 'ON', 'no' => 'OFF' ) ), 'ON' );
+$GLOBALS['entry'] = null;
+check( 'and the no word when it does not match', acps_active( array( 'state' => 'live', 'yes' => 'ON', 'no' => 'OFF' ) ), 'OFF' );
+
+// [acps_if] shows its content only in the chosen state.
+$GLOBALS['entry'] = null;
+check( 'if when=active always shows (the plugin is running)', acps_if( array( 'when' => 'active' ), 'HELLO' ), 'HELLO' );
+check( 'if when=normal shows when no alert is live', acps_if( array( 'when' => 'normal' ), 'RESTING' ), 'RESTING' );
+check( 'if when=live hides when no alert is live', acps_if( array( 'when' => 'live' ), 'ALERT' ), '' );
+
+$GLOBALS['entry'] = new StubAlert( 'West Side', 'hold', 'x' );
+check( 'if when=live shows while an alert is live', acps_if( array( 'when' => 'live' ), 'ALERT' ), 'ALERT' );
+check( 'if when=normal hides while an alert is live', acps_if( array( 'when' => 'normal' ), 'RESTING' ), '' );
+
+// Empty content is nothing to show either way.
+check( 'empty enclosed content stays empty', acps_if( array( 'when' => 'active' ), '' ), '' );
+
+// An unknown state word falls back to "active" (always shows / always 1) rather
+// than silently hiding everything.
+$GLOBALS['entry'] = null;
+check( 'an unknown state falls back to active for the value shortcode', acps_active( array( 'state' => 'nonsense' ) ), '1' );
+check( 'and for the enclosing one', acps_if( array( 'when' => 'nonsense' ), 'X' ), 'X' );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All shortcode cases passed\n";
 exit( $fails ? 1 : 0 );

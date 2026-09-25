@@ -39,6 +39,128 @@ class ACPS_Alerts_Shortcodes {
 		foreach ( array( 'statusdot', 'status_dot' ) as $tag ) {
 			add_shortcode( $tag, ACPS_Alerts_Failsafe::wrap( array( $this, 'render_dot' ), 'shortcode/dot' ) );
 		}
+
+		// A plain value for Beaver Builder's (or any) conditional-logic display
+		// rules: prints "1" when the plugin is running, and — with state="live"
+		// / state="normal" — when an alert is or is not showing. When the plugin
+		// is switched off or paused this shortcode is not registered, so it
+		// yields nothing, which is exactly the "disabled" signal.
+		foreach ( array( 'acps_active', 'acps_enabled' ) as $tag ) {
+			add_shortcode( $tag, ACPS_Alerts_Failsafe::wrap( array( $this, 'render_active' ), 'shortcode/active' ) );
+		}
+
+		// An enclosing shortcode that shows its content only in the chosen
+		// state, for sites without a conditional-logic add-on: wrap the content
+		// in [acps_if when="live"] … [/acps_if].
+		add_shortcode( 'acps_if', ACPS_Alerts_Failsafe::wrap( array( $this, 'render_if' ), 'shortcode/if' ) );
+	}
+
+	/**
+	 * Whether an alert is showing right now.
+	 *
+	 * @return bool
+	 */
+	protected static function alert_is_live() {
+		return class_exists( 'ACPS_Alerts_Status' ) && (bool) ACPS_Alerts_Status::board_entry();
+	}
+
+	/**
+	 * Resolves a state word to one of: active | live | normal.
+	 *
+	 * "active" is "the plugin is running", which is always true when any of
+	 * these shortcodes execute at all — that is the point, since a switched-off
+	 * plugin runs none of them. "live" and "normal" ask whether an alert is
+	 * showing. Deliberately no "enabled"/"disabled" aliases: those read as "the
+	 * plugin", which is the default (bare) state, not the alert.
+	 *
+	 * @param string $word Raw state word.
+	 * @return string
+	 */
+	protected static function resolve_state( $word ) {
+		$word = strtolower( trim( (string) $word ) );
+
+		$map = array(
+			''        => 'active',
+			'active'  => 'active',
+			'running' => 'active',
+			'on'      => 'active',
+			'live'    => 'live',
+			'alert'   => 'live',
+			'showing' => 'live',
+			'normal'  => 'normal',
+			'resting' => 'normal',
+			'quiet'   => 'normal',
+		);
+
+		return isset( $map[ $word ] ) ? $map[ $word ] : 'active';
+	}
+
+	/**
+	 * Whether the current state matches the requested one.
+	 *
+	 * @param string $word Requested state word.
+	 * @return bool
+	 */
+	protected static function state_matches( $word ) {
+		switch ( self::resolve_state( $word ) ) {
+			case 'live':
+				return self::alert_is_live();
+			case 'normal':
+				return ! self::alert_is_live();
+			default: // active
+				return true;
+		}
+	}
+
+	/**
+	 * The value shortcode: prints "1" (or a chosen word) when the state matches,
+	 * nothing otherwise. For conditional-logic display rules that compare a
+	 * shortcode's result.
+	 *
+	 * Public because the failsafe calls it from outside the class.
+	 *
+	 * @param array $atts Shortcode attributes.
+	 * @return string
+	 */
+	public function render_active( $atts ) {
+		$atts = shortcode_atts(
+			array(
+				'state' => '',   // active (default) | live | normal.
+				'yes'   => '1',  // printed when the state matches.
+				'no'    => '',   // printed when it does not.
+			),
+			(array) $atts,
+			'acps_active'
+		);
+
+		return self::state_matches( $atts['state'] ) ? (string) $atts['yes'] : (string) $atts['no'];
+	}
+
+	/**
+	 * The enclosing shortcode: shows its content only when the state matches.
+	 *
+	 * Public because the failsafe calls it from outside the class.
+	 *
+	 * @param array       $atts    Shortcode attributes.
+	 * @param string|null $content Enclosed content.
+	 * @return string
+	 */
+	public function render_if( $atts, $content = null ) {
+		$atts = shortcode_atts(
+			array(
+				'when' => 'active', // active | live | normal.
+			),
+			(array) $atts,
+			'acps_if'
+		);
+
+		if ( null === $content || '' === $content || ! self::state_matches( $atts['when'] ) ) {
+			return '';
+		}
+
+		// Expand any shortcodes nested inside, the way WordPress does for other
+		// enclosing shortcodes.
+		return function_exists( 'do_shortcode' ) ? do_shortcode( $content ) : $content;
 	}
 
 	/**

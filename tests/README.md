@@ -592,3 +592,12 @@ override:
 Verified non-vacuous: ignoring `source` fails with "while the alert still says
 HOLD", and skipping the colour check fails with "and the standard colour is
 kept".
+
+It also covers the two state shortcodes used to show/hide a Beaver Builder
+module: `[acps_active]` prints `1` when the plugin is running (and, with
+`state="live"`/`"normal"`, only when an alert is or is not showing; `yes`/`no`
+customise the words), and `[acps_if when="…"]…[/acps_if]` shows its content only
+in that state. An unknown state word falls back to `active` (always on) rather
+than hiding everything. Verified non-vacuous: making the state always match, or
+having the enclosing shortcode ignore its state, each turn the live/normal cases
+red.
