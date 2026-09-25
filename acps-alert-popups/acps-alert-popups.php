@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.10.4
+ * Version:           1.10.5
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.10.4' );
+define( 'ACPS_ALERTS_VERSION', '1.10.5' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -152,12 +152,14 @@ function acps_alerts_notify_safe_mode( array $state ) {
 
 		// The remote status/console URL, when it can be assembled, plus the
 		// one-click recovery URL that lifts the pause on its own.
-		$console = '';
-		$resume  = '';
-		$key     = acps_alerts_recovery_key();
+		$console   = '';
+		$resume    = '';
+		$reinstall = '';
+		$key       = acps_alerts_recovery_key();
 
 		if ( '' !== $key && function_exists( 'add_query_arg' ) ) {
-			$resume = add_query_arg( 'acps_alerts_resume', $key, $site );
+			$resume    = add_query_arg( 'acps_alerts_resume', $key, $site );
+			$reinstall = add_query_arg( 'acps_alerts_reinstall', $key, $site );
 
 			if ( class_exists( 'ACPS_Alerts_Panel' ) ) {
 				$console = add_query_arg( ACPS_Alerts_Panel::QUERY_VAR, $key, $site );
@@ -182,7 +184,13 @@ function acps_alerts_notify_safe_mode( array $state ) {
 
 		if ( $missing ) {
 			$body .= "\nMissing files:\n  " . implode( "\n  ", array_map( 'strval', $state['missing'] ) ) . "\n";
-			$body .= "\nThe rest of the site is unaffected. The plugin comes back by itself as soon as the files are restored (re-upload the plugin).\n";
+
+			if ( '' !== $reinstall ) {
+				$body .= "\nTo restore the missing files from the update source now, open this link (no login needed):\n";
+				$body .= '  ' . $reinstall . "\n";
+			}
+
+			$body .= "\nThe rest of the site is unaffected. The plugin also comes back by itself as soon as the files are restored (re-upload the plugin).\n";
 		} else {
 			$body .= "\nError:\n";
 			$body .= '  ' . ( isset( $state['msg'] ) ? $state['msg'] : '' ) . "\n";
@@ -193,8 +201,13 @@ function acps_alerts_notify_safe_mode( array $state ) {
 				$body .= '  ' . $resume . "\n";
 			}
 
+			if ( '' !== $reinstall ) {
+				$body .= "\nOr, if a plugin file is damaged, reinstall fresh files from the update source (no login needed):\n";
+				$body .= '  ' . $reinstall . "\n";
+			}
+
 			$body .= "\nThe rest of the site is unaffected. The plugin stays paused until one of these:\n";
-			$body .= "  - the recovery link above is opened;\n";
+			$body .= "  - the resume or reinstall link above is opened;\n";
 			$body .= "  - a new version is installed (any way: Plugins screen, the console's update button, or a re-upload) — it lifts the pause by itself;\n";
 			$body .= "  - the plugin is deactivated and reactivated in wp-admin.\n";
 		}
@@ -440,6 +453,95 @@ function acps_alerts_maybe_resume_via_url() {
 }
 
 /**
+ * Reinstalls the plugin from the update source, from a secret URL, to repair a
+ * missing or damaged file:
+ *
+ *     https://yoursite/?acps_alerts_reinstall=<console key or update secret>
+ *
+ * It loads only the three core files the reinstall needs — the failsafe, the
+ * settings and the updater — never the whole plugin, since a broken file
+ * elsewhere is exactly what this is meant to fix. The updater downloads the
+ * package the source offers and installs it over the current copy, restoring
+ * every file, then the pause is lifted so the fresh code runs. Same secret gate
+ * as the resume URL; the request ends here on either outcome.
+ *
+ * @return void
+ */
+function acps_alerts_maybe_reinstall_via_url() {
+	if ( ! isset( $_GET['acps_alerts_reinstall'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return;
+	}
+
+	try {
+		$key = acps_alerts_recovery_key();
+
+		if ( '' === $key ) {
+			return;
+		}
+
+		$given = function_exists( 'wp_unslash' ) ? wp_unslash( $_GET['acps_alerts_reinstall'] ) : $_GET['acps_alerts_reinstall']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+
+		if ( ! is_string( $given ) || ! hash_equals( $key, $given ) ) {
+			return;
+		}
+
+		if ( function_exists( 'nocache_headers' ) ) {
+			nocache_headers();
+		}
+
+		if ( ! headers_sent() ) {
+			if ( function_exists( 'status_header' ) ) {
+				status_header( 200 );
+			}
+
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'X-Robots-Tag: noindex, nofollow', true );
+		}
+
+		// Only the three files the reinstall itself needs, loaded by hand. A
+		// parse error in one of them cannot be fixed from here anyway, and a
+		// missing one is reported plainly.
+		$core = array(
+			'includes/class-acps-alerts-failsafe.php',
+			'includes/class-acps-alerts-settings.php',
+			'includes/class-acps-alerts-updater.php',
+		);
+
+		foreach ( $core as $rel ) {
+			$path = ACPS_ALERTS_DIR . $rel;
+
+			if ( ! is_readable( $path ) ) {
+				echo "Cannot reinstall from here: a core file is missing (" . $rel . ").\n";
+				echo "Re-upload the plugin, or deactivate and reactivate it in wp-admin.\n";
+				exit;
+			}
+
+			require_once $path;
+		}
+
+		$updater = new ACPS_Alerts_Updater();
+
+		echo $updater->reinstall_now();
+
+		// Fresh files are in place; lift the pause so they get to run.
+		delete_option( ACPS_ALERTS_SAFE_MODE_OPT );
+		delete_option( 'acps_alerts_update_failed' );
+		delete_option( 'acps_alerts_missing_notified' );
+
+		echo "\nSafe mode cleared. Load any page to confirm the plugin is running again.\n";
+		exit;
+	} catch ( \Throwable $e ) {
+		// Never let recovery itself fatal; say what happened and stop.
+		if ( ! headers_sent() ) {
+			header( 'Content-Type: text/plain; charset=utf-8' );
+		}
+
+		echo "Reinstall failed: " . $e->getMessage() . "\n";
+		exit;
+	}
+}
+
+/**
  * Loads the plugin's files, guarding against a missing one.
  *
  * @return bool True when every required file loaded.
@@ -519,11 +621,12 @@ function acps_alerts_boot() {
 
 	$booted = true;
 
-	// The last-resort recovery: a secret URL that lifts safe mode using nothing
-	// but this file. It runs before every other check — before the PHP guard,
-	// the kill switch and the safe-mode gate — and loads none of the plugin's
-	// other files, so it works even when one of them is what broke.
+	// The last-resort recovery, before every other check — the PHP guard, the
+	// kill switch, the safe-mode gate. Resume lifts the pause using this file
+	// alone; reinstall pulls fresh files from the update source to repair a
+	// missing or damaged one. Both are reached even while paused.
 	acps_alerts_maybe_resume_via_url();
+	acps_alerts_maybe_reinstall_via_url();
 
 	// Hard stops first: an unsupported PHP version or the wp-config kill switch
 	// means nothing else in this plugin runs at all. Silently — WordPress itself

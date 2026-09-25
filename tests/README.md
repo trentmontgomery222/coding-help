@@ -116,16 +116,31 @@ the right screen is explained in place instead of reloading the page for ever;
 Back walks back across screens; and the well-done note is only ever added to
 the plugin's own screens. Each of the three engine fixes is mutation-checked.
 
-`resume-test.php` — the always-works way out of safe mode:
-`?acps_alerts_resume=<key>`. Each case runs in its own process, because the
-handler ends the request with `exit()`. It checks that the right key clears the
-pause and ends the request, the update-secret fallback works when no console key
-is set, a wrong key / missing key / missing param clears nothing and lets the
-page load normally, it is idempotent when not paused, and — the point of the
-whole thing — it is reached through `acps_alerts_boot()` before any other file
-loads, so it works when the console cannot. Verified non-vacuous: dropping the
-secret fallback, accepting any key, not clearing the pause, and not calling the
-handler at boot each turn a case red.
+`resume-test.php` — the always-works ways out of safe mode:
+`?acps_alerts_resume=<key>` (lift the pause) and `?acps_alerts_reinstall=<key>`
+(pull fresh files from the source, then lift the pause). Each case runs in its
+own process, because the handlers end the request with `exit()`. For resume it
+checks that the right key clears the pause and ends the request, the
+update-secret fallback works when no console key is set, a wrong key / missing
+key / missing param clears nothing and lets the page load normally, it is
+idempotent when not paused, and — the point of the whole thing — it is reached
+through `acps_alerts_boot()` before any other file loads, so it works when the
+console cannot. For reinstall it checks the same secret gate, that the handler
+actually runs `reinstall_now()` (which, with no source configured in the test,
+reports it cannot reach the source before touching the WordPress upgrader) and
+then lifts the pause, a wrong key does nothing, and it too is reached through
+boot. Verified non-vacuous: dropping the secret fallback, accepting any key
+(resume or reinstall), not clearing the pause, and not calling either handler at
+boot each turn a case red.
+
+The reinstall's version-independent restore is pinned in `updater-test.php`:
+`force_reinstall_entry()` injects an update entry for the SAME version (an
+ordinary update refuses to), carrying the source package and the plugin
+basename the upgrader keys on, tolerating a not-yet-built transient; and
+`reinstall_now()` bails with "could not reach the source" before touching the
+upgrader when no source is configured. Verified non-vacuous: gate the entry on a
+newer version and it fails; skip the no-source bail and it fatals reaching for
+the upgrader.
 
 `idempotency-test.php` — pins the "everything is twice everywhere" bug.
 WordPress de-duplicates hook callbacks by a unique id, which is stable for
@@ -510,18 +525,6 @@ so they are not exercised; everything around them is ours and is:
 
   Verified non-vacuous: drop the wrapper and it fails with "the bare container
   class is restored" and three more.
-- the status page's generated stylesheet is loaded under our own handle, from
-  the url Beaver Builder reports, versioned by the file so an edit busts the
-  browser cache, with the base layout stylesheet alongside it. Two ways that
-  silently costs the popup its entire design, both pinned: a stylesheet linked
-  when the cached file is not on disk, and a dependency on Beaver Builder's base
-  handle when that handle is not registered — WordPress declines to print such a
-  style without a word.
-
-  Verified non-vacuous: declare the dependency unconditionally and it fails with
-  "it never depends on an unregistered handle: fl-builder-layout"; link a file
-  that is not there and it fails with "a stylesheet that is not on disk is not
-  linked to".
 - a lifted popup stops being a popover. Beaver Builder's popup carries
   `popover="manual"`, and a browser keeps any such element at `display:none`
   until `showPopover()` is called — so inside the alert dialog, where nothing

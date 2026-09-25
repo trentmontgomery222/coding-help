@@ -223,5 +223,36 @@ $log = $GLOBALS['options']['acps_alerts_health'];
 $last = end( $log );
 check( 'a degraded channel is kept as degraded, not softened to ok', $last['status'], 'degraded' );
 
+/* ---- reinstall forces an entry even for the SAME version ---- */
+
+// The whole point of reinstall (vs update): it must offer the package to the
+// upgrader even when the version is not newer, so a damaged file is restored.
+$remote_same = array(
+	'version'  => ACPS_ALERTS_VERSION, // exactly what is installed
+	'package'  => 'https://example.org/pkg/acps-alert-popups.zip',
+	'html_url' => 'https://example.org/plugin',
+);
+
+$forced = $u->force_reinstall_entry( transient_obj(), $remote_same );
+
+ok( 'reinstall injects an entry even at the same version', isset( $forced->response[ ACPS_ALERTS_BASENAME ] ) );
+
+$entry = isset( $forced->response[ ACPS_ALERTS_BASENAME ] ) ? $forced->response[ ACPS_ALERTS_BASENAME ] : null;
+
+check( 'the forced entry carries the source package', $entry ? $entry->package : '', 'https://example.org/pkg/acps-alert-popups.zip' );
+check( 'and the plugin basename the upgrader keys on', $entry ? $entry->plugin : '', ACPS_ALERTS_BASENAME );
+check( 'and a slug', $entry ? $entry->slug : '', 'acps-alert-popups' );
+
+// It tolerates a transient that is not yet an object (a fresh site).
+$forced_bare = $u->force_reinstall_entry( null, $remote_same );
+ok( 'a null transient is handled', isset( $forced_bare->response[ ACPS_ALERTS_BASENAME ] ) );
+
+// reinstall_now bails cleanly, before touching the WordPress upgrader, when no
+// source is configured.
+$GLOBALS['settings'] = array( 'update_source' => 'manifest', 'update_base' => '' );
+$GLOBALS['transients'] = array();
+$log = $u->reinstall_now();
+ok( 'reinstall reports it cannot reach an unconfigured source', false !== strpos( $log, 'Could not reach the configured update source' ) );
+
 echo $fails ? "\n$fails failing case(s)\n" : "All updater cases passed\n";
 exit( $fails ? 1 : 0 );

@@ -183,6 +183,12 @@ class ACPS_Alerts_Panel {
 			return;
 		}
 
+		if ( 'reinstall' === $action ) {
+			$this->handle_reinstall();
+
+			return;
+		}
+
 		if ( 'clear' === $action ) {
 			// Not throttled like a settings write: clearing the log and closing
 			// the breakers changes no configuration, and is exactly what an
@@ -275,6 +281,13 @@ class ACPS_Alerts_Panel {
 		echo '<form method="post" action="' . esc_url( $this->console_url() ) . '" style="display:inline">';
 		echo '<input type="hidden" name="acps_console_action" value="update" />';
 		echo '<button type="submit">' . esc_html__( 'Check & install update now', 'acps-alert-popups' ) . '</button>';
+		echo '</form>';
+
+		// Reinstall now: pulls fresh files from the source over the current copy,
+		// even at the same version, to repair a missing or damaged file.
+		echo ' <form method="post" action="' . esc_url( $this->console_url() ) . '" style="display:inline">';
+		echo '<input type="hidden" name="acps_console_action" value="reinstall" />';
+		echo '<button type="submit">' . esc_html__( 'Reinstall from source (restore files)', 'acps-alert-popups' ) . '</button>';
 		echo '</form>';
 	}
 
@@ -382,6 +395,22 @@ class ACPS_Alerts_Panel {
 		$this->page_head( __( 'Update', 'acps-alert-popups' ) );
 		$this->nav();
 		echo '<h2>' . esc_html__( 'Update', 'acps-alert-popups' ) . '</h2>';
+		echo '<pre>' . esc_html( $log ) . '</pre>';
+		$this->page_foot();
+	}
+
+	/**
+	 * Reinstalls the plugin from the update source, restoring its files. Unlike
+	 * the update above, it does not need a newer version.
+	 *
+	 * @return void
+	 */
+	protected function handle_reinstall() {
+		$log = $this->updater ? $this->updater->reinstall_now() : "No updater available.\n";
+
+		$this->page_head( __( 'Reinstall', 'acps-alert-popups' ) );
+		$this->nav();
+		echo '<h2>' . esc_html__( 'Reinstall from source', 'acps-alert-popups' ) . '</h2>';
 		echo '<pre>' . esc_html( $log ) . '</pre>';
 		$this->page_foot();
 	}

@@ -1023,6 +1023,109 @@ class ACPS_Alerts_Updater {
 	}
 
 	/**
+	 * Reinstalls the plugin from the update source, restoring its files.
+	 *
+	 * Unlike install_now(), this does NOT need a newer version: it reinstalls
+	 * whatever the source currently offers, over the top of the installed copy,
+	 * so a missing or damaged file is replaced with a fresh one. Rollout gating
+	 * does not apply — a restore is not a version bump. Returns a plain-text log
+	 * so the console and the recovery URL can both use it.
+	 *
+	 * @return string
+	 */
+	public function reinstall_now() {
+		self::flush_cache();
+		$remote = $this->remote( true );
+
+		if ( ! $remote || empty( $remote['package'] ) ) {
+			return "Could not reach the configured update source.\n";
+		}
+
+		$out  = "Reinstalling the plugin from the update source.\n";
+		$out .= 'Installed version: ' . ACPS_ALERTS_VERSION . "\n";
+		$out .= 'Source version:    ' . $remote['version'] . "\n";
+
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+		// The folder-rename and private-download hooks the install needs, in
+		// case register() has not run this request (the recovery URL loads
+		// little). Through the failsafe, and deduped by the same contexts
+		// register() uses, so a throw in them is contained and they are not
+		// wired twice.
+		ACPS_Alerts_Failsafe::filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 'updater/source-dir', 10, 4 );
+		ACPS_Alerts_Failsafe::filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 'updater/download', 10, 3 );
+
+		// Force an update entry for this plugin — the SAME version counts — so the
+		// upgrader reinstalls the package and restores every file, rather than
+		// reporting "up to date" and doing nothing. Written straight into the
+		// transient the upgrader reads, rather than through a filter, so nothing
+		// has to be unhooked afterwards.
+		set_site_transient( 'update_plugins', $this->force_reinstall_entry( get_site_transient( 'update_plugins' ), $remote ) );
+
+		$skin     = new Automatic_Upgrader_Skin();
+		$upgrader = new Plugin_Upgrader( $skin );
+		$result   = $upgrader->upgrade( ACPS_ALERTS_BASENAME );
+
+		// Let WordPress rebuild its own view of available updates next time.
+		delete_site_transient( 'update_plugins' );
+
+		$messages = $skin->get_upgrade_messages();
+
+		if ( $messages ) {
+			$out .= "\n" . implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) . "\n";
+		}
+
+		$ok = ( ! is_wp_error( $result ) && $result );
+
+		if ( $ok ) {
+			// The upgrader deactivates a plugin before replacing it; put it back.
+			if ( ! function_exists( 'is_plugin_active' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			}
+
+			if ( ! is_plugin_active( ACPS_ALERTS_BASENAME ) ) {
+				activate_plugin( ACPS_ALERTS_BASENAME, '', false, true );
+			}
+
+			self::flush_cache();
+		}
+
+		return $out . "\n" . ( $ok ? 'SUCCESS — files restored from the source.' : 'FAILED' ) . "\n";
+	}
+
+	/**
+	 * Injects a forced update entry for this plugin into the update transient,
+	 * so the upgrader reinstalls the source package even when the version is not
+	 * newer. Public so the reinstall filter (and its test) can reach it.
+	 *
+	 * @param mixed $transient The update_plugins transient.
+	 * @param array $remote    Normalized remote info (version, package, …).
+	 * @return object
+	 */
+	public function force_reinstall_entry( $transient, array $remote ) {
+		if ( ! is_object( $transient ) ) {
+			$transient = new stdClass();
+		}
+
+		if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+			$transient->response = array();
+		}
+
+		$transient->response[ ACPS_ALERTS_BASENAME ] = (object) array(
+			'slug'        => dirname( ACPS_ALERTS_BASENAME ),
+			'plugin'      => ACPS_ALERTS_BASENAME,
+			'new_version' => (string) $remote['version'],
+			'package'     => (string) $remote['package'],
+			'url'         => ! empty( $remote['html_url'] ) ? (string) $remote['html_url'] : '',
+		);
+
+		return $transient;
+	}
+
+	/**
 	 * The secret force-update URL, for display in the hidden panel.
 	 *
 	 * @return string

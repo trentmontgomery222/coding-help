@@ -26,6 +26,9 @@ if ( '' === $scenario ) {
 		'no-param'         => array( false, false ),
 		'not-in-safe-mode' => array( true, true ), // idempotent: still responds, nothing to clear
 		'via-boot'         => array( true, true ), // reached through acps_alerts_boot(), proving it is wired
+		'reinstall-match'  => array( true, true ), // reinstall handler runs, then lifts the pause
+		'reinstall-wrong'  => array( false, false ),
+		'reinstall-via-boot' => array( true, true ), // reached through acps_alerts_boot(), proving it is wired
 	);
 
 	$fails = 0;
@@ -39,7 +42,7 @@ if ( '' === $scenario ) {
 		$text = implode( "\n", $out );
 
 		$cleared = false !== strpos( $text, 'RESULT:CLEARED' );
-		$body    = false !== strpos( $text, 'safe mode cleared' );
+		$body    = false !== stripos( $text, 'safe mode cleared' );
 
 		if ( $cleared !== $want_cleared ) {
 			$fails++;
@@ -49,6 +52,14 @@ if ( '' === $scenario ) {
 		if ( $body !== $want_body ) {
 			$fails++;
 			printf( "FAIL %s: expected recovery body=%s, got %s\n", $name, var_export( $want_body, true ), var_export( $body, true ) );
+		}
+
+		// The reinstall URL must actually run the reinstall (which, with no
+		// source configured in the test, reports it cannot reach the source)
+		// before it lifts the pause.
+		if ( 0 === strpos( $name, 'reinstall' ) && $want_body && false === strpos( $text, 'update source' ) ) {
+			$fails++;
+			printf( "FAIL %s: the reinstall handler did not run reinstall_now()\n", $name );
 		}
 
 		// A non-match must never end the request itself (it falls through so the
@@ -112,6 +123,13 @@ switch ( $scenario ) {
 	case 'no-key-set':
 		$_GET['acps_alerts_resume'] = 'anything';
 		break;
+	case 'reinstall-match':
+	case 'reinstall-via-boot':
+		$_GET['acps_alerts_reinstall'] = 'right-key-123';
+		break;
+	case 'reinstall-wrong':
+		$_GET['acps_alerts_reinstall'] = 'not-the-key';
+		break;
 	default:
 		$_GET['acps_alerts_resume'] = 'right-key-123';
 }
@@ -126,6 +144,17 @@ function status_header( $c ) {}
 $GLOBALS['acts'] = array();
 function add_action( $h = '', $cb = null, $p = 10, $a = 1 ) { $GLOBALS['acts'][ $h ][] = $cb; }
 function add_filter() {}
+function remove_filter() {}
+// Enough for the updater to load and reach "no source configured" without HTTP.
+function wp_parse_args( $a, $d ) { return array_merge( (array) $d, (array) $a ); }
+$GLOBALS['transients'] = array();
+function get_transient( $k ) { return isset( $GLOBALS['transients'][ $k ] ) ? $GLOBALS['transients'][ $k ] : false; }
+function set_transient( $k, $v, $t = 0 ) { $GLOBALS['transients'][ $k ] = $v; return true; }
+function delete_transient( $k ) { unset( $GLOBALS['transients'][ $k ] ); return true; }
+function delete_site_transient( $k ) { return true; }
+function trailingslashit( $s ) { return rtrim( (string) $s, '/' ) . '/'; }
+function sanitize_text_field( $s ) { return trim( strip_tags( (string) $s ) ); }
+function esc_url_raw( $s ) { return (string) $s; }
 function apply_filters( $t, $v ) { return $v; }
 function register_activation_hook() {}
 function register_deactivation_hook() {}
@@ -142,7 +171,7 @@ register_shutdown_function( function () {
 
 require $plugin;
 
-if ( 'via-boot' === $scenario ) {
+if ( 'via-boot' === $scenario || 'reinstall-via-boot' === $scenario ) {
 	// Prove the handler is actually wired into boot: fire plugins_loaded the
 	// way WordPress would, and let acps_alerts_boot() reach it on its own.
 	foreach ( ( isset( $GLOBALS['acts']['plugins_loaded'] ) ? $GLOBALS['acts']['plugins_loaded'] : array() ) as $cb ) {
@@ -150,6 +179,11 @@ if ( 'via-boot' === $scenario ) {
 			call_user_func( $cb );
 		}
 	}
+} elseif ( 0 === strpos( $scenario, 'reinstall' ) ) {
+	// The reinstall handler: with no source configured it reports it cannot
+	// reach the source (before touching the WordPress upgrader), then lifts the
+	// pause — so the whole path is exercised without a real download.
+	acps_alerts_maybe_reinstall_via_url();
 } else {
 	// The handler runs before every other boot step; call it directly here.
 	acps_alerts_maybe_resume_via_url();

@@ -245,14 +245,24 @@ pause lifts when:
   and the remote console therefore can't come up. The long random key in the URL
   is the only credential (the same gate the self-test and force-update URLs use),
   no login required. The email carries this link ready to click.
+- **the files are reinstalled from the update source** —
+  `https://yoursite/?acps_alerts_reinstall=<console key or update secret>`. When
+  the cause is a missing or damaged plugin file, this pulls a fresh copy of the
+  package from the configured update source and installs it over the current
+  one — **even at the same version**, which an ordinary update refuses to do —
+  then lifts the pause. It loads only the three core files it needs (the
+  failsafe, the settings and the updater), never the file that broke. Same
+  secret gate, no login. The email carries this link too.
 - **a new version is installed**, by any route. The pause records which version
   crashed, and different code on disk gets its chance; if it fatals too, it is
   paused again and a fresh email goes out.
 - the plugin is deactivated and reactivated in wp-admin.
 
-The remote console (`?acpsupdater=<key>`) also has a **Resume** button, but it
-needs the console to load and a password — so the recovery URL above is the one
-to reach for when the console just returns the home page.
+The remote console (`?acpsupdater=<key>`) also has **Resume** and **Reinstall
+from source** buttons, but it needs the console to load and a password — so the
+`acps_alerts_resume` / `acps_alerts_reinstall` URLs above are the ones to reach
+for when the console just returns the home page. "Reinstall from source" is also
+the way to repair a damaged file on a running site, without a version bump.
 
 ### Targeting notes
 
