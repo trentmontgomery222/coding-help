@@ -4,7 +4,7 @@ Tags: beaver builder, popups, alerts, notifications
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.10.3
+Stable tag: 1.10.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,6 +15,9 @@ Turns Beaver Builder Popups into a managed site alert system, controlled from wp
 Design the alert in Beaver Builder; post, schedule, target and throttle it from wp-admin. See README.md for full documentation.
 
 == Changelog ==
+
+= 1.10.4 =
+* Added an always-works way out of safe mode: opening https://yoursite/?acps_alerts_resume=<your console key or update secret> lifts the pause using only the main plugin file, so it works even when the remote console cannot load. The safe-mode email now includes this one-click link.
 
 = 1.10.3 =
 * Fixed for real: the popup's styles no longer touch the rest of the page. All of the popup's CSS is now confined to the popup itself and nothing is loaded globally, so site columns (especially on mobile) are left alone. Beaver Builder's own webfonts and icon sheets are off by default now; add_filter( 'acps_alerts_load_bb_scripts', '__return_true' ) brings them back.

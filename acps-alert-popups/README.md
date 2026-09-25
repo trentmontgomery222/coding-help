@@ -237,10 +237,22 @@ nothing in that path can itself break a request.
 While paused, ordinary page views don't load the plugin's code at all. The
 pause lifts when:
 
+- **the recovery URL is opened** —
+  `https://yoursite/?acps_alerts_resume=<console key or update secret>`. This is
+  the way out that always works: it runs in the main plugin file alone, reads
+  the key straight from the database, and clears the pause without loading any
+  of the other files — so it works even when one of those files is what broke
+  and the remote console therefore can't come up. The long random key in the URL
+  is the only credential (the same gate the self-test and force-update URLs use),
+  no login required. The email carries this link ready to click.
 - **a new version is installed**, by any route. The pause records which version
   crashed, and different code on disk gets its chance; if it fatals too, it is
-  paused again and a fresh email goes out; or
+  paused again and a fresh email goes out.
 - the plugin is deactivated and reactivated in wp-admin.
+
+The remote console (`?acpsupdater=<key>`) also has a **Resume** button, but it
+needs the console to load and a password — so the recovery URL above is the one
+to reach for when the console just returns the home page.
 
 ### Targeting notes
 

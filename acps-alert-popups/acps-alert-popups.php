@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.10.3
+ * Version:           1.10.4
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.10.3' );
+define( 'ACPS_ALERTS_VERSION', '1.10.4' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -150,13 +150,16 @@ function acps_alerts_notify_safe_mode( array $state ) {
 		$name  = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : $site;
 		$admin = function_exists( 'wp_login_url' ) ? wp_login_url() : ( function_exists( 'admin_url' ) ? admin_url() : '' );
 
-		// The remote status/console URL, when it can be assembled.
+		// The remote status/console URL, when it can be assembled, plus the
+		// one-click recovery URL that lifts the pause on its own.
 		$console = '';
+		$resume  = '';
+		$key     = acps_alerts_recovery_key();
 
-		if ( class_exists( 'ACPS_Alerts_Panel' ) && function_exists( 'add_query_arg' ) ) {
-			$key = ACPS_Alerts_Panel::access_key();
+		if ( '' !== $key && function_exists( 'add_query_arg' ) ) {
+			$resume = add_query_arg( 'acps_alerts_resume', $key, $site );
 
-			if ( '' !== $key ) {
+			if ( class_exists( 'ACPS_Alerts_Panel' ) ) {
 				$console = add_query_arg( ACPS_Alerts_Panel::QUERY_VAR, $key, $site );
 			}
 		}
@@ -184,9 +187,15 @@ function acps_alerts_notify_safe_mode( array $state ) {
 			$body .= "\nError:\n";
 			$body .= '  ' . ( isset( $state['msg'] ) ? $state['msg'] : '' ) . "\n";
 			$body .= '  ' . ( isset( $state['file'] ) ? $state['file'] : '' ) . ':' . ( isset( $state['line'] ) ? $state['line'] : 0 ) . "\n";
+
+			if ( '' !== $resume ) {
+				$body .= "\nTo take it out of safe mode now, open this link (no login needed):\n";
+				$body .= '  ' . $resume . "\n";
+			}
+
 			$body .= "\nThe rest of the site is unaffected. The plugin stays paused until one of these:\n";
+			$body .= "  - the recovery link above is opened;\n";
 			$body .= "  - a new version is installed (any way: Plugins screen, the console's update button, or a re-upload) — it lifts the pause by itself;\n";
-			$body .= "  - Resume is pressed in the remote console;\n";
 			$body .= "  - the plugin is deactivated and reactivated in wp-admin.\n";
 		}
 
@@ -342,6 +351,95 @@ function acps_alerts_boot_console_only() {
 }
 
 /**
+ * The key that unlocks the recovery URL: the console key, or the update secret
+ * when no console key is set. Read straight from the options row, so this needs
+ * none of the plugin's classes and works even when every file is broken.
+ *
+ * @return string
+ */
+function acps_alerts_recovery_key() {
+	if ( ! function_exists( 'get_option' ) ) {
+		return '';
+	}
+
+	$settings = get_option( 'acps_alerts_settings' );
+
+	if ( ! is_array( $settings ) ) {
+		return '';
+	}
+
+	$key = isset( $settings['console_key'] ) ? trim( (string) $settings['console_key'] ) : '';
+
+	if ( '' === $key ) {
+		$key = isset( $settings['update_secret'] ) ? trim( (string) $settings['update_secret'] ) : '';
+	}
+
+	return $key;
+}
+
+/**
+ * Lifts safe mode from a secret URL, without loading anything else.
+ *
+ * This is the always-works way out of safe mode:
+ *
+ *     https://yoursite/?acps_alerts_resume=<console key or update secret>
+ *
+ * It reads the key straight from the database and clears the pause with plain
+ * option writes, so it never touches the plugin's other files — the ones that
+ * may be exactly what broke, and that a parse error in would otherwise take the
+ * whole request (the remote console included) down with them. The long random
+ * key in the URL is the only credential, the same gate the self-test and
+ * force-update URLs already use; it lifts the pause and nothing more, so if the
+ * cause is not fixed the next request simply pauses again.
+ *
+ * @return void
+ */
+function acps_alerts_maybe_resume_via_url() {
+	if ( ! isset( $_GET['acps_alerts_resume'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return;
+	}
+
+	try {
+		$key = acps_alerts_recovery_key();
+
+		if ( '' === $key ) {
+			return;
+		}
+
+		$given = function_exists( 'wp_unslash' ) ? wp_unslash( $_GET['acps_alerts_resume'] ) : $_GET['acps_alerts_resume']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+
+		if ( ! is_string( $given ) || ! hash_equals( $key, $given ) ) {
+			return;
+		}
+
+		delete_option( ACPS_ALERTS_SAFE_MODE_OPT );
+		delete_option( 'acps_alerts_update_failed' );
+		delete_option( 'acps_alerts_missing_notified' );
+
+		if ( function_exists( 'nocache_headers' ) ) {
+			nocache_headers();
+		}
+
+		if ( ! headers_sent() ) {
+			if ( function_exists( 'status_header' ) ) {
+				status_header( 200 );
+			}
+
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'X-Robots-Tag: noindex, nofollow', true );
+		}
+
+		echo "ACPS Alert Popups: safe mode cleared.\n\n";
+		echo "The plugin will run again on the next page load. If whatever caused the pause is still there, it will pause again and email you.\n";
+		exit;
+	} catch ( \Throwable $e ) {
+		// Recovery must never itself fatal. Fall through and let the request go
+		// on as it would have.
+		return;
+	}
+}
+
+/**
  * Loads the plugin's files, guarding against a missing one.
  *
  * @return bool True when every required file loaded.
@@ -420,6 +518,12 @@ function acps_alerts_boot() {
 	}
 
 	$booted = true;
+
+	// The last-resort recovery: a secret URL that lifts safe mode using nothing
+	// but this file. It runs before every other check — before the PHP guard,
+	// the kill switch and the safe-mode gate — and loads none of the plugin's
+	// other files, so it works even when one of them is what broke.
+	acps_alerts_maybe_resume_via_url();
 
 	// Hard stops first: an unsupported PHP version or the wp-config kill switch
 	// means nothing else in this plugin runs at all. Silently — WordPress itself

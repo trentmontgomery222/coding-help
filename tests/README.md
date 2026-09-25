@@ -20,6 +20,7 @@ php tests/popup-source-test.php
 php tests/shortcode-test.php
 php tests/updater-test.php
 php tests/safe-mode-test.php
+php tests/resume-test.php
 php tests/settings-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
@@ -74,7 +75,8 @@ admin requests, so without it `missing-help` would pass for the wrong reason.
 - arming safe mode emails the operator **exactly once** per episode; a second
   arm on a following request while already dormant sends nothing
 - the email carries the site URL, the wp-admin login link, the remote console
-  URL (`acpsupdater=<key>`) and the caught error
+  URL (`acpsupdater=<key>`), the one-click recovery URL (`acps_alerts_resume=`)
+  and the caught error
 - no `admin_notices` safe-mode banner is hooked and the old on-screen notice
   function is gone, so nothing on any screen announces the failure
 - `ACPS_Alerts_Admin::default_css()` returns the real plugin CSS (both source
@@ -113,6 +115,17 @@ tour and step; the tour resumes on arrival; a step whose element is missing on
 the right screen is explained in place instead of reloading the page for ever;
 Back walks back across screens; and the well-done note is only ever added to
 the plugin's own screens. Each of the three engine fixes is mutation-checked.
+
+`resume-test.php` — the always-works way out of safe mode:
+`?acps_alerts_resume=<key>`. Each case runs in its own process, because the
+handler ends the request with `exit()`. It checks that the right key clears the
+pause and ends the request, the update-secret fallback works when no console key
+is set, a wrong key / missing key / missing param clears nothing and lets the
+page load normally, it is idempotent when not paused, and — the point of the
+whole thing — it is reached through `acps_alerts_boot()` before any other file
+loads, so it works when the console cannot. Verified non-vacuous: dropping the
+secret fallback, accepting any key, not clearing the pause, and not calling the
+handler at boot each turn a case red.
 
 `idempotency-test.php` — pins the "everything is twice everywhere" bug.
 WordPress de-duplicates hook callbacks by a unique id, which is stable for

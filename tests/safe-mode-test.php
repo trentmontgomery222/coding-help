@@ -163,7 +163,8 @@ $GLOBALS['acps_mails'] = array();
 unset( $GLOBALS['options']['acps_alerts_safe_mode'] );
 acps_alerts_arm_safe_mode( 'boom', '/x/acps.php', 1 );
 check( 'the safe-mode email lists installing a new version as a way out', false !== strpos( $GLOBALS['acps_mails'][0]['body'], 'a new version is installed' ), true );
-check( 'and Resume in the console', false !== strpos( $GLOBALS['acps_mails'][0]['body'], 'Resume' ), true );
+check( 'and carries the one-click recovery URL', false !== strpos( $GLOBALS['acps_mails'][0]['body'], 'acps_alerts_resume=' ), true );
+check( 'built from the console key', false !== strpos( $GLOBALS['acps_mails'][0]['body'], 'acps_alerts_resume=consolekey123' ), true );
 
 // ---- no on-screen safe-mode notice was ever hooked ------------------------
 check( 'safe_mode_notice function removed', function_exists( 'acps_alerts_safe_mode_notice' ), false );
