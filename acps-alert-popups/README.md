@@ -361,23 +361,33 @@ wrong layout.
 
 **Styling is a separate job from markup.** Beaver Builder writes one stylesheet
 per post, so the popup's design lives in the status page's stylesheet and is
-simply not on any other page. That gets loaded on `wp_enqueue_scripts`, not at
-render time — a stylesheet asked for in the footer arrives after the browser has
-already painted the popup unstyled. Beaver Builder's base layout stylesheet is enqueued (it is absent on a page with
-no builder content of its own), its own enqueue method is called for whichever
-name that version has, and then the status page's cached stylesheet is loaded
-under our own handle regardless, located through
-`FLBuilderModel::get_asset_info()`. There is no reliable way to tell whether
-Beaver Builder's call did anything — the handle for a layout has changed shape
-between versions, so looking for one by name answers "no" for a version that
-named it something else — and being wrong means the popup arrives with its
-structure and none of its design. Loading it twice costs one cached request;
-not loading it costs the whole look.
+simply not on any other page. Beaver Builder's base layout stylesheet is
+enqueued (it is absent on a page with no builder content of its own), and its
+own enqueue method is called for whichever name that version has, to bring the
+layout's fonts, icons and any secondary CSS.
 
-Two details that silently cost everything if got wrong: the stylesheet is only
-linked when the cached file is really on disk, and Beaver Builder's base handle
-is only named as a dependency when it is really registered — WordPress declines,
-without a word, to print a style whose dependency it has never heard of.
+**But the status page's compiled stylesheet is never loaded as-is.** Beaver
+Builder scopes most of a layout's rules to a wrapper class that is present on
+*every* builder page — `.fl-builder-content .fl-col { float: … }`,
+`.fl-builder-content .fl-row { … }` — so a stylesheet loaded globally restyles
+the host page's own columns and rows, not just the popup's. The symptom is a
+page whose columns stop centring, most visibly on mobile where the leaked float
+rules take over. So the compiled stylesheet is read off disk (located through
+`FLBuilderModel::get_asset_info()`), **every rule in it is confined under
+`.acps-alert`** — the dialog the lifted popup sits in — and the result is
+printed inline. `.fl-col` becomes `.acps-alert .fl-col`, which can only match
+inside the popup. `@media` blocks are scoped inside; `@font-face` and
+`@keyframes` are left alone. The scoped result is cached against the file's
+timestamp, so the rewrite happens once per edit, not once per request, and only
+on pages actually showing an alert. Beaver Builder's own globally-enqueued copy
+of that same stylesheet is dequeued (matched by the file it points at, so the
+handle's name across versions does not matter), leaving the scoped copy as the
+only one on the page.
+
+One detail that silently costs the look if got wrong: Beaver Builder's base
+handle is only named as a dependency of the inline style when it is really
+registered — WordPress declines, without a word, to print a style whose
+dependency it has never heard of.
 
 **The lifted node has to stay inside the container its CSS names.** Beaver
 Builder writes most of a layout's rules against an ancestor —

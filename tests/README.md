@@ -449,6 +449,19 @@ so they are not exercised; everything around them is ours and is:
   Verified non-vacuous twice: always drawing ours fails with "the alert does not
   add a second one", and dropping the already-wired guard fails with "wiring it
   twice adds the attribute once".
+- the status page's compiled stylesheet is confined to the alert dialog, not
+  loaded as-is. Beaver Builder scopes many rules to the generic
+  `.fl-builder-content` wrapper present on every builder page, so loaded raw its
+  `.fl-col` / `.fl-row` rules restyle the host page's own columns — the reported
+  bug, worst on mobile. `scope_css()` prefixes every selector with `.acps-alert`
+  (`.fl-col` → `.acps-alert .fl-col`), recurses into `@media`, and leaves
+  `@font-face` / `@keyframes` untouched; comments and braces inside strings do
+  not throw the brace matching off; the result is printed inline, and Beaver
+  Builder's own global copy of the same file is dequeued by matching its src.
+
+  Verified non-vacuous four times: a no-op scoper, an unscoped `@media` inner, a
+  scoped `@keyframes`/`@font-face`, and skipping the dequeue each turn a case
+  red.
 - the shell says which of the two cases it is, with `acps-alert--own-close`,
   because the stylesheet has to size the dialog differently for each: spanning
   the page gives the popup's percentage width a basis, but puts a close button

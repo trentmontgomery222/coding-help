@@ -58,14 +58,54 @@ $GLOBALS['styles']     = array();
 $GLOBALS['registered_styles'] = array( 'fl-builder-layout' );
 
 function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = null ) {
-	$GLOBALS['styles'][ $handle ] = array( 'src' => $src, 'deps' => (array) $deps, 'ver' => $ver );
+	// wp_enqueue_style( $handle ) with no src enqueues an already-registered
+	// style without changing it — it must not wipe the registration.
+	if ( '' === $src && isset( $GLOBALS['styles'][ $handle ] ) ) {
+		return;
+	}
+	$GLOBALS['styles'][ $handle ] = array(
+		'src'    => $src,
+		'deps'   => (array) $deps,
+		'ver'    => $ver,
+		'inline' => isset( $GLOBALS['styles'][ $handle ]['inline'] ) ? $GLOBALS['styles'][ $handle ]['inline'] : '',
+	);
 }
+function wp_register_style( $handle, $src = '', $deps = array(), $ver = null ) {
+	// A no-src registered style still carries inline CSS; record it like an
+	// enqueue so the assertions can read it back.
+	$GLOBALS['styles'][ $handle ] = array(
+		'src'    => $src,
+		'deps'   => (array) $deps,
+		'ver'    => $ver,
+		'inline' => '',
+	);
+}
+function wp_add_inline_style( $handle, $css ) {
+	if ( ! isset( $GLOBALS['styles'][ $handle ] ) ) {
+		return false;
+	}
+	$GLOBALS['styles'][ $handle ]['inline'] .= (string) $css;
+	return true;
+}
+function wp_dequeue_style( $handle ) {
+	$GLOBALS['dequeued'][] = $handle;
+	unset( $GLOBALS['styles'][ $handle ] );
+}
+function wp_parse_url( $url, $component = -1 ) { return parse_url( (string) $url, $component ); }
 function wp_style_is( $handle, $list = 'enqueued' ) {
 	if ( 'registered' === $list ) {
 		return in_array( $handle, $GLOBALS['registered_styles'], true ) || isset( $GLOBALS['styles'][ $handle ] );
 	}
 	return isset( $GLOBALS['styles'][ $handle ] );
 }
+$GLOBALS['dequeued'] = array();
+// Stands in for wp_styles()->registered, so dequeue_raw_layout_css() can find
+// the raw compiled stylesheet Beaver Builder enqueued and drop it.
+class ACPS_WP_Styles {
+	public $registered = array();
+}
+$GLOBALS['wp_styles_obj'] = new ACPS_WP_Styles();
+function wp_styles() { return $GLOBALS['wp_styles_obj']; }
 
 /**
  * Stands in for Beaver Builder's asset reader, which reports where it cached a
@@ -548,11 +588,22 @@ check( 'and with no page there is no wrapper to name', ACPS_Alerts_Popup_Source:
 /*
  * The popup's design lives in the status page's generated stylesheet, and that
  * file is on no other page. Without it the popup arrives with its structure and
- * none of its look — unstyled buttons, and every width gone.
+ * none of its look — unstyled buttons, and every width gone. But that stylesheet
+ * must NOT be loaded as-is: Beaver Builder scopes many of its rules to the
+ * generic .fl-builder-content wrapper, present on every builder page, so loaded
+ * raw its column and row rules land on the host page too. Every rule is confined
+ * under .acps-alert (the dialog the lifted popup sits in) and printed inline.
  */
 $css_file = sys_get_temp_dir() . '/acps-layout-test.css';
-file_put_contents( $css_file, '.fl-node-x .fl-button{background:#2b4a8b;}' );
+file_put_contents(
+	$css_file,
+	'.fl-node-x .fl-button{background:#2b4a8b;}'
+	. '.fl-builder-content .fl-col{float:left;}'
+	. '@media (max-width:768px){.fl-col{float:none;width:100%;}}'
+	. '@font-face{font-family:"BB";src:url(bb.woff2);}'
+);
 
+$GLOBALS['transients'] = array();
 FLBuilderModel::$info = array(
 	'css'     => $css_file,
 	'css_url' => 'https://example.org/cache/42.css',
@@ -561,10 +612,46 @@ FLBuilderModel::$info = array(
 $GLOBALS['styles'] = array();
 ACPS_Alerts_Popup_Source::enqueue_assets();
 
-ok( 'the status page stylesheet is loaded', isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
-check( 'from the url Beaver Builder reported', $GLOBALS['styles']['acps-alerts-popup-layout']['src'], 'https://example.org/cache/42.css' );
-ok( 'versioned by the file, so an edit busts the browser cache', '' !== (string) $GLOBALS['styles']['acps-alerts-popup-layout']['ver'] );
+$layout = isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) ? $GLOBALS['styles']['acps-alerts-popup-layout'] : null;
+
+ok( 'the status page stylesheet is loaded', null !== $layout );
+ok( 'as inline CSS, not a raw link that would leak globally', null !== $layout && '' === (string) $layout['src'] );
+
+$inline = null !== $layout ? (string) $layout['inline'] : '';
+
+ok( 'a node rule is scoped', false !== strpos( $inline, '.acps-alert .fl-node-x .fl-button' ) );
+ok( "the leaking .fl-col rule is scoped so it cannot reach the host page", false !== strpos( $inline, '.acps-alert .fl-builder-content .fl-col' ) );
+ok( 'no .fl-col rule survives unscoped', ! preg_match( '/(^|[},])\s*\.fl-/', $inline ) );
+ok( 'the media query is kept, with its inner rule scoped', false !== strpos( $inline, '@media (max-width:768px)' ) && false !== strpos( $inline, '.acps-alert .fl-col{float:none' ) );
+ok( 'the @media at-rule itself is not scoped', false === strpos( $inline, '.acps-alert @media' ) );
+ok( '@font-face is left untouched so the font still loads', false !== strpos( $inline, '@font-face{font-family:"BB"' ) && false === strpos( $inline, '.acps-alert @font-face' ) && false === strpos( $inline, '.acps-alert src:' ) );
+ok( 'versioned by the file, so an edit busts the browser cache', null !== $layout && '' !== (string) $layout['ver'] );
 ok( 'and the base layout stylesheet comes with it', isset( $GLOBALS['styles']['fl-builder-layout'] ) );
+
+/* ---- the raw, unscoped compiled stylesheet Beaver Builder enqueues is dropped ---- */
+
+/*
+ * FLBuilder::enqueue_layout_styles_scripts() loads the layout's fonts, icons and
+ * scripts (wanted) but ALSO enqueues the compiled stylesheet unscoped — the very
+ * leak we are removing. It must be dequeued, matched by the file it points at so
+ * the handle's name across Beaver Builder versions does not matter.
+ */
+$GLOBALS['styles']    = array();
+$GLOBALS['dequeued']  = array();
+$GLOBALS['transients'] = array();
+$GLOBALS['wp_styles_obj']->registered = array(
+	// However Beaver Builder named it, its src is the compiled file.
+	'fl-builder-layout-42' => (object) array( 'src' => 'https://example.org/cache/42.css?ver=9' ),
+	'some-theme-style'     => (object) array( 'src' => 'https://example.org/theme.css' ),
+);
+ACPS_Alerts_Popup_Source::forget();
+ACPS_Alerts_Popup_Source::enqueue_assets();
+
+ok( 'the raw compiled stylesheet is dequeued', in_array( 'fl-builder-layout-42', $GLOBALS['dequeued'], true ) );
+ok( 'an unrelated stylesheet is left alone', ! in_array( 'some-theme-style', $GLOBALS['dequeued'], true ) );
+ok( 'and our own scoped handle is never dequeued', ! in_array( 'acps-alerts-popup-layout', $GLOBALS['dequeued'], true ) );
+
+$GLOBALS['wp_styles_obj']->registered = array();
 
 /* ---- the popup engine must not be loaded onto the page ---- */
 
@@ -751,6 +838,93 @@ $rendered = ACPS_Alerts_Popup_Source::render();
 ok( 'the popup is run through the shortcode processor', true === $GLOBALS['shortcode_ran'] );
 ok( 'so a shortcode inside it is executed', false !== strpos( $rendered, 'BADGE' ) );
 ok( 'and its literal text is gone', false === strpos( $rendered, '[schoolstatus' ) );
+
+/* ---- scope_css() in detail ---- */
+
+$scope = '.acps-alert';
+
+// The plain case, and the leak that started all this.
+check(
+	'a bare selector is confined to the dialog',
+	ACPS_Alerts_Popup_Source::scope_css( '.fl-col{float:left}', $scope ),
+	'.acps-alert .fl-col{float:left}'
+);
+
+// A comma list scopes each selector, and a comma inside :not() is not a split.
+check(
+	'each selector in a list is scoped',
+	ACPS_Alerts_Popup_Source::scope_css( 'a,b{color:red}', $scope ),
+	'.acps-alert a,.acps-alert b{color:red}'
+);
+check(
+	'a comma inside :not() is not treated as a separator',
+	ACPS_Alerts_Popup_Source::scope_css( '.fl-col:not(.a,.b){x:1}', $scope ),
+	'.acps-alert .fl-col:not(.a,.b){x:1}'
+);
+
+// A media query keeps its prelude and scopes the rules inside it.
+check(
+	'the inside of @media is scoped, the @media itself is not',
+	ACPS_Alerts_Popup_Source::scope_css( '@media (max-width:600px){.fl-col{width:100%}}', $scope ),
+	'@media (max-width:600px){.acps-alert .fl-col{width:100%}}'
+);
+
+// @font-face and @keyframes are declarations, not selectors: left alone.
+check(
+	'@font-face is left untouched',
+	ACPS_Alerts_Popup_Source::scope_css( '@font-face{font-family:x;src:url(a.woff2)}', $scope ),
+	'@font-face{font-family:x;src:url(a.woff2)}'
+);
+$keyframes = ACPS_Alerts_Popup_Source::scope_css( '@keyframes spin{from{x:0}to{x:1}}', $scope );
+ok( 'the from/to inside @keyframes are not scoped', false === strpos( $keyframes, '.acps-alert from' ) && false !== strpos( $keyframes, '@keyframes spin{from{x:0}to{x:1}}' ) );
+
+// @import stays a whole statement and is never scoped.
+check(
+	'@import is left as a statement',
+	ACPS_Alerts_Popup_Source::scope_css( "@import url(a.css);.fl-col{x:1}", $scope ),
+	'@import url(a.css);.acps-alert .fl-col{x:1}'
+);
+
+// Comments are stripped, so a "}" inside one cannot throw the brace matching.
+check(
+	'a comment (even one holding a brace) is stripped',
+	ACPS_Alerts_Popup_Source::scope_css( '/* a } b */.fl-col{x:1}', $scope ),
+	'.acps-alert .fl-col{x:1}'
+);
+
+// A brace inside a string value must not be read as the end of the rule.
+$stringy = ACPS_Alerts_Popup_Source::scope_css( '.x{content:"}"}', $scope );
+ok( 'a brace inside a string does not break rule matching', false !== strpos( $stringy, '.acps-alert .x{content:"}"}' ) );
+
+// :root / html / body hold a layout's CSS variables: the scope replaces the
+// root token so the variables land on the dialog and inherit inward, rather
+// than being prefixed into a selector that can never match.
+check(
+	':root is replaced by the scope, not prefixed',
+	ACPS_Alerts_Popup_Source::scope_css( ':root{--c:red}', $scope ),
+	'.acps-alert{--c:red}'
+);
+check(
+	'body is replaced by the scope',
+	ACPS_Alerts_Popup_Source::scope_css( 'body .fl-col{x:1}', $scope ),
+	'.acps-alert .fl-col{x:1}'
+);
+check(
+	'body.fl-builder keeps its trailing compound on the scope',
+	ACPS_Alerts_Popup_Source::scope_css( 'body.fl-x{x:1}', $scope ),
+	'.acps-alert.fl-x{x:1}'
+);
+
+// Empty and whitespace-only input.
+check( 'empty CSS stays empty', ACPS_Alerts_Popup_Source::scope_css( '', $scope ), '' );
+check( 'whitespace-only CSS stays empty', ACPS_Alerts_Popup_Source::scope_css( "  \n\t", $scope ), '' );
+
+// Every top-level rule really is prefixed — no selector escapes.
+$sheet = ACPS_Alerts_Popup_Source::scope_css(
+	'.fl-row{a:1}.fl-col{b:2}@media screen{.fl-module{c:3}}',
+	$scope
+);
+ok( 'no rule in a whole sheet escapes the scope', ! preg_match( '/(^|[{},])\s*\.fl-/', $sheet ) );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All popup source cases passed\n";
 exit( $fails ? 1 : 0 );

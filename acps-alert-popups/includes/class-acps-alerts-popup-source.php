@@ -41,6 +41,19 @@ class ACPS_Alerts_Popup_Source {
 	const STYLE_HANDLE = 'acps-alerts-popup-layout';
 
 	/**
+	 * The element every rule from the status page's stylesheet is confined to.
+	 *
+	 * The lifted popup is rendered inside the alert dialog (`.acps-alert`), and
+	 * the status page's compiled CSS is scoped under this selector before it is
+	 * printed, so none of its rules — least of all Beaver Builder's own
+	 * `.fl-builder-content .fl-col` / `.fl-row` rules, which target a wrapper
+	 * class present on every builder page — can reach the page the popup is
+	 * shown on. Without this, those rules leaked onto the host page's own
+	 * columns and, at mobile widths, overrode their float and centring.
+	 */
+	const CSS_SCOPE = '.acps-alert';
+
+	/**
 	 * Pages whose assets have already been asked for this request.
 	 *
 	 * A property rather than a static local so that forgetting the popup also
@@ -321,16 +334,12 @@ class ACPS_Alerts_Popup_Source {
 		self::enqueue_base_styles();
 
 		/*
-		 * Beaver Builder's own layout assets — how the popup gets ALL of its
-		 * design on a page it was not built on.
-		 *
-		 * enqueue_cached_stylesheet() below loads the compiled stylesheet
-		 * directly and is a good backstop, but on its own it misses pieces on
-		 * some sites: webfonts, an icon sheet, a module's secondary CSS. The
-		 * result is the popup arriving half-styled — a heading and a button but
-		 * no card behind them. Letting Beaver Builder enqueue the layout the way
-		 * it does on its own page is what makes the styling reliable, so it is
-		 * on by default.
+		 * Beaver Builder's own layout assets — how the popup gets the pieces the
+		 * compiled stylesheet alone misses on some sites: webfonts, an icon
+		 * sheet, a module's secondary CSS. Without them the popup can arrive
+		 * half-styled. Letting Beaver Builder enqueue the layout the way it does
+		 * on its own page is what makes that reliable, so it is on by default;
+		 * the one stylesheet it enqueues unscoped is dropped again just below.
 		 *
 		 * This call also loads the layout's scripts, including the popup engine,
 		 * but that engine cannot open THIS popup: inline_popup() has already
@@ -339,6 +348,10 @@ class ACPS_Alerts_Popup_Source {
 		 * runtime (assets/js/alerts.js). A site that needs to keep Beaver
 		 * Builder's scripts off every page can pass false to the filter.
 		 */
+		// Where Beaver Builder cached this page's compiled stylesheet, asked for
+		// once and shared by the two steps below.
+		$info = self::asset_info( $page_id );
+
 		if ( apply_filters( 'acps_alerts_load_bb_scripts', true ) ) {
 			foreach ( array( 'enqueue_layout_styles_scripts_by_id', 'enqueue_layout_styles_scripts' ) as $method ) {
 				if ( method_exists( 'FLBuilder', $method ) ) {
@@ -351,28 +364,406 @@ class ACPS_Alerts_Popup_Source {
 					break;
 				}
 			}
+
+			/*
+			 * That call loads the layout's fonts, icons and scripts — which we
+			 * want — but it ALSO enqueues the compiled stylesheet unscoped and
+			 * globally, which is exactly the leak we are avoiding. Drop that one
+			 * stylesheet (matched by the file it points at, so the handle's name
+			 * across Beaver Builder versions does not matter) and let the scoped
+			 * copy below be the only one that reaches the page.
+			 */
+			self::dequeue_raw_layout_css( $info );
 		}
 
 		/*
-		 * And load the status page's stylesheet ourselves as well, rather than
-		 * trusting that the call above did anything.
+		 * Load the status page's stylesheet ourselves — scoped to the alert
+		 * dialog so it can only ever style the popup, never the page around it.
 		 *
-		 * There is no reliable way to tell whether it did: Beaver Builder's
-		 * handle for a layout has changed shape between versions, so looking
-		 * for one by name answers "no" for a version that named it something
-		 * else, and the method can also decline quietly for a post that is not
-		 * the one being viewed. Getting this wrong means the popup arrives with
-		 * its structure and none of its design — the buttons unstyled, the
-		 * widths gone.
-		 *
-		 * Loading the cached file under our own handle always works. If Beaver
-		 * Builder did already enqueue it, the same stylesheet is fetched twice,
-		 * which costs one cached request and nothing else. That is the better
-		 * side to be wrong on.
+		 * Beaver Builder's handle for a layout has changed shape between
+		 * versions, so trusting the call above to have loaded it is not safe:
+		 * the popup would arrive with its structure and none of its design. We
+		 * read the cached file directly, confine every rule under .acps-alert,
+		 * and print it inline. That always works, and it cannot leak.
 		 */
-		if ( ! self::enqueue_cached_stylesheet( $page_id ) ) {
+		if ( ! self::inject_scoped_stylesheet( $page_id, $info ) ) {
 			ACPS_Alerts_Failsafe::record( 'popup-source/assets', 'no cached stylesheet for the status page; the popup may render unstyled' );
 		}
+	}
+
+	/**
+	 * Where Beaver Builder cached this page's compiled stylesheet.
+	 *
+	 * @param int $page_id Post ID.
+	 * @return array The asset info array (css/css_url, css_partial/…), or empty.
+	 */
+	protected static function asset_info( $page_id ) {
+		if ( ! class_exists( 'FLBuilderModel' ) || ! method_exists( 'FLBuilderModel', 'get_asset_info' ) ) {
+			return array();
+		}
+
+		$switched = self::point_at( $page_id );
+
+		try {
+			$info = ACPS_Alerts_Failsafe::guard( array( 'FLBuilderModel', 'get_asset_info' ), array(), 'popup-source/asset-info', array() );
+		} finally {
+			self::point_back( $switched );
+		}
+
+		return (array) $info;
+	}
+
+	/**
+	 * The readable compiled-stylesheet path and its url, out of the asset info.
+	 *
+	 * A partial refresh writes a different file from a full render, and only one
+	 * of the two is on disk, so the path is checked rather than picked.
+	 *
+	 * @param array $info Asset info.
+	 * @return array{0:string,1:string} Path and url, or two empty strings.
+	 */
+	protected static function stylesheet_path( array $info ) {
+		$pairs = array(
+			array( 'css_partial', 'css_partial_url' ),
+			array( 'css', 'css_url' ),
+		);
+
+		foreach ( $pairs as $pair ) {
+			list( $path_key, $url_key ) = $pair;
+
+			$path = isset( $info[ $path_key ] ) ? (string) $info[ $path_key ] : '';
+			$url  = isset( $info[ $url_key ] ) ? (string) $info[ $url_key ] : '';
+
+			if ( '' !== $path && '' !== $url && is_readable( $path ) ) {
+				return array( $path, $url );
+			}
+		}
+
+		return array( '', '' );
+	}
+
+	/**
+	 * Drops the raw, unscoped compiled stylesheet Beaver Builder enqueues.
+	 *
+	 * Matched by the file it points at rather than by handle, so it does not
+	 * matter what Beaver Builder calls the handle in a given version. Our own
+	 * scoped handle is left alone.
+	 *
+	 * @param array $info Asset info.
+	 * @return void
+	 */
+	protected static function dequeue_raw_layout_css( array $info ) {
+		if ( ! function_exists( 'wp_styles' ) || ! function_exists( 'wp_dequeue_style' ) ) {
+			return;
+		}
+
+		$targets = array();
+
+		foreach ( array( 'css_url', 'css_partial_url' ) as $key ) {
+			if ( ! empty( $info[ $key ] ) ) {
+				$targets[] = basename( (string) wp_parse_url( (string) $info[ $key ], PHP_URL_PATH ) );
+			}
+		}
+
+		if ( empty( $targets ) ) {
+			return;
+		}
+
+		$styles = wp_styles();
+
+		if ( ! isset( $styles->registered ) || ! is_array( $styles->registered ) ) {
+			return;
+		}
+
+		foreach ( $styles->registered as $handle => $dep ) {
+			if ( self::STYLE_HANDLE === $handle || empty( $dep->src ) ) {
+				continue;
+			}
+
+			$base = basename( (string) wp_parse_url( (string) $dep->src, PHP_URL_PATH ) );
+
+			if ( in_array( $base, $targets, true ) ) {
+				wp_dequeue_style( $handle );
+			}
+		}
+	}
+
+	/**
+	 * Reads the compiled stylesheet, scopes it to the alert dialog, and prints
+	 * it inline. The scoped result is cached against the file's timestamp, so
+	 * the parse happens once per edit, not once per request.
+	 *
+	 * @param int   $page_id Post ID.
+	 * @param array $info    Asset info.
+	 * @return bool Whether a stylesheet was found and injected.
+	 */
+	protected static function inject_scoped_stylesheet( $page_id, array $info ) {
+		if ( ! function_exists( 'wp_register_style' ) || ! function_exists( 'wp_add_inline_style' ) ) {
+			return false;
+		}
+
+		list( $path, ) = self::stylesheet_path( $info );
+
+		if ( '' === $path ) {
+			return false;
+		}
+
+		$stamp = (string) filemtime( $path );
+		$key   = 'acps_alerts_popup_css_' . (int) $page_id . '_' . $stamp;
+		$css   = get_transient( $key );
+
+		if ( false === $css ) {
+			$raw = (string) @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- A local cache file, read once per edit.
+			$css = self::scope_css( $raw, self::CSS_SCOPE );
+
+			set_transient( $key, $css, DAY_IN_SECONDS );
+		}
+
+		if ( '' === trim( (string) $css ) ) {
+			return false;
+		}
+
+		/*
+		 * Depend on the base layout stylesheet only when it is really
+		 * registered, so the scoped rules print after it and win inside the
+		 * popup — but naming a handle WordPress has never heard of would drop
+		 * this style silently, so on a site where the base handle is named
+		 * something else we simply do not name it.
+		 */
+		$deps = ( function_exists( 'wp_style_is' ) && wp_style_is( 'fl-builder-layout', 'registered' ) )
+			? array( 'fl-builder-layout' )
+			: array();
+
+		wp_register_style( self::STYLE_HANDLE, false, $deps, $stamp );
+		wp_enqueue_style( self::STYLE_HANDLE );
+		wp_add_inline_style( self::STYLE_HANDLE, (string) $css );
+
+		return true;
+	}
+
+	/**
+	 * Confines every rule in a stylesheet under a scope selector.
+	 *
+	 * Each rule's selectors are prefixed with the scope, so `.fl-col { … }`
+	 * becomes `.acps-alert .fl-col { … }` and can only match inside the alert
+	 * dialog. `@media` / `@supports` / `@layer` blocks are recursed into so
+	 * their inner rules are scoped too; `@font-face`, `@keyframes` and the like
+	 * are left untouched, because scoping their contents would break them. This
+	 * is deliberately conservative: a selector it cannot sensibly scope (one
+	 * rooted at `html` or `body`) is still prefixed, so it stops matching rather
+	 * than leaking — no layout rule of Beaver Builder's needs those.
+	 *
+	 * @param string $css    Raw CSS.
+	 * @param string $prefix Scope selector, e.g. ".acps-alert".
+	 * @return string
+	 */
+	public static function scope_css( $css, $prefix ) {
+		$css = (string) $css;
+
+		if ( '' === trim( $css ) ) {
+			return '';
+		}
+
+		// Strip comments first: a stray "{" or "}" inside one would throw the
+		// brace matching off.
+		$stripped = preg_replace( '#/\*.*?\*/#s', '', $css );
+		$css      = null === $stripped ? $css : $stripped;
+
+		return self::scope_block( $css, $prefix );
+	}
+
+	/**
+	 * Scopes a run of statements — the top level, or the inside of an @media.
+	 *
+	 * @param string $css    CSS statements.
+	 * @param string $prefix Scope selector.
+	 * @return string
+	 */
+	protected static function scope_block( $css, $prefix ) {
+		$out = '';
+		$len = strlen( $css );
+		$i   = 0;
+		$buf = '';
+
+		while ( $i < $len ) {
+			$ch = $css[ $i ];
+
+			if ( '@' === $ch ) {
+				// Flush any stray text before the at-rule (there should be none).
+				$buf = '';
+
+				$j = $i;
+
+				while ( $j < $len && '{' !== $css[ $j ] && ';' !== $css[ $j ] ) {
+					$j++;
+				}
+
+				if ( $j >= $len ) {
+					break; // Malformed tail; drop it rather than emit broken CSS.
+				}
+
+				$prelude = trim( substr( $css, $i, $j - $i ) );
+
+				if ( ';' === $css[ $j ] ) {
+					// A statement at-rule: @import, @charset, @namespace.
+					$out .= $prelude . ';';
+					$i    = $j + 1;
+
+					continue;
+				}
+
+				$close = self::matching_brace( $css, $j );
+				$inner = substr( $css, $j + 1, $close - $j - 1 );
+
+				if ( preg_match( '/^@(-[a-z]+-)?(media|supports|document|layer)\b/i', $prelude ) ) {
+					// A grouping at-rule: scope the rules inside it.
+					$out .= $prelude . '{' . self::scope_block( $inner, $prefix ) . '}';
+				} else {
+					// @font-face, @keyframes, @page, @font-feature-values …:
+					// their contents are not selectors, so leave them be.
+					$out .= $prelude . '{' . $inner . '}';
+				}
+
+				$i = $close + 1;
+
+				continue;
+			}
+
+			if ( '{' === $ch ) {
+				$close = self::matching_brace( $css, $i );
+				$decls = trim( substr( $css, $i + 1, $close - $i - 1 ) );
+				$sel   = trim( $buf );
+
+				if ( '' !== $sel ) {
+					$out .= self::scope_selector_list( $sel, $prefix ) . '{' . $decls . '}';
+				}
+
+				$i   = $close + 1;
+				$buf = '';
+
+				continue;
+			}
+
+			$buf .= $ch;
+			$i++;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The index of the "}" that closes the "{" at $open, honouring nesting and
+	 * string literals.
+	 *
+	 * @param string $css  CSS.
+	 * @param int    $open Index of the opening brace.
+	 * @return int Index of the matching close brace, or the last character.
+	 */
+	protected static function matching_brace( $css, $open ) {
+		$len   = strlen( $css );
+		$depth = 0;
+
+		for ( $i = $open; $i < $len; $i++ ) {
+			$c = $css[ $i ];
+
+			if ( '"' === $c || "'" === $c ) {
+				$q = $c;
+				$i++;
+
+				while ( $i < $len && $css[ $i ] !== $q ) {
+					if ( '\\' === $css[ $i ] ) {
+						$i++;
+					}
+
+					$i++;
+				}
+
+				continue;
+			}
+
+			if ( '{' === $c ) {
+				$depth++;
+			} elseif ( '}' === $c ) {
+				$depth--;
+
+				if ( 0 === $depth ) {
+					return $i;
+				}
+			}
+		}
+
+		return $len - 1;
+	}
+
+	/**
+	 * Prefixes each selector in a comma-separated list with the scope.
+	 *
+	 * @param string $selectors Selector list.
+	 * @param string $prefix    Scope selector.
+	 * @return string
+	 */
+	protected static function scope_selector_list( $selectors, $prefix ) {
+		$scoped = array();
+
+		foreach ( self::split_selectors( $selectors ) as $selector ) {
+			$selector = trim( $selector );
+
+			if ( '' === $selector ) {
+				continue;
+			}
+
+			/*
+			 * A rule rooted at the document — :root, html, body — is where a
+			 * layout keeps its CSS custom properties. Prefixed as a descendant
+			 * (`.acps-alert :root`) it would never match, and the popup would
+			 * lose those variables. Put the scope IN PLACE of that root token
+			 * instead, so the properties land on the dialog and inherit inward.
+			 */
+			$rooted = preg_replace( '/^\s*(?::root|html|body)\b/i', $prefix, $selector, 1, $count );
+
+			$scoped[] = $count ? $rooted : $prefix . ' ' . $selector;
+		}
+
+		return implode( ',', $scoped );
+	}
+
+	/**
+	 * Splits a selector list on its top-level commas — the ones that separate
+	 * selectors, not the commas inside :not(), :is() or an [attr] value.
+	 *
+	 * @param string $selectors Selector list.
+	 * @return string[]
+	 */
+	protected static function split_selectors( $selectors ) {
+		$parts = array();
+		$buf   = '';
+		$depth = 0;
+		$len   = strlen( $selectors );
+
+		for ( $i = 0; $i < $len; $i++ ) {
+			$c = $selectors[ $i ];
+
+			if ( '(' === $c || '[' === $c ) {
+				$depth++;
+			} elseif ( ')' === $c || ']' === $c ) {
+				$depth = max( 0, $depth - 1 );
+			}
+
+			if ( ',' === $c && 0 === $depth ) {
+				$parts[] = $buf;
+				$buf     = '';
+
+				continue;
+			}
+
+			$buf .= $c;
+		}
+
+		if ( '' !== trim( $buf ) ) {
+			$parts[] = $buf;
+		}
+
+		return $parts;
 	}
 
 	/**
@@ -401,73 +792,6 @@ class ACPS_Alerts_Popup_Source {
 			array(),
 			defined( 'FL_BUILDER_VERSION' ) ? FL_BUILDER_VERSION : null
 		);
-	}
-
-	/**
-	 * Loads the status page's generated stylesheet straight off disk.
-	 *
-	 * The fallback for when Beaver Builder's own enqueue did not fire. It
-	 * writes one cached stylesheet per post and can say where it is, which is
-	 * a far more stable thing to ask for than a particular method name.
-	 *
-	 * @param int $page_id Post ID.
-	 * @return bool Whether a stylesheet was found and enqueued.
-	 */
-	protected static function enqueue_cached_stylesheet( $page_id ) {
-		if ( ! class_exists( 'FLBuilderModel' ) || ! method_exists( 'FLBuilderModel', 'get_asset_info' ) ) {
-			return false;
-		}
-
-		$switched = self::point_at( $page_id );
-
-		try {
-			$info = ACPS_Alerts_Failsafe::guard( array( 'FLBuilderModel', 'get_asset_info' ), array(), 'popup-source/asset-info', array() );
-		} finally {
-			self::point_back( $switched );
-		}
-
-		$info = (array) $info;
-
-		// Partial refresh writes a different file from a full render, and only
-		// one of the two is on disk, so the path is checked rather than picked.
-		$pairs = array(
-			array( 'css_partial', 'css_partial_url' ),
-			array( 'css', 'css_url' ),
-		);
-
-		foreach ( $pairs as $pair ) {
-			list( $path_key, $url_key ) = $pair;
-
-			$path = isset( $info[ $path_key ] ) ? (string) $info[ $path_key ] : '';
-			$url  = isset( $info[ $url_key ] ) ? (string) $info[ $url_key ] : '';
-
-			if ( '' === $path || '' === $url || ! is_readable( $path ) ) {
-				continue;
-			}
-
-			/*
-			 * Only name the base stylesheet as a dependency when it is really
-			 * registered. WordPress silently declines to print a style whose
-			 * dependency it has never heard of — so on a site where Beaver
-			 * Builder's base handle is named something else, declaring it
-			 * unconditionally would mean this stylesheet never reaches the page
-			 * at all, and the popup would arrive with no design whatsoever.
-			 */
-			$deps = ( function_exists( 'wp_style_is' ) && wp_style_is( 'fl-builder-layout', 'registered' ) )
-				? array( 'fl-builder-layout' )
-				: array();
-
-			wp_enqueue_style(
-				self::STYLE_HANDLE,
-				$url,
-				$deps,
-				(string) filemtime( $path )
-			);
-
-			return true;
-		}
-
-		return false;
 	}
 
 	/**

@@ -4,7 +4,7 @@ Tags: beaver builder, popups, alerts, notifications
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.10.1
+Stable tag: 1.10.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,6 +15,9 @@ Turns Beaver Builder Popups into a managed site alert system, controlled from wp
 Design the alert in Beaver Builder; post, schedule, target and throttle it from wp-admin. See README.md for full documentation.
 
 == Changelog ==
+
+= 1.10.2 =
+* Fixed: the popup's styles could affect columns and other layout on the rest of the site, most visibly on mobile. The status page's stylesheet is now confined to the alert popup and cannot reach the page around it.
 
 = 1.10.1 =
 * Removed the per-feature on/off switches from Settings. The delete warning now points to switching the alert off or changing a setting.
