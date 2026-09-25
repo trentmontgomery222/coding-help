@@ -328,31 +328,37 @@ class ACPS_Alerts_Popup_Source {
 
 		self::$assets_done[ $page_id ] = true;
 
-		// Beaver Builder's base layout stylesheet. On a page with no builder
-		// content of its own it is simply not there, and without it the popup
-		// has no rows, no columns and no spacing.
-		self::enqueue_base_styles();
-
-		/*
-		 * Beaver Builder's own layout assets — how the popup gets the pieces the
-		 * compiled stylesheet alone misses on some sites: webfonts, an icon
-		 * sheet, a module's secondary CSS. Without them the popup can arrive
-		 * half-styled. Letting Beaver Builder enqueue the layout the way it does
-		 * on its own page is what makes that reliable, so it is on by default;
-		 * the one stylesheet it enqueues unscoped is dropped again just below.
-		 *
-		 * This call also loads the layout's scripts, including the popup engine,
-		 * but that engine cannot open THIS popup: inline_popup() has already
-		 * stripped the `popover` attribute, so there is nothing for it to show.
-		 * Opening and the frequency rule stay entirely with this plugin's own
-		 * runtime (assets/js/alerts.js). A site that needs to keep Beaver
-		 * Builder's scripts off every page can pass false to the filter.
-		 */
-		// Where Beaver Builder cached this page's compiled stylesheet, asked for
-		// once and shared by the two steps below.
+		// Where Beaver Builder cached this page's compiled stylesheet.
 		$info = self::asset_info( $page_id );
 
-		if ( apply_filters( 'acps_alerts_load_bb_scripts', true ) ) {
+		/*
+		 * The popup is styled entirely by ONE inline block, with every rule in
+		 * it confined under .acps-alert — the dialog the lifted popup sits in.
+		 * That block carries both the base layout rules (rows, columns, spacing)
+		 * and this page's compiled rules, so the popup has its full look while
+		 * NOTHING the plugin adds is left able to touch the page around it.
+		 *
+		 * This is the whole point of the change: Beaver Builder scopes many of
+		 * its rules to .fl-builder-content / .fl-col / .fl-row — classes present
+		 * on every builder page — so any of its stylesheets loaded globally
+		 * restyle the host page's own columns, most visibly on mobile. So none
+		 * of them is loaded globally; they are read, scoped and inlined instead.
+		 */
+		if ( ! self::inject_scoped_stylesheet( $page_id, $info ) ) {
+			ACPS_Alerts_Failsafe::record( 'popup-source/assets', 'no stylesheet for the status page; the popup may render unstyled' );
+		}
+
+		/*
+		 * Beaver Builder's own global layout assets — webfonts, an icon sheet, a
+		 * module's secondary CSS — are OFF by default now, because the call that
+		 * loads them also enqueues the compiled stylesheet unscoped and globally,
+		 * which is exactly the leak. The scoped inline block above already gives
+		 * the popup its layout and design; a site that also wants Beaver
+		 * Builder's fonts and icon sheets on every page can opt back in, and even
+		 * then the unscoped compiled stylesheet is dropped again so it cannot
+		 * reach the page.
+		 */
+		if ( apply_filters( 'acps_alerts_load_bb_scripts', false ) ) {
 			foreach ( array( 'enqueue_layout_styles_scripts_by_id', 'enqueue_layout_styles_scripts' ) as $method ) {
 				if ( method_exists( 'FLBuilder', $method ) ) {
 					ACPS_Alerts_Failsafe::guard(
@@ -365,29 +371,7 @@ class ACPS_Alerts_Popup_Source {
 				}
 			}
 
-			/*
-			 * That call loads the layout's fonts, icons and scripts — which we
-			 * want — but it ALSO enqueues the compiled stylesheet unscoped and
-			 * globally, which is exactly the leak we are avoiding. Drop that one
-			 * stylesheet (matched by the file it points at, so the handle's name
-			 * across Beaver Builder versions does not matter) and let the scoped
-			 * copy below be the only one that reaches the page.
-			 */
 			self::dequeue_raw_layout_css( $info );
-		}
-
-		/*
-		 * Load the status page's stylesheet ourselves — scoped to the alert
-		 * dialog so it can only ever style the popup, never the page around it.
-		 *
-		 * Beaver Builder's handle for a layout has changed shape between
-		 * versions, so trusting the call above to have loaded it is not safe:
-		 * the popup would arrive with its structure and none of its design. We
-		 * read the cached file directly, confine every rule under .acps-alert,
-		 * and print it inline. That always works, and it cannot leak.
-		 */
-		if ( ! self::inject_scoped_stylesheet( $page_id, $info ) ) {
-			ACPS_Alerts_Failsafe::record( 'popup-source/assets', 'no cached stylesheet for the status page; the popup may render unstyled' );
 		}
 	}
 
@@ -489,56 +473,124 @@ class ACPS_Alerts_Popup_Source {
 	}
 
 	/**
-	 * Reads the compiled stylesheet, scopes it to the alert dialog, and prints
-	 * it inline. The scoped result is cached against the file's timestamp, so
-	 * the parse happens once per edit, not once per request.
+	 * Builds the popup's whole stylesheet — the base layout rules plus this
+	 * page's compiled rules, every one of them confined under .acps-alert — and
+	 * prints it inline. Each part is scoped once per edit and cached against its
+	 * file's timestamp, so the parse does not repeat on every request.
 	 *
 	 * @param int   $page_id Post ID.
 	 * @param array $info    Asset info.
-	 * @return bool Whether a stylesheet was found and injected.
+	 * @return bool Whether any stylesheet was found and injected.
 	 */
 	protected static function inject_scoped_stylesheet( $page_id, array $info ) {
 		if ( ! function_exists( 'wp_register_style' ) || ! function_exists( 'wp_add_inline_style' ) ) {
 			return false;
 		}
 
+		// Base first (structure), compiled second (this page's specifics), so a
+		// node rule wins over the generic one it overrides inside the popup.
+		$base = self::scoped_base_css();
+
 		list( $path, ) = self::stylesheet_path( $info );
 
-		if ( '' === $path ) {
+		$compiled = '';
+		$stamp    = '' !== $base ? '1' : '0';
+
+		if ( '' !== $path ) {
+			$stamp = (string) filemtime( $path );
+			$key   = 'acps_alerts_popup_css_' . (int) $page_id . '_' . $stamp;
+			$css   = get_transient( $key );
+
+			if ( false === $css ) {
+				$raw = (string) @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- A local cache file, read once per edit.
+				$css = self::scope_css( $raw, self::CSS_SCOPE );
+
+				set_transient( $key, $css, DAY_IN_SECONDS );
+			}
+
+			$compiled = (string) $css;
+		}
+
+		$blob = trim( $base . "\n" . $compiled );
+
+		if ( '' === $blob ) {
 			return false;
 		}
 
+		// A no-src style that only carries inline CSS; no external dependency,
+		// because the base rules are folded into the block itself.
+		wp_register_style( self::STYLE_HANDLE, false, array(), $stamp );
+		wp_enqueue_style( self::STYLE_HANDLE );
+		wp_add_inline_style( self::STYLE_HANDLE, $blob );
+
+		return true;
+	}
+
+	/**
+	 * Beaver Builder's base layout stylesheet, read off disk and scoped to the
+	 * alert dialog. Cached against the file's timestamp.
+	 *
+	 * Loaded this way rather than enqueued globally: the file carries generic
+	 * `.fl-col` / `.fl-row` rules, including the ones that stack columns at
+	 * mobile widths, and on its own on a page it restyles that page's columns.
+	 * Scoped under .acps-alert it can only ever lay out the popup.
+	 *
+	 * @return string Scoped CSS, or '' when the file cannot be found.
+	 */
+	protected static function scoped_base_css() {
+		$path = self::base_css_path();
+
+		if ( '' === $path ) {
+			return '';
+		}
+
 		$stamp = (string) filemtime( $path );
-		$key   = 'acps_alerts_popup_css_' . (int) $page_id . '_' . $stamp;
+		$key   = 'acps_alerts_popup_basecss_' . md5( $path ) . '_' . $stamp;
 		$css   = get_transient( $key );
 
 		if ( false === $css ) {
-			$raw = (string) @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- A local cache file, read once per edit.
+			$raw = (string) @file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Beaver Builder's own stylesheet, read once per version.
 			$css = self::scope_css( $raw, self::CSS_SCOPE );
 
 			set_transient( $key, $css, DAY_IN_SECONDS );
 		}
 
-		if ( '' === trim( (string) $css ) ) {
-			return false;
+		return (string) $css;
+	}
+
+	/**
+	 * The path to Beaver Builder's base layout stylesheet on disk.
+	 *
+	 * Prefers the FL_BUILDER_DIR constant; falls back to mapping Beaver
+	 * Builder's plugin URL back to a path under wp-content. Returns '' when
+	 * neither yields a readable file, in which case the popup simply relies on
+	 * the base stylesheet the host page loads for its own builder content.
+	 *
+	 * @return string
+	 */
+	protected static function base_css_path() {
+		if ( defined( 'FL_BUILDER_DIR' ) ) {
+			$path = rtrim( (string) FL_BUILDER_DIR, '/\\' ) . '/css/fl-builder-layout.css';
+
+			if ( is_readable( $path ) ) {
+				return $path;
+			}
 		}
 
-		/*
-		 * Depend on the base layout stylesheet only when it is really
-		 * registered, so the scoped rules print after it and win inside the
-		 * popup — but naming a handle WordPress has never heard of would drop
-		 * this style silently, so on a site where the base handle is named
-		 * something else we simply do not name it.
-		 */
-		$deps = ( function_exists( 'wp_style_is' ) && wp_style_is( 'fl-builder-layout', 'registered' ) )
-			? array( 'fl-builder-layout' )
-			: array();
+		if ( method_exists( 'FLBuilder', 'plugin_url' ) && defined( 'WP_CONTENT_URL' ) && defined( 'WP_CONTENT_DIR' ) ) {
+			$url = ACPS_Alerts_Failsafe::guard( array( 'FLBuilder', 'plugin_url' ), array(), 'popup-source/base-url', '' );
 
-		wp_register_style( self::STYLE_HANDLE, false, $deps, $stamp );
-		wp_enqueue_style( self::STYLE_HANDLE );
-		wp_add_inline_style( self::STYLE_HANDLE, (string) $css );
+			if ( is_string( $url ) && '' !== $url ) {
+				$file_url = rtrim( $url, '/' ) . '/css/fl-builder-layout.css';
+				$path     = str_replace( WP_CONTENT_URL, WP_CONTENT_DIR, $file_url );
 
-		return true;
+				if ( $path !== $file_url && is_readable( $path ) ) {
+					return $path;
+				}
+			}
+		}
+
+		return '';
 	}
 
 	/**
@@ -764,34 +816,6 @@ class ACPS_Alerts_Popup_Source {
 		}
 
 		return $parts;
-	}
-
-	/**
-	 * Loads Beaver Builder's base layout stylesheet.
-	 *
-	 * @return void
-	 */
-	protected static function enqueue_base_styles() {
-		if ( ! function_exists( 'wp_style_is' ) || ! method_exists( 'FLBuilder', 'plugin_url' ) ) {
-			return;
-		}
-
-		if ( wp_style_is( 'fl-builder-layout', 'enqueued' ) || wp_style_is( 'fl-builder-layout', 'done' ) ) {
-			return;
-		}
-
-		$url = ACPS_Alerts_Failsafe::guard( array( 'FLBuilder', 'plugin_url' ), array(), 'popup-source/base-url', '' );
-
-		if ( ! is_string( $url ) || '' === $url ) {
-			return;
-		}
-
-		wp_enqueue_style(
-			'fl-builder-layout',
-			rtrim( $url, '/' ) . '/css/fl-builder-layout.css',
-			array(),
-			defined( 'FL_BUILDER_VERSION' ) ? FL_BUILDER_VERSION : null
-		);
 	}
 
 	/**

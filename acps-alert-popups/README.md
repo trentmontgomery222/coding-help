@@ -359,35 +359,41 @@ Throughout, Beaver Builder is pointed at the status page with
 mid-render cannot leave every later builder call on the request reading the
 wrong layout.
 
-**Styling is a separate job from markup.** Beaver Builder writes one stylesheet
-per post, so the popup's design lives in the status page's stylesheet and is
-simply not on any other page. Beaver Builder's base layout stylesheet is
-enqueued (it is absent on a page with no builder content of its own), and its
-own enqueue method is called for whichever name that version has, to bring the
-layout's fonts, icons and any secondary CSS.
+**Styling is a separate job from markup, and it is done in complete
+isolation.** The popup's look comes from two stylesheets that are on no other
+page: Beaver Builder's base layout rules (rows, columns, spacing) and the status
+page's own compiled rules. Beaver Builder scopes most of both to classes that
+are present on *every* builder page — `.fl-builder-content .fl-col { float: … }`,
+`.fl-col`, `.fl-row` — so **loaded globally, in any form, they restyle the host
+page's own columns and rows, not just the popup's.** The symptom is a page whose
+columns stop centring, most visibly on mobile, where the leaked column-stacking
+rules take over.
 
-**But the status page's compiled stylesheet is never loaded as-is.** Beaver
-Builder scopes most of a layout's rules to a wrapper class that is present on
-*every* builder page — `.fl-builder-content .fl-col { float: … }`,
-`.fl-builder-content .fl-row { … }` — so a stylesheet loaded globally restyles
-the host page's own columns and rows, not just the popup's. The symptom is a
-page whose columns stop centring, most visibly on mobile where the leaked float
-rules take over. So the compiled stylesheet is read off disk (located through
-`FLBuilderModel::get_asset_info()`), **every rule in it is confined under
-`.acps-alert`** — the dialog the lifted popup sits in — and the result is
-printed inline. `.fl-col` becomes `.acps-alert .fl-col`, which can only match
-inside the popup. `@media` blocks are scoped inside; `@font-face` and
-`@keyframes` are left alone. The scoped result is cached against the file's
-timestamp, so the rewrite happens once per edit, not once per request, and only
-on pages actually showing an alert. Beaver Builder's own globally-enqueued copy
-of that same stylesheet is dequeued (matched by the file it points at, so the
-handle's name across versions does not matter), leaving the scoped copy as the
-only one on the page.
+So the plugin loads **nothing** globally for the popup. It reads both
+stylesheets off disk (the compiled one located through
+`FLBuilderModel::get_asset_info()`, the base one through `FL_BUILDER_DIR`),
+**confines every rule under `.acps-alert`** — the dialog the lifted popup sits
+in — and prints the two as one inline block, base first so a node rule wins over
+the generic rule it overrides. `.fl-col` becomes `.acps-alert .fl-col`, which
+can only ever match inside the popup. `@media` blocks are scoped inside;
+`@font-face` and `@keyframes` are left alone; `:root`/`html`/`body` rules have
+the scope put in their place so a layout's CSS variables still reach the popup.
+Each part is scoped once per edit, cached against its file's timestamp, and the
+block is printed only on pages that actually show an alert.
 
-One detail that silently costs the look if got wrong: Beaver Builder's base
-handle is only named as a dependency of the inline style when it is really
-registered — WordPress declines, without a word, to print a style whose
-dependency it has never heard of.
+Because nothing is enqueued globally, Beaver Builder's own layout assets — its
+webfonts, icon sheet and any per-module secondary CSS — are **off by default**:
+the call that loads them also enqueues the compiled stylesheet unscoped, which
+is the very leak. The inline block already gives the popup its layout and
+design. A site that also wants those extras on every page can opt in with
+
+```php
+add_filter( 'acps_alerts_load_bb_scripts', '__return_true' );
+```
+
+and even then the unscoped compiled stylesheet is dequeued again (matched by the
+file it points at, so the handle's name across Beaver Builder versions does not
+matter), so it still cannot reach the page.
 
 **The lifted node has to stay inside the container its CSS names.** Beaver
 Builder writes most of a layout's rules against an ancestor —

@@ -449,19 +449,26 @@ so they are not exercised; everything around them is ours and is:
   Verified non-vacuous twice: always drawing ours fails with "the alert does not
   add a second one", and dropping the already-wired guard fails with "wiring it
   twice adds the attribute once".
-- the status page's compiled stylesheet is confined to the alert dialog, not
-  loaded as-is. Beaver Builder scopes many rules to the generic
-  `.fl-builder-content` wrapper present on every builder page, so loaded raw its
-  `.fl-col` / `.fl-row` rules restyle the host page's own columns — the reported
-  bug, worst on mobile. `scope_css()` prefixes every selector with `.acps-alert`
-  (`.fl-col` → `.acps-alert .fl-col`), recurses into `@media`, and leaves
-  `@font-face` / `@keyframes` untouched; comments and braces inside strings do
-  not throw the brace matching off; the result is printed inline, and Beaver
-  Builder's own global copy of the same file is dequeued by matching its src.
+- the popup is styled in complete isolation: **nothing** is loaded globally.
+  Beaver Builder scopes rules to `.fl-builder-content` / `.fl-col` / `.fl-row`,
+  classes present on every builder page, so any of its stylesheets loaded
+  globally restyle the host page's own columns — the reported bug, worst on
+  mobile. So both the base layout stylesheet and this page's compiled stylesheet
+  are read off disk, every rule confined under `.acps-alert` by `scope_css()`
+  (`.fl-col` → `.acps-alert .fl-col`; `@media` recursed into; `@font-face` /
+  `@keyframes` left alone; `:root`/`html`/`body` given the scope in their
+  place), and printed as one inline block. Comments and braces inside strings do
+  not throw the brace matching off. Beaver Builder's own global assets are off by
+  default (the filter re-enables them), and even then its unscoped compiled
+  stylesheet is dequeued by matching its src. With no compiled file yet the
+  scoped base alone still styles the popup; with neither, nothing is injected.
 
-  Verified non-vacuous four times: a no-op scoper, an unscoped `@media` inner, a
-  scoped `@keyframes`/`@font-face`, and skipping the dequeue each turn a case
-  red.
+  `scope_css()` covered directly (comma lists and `:not()`, `@media`,
+  `@font-face`/`@keyframes`, `@import`, comments, braces in strings,
+  `:root`/`body`, empty input). Verified non-vacuous: a no-op scoper, an
+  unscoped `@media` inner, a scoped `@keyframes`/`@font-face`, a default filter
+  of true, base CSS not folded in, and skipping the opt-in dequeue each turn a
+  case red.
 - the shell says which of the two cases it is, with `acps-alert--own-close`,
   because the stylesheet has to size the dialog differently for each: spanning
   the page gives the popup's percentage width a basis, but puts a close button

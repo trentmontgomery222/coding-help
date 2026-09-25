@@ -583,23 +583,32 @@ ok( 'a wrapper for another page does not count', false !== strpos( ACPS_Alerts_P
 check( 'nothing to wrap stays nothing', ACPS_Alerts_Popup_Source::wrap( '', 10240 ), '' );
 check( 'and with no page there is no wrapper to name', ACPS_Alerts_Popup_Source::wrap( $node, 0 ), $node );
 
-/* ---- loading the status page's stylesheet ---- */
+/* ---- the popup's stylesheet is one inline block, confined to the dialog ---- */
 
 /*
- * The popup's design lives in the status page's generated stylesheet, and that
- * file is on no other page. Without it the popup arrives with its structure and
- * none of its look — unstyled buttons, and every width gone. But that stylesheet
- * must NOT be loaded as-is: Beaver Builder scopes many of its rules to the
- * generic .fl-builder-content wrapper, present on every builder page, so loaded
- * raw its column and row rules land on the host page too. Every rule is confined
- * under .acps-alert (the dialog the lifted popup sits in) and printed inline.
+ * The popup's design lives in the status page's generated stylesheet, plus
+ * Beaver Builder's base layout rules — and neither is on any other page. But
+ * neither may be loaded as-is either: Beaver Builder scopes rules to the generic
+ * .fl-builder-content / .fl-col / .fl-row classes, present on every builder page,
+ * so loaded globally they restyle the host page's own columns (worst on mobile).
+ * So the plugin loads NOTHING globally: it reads both stylesheets, confines every
+ * rule under .acps-alert (the dialog the lifted popup sits in), and prints one
+ * inline block. Nothing it adds can reach the page around the popup.
  */
+$bb_dir = sys_get_temp_dir() . '/acps-bb-plugin';
+@mkdir( $bb_dir . '/css', 0777, true );
+// Beaver Builder's base layout stylesheet: the generic column/row rules, and
+// the mobile stacking rules, that leaked onto host pages.
+file_put_contents(
+	$bb_dir . '/css/fl-builder-layout.css',
+	'.fl-row{max-width:100%;}.fl-col{float:left;}@media (max-width:768px){.fl-col{float:none;width:100%;}}'
+);
+define( 'FL_BUILDER_DIR', $bb_dir . '/' );
+
 $css_file = sys_get_temp_dir() . '/acps-layout-test.css';
 file_put_contents(
 	$css_file,
 	'.fl-node-x .fl-button{background:#2b4a8b;}'
-	. '.fl-builder-content .fl-col{float:left;}'
-	. '@media (max-width:768px){.fl-col{float:none;width:100%;}}'
 	. '@font-face{font-family:"BB";src:url(bb.woff2);}'
 );
 
@@ -610,35 +619,38 @@ FLBuilderModel::$info = array(
 );
 
 $GLOBALS['styles'] = array();
+FLBuilder::$scripts_loaded = false;
 ACPS_Alerts_Popup_Source::enqueue_assets();
 
 $layout = isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) ? $GLOBALS['styles']['acps-alerts-popup-layout'] : null;
 
-ok( 'the status page stylesheet is loaded', null !== $layout );
+ok( 'the popup stylesheet is loaded', null !== $layout );
 ok( 'as inline CSS, not a raw link that would leak globally', null !== $layout && '' === (string) $layout['src'] );
 
 $inline = null !== $layout ? (string) $layout['inline'] : '';
 
-ok( 'a node rule is scoped', false !== strpos( $inline, '.acps-alert .fl-node-x .fl-button' ) );
-ok( "the leaking .fl-col rule is scoped so it cannot reach the host page", false !== strpos( $inline, '.acps-alert .fl-builder-content .fl-col' ) );
-ok( 'no .fl-col rule survives unscoped', ! preg_match( '/(^|[},])\s*\.fl-/', $inline ) );
-ok( 'the media query is kept, with its inner rule scoped', false !== strpos( $inline, '@media (max-width:768px)' ) && false !== strpos( $inline, '.acps-alert .fl-col{float:none' ) );
+ok( 'the base layout rules are folded in, scoped', false !== strpos( $inline, '.acps-alert .fl-row' ) && false !== strpos( $inline, '.acps-alert .fl-col{float:left' ) );
+ok( 'including the mobile stacking rule, scoped inside its media query', false !== strpos( $inline, '@media (max-width:768px)' ) && false !== strpos( $inline, '.acps-alert .fl-col{float:none' ) );
+ok( "this page's compiled node rule is scoped too", false !== strpos( $inline, '.acps-alert .fl-node-x .fl-button' ) );
+ok( 'no .fl- rule survives unscoped, so nothing can reach the host page', ! preg_match( '/(^|[{},])\s*\.fl-/', $inline ) );
 ok( 'the @media at-rule itself is not scoped', false === strpos( $inline, '.acps-alert @media' ) );
-ok( '@font-face is left untouched so the font still loads', false !== strpos( $inline, '@font-face{font-family:"BB"' ) && false === strpos( $inline, '.acps-alert @font-face' ) && false === strpos( $inline, '.acps-alert src:' ) );
-ok( 'versioned by the file, so an edit busts the browser cache', null !== $layout && '' !== (string) $layout['ver'] );
-ok( 'and the base layout stylesheet comes with it', isset( $GLOBALS['styles']['fl-builder-layout'] ) );
+ok( '@font-face is left untouched so the font still loads', false !== strpos( $inline, '@font-face{font-family:"BB"' ) && false === strpos( $inline, '.acps-alert @font-face' ) );
+ok( 'nothing unscoped is enqueued globally — no base handle on the page', ! isset( $GLOBALS['styles']['fl-builder-layout'] ) );
+ok( 'and Beaver Builder is not asked to dump its global layout assets by default', false === FLBuilder::$scripts_loaded );
 
-/* ---- the raw, unscoped compiled stylesheet Beaver Builder enqueues is dropped ---- */
+/* ---- opting Beaver Builder's own assets back in still cannot leak the CSS ---- */
 
 /*
- * FLBuilder::enqueue_layout_styles_scripts() loads the layout's fonts, icons and
- * scripts (wanted) but ALSO enqueues the compiled stylesheet unscoped — the very
- * leak we are removing. It must be dequeued, matched by the file it points at so
- * the handle's name across Beaver Builder versions does not matter.
+ * A site that also wants Beaver Builder's fonts and icon sheets on every page can
+ * opt in. Even then the compiled stylesheet it enqueues unscoped is dropped again,
+ * matched by the file it points at so the handle's name across versions does not
+ * matter, leaving the scoped inline block as the only layout CSS on the page.
  */
-$GLOBALS['styles']    = array();
-$GLOBALS['dequeued']  = array();
+$GLOBALS['filters']['acps_alerts_load_bb_scripts'] = function () { return true; };
+$GLOBALS['styles']     = array();
+$GLOBALS['dequeued']   = array();
 $GLOBALS['transients'] = array();
+FLBuilder::$scripts_loaded = false;
 $GLOBALS['wp_styles_obj']->registered = array(
 	// However Beaver Builder named it, its src is the compiled file.
 	'fl-builder-layout-42' => (object) array( 'src' => 'https://example.org/cache/42.css?ver=9' ),
@@ -647,78 +659,40 @@ $GLOBALS['wp_styles_obj']->registered = array(
 ACPS_Alerts_Popup_Source::forget();
 ACPS_Alerts_Popup_Source::enqueue_assets();
 
-ok( 'the raw compiled stylesheet is dequeued', in_array( 'fl-builder-layout-42', $GLOBALS['dequeued'], true ) );
+ok( 'the opt-in loads Beaver Builder\'s own assets', true === FLBuilder::$scripts_loaded );
+ok( 'and the raw compiled stylesheet it enqueues is dequeued', in_array( 'fl-builder-layout-42', $GLOBALS['dequeued'], true ) );
 ok( 'an unrelated stylesheet is left alone', ! in_array( 'some-theme-style', $GLOBALS['dequeued'], true ) );
-ok( 'and our own scoped handle is never dequeued', ! in_array( 'acps-alerts-popup-layout', $GLOBALS['dequeued'], true ) );
+ok( 'our own scoped handle is never dequeued', ! in_array( 'acps-alerts-popup-layout', $GLOBALS['dequeued'], true ) );
 
 $GLOBALS['wp_styles_obj']->registered = array();
-
-/* ---- the popup engine must not be loaded onto the page ---- */
-
-/*
- * The popup is built on the status page, so on every other page Beaver Builder's
- * own layout assets have to be loaded or the popup arrives half-styled — a
- * heading and a button but no card. So the builder's enqueue runs by default.
- * Its popup engine cannot open THIS popup because inline_popup() has already
- * stripped the popover attribute; opening stays with the plugin's own runtime.
- */
-FLBuilder::$scripts_loaded = false;
-$GLOBALS['styles']         = array();
-ACPS_Alerts_Popup_Source::forget();
-ACPS_Alerts_Popup_Source::enqueue_assets();
-
-ok( 'Beaver Builder\'s layout assets are enqueued by default, so the popup is fully styled', true === FLBuilder::$scripts_loaded );
-ok( 'and the compiled stylesheet is loaded as a backstop too', isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
-
-// A site that needs the builder's scripts kept off every page can opt out.
-$GLOBALS['filters']['acps_alerts_load_bb_scripts'] = function () { return false; };
-FLBuilder::$scripts_loaded = false;
-ACPS_Alerts_Popup_Source::forget();
-ACPS_Alerts_Popup_Source::enqueue_assets();
-
-ok( 'the filter can turn the builder assets off', false === FLBuilder::$scripts_loaded );
-
 unset( $GLOBALS['filters']['acps_alerts_load_bb_scripts'] );
 ACPS_Alerts_Popup_Source::forget();
 
-/*
- * Pins a stylesheet that never reaches the page. WordPress silently declines to
- * print a style whose dependency it has not heard of, so naming Beaver
- * Builder's base handle unconditionally would mean that on a site where it is
- * called something else, this stylesheet is dropped without a word and the
- * popup has no design at all.
- */
-$GLOBALS['registered_styles'] = array();
-$GLOBALS['styles']            = array();
-FLBuilder::$url               = '';
+/* ---- with no compiled file yet, the scoped base alone still styles the popup ---- */
 
-ACPS_Alerts_Popup_Source::forget();
-ACPS_Alerts_Popup_Source::enqueue_assets();
-
-ok( 'with nowhere to load it from, no base stylesheet is registered', ! isset( $GLOBALS['styles']['fl-builder-layout'] ) );
-
-$deps = isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) ? $GLOBALS['styles']['acps-alerts-popup-layout']['deps'] : null;
-
-ok( 'the stylesheet is still loaded when the base handle is unknown', null !== $deps );
-
-foreach ( (array) $deps as $dep ) {
-	ok( "it never depends on an unregistered handle: $dep", wp_style_is( $dep, 'registered' ) );
-}
-
-// No cached file on disk — a status page nobody has visited yet — must not
-// enqueue a stylesheet pointing at nothing.
+// A status page nobody has visited has no compiled file on disk. The popup must
+// still get the base structure — scoped — rather than nothing at all.
+$GLOBALS['styles']     = array();
+$GLOBALS['transients'] = array();
 FLBuilderModel::$info = array(
 	'css'     => $css_file . '.missing',
 	'css_url' => 'https://example.org/cache/nope.css',
 );
-
-$GLOBALS['styles'] = array();
 ACPS_Alerts_Popup_Source::forget();
 ACPS_Alerts_Popup_Source::enqueue_assets();
 
-ok( 'a stylesheet that is not on disk is not linked to', ! isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
+$layout = isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) ? $GLOBALS['styles']['acps-alerts-popup-layout'] : null;
+ok( 'the scoped base is injected even with no compiled file', null !== $layout && false !== strpos( (string) $layout['inline'], '.acps-alert .fl-col' ) );
+ok( 'and it still links nothing raw', null !== $layout && '' === (string) $layout['src'] );
 
-FLBuilder::$url = 'https://example.org/wp-content/plugins/bb-plugin/';
+// With neither compiled nor base available, nothing is injected at all.
+$GLOBALS['styles']     = array();
+$GLOBALS['transients'] = array();
+unlink( $bb_dir . '/css/fl-builder-layout.css' );
+ACPS_Alerts_Popup_Source::forget();
+ACPS_Alerts_Popup_Source::enqueue_assets();
+
+ok( 'with no stylesheet anywhere, nothing is injected', ! isset( $GLOBALS['styles']['acps-alerts-popup-layout'] ) );
 
 unlink( $css_file );
 
