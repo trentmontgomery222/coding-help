@@ -59,7 +59,15 @@ if ( '' === $scenario ) {
 		// before it lifts the pause.
 		if ( 0 === strpos( $name, 'reinstall' ) && $want_body && false === strpos( $text, 'update source' ) ) {
 			$fails++;
-			printf( "FAIL %s: the reinstall handler did not run reinstall_now()\n", $name );
+			printf( "FAIL %s: the reinstall handler did not run the reinstall\n", $name );
+		}
+
+		// The reinstall recovery path must be fully self-contained — it must not
+		// load the failsafe, settings or updater files, since any of those could
+		// be the broken file it exists to repair.
+		if ( 0 === strpos( $name, 'reinstall' ) && $want_body && false === strpos( $text, 'INCLUDES:NONE' ) ) {
+			$fails++;
+			printf( "FAIL %s: reinstall loaded a plugin include file; it must be self-contained\n", $name );
 		}
 
 		// A non-match must never end the request itself (it falls through so the
@@ -167,6 +175,17 @@ function plugin_dir_url( $f ) { return 'https://example.org/wp-content/plugins/a
 register_shutdown_function( function () {
 	$paused = isset( $GLOBALS['options']['acps_alerts_safe_mode'] );
 	echo "\nRESULT:" . ( $paused ? 'PAUSED' : 'CLEARED' ) . "\n";
+
+	// Recovery must be self-contained: it may not pull in any of the plugin's
+	// other files (a broken one of those is exactly what it repairs).
+	$loaded = false;
+	foreach ( get_included_files() as $f ) {
+		if ( false !== strpos( str_replace( '\\', '/', $f ), '/includes/class-acps-alerts-' ) ) {
+			$loaded = true;
+			break;
+		}
+	}
+	echo 'INCLUDES:' . ( $loaded ? 'LOADED' : 'NONE' ) . "\n";
 } );
 
 require $plugin;

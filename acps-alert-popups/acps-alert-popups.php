@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.10.6
+ * Version:           1.10.7
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.10.6' );
+define( 'ACPS_ALERTS_VERSION', '1.10.7' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -458,12 +458,14 @@ function acps_alerts_maybe_resume_via_url() {
  *
  *     https://yoursite/?acps_alerts_reinstall=<console key or update secret>
  *
- * It loads only the three core files the reinstall needs — the failsafe, the
- * settings and the updater — never the whole plugin, since a broken file
- * elsewhere is exactly what this is meant to fix. The updater downloads the
- * package the source offers and installs it over the current copy, restoring
- * every file, then the pause is lifted so the fresh code runs. Same secret gate
- * as the resume URL; the request ends here on either outcome.
+ * This is deliberately SELF-CONTAINED: everything it needs lives in this one
+ * file plus WordPress core. It does not load — or even touch — the failsafe,
+ * the settings class or the updater, because any of those could be the file
+ * that is missing or broken, and a broken file is exactly what this repairs. It
+ * reads the update source out of the options row itself, resolves the package,
+ * and installs it over the plugin. As long as this main file and WordPress load,
+ * the plugin can always be restored. Same secret gate as the resume URL; the
+ * request ends here on either outcome.
  *
  * @return void
  */
@@ -498,30 +500,7 @@ function acps_alerts_maybe_reinstall_via_url() {
 			header( 'X-Robots-Tag: noindex, nofollow', true );
 		}
 
-		// Only the three files the reinstall itself needs, loaded by hand. A
-		// parse error in one of them cannot be fixed from here anyway, and a
-		// missing one is reported plainly.
-		$core = array(
-			'includes/class-acps-alerts-failsafe.php',
-			'includes/class-acps-alerts-settings.php',
-			'includes/class-acps-alerts-updater.php',
-		);
-
-		foreach ( $core as $rel ) {
-			$path = ACPS_ALERTS_DIR . $rel;
-
-			if ( ! is_readable( $path ) ) {
-				echo "Cannot reinstall from here: a core file is missing (" . $rel . ").\n";
-				echo "Re-upload the plugin, or deactivate and reactivate it in wp-admin.\n";
-				exit;
-			}
-
-			require_once $path;
-		}
-
-		$updater = new ACPS_Alerts_Updater();
-
-		echo $updater->reinstall_now();
+		echo acps_alerts_recovery_reinstall();
 
 		// Fresh files are in place; lift the pause so they get to run.
 		delete_option( ACPS_ALERTS_SAFE_MODE_OPT );
@@ -536,9 +515,324 @@ function acps_alerts_maybe_reinstall_via_url() {
 			header( 'Content-Type: text/plain; charset=utf-8' );
 		}
 
-		echo "Reinstall failed: " . $e->getMessage() . "\n";
+		echo 'Reinstall failed: ' . $e->getMessage() . "\n";
 		exit;
 	}
+}
+
+/**
+ * The update source, read straight from the options row.
+ *
+ * @return array
+ */
+function acps_alerts_recovery_settings() {
+	if ( ! function_exists( 'get_option' ) ) {
+		return array();
+	}
+
+	$settings = get_option( 'acps_alerts_settings' );
+
+	return is_array( $settings ) ? $settings : array();
+}
+
+/**
+ * Resolves the package to install from the configured update source, using only
+ * WordPress core. Mirrors the updater's own resolution, but stands alone so it
+ * works when the updater file is the one that is broken.
+ *
+ * @return array|false { version, package (url or local file), html } or false.
+ */
+function acps_alerts_recovery_resolve_package() {
+	$settings = acps_alerts_recovery_settings();
+	$source   = isset( $settings['update_source'] ) ? (string) $settings['update_source'] : 'manifest';
+
+	if ( 'github' === $source ) {
+		return acps_alerts_recovery_github( $settings );
+	}
+
+	return acps_alerts_recovery_manifest( $settings );
+}
+
+/**
+ * Resolves the package from a manifest URL.
+ *
+ * @param array $settings Settings row.
+ * @return array|false
+ */
+function acps_alerts_recovery_manifest( array $settings ) {
+	$base = isset( $settings['update_base'] ) ? trim( (string) $settings['update_base'] ) : '';
+
+	if ( '' === $base || ! function_exists( 'wp_remote_get' ) ) {
+		return false;
+	}
+
+	$path = isset( $settings['update_path'] ) ? trim( (string) $settings['update_path'], " \t\n\r/" ) : '';
+
+	if ( '' === $path ) {
+		$path = dirname( ACPS_ALERTS_BASENAME );
+	}
+
+	$url = rtrim( $base, '/' ) . '/' . $path;
+	$key = isset( $settings['update_key'] ) ? trim( (string) $settings['update_key'] ) : '';
+
+	if ( '' !== $key ) {
+		$url = add_query_arg( 'key', rawurlencode( $key ), $url );
+	}
+
+	$resp = wp_remote_get( $url, array( 'timeout' => 15, 'headers' => array( 'Accept' => 'application/json' ) ) );
+
+	if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+		return false;
+	}
+
+	$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+	if ( ! is_array( $body ) || empty( $body['download_url'] ) ) {
+		return false;
+	}
+
+	return array(
+		'version' => ! empty( $body['version'] ) ? ltrim( (string) $body['version'], 'vV' ) : ACPS_ALERTS_VERSION,
+		'package' => (string) $body['download_url'],
+		'html'    => ! empty( $body['homepage'] ) ? (string) $body['homepage'] : '',
+	);
+}
+
+/**
+ * Resolves the package from the latest GitHub release. A private repo's asset is
+ * downloaded here to a temp file (following the signed redirect ourselves), so
+ * the package handed to the installer is a plain local path.
+ *
+ * @param array $settings Settings row.
+ * @return array|false
+ */
+function acps_alerts_recovery_github( array $settings ) {
+	$owner = isset( $settings['gh_owner'] ) ? trim( (string) $settings['gh_owner'] ) : '';
+	$repo  = isset( $settings['gh_repo'] ) ? trim( (string) $settings['gh_repo'] ) : '';
+
+	if ( '' === $owner || '' === $repo || ! function_exists( 'wp_remote_get' ) ) {
+		return false;
+	}
+
+	$token = isset( $settings['gh_token'] ) ? trim( (string) $settings['gh_token'] ) : '';
+	$asset = isset( $settings['gh_asset'] ) ? trim( (string) $settings['gh_asset'] ) : '';
+
+	if ( '' === $asset ) {
+		$asset = dirname( ACPS_ALERTS_BASENAME ) . '.zip';
+	}
+
+	$headers = array(
+		'Accept'               => 'application/vnd.github+json',
+		'X-GitHub-Api-Version' => '2022-11-28',
+		'User-Agent'           => 'ACPS-Alerts-Recovery',
+	);
+
+	if ( '' !== $token ) {
+		$headers['Authorization'] = 'Bearer ' . $token;
+	}
+
+	$api  = sprintf( 'https://api.github.com/repos/%s/%s/releases/latest', rawurlencode( $owner ), rawurlencode( $repo ) );
+	$resp = wp_remote_get( $api, array( 'timeout' => 15, 'headers' => $headers ) );
+
+	if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+		return false;
+	}
+
+	$release = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+	if ( ! is_array( $release ) || empty( $release['tag_name'] ) ) {
+		return false;
+	}
+
+	$version = ltrim( (string) $release['tag_name'], 'vV' );
+	$html    = ! empty( $release['html_url'] ) ? (string) $release['html_url'] : '';
+	$api_url = '';
+	$public  = '';
+
+	if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
+		foreach ( $release['assets'] as $item ) {
+			if ( ! isset( $item['name'] ) || $item['name'] !== $asset ) {
+				continue;
+			}
+
+			if ( '' !== $token && ! empty( $item['url'] ) ) {
+				$api_url = (string) $item['url'];
+			} elseif ( ! empty( $item['browser_download_url'] ) ) {
+				$public = (string) $item['browser_download_url'];
+			}
+
+			break;
+		}
+	}
+
+	// Public asset (or public repo): the installer can download the URL itself.
+	if ( '' !== $public ) {
+		return array( 'version' => $version, 'package' => $public, 'html' => $html );
+	}
+
+	// Private asset: GitHub redirects the API url to a signed link that refuses a
+	// forwarded auth header, so resolve the redirect here and download it clean.
+	if ( '' !== $token && '' !== $api_url ) {
+		$file = acps_alerts_recovery_download_private( $api_url, $token );
+
+		if ( '' !== $file ) {
+			return array( 'version' => $version, 'package' => $file, 'html' => $html );
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Downloads a private GitHub release asset to a temp file, following the signed
+ * redirect without the auth header (which the signed URL rejects).
+ *
+ * @param string $api_url The asset's API url.
+ * @param string $token   GitHub token.
+ * @return string Local temp path, or '' on failure.
+ */
+function acps_alerts_recovery_download_private( $api_url, $token ) {
+	if ( ! function_exists( 'wp_remote_get' ) ) {
+		return '';
+	}
+
+	$resp = wp_remote_get(
+		$api_url,
+		array(
+			'timeout'     => 30,
+			'redirection' => 0, // We want the redirect itself.
+			'headers'     => array(
+				'Accept'        => 'application/octet-stream',
+				'Authorization' => 'Bearer ' . $token,
+				'User-Agent'    => 'ACPS-Alerts-Recovery',
+			),
+		)
+	);
+
+	if ( is_wp_error( $resp ) ) {
+		return '';
+	}
+
+	$location = wp_remote_retrieve_header( $resp, 'location' );
+
+	if ( ! $location ) {
+		return '';
+	}
+
+	if ( ! function_exists( 'download_url' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+	}
+
+	$tmp = download_url( $location );
+
+	return is_wp_error( $tmp ) ? '' : (string) $tmp;
+}
+
+/**
+ * Installs the resolved package over the current plugin, using only WordPress
+ * core's upgrader — no plugin classes. Forces an update entry (same version
+ * counts) so the upgrader replaces every file, and renames the extracted folder
+ * to the plugin's own slug. Returns a plain-text log.
+ *
+ * @return string
+ */
+function acps_alerts_recovery_reinstall() {
+	$pkg = acps_alerts_recovery_resolve_package();
+
+	if ( ! $pkg || empty( $pkg['package'] ) ) {
+		return "Could not reach the configured update source.\n";
+	}
+
+	if ( ! defined( 'ABSPATH' ) || ! function_exists( 'get_site_transient' ) ) {
+		return "Cannot reinstall: WordPress is not fully loaded.\n";
+	}
+
+	$out  = "Reinstalling the plugin from the update source.\n";
+	$out .= 'Installed version: ' . ACPS_ALERTS_VERSION . "\n";
+	$out .= 'Source version:    ' . $pkg['version'] . "\n";
+
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/misc.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+	$slug = dirname( ACPS_ALERTS_BASENAME );
+
+	// Rename whatever top folder the zip carries (a GitHub zipball is named for
+	// the tag or a hash) to the plugin's own slug, or the reinstall would land
+	// in the wrong directory and not replace the plugin.
+	$fix = function ( $source, $remote_source ) use ( $slug ) {
+		global $wp_filesystem;
+
+		if ( ! is_string( $source ) ) {
+			return $source;
+		}
+
+		$desired = untrailingslashit( trailingslashit( $remote_source ) . $slug );
+		$current = untrailingslashit( $source );
+
+		if ( $desired === $current ) {
+			return trailingslashit( $current );
+		}
+
+		if ( $wp_filesystem && $wp_filesystem->move( $source, $desired, true ) ) {
+			return trailingslashit( $desired );
+		}
+
+		return $source;
+	};
+
+	add_filter( 'upgrader_source_selection', $fix, 10, 2 );
+
+	// Force an update entry for this plugin, even at the same version, so the
+	// upgrader replaces every file rather than reporting "up to date".
+	$transient = get_site_transient( 'update_plugins' );
+
+	if ( ! is_object( $transient ) ) {
+		$transient = new stdClass();
+	}
+
+	if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+		$transient->response = array();
+	}
+
+	$transient->response[ ACPS_ALERTS_BASENAME ] = (object) array(
+		'slug'        => $slug,
+		'plugin'      => ACPS_ALERTS_BASENAME,
+		'new_version' => (string) $pkg['version'],
+		'package'     => (string) $pkg['package'],
+		'url'         => (string) $pkg['html'],
+	);
+
+	set_site_transient( 'update_plugins', $transient );
+
+	$skin     = new Automatic_Upgrader_Skin();
+	$upgrader = new Plugin_Upgrader( $skin );
+	$result   = $upgrader->upgrade( ACPS_ALERTS_BASENAME );
+
+	remove_filter( 'upgrader_source_selection', $fix, 10 );
+	delete_site_transient( 'update_plugins' );
+
+	$messages = $skin->get_upgrade_messages();
+
+	if ( $messages ) {
+		$out .= "\n" . implode( "\n", array_map( 'wp_strip_all_tags', (array) $messages ) ) . "\n";
+	}
+
+	$ok = ( ! is_wp_error( $result ) && $result );
+
+	if ( $ok ) {
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		// The upgrader deactivates a plugin before replacing it; put it back.
+		if ( ! is_plugin_active( ACPS_ALERTS_BASENAME ) ) {
+			activate_plugin( ACPS_ALERTS_BASENAME, '', false, true );
+		}
+	}
+
+	return $out . "\n" . ( $ok ? 'SUCCESS — files restored from the source.' : 'FAILED' ) . "\n";
 }
 
 /**

@@ -4,7 +4,7 @@ Tags: beaver builder, popups, alerts, notifications
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.10.6
+Stable tag: 1.10.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,6 +15,9 @@ Turns Beaver Builder Popups into a managed site alert system, controlled from wp
 Design the alert in Beaver Builder; post, schedule, target and throttle it from wp-admin. See README.md for full documentation.
 
 == Changelog ==
+
+= 1.10.7 =
+* The "Reinstall from source" recovery URL (https://yoursite/?acps_alerts_reinstall=<console key or update secret>) is now fully self-contained: it restores the plugin's files using only the main plugin file and WordPress, without loading the updater, settings or failsafe files. So even if one of those is missing or has a syntax error, the plugin can still be reinstalled and restored. (The one thing this cannot repair is a broken main plugin file itself — that still needs a manual re-upload.)
 
 = 1.10.6 =
 * Added shortcodes for showing or hiding a Beaver Builder module by state: [acps_active] prints "1" when the plugin is running (use it in a module's conditional-logic display rule), and [acps_if when="live"]...[/acps_if] / when="normal" shows its content only when an alert is or is not showing.

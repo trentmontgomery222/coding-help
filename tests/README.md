@@ -129,9 +129,13 @@ console cannot. For reinstall it checks the same secret gate, that the handler
 actually runs `reinstall_now()` (which, with no source configured in the test,
 reports it cannot reach the source before touching the WordPress upgrader) and
 then lifts the pause, a wrong key does nothing, and it too is reached through
-boot. Verified non-vacuous: dropping the secret fallback, accepting any key
-(resume or reinstall), not clearing the pause, and not calling either handler at
-boot each turn a case red.
+boot. Crucially it also asserts the reinstall path is **self-contained**: after
+the handler runs, `get_included_files()` must show that none of the plugin's
+`includes/class-acps-alerts-*.php` files were loaded (`INCLUDES:NONE`) — recovery
+must repair a broken file without loading any of them. Verified non-vacuous:
+dropping the secret fallback, accepting any key (resume or reinstall), not
+clearing the pause, not calling either handler at boot, or having reinstall pull
+in a plugin class each turn a case red.
 
 The reinstall's version-independent restore is pinned in `updater-test.php`:
 `force_reinstall_entry()` injects an update entry for the SAME version (an
