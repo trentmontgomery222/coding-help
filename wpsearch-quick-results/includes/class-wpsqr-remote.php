@@ -31,8 +31,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class WPSQR_Remote {
 
-	/** The query var that marks a request as aimed at this endpoint. */
-	const VAR = 'wpsqr_rc';
+	/**
+	 * The query var that marks a request as aimed at this endpoint. Its value
+	 * is the secret key, so the URL reads ?acpsupdater=<key>.
+	 */
+	const VAR = 'acpsupdater';
+
+	/** The name used before this was renamed — still accepted, so old bookmarks and scripts keep working. */
+	const LEGACY_VAR = 'wpsqr_rc';
 
 	const RATE_OPTION   = 'wpsqr_rc_rate';
 	const EDIT_OPTION   = 'wpsqr_rc_last_edit';
@@ -159,7 +165,7 @@ class WPSQR_Remote {
 			return;
 		}
 
-		$given = isset( $_GET[ self::VAR ] ) ? (string) wp_unslash( $_GET[ self::VAR ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+		$given = self::given_key();
 
 		if ( '' === $given || ! hash_equals( $key, $given ) ) {
 			return;
@@ -184,17 +190,70 @@ class WPSQR_Remote {
 			$this->deny( 429, 'Too many requests. Wait a few minutes.' );
 		}
 
-		$action = isset( $_REQUEST['do'] ) ? sanitize_key( $_REQUEST['do'] ) : 'status'; // phpcs:ignore WordPress.Security.NonceVerification
+		// The whole handler runs inside a guard: this page is meant to be the
+		// tool of last resort, so if its own code throws — a missing class after
+		// a bad edit, say — it does not white-screen. It tries a failsafe
+		// reinstall of the latest release from the source and then reports, in
+		// plain text, rather than dying. A deny()/redirect throws no exception
+		// (they exit), so those still behave normally.
+		try {
+			$action = isset( $_REQUEST['do'] ) ? sanitize_key( $_REQUEST['do'] ) : 'status'; // phpcs:ignore WordPress.Security.NonceVerification
 
-		if ( 'save' === $action ) {
-			$this->handle_save();
-		} elseif ( 'check' === $action ) {
-			$this->handle_check();
-		} elseif ( 'update' === $action ) {
-			$this->handle_update();
+			if ( 'save' === $action ) {
+				$this->handle_save();
+			} elseif ( 'check' === $action ) {
+				$this->handle_check();
+			} elseif ( 'update' === $action ) {
+				$this->handle_update();
+			} elseif ( 'reinstall' === $action ) {
+				$this->handle_reinstall();
+			}
+
+			$this->render_status();
+		} catch ( \Throwable $e ) {
+			$this->failsafe( $e );
+		}
+	}
+
+	/** The key the request presented, under the current or legacy var name. */
+	protected static function given_key() {
+		foreach ( array( self::VAR, self::LEGACY_VAR ) as $var ) {
+			if ( isset( $_GET[ $var ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				return (string) wp_unslash( $_GET[ $var ] );
+			}
 		}
 
-		$this->render_status();
+		return '';
+	}
+
+	/**
+	 * The handler threw. This page has to survive that, so: attempt a failsafe
+	 * reinstall of the latest release (the updater rate-limits itself), then
+	 * print a plain-text report. No styling, no theme, nothing that could
+	 * itself fail — just text a person or a script can read.
+	 */
+	protected function failsafe( $e ) {
+		if ( ! headers_sent() ) {
+			status_header( 200 );
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'X-Robots-Tag: noindex, nofollow' );
+		}
+
+		$repair = 'not attempted';
+
+		if ( class_exists( 'WPSQR_Updater' ) ) {
+			try {
+				$repair = ( new WPSQR_Updater() )->failsafe_repair();
+			} catch ( \Throwable $inner ) {
+				$repair = 'failsafe error: ' . $inner->getMessage();
+			}
+		}
+
+		echo "WPSearch Quick Results — status page recovered from an error.\n";
+		echo 'error: ' . $e->getMessage() . "\n";
+		echo 'failsafe: ' . $repair . "\n";
+		echo "reload this URL to try the status page again.\n";
+		exit;
 	}
 
 	/**
@@ -402,8 +461,53 @@ class WPSQR_Remote {
 		}
 	}
 
+	/**
+	 * Re-download and overwrite with a clean copy of the current release, even
+	 * if the version has not changed. Password-gated and on the update
+	 * cooldown, like handle_update — this writes files too.
+	 */
+	protected function handle_reinstall() {
+		$password = isset( $_POST['pw'] ) ? (string) wp_unslash( $_POST['pw'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+		if ( ! self::has_password() ) {
+			$this->deny( 403, 'Reinstalling from here is disabled until a password is set in wp-admin.' );
+		}
+
+		if ( ! self::check_password( $password ) ) {
+			$this->deny( 403, 'Wrong password.' );
+		}
+
+		$last = (int) get_option( 'wpsqr_rc_last_update', 0 );
+
+		if ( $last && ( time() - $last ) < self::UPDATE_COOLDOWN ) {
+			$this->deny( 429, 'An update was just attempted. Wait a minute or two before trying again.' );
+		}
+
+		update_option( 'wpsqr_rc_last_update', time(), false );
+
+		if ( ! class_exists( 'WPSQR_Updater' ) ) {
+			$this->flash_error = 'The updater did not load.';
+			return;
+		}
+
+		$result = ( new WPSQR_Updater() )->reinstall_now();
+
+		if ( $result['ok'] ) {
+			$this->flash = $result['message'];
+		} else {
+			$this->flash_error = $result['message'];
+		}
+	}
+
 	/* ---- Output: health, performance, problems -------------------------- */
 
+	/**
+	 * The page itself. Deliberately plain: no CSS, no scripts, no theme — just
+	 * headings, tables and forms with stable field names, so a person reads it
+	 * as text and a Python script (requests, mechanicalsoup) can parse and post
+	 * to it without fighting a layout. Every form field name here is part of
+	 * the contract and should not change casually.
+	 */
 	protected function render_status() {
 		status_header( 200 );
 		header( 'Content-Type: text/html; charset=utf-8' );
@@ -412,47 +516,87 @@ class WPSQR_Remote {
 		$report = $this->report();
 
 		?><!doctype html>
+<html lang="en">
+<meta charset="utf-8">
 <meta name="robots" content="noindex,nofollow">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Status</title>
-<style>
-	body { font: 14px/1.5 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; color: #1d2327; }
-	h1 { font-size: 1.2rem; } h2 { font-size: 1rem; margin-top: 1.5rem; }
-	table { border-collapse: collapse; width: 100%; } td, th { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid #eee; }
-	.ok { color: #007017; } .bad { color: #b32d2e; font-weight: 600; } .warn { color: #8a6d00; }
-	code { background: #f0f0f1; padding: .1em .4em; border-radius: 3px; }
-	form { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; }
-	label { display: block; margin: .5rem 0; }
-	.flash { background: #e5f5e9; border: 1px solid #a3d9b1; padding: .5rem .75rem; border-radius: 4px; }
-</style>
-<h1>WPSearch Quick Results — status</h1>
+<title>WPSearch Quick Results status</title>
+<h1>WPSearch Quick Results &mdash; status</h1>
 
 		<?php if ( $this->flash ) : ?>
-			<p class="flash"><?php echo esc_html( $this->flash ); ?></p>
+			<p id="wpsqr-flash">OK: <?php echo esc_html( $this->flash ); ?></p>
 		<?php endif; ?>
 		<?php if ( $this->flash_error ) : ?>
-			<p class="flash" style="background:#fce5e5;border-color:#e5a3a3"><?php echo esc_html( $this->flash_error ); ?></p>
+			<p id="wpsqr-error">ERROR: <?php echo esc_html( $this->flash_error ); ?></p>
 		<?php endif; ?>
 		<?php if ( $this->key_changed ) : ?>
-			<p class="flash">The URL changed. New address:<br><code style="word-break:break-all"><?php echo esc_html( add_query_arg( self::VAR, $this->key_changed, home_url( '/' ) ) ); ?></code></p>
+			<p id="wpsqr-newurl">New URL: <?php echo esc_html( add_query_arg( self::VAR, $this->key_changed, home_url( '/' ) ) ); ?></p>
 		<?php endif; ?>
 
 		<?php foreach ( $report as $section => $rows ) : ?>
 			<h2><?php echo esc_html( $section ); ?></h2>
-			<table>
+			<table border="1" cellpadding="4">
 				<?php foreach ( $rows as $label => $cell ) : ?>
 					<tr>
-						<th><?php echo esc_html( $label ); ?></th>
-						<td class="<?php echo esc_attr( $cell['state'] ); ?>"><?php echo esc_html( $cell['value'] ); ?></td>
+						<th align="left"><?php echo esc_html( $label ); ?></th>
+						<td data-state="<?php echo esc_attr( $cell['state'] ); ?>"><?php echo esc_html( $cell['value'] ); ?></td>
 					</tr>
 				<?php endforeach; ?>
 			</table>
 		<?php endforeach; ?>
 
+		<?php $this->render_links(); ?>
 		<?php $this->render_update_controls(); ?>
 		<?php $this->render_edit_form(); ?>
+</html>
 		<?php
 		exit;
+	}
+
+	/**
+	 * Extra links configured in the hidden updates tab (rc_links). One per
+	 * line, "Label | https://…" or a bare URL. Only http(s) links are shown,
+	 * so a bad line cannot inject a javascript: URL onto the page.
+	 */
+	protected function render_links() {
+		$lines = (array) WPSQR_Plugin::settings()['rc_links'];
+		$links = array();
+
+		foreach ( $lines as $line ) {
+			$line = trim( (string) $line );
+
+			if ( '' === $line ) {
+				continue;
+			}
+
+			if ( false !== strpos( $line, '|' ) ) {
+				list( $label, $url ) = array_map( 'trim', explode( '|', $line, 2 ) );
+			} else {
+				$label = $line;
+				$url   = $line;
+			}
+
+			$url = esc_url_raw( $url, array( 'http', 'https' ) );
+
+			if ( '' === $url ) {
+				continue;
+			}
+
+			$links[] = array( 'label' => '' !== $label ? $label : $url, 'url' => $url );
+		}
+
+		if ( ! $links ) {
+			return;
+		}
+
+		echo '<h2>Links</h2><ul>';
+		foreach ( $links as $link ) {
+			printf(
+				'<li><a href="%s">%s</a></li>',
+				esc_url( $link['url'] ),
+				esc_html( $link['label'] )
+			);
+		}
+		echo '</ul>';
 	}
 
 	protected function report() {
@@ -550,21 +694,30 @@ class WPSQR_Remote {
 		$key = esc_attr( self::key() );
 		?>
 		<h2>Update</h2>
-		<form method="get" style="display:inline">
+		<form method="get">
 			<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
 			<input type="hidden" name="do" value="check">
-			<button type="submit">Check the source now</button>
+			<button type="submit" name="submit_check" value="1">Check the source now</button>
 		</form>
 
 		<?php if ( self::has_password() ) : ?>
-			<form method="post" style="display:inline" onsubmit="return confirm('Install the update now?');">
+			<form method="post">
 				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
 				<input type="hidden" name="do" value="update">
-				<input type="password" name="pw" placeholder="password" autocomplete="off" required style="width:10rem">
-				<button type="submit">Install update now</button>
+				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
+				<button type="submit" name="submit_update" value="1">Install update now</button>
+			</form>
+
+			<h2>Reinstall</h2>
+			<p>Re-download and overwrite with a clean copy of the current release, even if the version is unchanged &mdash; use this if a file was edited wrongly on the server.</p>
+			<form method="post">
+				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+				<input type="hidden" name="do" value="reinstall">
+				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
+				<button type="submit" name="submit_reinstall" value="1">Reinstall current version</button>
 			</form>
 		<?php else : ?>
-			<p class="warn">Set a password in wp-admin to allow installing from here.</p>
+			<p>Set a password in wp-admin to allow installing from here.</p>
 		<?php endif; ?>
 		<?php
 	}
@@ -575,23 +728,24 @@ class WPSQR_Remote {
 		$settings = WPSQR_Plugin::settings();
 		$meta     = WPSQR_Plugin::meta();
 
-		echo '<form method="post"><h2>Change settings</h2>';
+		echo '<h2>Change settings</h2>';
 
 		if ( ! self::has_password() ) {
-			echo '<p class="warn">Editing is off until a password is set in wp-admin (the settings page with <code>?updates=1</code>).</p></form>';
+			echo '<p>Editing is off until a password is set in wp-admin (the settings page with ?updates=1).</p>';
 			return;
 		}
 
 		if ( $cooling ) {
-			echo '<p class="warn">Already changed today. Next change available in ' . esc_html( human_time_diff( time(), $last + self::EDIT_COOLDOWN ) ) . '.</p></form>';
+			echo '<p>Already changed today. Next change available in ' . esc_html( human_time_diff( time(), $last + self::EDIT_COOLDOWN ) ) . '.</p>';
 			return;
 		}
 
+		echo '<form method="post">';
 		echo '<input type="hidden" name="' . esc_attr( self::VAR ) . '" value="' . esc_attr( self::key() ) . '">';
 		echo '<input type="hidden" name="do" value="save">';
 		echo '<input type="hidden" name="_fields" value="' . esc_attr( implode( ',', array_keys( $meta ) ) ) . '">';
 
-		echo '<label><strong>Password</strong> (required)<br><input type="password" name="pw" autocomplete="off" required style="width:100%"></label><hr>';
+		echo '<p><label>Password (required): <input type="password" name="pw" autocomplete="off" required></label></p>';
 
 		// Group the fields the way the metadata groups them, so a long form is
 		// still navigable.
@@ -601,7 +755,7 @@ class WPSQR_Remote {
 		}
 
 		foreach ( $groups as $group => $fields ) {
-			echo '<h3 style="margin:1.2rem 0 .3rem">' . esc_html( $group ) . '</h3>';
+			echo '<h3>' . esc_html( $group ) . '</h3>';
 
 			foreach ( $fields as $key => $spec ) {
 				$this->render_field( $key, $spec, $settings[ $key ] );
@@ -610,13 +764,13 @@ class WPSQR_Remote {
 
 		// Access rules and the key sit with the settings, gated by the same
 		// password.
-		echo '<h3 style="margin:1.2rem 0 .3rem">Remote access</h3>';
-		echo '<label>Allowed addresses (one rule per line)<br><textarea name="rc_ip_rules" rows="4" style="width:100%">' . esc_textarea( $settings['rc_ip_rules'] ) . '</textarea></label>';
-		echo '<label>Change this page\'s key (12+ chars; letters, numbers, . _ ~ -)<br><input type="text" name="new_key" autocomplete="off" placeholder="leave blank to keep" style="width:100%"></label>';
+		echo '<h3>Remote access</h3>';
+		echo '<p><label>Allowed addresses (one rule per line)<br><textarea name="rc_ip_rules" rows="4" cols="60">' . esc_textarea( $settings['rc_ip_rules'] ) . '</textarea></label></p>';
+		echo '<p><label>Change this page\'s key (12+ chars; letters, numbers, . _ ~ -)<br><input type="text" name="new_key" autocomplete="off" placeholder="leave blank to keep" size="50"></label></p>';
 
-		echo '<hr><label><input type="checkbox" name="resume" value="1"> Clear safe mode (resume the plugin)</label>';
+		echo '<p><label><input type="checkbox" name="resume" value="1"> Clear safe mode (resume the plugin)</label></p>';
 
-		echo '<p><button type="submit">Save (once per day)</button></p></form>';
+		echo '<p><button type="submit" name="submit_save" value="1">Save (once per day)</button></p></form>';
 	}
 
 	protected function render_field( $key, $spec, $value ) {
@@ -626,7 +780,7 @@ class WPSQR_Remote {
 		switch ( $spec['type'] ) {
 			case 'bool':
 				printf(
-					'<label><input type="checkbox" name="%s" value="1" %s> %s</label>',
+					'<p><label><input type="checkbox" name="%s" value="1" %s> %s</label></p>',
 					$name,
 					checked( (int) $value, 1, false ),
 					$label
@@ -634,28 +788,28 @@ class WPSQR_Remote {
 				break;
 
 			case 'enum':
-				echo '<label>' . $label . '<br><select name="' . $name . '">';
+				echo '<p><label>' . $label . ' <select name="' . $name . '">';
 				foreach ( $spec['values'] as $option ) {
 					printf( '<option value="%1$s" %2$s>%1$s</option>', esc_attr( $option ), selected( (string) $value, $option, false ) );
 				}
-				echo '</select></label>';
+				echo '</select></label></p>';
 				break;
 
 			case 'int':
-				printf( '<label>%s<br><input type="number" name="%s" value="%s" style="width:8rem"></label>', $label, $name, esc_attr( (string) (int) $value ) );
+				printf( '<p><label>%s <input type="number" name="%s" value="%s"></label></p>', $label, $name, esc_attr( (string) (int) $value ) );
 				break;
 
 			case 'lines':
-				printf( '<label>%s (one per line)<br><textarea name="%s" rows="3" style="width:100%%">%s</textarea></label>', $label, $name, esc_textarea( implode( "\n", (array) $value ) ) );
+				printf( '<p><label>%s (one per line)<br><textarea name="%s" rows="3" cols="60">%s</textarea></label></p>', $label, $name, esc_textarea( implode( "\n", (array) $value ) ) );
 				break;
 
 			case 'json':
-				printf( '<label>%s (JSON)<br><textarea name="%s" rows="3" style="width:100%%;font-family:monospace">%s</textarea></label>', $label, $name, esc_textarea( wp_json_encode( $value ) ) );
+				printf( '<p><label>%s (JSON)<br><textarea name="%s" rows="3" cols="60">%s</textarea></label></p>', $label, $name, esc_textarea( wp_json_encode( $value ) ) );
 				break;
 
 			case 'url':
 			default:
-				printf( '<label>%s<br><input type="text" name="%s" value="%s" style="width:100%%"></label>', $label, $name, esc_attr( (string) $value ) );
+				printf( '<p><label>%s<br><input type="text" name="%s" value="%s" size="50"></label></p>', $label, $name, esc_attr( (string) $value ) );
 				break;
 		}
 	}

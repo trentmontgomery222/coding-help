@@ -68,7 +68,14 @@ page as "Last update", and a revert as "Last rollback".
 ## The remote endpoint
 
 A status page reachable **without a wp-admin login**, at a secret URL, for
-checking on or steering the site when wp-admin itself is the problem.
+checking on or steering the site when wp-admin itself is the problem. The URL
+is `?acpsupdater=<key>` (the older `?wpsqr_rc=<key>` is still accepted, so old
+bookmarks keep working). The page is deliberately **plain — no CSS, no
+JavaScript, no theme** — so it reads as text and a script (Python `requests`,
+`mechanicalsoup`) can parse it and post to its forms. Form field names are
+stable: `pw` (password), `do` (`status`/`check`/`update`/`reinstall`/`save`),
+`acpsupdater` (the key), `_fields` on the settings form, and each setting's own
+key.
 
 It is served on early `init` at the lowest priority and exits immediately, so
 the request never reaches the theme, the `wp` / `template_redirect` /
@@ -112,6 +119,26 @@ self-check included, so an update can be pushed and applied without ever
 opening wp-admin. Installing has its own short cooldown rather than the
 once-a-day settings limit, so a failed attempt can be retried.
 
+**Reinstall (re-download the current version).** "Reinstall current version"
+(password required) forces a clean copy of the current release to be
+downloaded from the source and written over the installed files, *even if the
+version has not changed* — the fix for "a file got edited wrong on the server."
+
+**The update notice is off by default.** WordPress shows no "update available"
+banner on the Plugins screen; the only ways to update are the `?updates=1`
+panel and this remote page. The `hide_update_notice` setting (on the
+`?updates=1` panel) controls it — turn it off to get the normal notice back.
+
+**Extra links.** The `?updates=1` panel has a "Status page links" box: one link
+per line, `Label | https://…` or a bare URL. They show under a **Links**
+heading on the remote page. Only `http(s)` links are rendered.
+
+**Failsafe.** The whole remote handler runs inside a guard. If its own code
+throws — say a bad edit left a class missing — the page does not white-screen:
+it attempts a one-per-hour failsafe reinstall of the latest release from the
+source, then prints a plain-text report (`error:` / `failsafe:`) instead of
+dying. So the page used to fix the site is itself hard to break.
+
 **The key is yours to set.** In the `?updates=1` panel, type the endpoint key
 you want (12+ characters, `A-Z a-z 0-9 . _ ~ -`) — it is not random unless you
 ask for one. Changing it changes the URL and the old one stops working at
@@ -129,8 +156,10 @@ the endpoint gives no sign of existing to an address that is not allowed.
 ## Tests
 
 ```
-php tests/netgate-test.php   # 34 — the IP gate, exhaustively
-php tests/guard-test.php     # 12 — missing-file survival and safe mode
+php tests/netgate-test.php          # 34 — the IP gate, exhaustively
+php tests/guard-test.php            # 23 — missing-file survival and safe mode
+php tests/remote-settings-test.php  # 23 — the type-based sanitizer, incl. rc_links / hide_update_notice
+php tests/shortcode-if-test.php     # 16 — the [wpsqr_if] conditions
 ```
 
 The IP gate is tested hardest because it is the only thing between the open

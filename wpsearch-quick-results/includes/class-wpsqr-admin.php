@@ -905,7 +905,13 @@ class WPSQR_Admin {
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Self-update', 'wpsqr' ); ?></th>
 						<td><label><input type="checkbox" name="update_enabled" value="1" <?php checked( $s['update_enabled'], 1 ); ?>>
-							<?php esc_html_e( 'Offer updates from the manifest below on the Plugins screen', 'wpsqr' ); ?></label></td>
+							<?php esc_html_e( 'Allow this plugin to update itself from the manifest below', 'wpsqr' ); ?></label></td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Update notice', 'wpsqr' ); ?></th>
+						<td><label><input type="checkbox" name="hide_update_notice" value="1" <?php checked( $s['hide_update_notice'], 1 ); ?>>
+							<?php esc_html_e( 'Hide the WordPress "update available" notice on the Plugins screen', 'wpsqr' ); ?></label>
+							<p class="description"><?php esc_html_e( 'On by default. With this on, the only ways to update are this page and the remote endpoint — no update notice appears anywhere in wp-admin.', 'wpsqr' ); ?></p></td>
 					</tr>
 					<tr>
 						<th scope="row"><label for="wpsqr-manifest"><?php esc_html_e( 'Manifest URL', 'wpsqr' ); ?></label></th>
@@ -955,6 +961,15 @@ class WPSQR_Admin {
 								<?php esc_html_e( 'Trust the X-Forwarded-For header (only if the site is genuinely behind a proxy — otherwise this lets visitors spoof their address)', 'wpsqr' ); ?></label></p>
 						</td>
 					</tr>
+					<tr>
+						<th scope="row"><label for="wpsqr-rclinks"><?php esc_html_e( 'Status page links', 'wpsqr' ); ?></label></th>
+						<td>
+							<textarea id="wpsqr-rclinks" name="rc_links" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", (array) $s['rc_links'] ) ); ?></textarea>
+							<p class="description">
+								<?php esc_html_e( 'Extra links to show on the remote status page. One per line: "Label | https://example.org/…" or just a URL. Only http(s) links are shown.', 'wpsqr' ); ?>
+							</p>
+						</td>
+					</tr>
 				</table>
 
 				<?php submit_button( __( 'Save updates settings', 'wpsqr' ) ); ?>
@@ -973,10 +988,12 @@ class WPSQR_Admin {
 		$in = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification
 		$s  = WPSQR_Plugin::settings();
 
-		$s['update_enabled']  = empty( $in['update_enabled'] ) ? 0 : 1;
-		$s['update_manifest'] = esc_url_raw( $in['update_manifest'] ?? '' );
-		$s['update_key']      = sanitize_text_field( $in['update_key'] ?? '' );
-		$s['rc_trust_proxy']  = empty( $in['rc_trust_proxy'] ) ? 0 : 1;
+		$s['update_enabled']     = empty( $in['update_enabled'] ) ? 0 : 1;
+		$s['hide_update_notice'] = empty( $in['hide_update_notice'] ) ? 0 : 1;
+		$s['update_manifest']    = esc_url_raw( $in['update_manifest'] ?? '' );
+		$s['update_key']         = sanitize_text_field( $in['update_key'] ?? '' );
+		$s['rc_trust_proxy']     = empty( $in['rc_trust_proxy'] ) ? 0 : 1;
+		$s['rc_links']           = WPSQR_Plugin::coerce( 'rc_links', $in['rc_links'] ?? '', $s['rc_links'] );
 
 		// An empty IP box would lock everyone out silently; fall back to the
 		// default address rather than saving a gate that admits no one.

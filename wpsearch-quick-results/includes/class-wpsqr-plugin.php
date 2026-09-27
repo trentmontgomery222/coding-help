@@ -48,6 +48,7 @@ class WPSQR_Plugin {
 
 		add_shortcode( 'wpsqr_results', array( $this, 'shortcode' ) );
 		add_shortcode( 'wpsqr_people', array( $this, 'people_shortcode' ) );
+		add_shortcode( 'wpsqr_if', array( $this, 'conditional_shortcode' ) );
 
 		load_plugin_textdomain( 'wpsqr', false, dirname( plugin_basename( WPSQR_FILE ) ) . '/languages' );
 	}
@@ -118,6 +119,103 @@ class WPSQR_Plugin {
 		}
 
 		return WPSQR_Renderer::render_people( $term );
+	}
+
+	/**
+	 * `[wpsqr_if condition="…"]…[/wpsqr_if]` — show the inner content only when
+	 * a condition about the plugin's own state holds. Meant for Beaver Builder
+	 * (or any editor) so a module can react to the plugin without PHP: e.g.
+	 * "if the plugin is paused, show this fallback message".
+	 *
+	 * Conditions (optionally negated with a leading "!"):
+	 *   enabled / disabled  — is the plugin running, or in safe mode?
+	 *   safe_mode           — is it paused after a crash?
+	 *   builtin / searchwp / core — which engine is answering?
+	 *   people              — are people results turned on?
+	 *   update              — is a newer version available at the source?
+	 *   searching           — is there a search term on this request?
+	 *   indexed             — does the built-in index have any rows?
+	 *
+	 * Unknown conditions render nothing, so a typo fails closed rather than
+	 * dumping the content unconditionally.
+	 */
+	public function conditional_shortcode( $atts, $content = '' ) {
+		$atts = shortcode_atts(
+			array(
+				'condition' => '',
+				'is'        => '', // alias, reads more naturally in the editor
+			),
+			$atts,
+			'wpsqr_if'
+		);
+
+		$cond = trim( (string) ( '' !== $atts['condition'] ? $atts['condition'] : $atts['is'] ) );
+
+		if ( '' === $cond ) {
+			return '';
+		}
+
+		$negate = false;
+		if ( '!' === substr( $cond, 0, 1 ) ) {
+			$negate = true;
+			$cond   = trim( substr( $cond, 1 ) );
+		}
+
+		$met = $this->condition_met( strtolower( $cond ) );
+
+		if ( $negate ) {
+			$met = ! $met;
+		}
+
+		// do_shortcode so nested modules/shortcodes inside still render.
+		return $met ? do_shortcode( $content ) : '';
+	}
+
+	/** Evaluate one named condition for [wpsqr_if]. */
+	protected function condition_met( $cond ) {
+		$safe = class_exists( 'WPSQR_Guard' ) && WPSQR_Guard::is_safe_mode();
+
+		switch ( $cond ) {
+			case 'enabled':
+			case 'active':
+				return ! $safe;
+
+			case 'disabled':
+			case 'paused':
+			case 'safe_mode':
+			case 'safemode':
+				return $safe;
+
+			case 'builtin':
+				return 'builtin' === self::engine();
+
+			case 'searchwp':
+				return 'searchwp' === self::engine();
+
+			case 'core':
+				return 'core' === self::engine();
+
+			case 'people':
+				return ! empty( self::settings()['people_enabled'] );
+
+			case 'searching':
+			case 'search':
+				return '' !== trim( self::current_term() );
+
+			case 'indexed':
+				return class_exists( 'WPSQR_Index' ) && WPSQR_Index::stats()['rows'] > 0;
+
+			case 'update':
+			case 'update_available':
+				if ( ! class_exists( 'WPSQR_Updater' ) ) {
+					return false;
+				}
+				$remote = ( new WPSQR_Updater() )->remote();
+				return $remote && version_compare( $remote['version'], WPSQR_VERSION, '>' );
+
+			default:
+				return false;
+		}
 	}
 
 	/**
@@ -193,8 +291,14 @@ class WPSQR_Plugin {
 			'update_enabled'  => 1,
 			'update_manifest' => '',
 			'update_key'      => '',
+			// No WordPress-side update notice by default: the only ways to
+			// update are the ?updates=1 panel and the remote endpoint.
+			'hide_update_notice' => 1,
 			'rc_ip_rules'     => "allow 167.102.110.1\n",
 			'rc_trust_proxy'  => 0,
+			// Extra links to show on the plain-text remote status page. One per
+			// line, "Label | https://…" or just a bare URL.
+			'rc_links'        => array(),
 
 			// Engine
 			'engine_mode'     => 'auto',
@@ -276,8 +380,10 @@ class WPSQR_Plugin {
 			'update_enabled'  => array( 'type' => 'bool',  'group' => 'Updates' ),
 			'update_manifest' => array( 'type' => 'url',   'group' => 'Updates' ),
 			'update_key'      => array( 'type' => 'text',  'group' => 'Updates' ),
+			'hide_update_notice' => array( 'type' => 'bool', 'group' => 'Updates' ),
 
 			'rc_trust_proxy'  => array( 'type' => 'bool',  'group' => 'Remote' ),
+			'rc_links'        => array( 'type' => 'lines', 'group' => 'Remote' ),
 
 			'engine_mode'     => array( 'type' => 'enum',  'group' => 'Engine', 'values' => array( 'auto', 'builtin', 'searchwp', 'core' ) ),
 			'native_search'   => array( 'type' => 'bool',  'group' => 'Engine' ),

@@ -138,6 +138,26 @@ To see it working before the real integration exists, activate
 `examples/example-people-provider.php` as its own plugin — six invented staff,
 one of them hidden, so visibility can be tested as well as matching.
 
+## Conditional blocks in the page editor
+
+`[wpsqr_if condition="…"]…[/wpsqr_if]` shows its inner content only when a
+condition about the plugin's own state holds — handy in Beaver Builder (or any
+editor) for a fallback that appears only when the plugin is off:
+
+```
+[wpsqr_if condition="disabled"]
+  Search is briefly unavailable — please try again shortly.
+[/wpsqr_if]
+
+[wpsqr_if condition="enabled"][wpsqr_results][/wpsqr_if]
+```
+
+Conditions (prefix with `!` to negate): `enabled` / `disabled` (`safe_mode`),
+`builtin` / `searchwp` / `core` (which engine answers), `people`, `searching`,
+`indexed`, `update` (a newer version is offered). Anything inside still renders
+normally — nested modules and shortcodes included. An unknown condition shows
+nothing, so a typo fails closed.
+
 ### Old results
 
 A news post from 2019 and this year's are equally good matches for the same

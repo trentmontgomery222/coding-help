@@ -82,5 +82,15 @@ $GLOBALS['o']['wpsqr_settings'] = array();
 $before = WPSQR_Plugin::settings();
 check( 'defaults present', isset( $before['engine_mode'] ), true );
 
+echo "\nnew update/remote settings\n";
+WPSQR_Plugin::flush_memo();
+$d = WPSQR_Plugin::defaults();
+check( 'update notice hidden by default', $d['hide_update_notice'], 1 );
+check( 'status links default empty', $d['rc_links'], array() );
+check( 'hide_update_notice is a bool', co( 'hide_update_notice', '', 1 ), 0 );
+check( 'rc_links split into lines',
+	co( 'rc_links', "Site | https://x.org\nhttps://y.org", array() ),
+	array( 'Site | https://x.org', 'https://y.org' ) );
+
 echo "\n{$pass} passed, {$fail} failed\n\n";
 exit( $fail ? 1 : 0 );

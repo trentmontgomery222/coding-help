@@ -134,6 +134,16 @@ class WPSQR_Updater {
 
 	/* ---- Telling WordPress ---------------------------------------------- */
 
+	/**
+	 * The WordPress-side "an update is available" hook.
+	 *
+	 * By default this does nothing: the only ways to update are the ?updates=1
+	 * panel and the remote endpoint, so the Plugins screen must not show a
+	 * notice (the `hide_update_notice` setting, on by default). The internal
+	 * installer does not go through this filter — it calls
+	 * inject_update_entry() directly — so hiding the notice never blocks an
+	 * actual update.
+	 */
 	public function inject_update( $transient ) {
 		if ( ! is_object( $transient ) ) {
 			return $transient;
@@ -143,10 +153,35 @@ class WPSQR_Updater {
 			return $transient;
 		}
 
+		// Suppress the wp-admin update notice entirely when asked to.
+		if ( ! empty( $this->settings()['hide_update_notice'] ) ) {
+			return $transient;
+		}
+
+		return $this->inject_update_entry( $transient );
+	}
+
+	/**
+	 * Put this plugin's available-update entry into an update transient.
+	 *
+	 * Used both by the (optional) wp-admin notice and, always, by the internal
+	 * installer so it can update without the Plugins-screen notice being on.
+	 * With $force the entry is added even when the remote version is not newer,
+	 * so a same-version reinstall can re-download the current release.
+	 */
+	public function inject_update_entry( $transient, $force = false ) {
 		$remote = $this->remote();
 
-		if ( ! $remote || version_compare( $remote['version'], WPSQR_VERSION, '<=' ) ) {
+		if ( ! $remote ) {
 			return $transient;
+		}
+
+		if ( ! $force && version_compare( $remote['version'], WPSQR_VERSION, '<=' ) ) {
+			return $transient;
+		}
+
+		if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+			$transient->response = array();
 		}
 
 		$transient->response[ $this->basename() ] = (object) array(
@@ -281,7 +316,7 @@ class WPSQR_Updater {
 	 *
 	 * @return array { ok, updated, message }
 	 */
-	public function install_now() {
+	public function install_now( $force = false ) {
 		if ( empty( $this->settings()['update_enabled'] ) ) {
 			return array( 'ok' => false, 'updated' => false, 'message' => 'Self-update is turned off.' );
 		}
@@ -292,7 +327,9 @@ class WPSQR_Updater {
 			return array( 'ok' => false, 'updated' => false, 'message' => 'The update source did not answer, or returned nothing usable.' );
 		}
 
-		if ( version_compare( $remote['version'], WPSQR_VERSION, '<=' ) ) {
+		// With $force we reinstall even the same version, so a file edited
+		// wrongly on the server can be replaced by a clean copy from the source.
+		if ( ! $force && version_compare( $remote['version'], WPSQR_VERSION, '<=' ) ) {
 			return array( 'ok' => true, 'updated' => false, 'message' => 'Already up to date (' . WPSQR_VERSION . ').' );
 		}
 
@@ -317,8 +354,18 @@ class WPSQR_Updater {
 			$transient = new \stdClass();
 		}
 
-		$transient = $this->inject_update( $transient );
+		// Build the entry directly (not via the notice filter, which may be
+		// suppressed); with $force it is added even for the same version.
+		$transient = $this->inject_update_entry( $transient, $force );
 		set_site_transient( 'update_plugins', $transient );
+
+		// A same-version reinstall needs core to believe the package differs,
+		// or Plugin_Upgrader::upgrade() short-circuits. Clearing the checked
+		// entry forces it to treat the response entry as installable.
+		if ( $force && isset( $transient->checked[ $this->basename() ] ) ) {
+			unset( $transient->checked[ $this->basename() ] );
+			set_site_transient( 'update_plugins', $transient );
+		}
 
 		// Back up the current version first, so if the new one crashes on load
 		// the bootstrap can put this one back rather than leave the plugin
@@ -353,8 +400,50 @@ class WPSQR_Updater {
 		return array(
 			'ok'      => true,
 			'updated' => true,
-			'message' => 'Updated to ' . $remote['version'] . '. It will verify itself on the next page load.',
+			'message' => ( $force ? 'Reinstalled ' : 'Updated to ' ) . $remote['version'] . '. It will verify itself on the next page load.',
 		);
+	}
+
+	/**
+	 * Force a clean copy of the current release to be downloaded and written
+	 * over the installed files, even if the version has not changed.
+	 *
+	 * The escape hatch for "a file got edited wrong on the server" — pull the
+	 * source's copy again and overwrite.
+	 */
+	public function reinstall_now() {
+		return $this->install_now( true );
+	}
+
+	/**
+	 * Last-resort self-repair used by the remote endpoint if its own code
+	 * throws while handling a request: quietly re-download and apply the latest
+	 * release from the source, at most once in a while so a genuinely broken
+	 * release cannot loop.
+	 *
+	 * Deliberately defensive and self-limiting — it is a failsafe, not a
+	 * background auto-updater. Returns a short human-readable outcome string.
+	 */
+	public function failsafe_repair() {
+		// Rate-limit to one attempt per hour, whatever happens, so a package
+		// that keeps failing cannot be fetched and applied in a tight loop.
+		$last = (int) get_option( 'wpsqr_failsafe_last', 0 );
+
+		if ( $last && ( time() - $last ) < HOUR_IN_SECONDS ) {
+			return 'failsafe recently attempted; skipped';
+		}
+
+		update_option( 'wpsqr_failsafe_last', time(), false );
+
+		try {
+			$result = $this->install_now( true );
+
+			return $result['ok']
+				? ( $result['updated'] ? 'failsafe reinstalled the latest release' : 'failsafe: source offered nothing to install' )
+				: 'failsafe could not reinstall: ' . $result['message'];
+		} catch ( \Throwable $e ) {
+			return 'failsafe errored: ' . $e->getMessage();
+		}
 	}
 
 	/**
