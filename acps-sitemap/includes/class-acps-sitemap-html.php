@@ -22,6 +22,109 @@ class ACPS_Sitemap_HTML {
 	 */
 	public function hooks() {
 		add_shortcode( 'acps_sitemap', array( $this, 'render' ) );
+		add_shortcode( 'acps_if', array( $this, 'render_conditional' ) );
+	}
+
+	/**
+	 * Conditional shortcode for page builders (BeaverBuilder etc.):
+	 *
+	 *   [acps_if condition="safe_mode"]Shown only in safe mode[/acps_if]
+	 *   [acps_if condition="update_available"]An update is ready[/acps_if]
+	 *   [acps_if condition="xml_enabled"]Sitemap is on[/acps_if]
+	 *   [acps_if plugin_active="woocommerce/woocommerce.php"]…[/acps_if]
+	 *   [acps_if plugin_inactive="bb-plugin/fl-builder.php"]BeaverBuilder is off[/acps_if]
+	 *
+	 * Prefix any named condition with "!" to negate it. Note: while THIS plugin
+	 * is parked in safe mode its shortcodes do not run, so use a page-builder
+	 * fallback for the "plugin totally down" case; `plugin_active`/`plugin_inactive`
+	 * work for any OTHER plugin.
+	 *
+	 * @param array|string $atts    Attributes.
+	 * @param string|null  $content Enclosed content.
+	 * @return string
+	 */
+	public function render_conditional( $atts, $content = null ) {
+		try {
+			$atts = shortcode_atts(
+				array(
+					'condition'       => '',
+					'plugin_active'   => '',
+					'plugin_inactive' => '',
+				),
+				$atts,
+				'acps_if'
+			);
+
+			$show = true;
+
+			if ( '' !== $atts['plugin_active'] ) {
+				$show = $show && $this->is_plugin_active( $atts['plugin_active'] );
+			}
+			if ( '' !== $atts['plugin_inactive'] ) {
+				$show = $show && ! $this->is_plugin_active( $atts['plugin_inactive'] );
+			}
+			if ( '' !== $atts['condition'] ) {
+				$cond = trim( $atts['condition'] );
+				$neg  = ( 0 === strpos( $cond, '!' ) );
+				$cond = ltrim( $cond, '!' );
+				$res  = $this->eval_condition( $cond );
+				$show = $show && ( $neg ? ! $res : $res );
+			}
+
+			return $show ? do_shortcode( (string) $content ) : '';
+		} catch ( \Throwable $e ) {
+			return '';
+		}
+	}
+
+	/**
+	 * Evaluate a named condition.
+	 *
+	 * @param string $cond Condition name.
+	 * @return bool
+	 */
+	private function eval_condition( $cond ) {
+		switch ( $cond ) {
+			case 'safe_mode':
+				return function_exists( 'acps_sitemap_is_safe_mode' ) && acps_sitemap_is_safe_mode();
+			case 'not_safe_mode':
+				return ! ( function_exists( 'acps_sitemap_is_safe_mode' ) && acps_sitemap_is_safe_mode() );
+			case 'xml_enabled':
+				return (bool) ACPS_Sitemap::get_setting( 'enable_xml' );
+			case 'xml_disabled':
+				return ! ACPS_Sitemap::get_setting( 'enable_xml' );
+			case 'remote_enabled':
+				return (bool) ACPS_Sitemap::get_setting( 'remote_enabled' );
+			case 'update_available':
+				if ( class_exists( 'ACPS_Sitemap_Updater' ) ) {
+					$s = ACPS_Sitemap_Updater::peek_status();
+					return ! empty( $s['has_update'] );
+				}
+				return false;
+			case 'no_update':
+				if ( class_exists( 'ACPS_Sitemap_Updater' ) ) {
+					$s = ACPS_Sitemap_Updater::peek_status();
+					return empty( $s['has_update'] );
+				}
+				return true;
+			case 'update_failed':
+				$f = get_option( 'acps_sitemap_update_failed' );
+				return is_array( $f ) && ! empty( $f );
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a plugin basename is active (loads the helper if needed).
+	 *
+	 * @param string $basename e.g. "woocommerce/woocommerce.php".
+	 * @return bool
+	 */
+	private function is_plugin_active( $basename ) {
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		return is_plugin_active( $basename );
 	}
 
 	/**

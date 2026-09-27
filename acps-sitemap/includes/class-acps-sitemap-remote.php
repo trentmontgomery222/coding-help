@@ -84,8 +84,11 @@ class ACPS_Sitemap_Remote {
 	 * Gate 0: is this the secret URL?
 	 * --------------------------------------------------------------------- */
 
+	/** Query variable that opens the control panel: ?acpsupdater=<key> */
+	const QUERY_VAR = 'acpsupdater';
+
 	/**
-	 * The shared secret (same value used to build the URL).
+	 * The access key (the value of ?acpsupdater=, configurable in settings).
 	 *
 	 * @return string
 	 */
@@ -94,7 +97,7 @@ class ACPS_Sitemap_Remote {
 	}
 
 	/**
-	 * Whether the current request targets the secret URL.
+	 * Whether the current request targets the control-panel URL.
 	 *
 	 * @return bool
 	 */
@@ -103,14 +106,8 @@ class ACPS_Sitemap_Remote {
 		if ( '' === $secret ) {
 			return false;
 		}
-		if ( isset( $_GET['acps_sitemap_update'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return hash_equals( $secret, sanitize_text_field( wp_unslash( $_GET['acps_sitemap_update'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		}
-		if ( isset( $_SERVER['REQUEST_URI'] ) ) {
-			$path = trim( (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ), '/' ); // phpcs:ignore
-			if ( '' !== $path && hash_equals( $secret, $path ) ) {
-				return true;
-			}
+		if ( isset( $_GET[ self::QUERY_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return hash_equals( $secret, sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
 		return false;
 	}
@@ -147,15 +144,20 @@ class ACPS_Sitemap_Remote {
 			$action = sanitize_key( wp_unslash( $_GET['acps_action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
 
-		// Gate 3: authentication.
-		$authed = $this->check_session( $ip );
+		// Gate 3: authentication. A valid session cookie authenticates a browser;
+		// a correct password on the request authenticates a script (headless).
+		$authed         = $this->check_session( $ip );
+		$authed_via_pw  = false;
 
-		if ( ! $authed && 'POST' === $method && isset( $_POST['acps_password'] ) ) {
+		if ( isset( $_POST['acps_password'] ) && '' !== (string) $_POST['acps_password'] ) {
 			$result = $this->attempt_login( $ip );
 			if ( 'locked' === $result ) {
 				$this->send( 429, __( 'Too many failed attempts. Locked out temporarily.', 'acps-sitemap' ) );
 			}
-			$authed = ( true === $result );
+			if ( true === $result ) {
+				$authed        = true;
+				$authed_via_pw = true; // Password present this request => CSRF token not required.
+			}
 		}
 
 		if ( 'logout' === $action ) {
@@ -169,11 +171,18 @@ class ACPS_Sitemap_Remote {
 			$this->done();
 		}
 
-		// Authenticated. Guard state-changing actions with a CSRF form token.
-		$changing = in_array( $action, array( 'save_settings', 'force_update', 'check_update', 'resume', 'clear_issues' ), true );
-		if ( 'POST' === $method && $changing && ! $this->valid_form_token() ) {
+		// State-changing actions. CSRF token is required ONLY for cookie-session
+		// requests; a request that carried the password is self-authenticating,
+		// which is what lets a Python script drive the page without a token.
+		$changing = in_array(
+			$action,
+			array( 'save_settings', 'force_update', 'reinstall', 'check_update', 'resume', 'clear_issues', 'create_page' ),
+			true
+		);
+		if ( 'POST' === $method && $changing && ! $authed_via_pw && ! $this->valid_form_token() ) {
 			$this->flash = __( 'Security token mismatch. Please try again.', 'acps-sitemap' );
 			$action      = '';
+			$changing    = false;
 		}
 
 		if ( 'POST' === $method && $changing ) {
@@ -182,11 +191,18 @@ class ACPS_Sitemap_Remote {
 					$this->handle_save_settings();
 					break;
 				case 'force_update':
-					$this->handle_update( true );
+					$this->handle_update( 'update' );
+					$this->done();
+					break;
+				case 'reinstall':
+					$this->handle_update( 'reinstall' );
 					$this->done();
 					break;
 				case 'check_update':
-					$this->handle_update( false );
+					$this->handle_update( 'check' );
+					break;
+				case 'create_page':
+					$this->handle_create_page();
 					break;
 				case 'resume':
 					delete_option( ACPS_SITEMAP_SAFE_MODE_OPT );
@@ -226,7 +242,10 @@ class ACPS_Sitemap_Remote {
 	}
 
 	/**
-	 * Whether an IP passes the allow/deny list.
+	 * Advanced IP filtering with independent allow + deny lists.
+	 *
+	 * Deny wins over allow. If the allow list is non-empty the IP must match it;
+	 * if the allow list is empty everyone is allowed except those denied.
 	 *
 	 * @param string $ip Client IP.
 	 * @return bool
@@ -235,17 +254,32 @@ class ACPS_Sitemap_Remote {
 		if ( '' === $ip ) {
 			return false;
 		}
-		$mode  = ACPS_Sitemap::get_setting( 'remote_ip_mode', 'allow' );
-		$rules = (array) ACPS_Sitemap::get_setting( 'remote_ip_list', array() );
+		$allow = array_values( array_filter( array_map( 'trim', (array) ACPS_Sitemap::get_setting( 'remote_ip_allow', array() ) ) ) );
+		$deny  = (array) ACPS_Sitemap::get_setting( 'remote_ip_deny', array() );
 
-		$matched = false;
-		foreach ( $rules as $rule ) {
+		if ( $this->ip_in( $ip, $deny ) ) {
+			return false; // Explicit block wins.
+		}
+		if ( empty( $allow ) ) {
+			return true; // No allow list => allow all (that aren't denied).
+		}
+		return $this->ip_in( $ip, $allow );
+	}
+
+	/**
+	 * Whether an IP matches any rule in a list.
+	 *
+	 * @param string   $ip    Client IP.
+	 * @param string[] $rules Rules.
+	 * @return bool
+	 */
+	private function ip_in( $ip, $rules ) {
+		foreach ( (array) $rules as $rule ) {
 			if ( $this->ip_matches( $ip, trim( (string) $rule ) ) ) {
-				$matched = true;
-				break;
+				return true;
 			}
 		}
-		return ( 'deny' === $mode ) ? ! $matched : $matched;
+		return false;
 	}
 
 	/**
@@ -464,19 +498,23 @@ class ACPS_Sitemap_Remote {
 	}
 
 	/**
-	 * Run or check an update.
+	 * Run, reinstall, or check an update.
 	 *
-	 * @param bool $install Whether to install (true) or only check (false).
+	 * @param string $mode 'check' | 'update' | 'reinstall'.
 	 */
-	private function handle_update( $install ) {
+	private function handle_update( $mode ) {
 		if ( ! class_exists( 'ACPS_Sitemap_Updater' ) ) {
 			$this->flash = __( 'Updater unavailable.', 'acps-sitemap' );
 			return;
 		}
 		$updater = new ACPS_Sitemap_Updater();
-		if ( $install ) {
-			$result = $updater->run_update();
-			$this->send_update_result( $result );
+
+		if ( 'reinstall' === $mode ) {
+			// Re-download and overwrite the current version — repairs a file that
+			// was edited/corrupted without needing a version bump.
+			$this->send_update_result( $updater->run_install( true ) );
+		} elseif ( 'update' === $mode ) {
+			$this->send_update_result( $updater->run_install( false ) );
 		} else {
 			ACPS_Sitemap_Updater::flush_cache();
 			$remote = $updater->remote( true );
@@ -491,6 +529,33 @@ class ACPS_Sitemap_Remote {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Create (or reuse) the visitor-facing HTML sitemap page.
+	 */
+	private function handle_create_page() {
+		if ( $this->recovery ) {
+			$this->flash = __( 'Not available while the plugin is in safe mode.', 'acps-sitemap' );
+			return;
+		}
+		$existing = get_page_by_path( 'sitemap' );
+		if ( $existing instanceof WP_Post ) {
+			$this->flash = __( 'A page with the slug "sitemap" already exists.', 'acps-sitemap' );
+			return;
+		}
+		$id = wp_insert_post(
+			array(
+				'post_title'   => 'Sitemap',
+				'post_name'    => 'sitemap',
+				'post_content' => '[acps_sitemap]',
+				'post_status'  => 'publish',
+				'post_type'    => 'page',
+			)
+		);
+		$this->flash = ( $id && ! is_wp_error( $id ) )
+			? __( 'Sitemap page created.', 'acps-sitemap' )
+			: __( 'Could not create the sitemap page.', 'acps-sitemap' );
 	}
 
 	/* --------------------------------------------------------------------- *
@@ -531,9 +596,9 @@ class ACPS_Sitemap_Remote {
 		}
 		$body .= '<form method="post" autocomplete="off">'
 			. '<input type="hidden" name="acps_action" value="login" />'
-			. '<label>' . esc_html__( 'Password', 'acps-sitemap' ) . '<br />'
-			. '<input type="password" name="acps_password" autocomplete="off" style="width:100%;padding:8px;" /></label>'
-			. '<p><button type="submit" style="padding:8px 16px;">' . esc_html__( 'Sign in', 'acps-sitemap' ) . '</button></p>'
+			. '<label>' . esc_html__( 'Password', 'acps-sitemap' ) . ' '
+			. '<input type="password" name="acps_password" autocomplete="off" size="40" /></label> '
+			. '<button type="submit">' . esc_html__( 'Sign in', 'acps-sitemap' ) . '</button>'
 			. '</form>';
 		$this->page( __( 'Control panel', 'acps-sitemap' ), $body );
 	}
@@ -604,11 +669,18 @@ class ACPS_Sitemap_Remote {
 			$rows[ __( 'Last update', 'acps-sitemap' ) ] = __( 'FAILED and was rolled back', 'acps-sitemap' ) . ( ! empty( $failed['when'] ) ? ' (' . $failed['when'] . ')' : '' );
 		}
 
-		$out = '<h2>' . esc_html__( 'Diagnostics', 'acps-sitemap' ) . '</h2><table class="diag">';
-		foreach ( $rows as $k => $v ) {
-			$out .= '<tr><th>' . esc_html( $k ) . '</th><td>' . esc_html( $v ) . '</td></tr>';
+		$selfheal = get_option( 'acps_sitemap_selfheal', array() );
+		if ( is_array( $selfheal ) && ! empty( $selfheal['attempts'] ) ) {
+			$rows[ __( 'Self-heal attempts', 'acps-sitemap' ) ] = (int) $selfheal['attempts'] . ( ! empty( $selfheal['last'] ) ? ' (' . gmdate( 'Y-m-d H:i', (int) $selfheal['last'] ) . ' UTC)' : '' );
 		}
-		$out .= '</table>';
+
+		// Plain, preformatted key:value block — easy to read and easy to parse.
+		$lines = array();
+		foreach ( $rows as $k => $v ) {
+			$lines[] = str_pad( (string) $k . ':', 20 ) . ' ' . (string) $v;
+		}
+		$out  = '<h2>' . esc_html__( 'Diagnostics', 'acps-sitemap' ) . '</h2>';
+		$out .= '<pre>' . esc_html( implode( "\n", $lines ) ) . '</pre>';
 
 		// Recent issues.
 		$issues = ACPS_Sitemap::get_issues();
@@ -634,21 +706,39 @@ class ACPS_Sitemap_Remote {
 	 */
 	private function render_actions() {
 		$t   = esc_attr( $this->token );
-		$out = '<h2>' . esc_html__( 'Actions', 'acps-sitemap' ) . '</h2><div class="actions">';
+		$out = '<h2>' . esc_html__( 'Actions', 'acps-sitemap' ) . '</h2>';
 
 		$out .= $this->action_button( 'check_update', __( 'Check for updates', 'acps-sitemap' ), $t );
-		$out .= $this->action_button( 'force_update', __( 'Install update now', 'acps-sitemap' ), $t );
+		$out .= $this->action_button( 'force_update', __( 'Install latest update', 'acps-sitemap' ), $t );
+		$out .= $this->action_button( 'reinstall', __( 'Reinstall / reupload latest (repair)', 'acps-sitemap' ), $t );
+		if ( ! $this->recovery ) {
+			$out .= $this->action_button( 'create_page', __( 'Create HTML sitemap page', 'acps-sitemap' ), $t );
+		}
 		if ( function_exists( 'acps_sitemap_is_safe_mode' ) && acps_sitemap_is_safe_mode() ) {
 			$out .= $this->action_button( 'resume', __( 'Clear safe mode', 'acps-sitemap' ), $t );
 		}
 		$out .= $this->action_button( 'clear_issues', __( 'Clear issue log', 'acps-sitemap' ), $t );
 
-		$out .= '</div>';
+		// Operator-defined quick links (configured in wp-admin).
+		$links = (array) ACPS_Sitemap::get_setting( 'remote_links', array() );
+		if ( ! empty( $links ) ) {
+			$out .= '<h2>' . esc_html__( 'Links', 'acps-sitemap' ) . '</h2><ul>';
+			foreach ( $links as $link ) {
+				if ( empty( $link['url'] ) ) {
+					continue;
+				}
+				$label = ! empty( $link['label'] ) ? $link['label'] : $link['url'];
+				$out  .= '<li><a href="' . esc_url( $link['url'] ) . '">' . esc_html( $label ) . '</a></li>';
+			}
+			$out .= '</ul>';
+		}
+
 		return $out;
 	}
 
 	/**
-	 * A single action form/button.
+	 * A single action form/button. The password field lets a script re-submit
+	 * an action headlessly without a session cookie or CSRF token.
 	 *
 	 * @param string $action Action key.
 	 * @param string $label  Button label.
@@ -656,10 +746,10 @@ class ACPS_Sitemap_Remote {
 	 * @return string
 	 */
 	private function action_button( $action, $label, $token ) {
-		return '<form method="post" style="display:inline-block;margin:0 8px 8px 0;">'
+		return '<form method="post">'
 			. '<input type="hidden" name="acps_action" value="' . esc_attr( $action ) . '" />'
 			. '<input type="hidden" name="acps_token" value="' . $token . '" />'
-			. '<button type="submit" style="padding:6px 12px;">' . esc_html( $label ) . '</button>'
+			. '<button type="submit">' . esc_html( $label ) . '</button>'
 			. '</form>';
 	}
 
@@ -683,10 +773,16 @@ class ACPS_Sitemap_Remote {
 			) . '</p>';
 		}
 
-		$csv_pt  = esc_attr( implode( ', ', (array) $s['post_types'] ) );
-		$csv_tax = esc_attr( implode( ', ', (array) $s['taxonomies'] ) );
-		$csv_ex  = esc_attr( implode( ', ', (array) $s['exclude_ids'] ) );
-		$ips     = esc_textarea( implode( "\n", (array) $s['remote_ip_list'] ) );
+		$csv_pt   = esc_attr( implode( ', ', (array) $s['post_types'] ) );
+		$csv_tax  = esc_attr( implode( ', ', (array) $s['taxonomies'] ) );
+		$csv_ex   = esc_attr( implode( ', ', (array) $s['exclude_ids'] ) );
+		$ip_allow = esc_textarea( implode( "\n", (array) $s['remote_ip_allow'] ) );
+		$ip_deny  = esc_textarea( implode( "\n", (array) $s['remote_ip_deny'] ) );
+		$links    = array();
+		foreach ( (array) $s['remote_links'] as $l ) {
+			$links[] = ( isset( $l['label'] ) ? $l['label'] : '' ) . '|' . ( isset( $l['url'] ) ? $l['url'] : '' );
+		}
+		$links_txt = esc_textarea( implode( "\n", $links ) );
 
 		$out  = '<h2>' . esc_html__( 'All settings', 'acps-sitemap' ) . '</h2>' . $note;
 		$out .= '<form method="post">'
@@ -716,18 +812,22 @@ class ACPS_Sitemap_Remote {
 		$out .= $this->sel( 's[update_role]', __( 'Rollout role', 'acps-sitemap' ), array( 'standalone' => 'Standalone', 'dev' => 'Dev', 'production' => 'Production' ), $s['update_role'] );
 		$out .= $this->txt( 's[verify_status_url]', __( 'Dev status URL', 'acps-sitemap' ), esc_attr( $s['verify_status_url'] ) );
 		$out .= $this->txt( 's[verify_status_key]', __( 'Status key', 'acps-sitemap' ), esc_attr( $s['verify_status_key'] ) );
+		$out .= $this->txt( 's[update_trigger]', __( 'Access key (the ?acpsupdater= value; blank keeps current)', 'acps-sitemap' ), '' );
 		$out .= '</fieldset>';
 
 		$out .= '<fieldset><legend>' . esc_html__( 'Remote access', 'acps-sitemap' ) . '</legend>';
 		$out .= $this->cb( 's[remote_enabled]', __( 'Enable this control panel', 'acps-sitemap' ), $s['remote_enabled'] );
-		$out .= $this->sel( 's[remote_ip_mode]', __( 'IP list mode', 'acps-sitemap' ), array( 'allow' => __( 'Allow only listed', 'acps-sitemap' ), 'deny' => __( 'Block listed', 'acps-sitemap' ) ), $s['remote_ip_mode'] );
 		$out .= $this->sel( 's[remote_ip_source]', __( 'Client IP source', 'acps-sitemap' ), array( 'remote_addr' => 'REMOTE_ADDR', 'x_forwarded_for' => 'X-Forwarded-For' ), $s['remote_ip_source'] );
-		$out .= '<p><label>' . esc_html__( 'IP rules (one per line: exact, 196.168.*, or 10.0.0.0/8)', 'acps-sitemap' ) . '<br />'
-			. '<textarea name="s[remote_ip_list]" rows="4" style="width:100%;">' . $ips . '</textarea></label></p>';
+		$out .= '<p><label>' . esc_html__( 'Allow IPs (one per line: exact, 168.1.*, or 10.0.0.0/8; blank = allow all)', 'acps-sitemap' ) . '<br />'
+			. '<textarea name="s[remote_ip_allow]" rows="4" cols="50">' . $ip_allow . '</textarea></label></p>';
+		$out .= '<p><label>' . esc_html__( 'Block IPs (always denied; wins over allow)', 'acps-sitemap' ) . '<br />'
+			. '<textarea name="s[remote_ip_deny]" rows="4" cols="50">' . $ip_deny . '</textarea></label></p>';
 		$out .= $this->txt( 's[remote_rate_max]', __( 'Max requests / 5 min', 'acps-sitemap' ), esc_attr( $s['remote_rate_max'] ) );
+		$out .= '<p><label>' . esc_html__( 'Custom links (one per line: Label|https://url)', 'acps-sitemap' ) . '<br />'
+			. '<textarea name="s[remote_links]" rows="4" cols="50">' . $links_txt . '</textarea></label></p>';
 		$out .= '</fieldset>';
 
-		$out .= '<p><button type="submit" style="padding:8px 16px;">' . esc_html__( 'Save all settings', 'acps-sitemap' ) . '</button></p>';
+		$out .= '<p><button type="submit">' . esc_html__( 'Save all settings', 'acps-sitemap' ) . '</button></p>';
 		$out .= '</form>';
 		return $out;
 	}
@@ -739,11 +839,11 @@ class ACPS_Sitemap_Remote {
 	}
 
 	private function txt( $name, $label, $value, $type = 'text' ) {
-		return '<p><label>' . esc_html( $label ) . '<br /><input type="' . esc_attr( $type ) . '" name="' . esc_attr( $name ) . '" value="' . $value . '" style="width:100%;padding:6px;" /></label></p>';
+		return '<p><label>' . esc_html( $label ) . '<br /><input type="' . esc_attr( $type ) . '" name="' . esc_attr( $name ) . '" value="' . $value . '" size="50" /></label></p>';
 	}
 
 	private function sel( $name, $label, $options, $current ) {
-		$out = '<p><label>' . esc_html( $label ) . '<br /><select name="' . esc_attr( $name ) . '" style="padding:6px;">';
+		$out = '<p><label>' . esc_html( $label ) . '<br /><select name="' . esc_attr( $name ) . '">';
 		foreach ( $options as $val => $text ) {
 			$out .= '<option value="' . esc_attr( $val ) . '" ' . selected( $current, $val, false ) . '>' . esc_html( $text ) . '</option>';
 		}
@@ -762,7 +862,7 @@ class ACPS_Sitemap_Remote {
 	 * @return string
 	 */
 	private function self_url( $args = array() ) {
-		$base = add_query_arg( 'acps_sitemap_update', $this->secret(), home_url( '/' ) );
+		$base = add_query_arg( self::QUERY_VAR, $this->secret(), home_url( '/' ) );
 		foreach ( $args as $k => $v ) {
 			$base = add_query_arg( $k, $v, $base );
 		}
@@ -801,18 +901,10 @@ class ACPS_Sitemap_Remote {
 			header( 'Content-Type: text/html; charset=UTF-8' );
 			header( 'X-Robots-Tag: noindex, nofollow', true );
 		}
-		echo '<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />';
-		echo '<meta name="robots" content="noindex,nofollow" /><title>' . esc_html( $title ) . '</title>';
-		echo '<style>'
-			. 'body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:820px;margin:32px auto;padding:0 16px;color:#1d2327;background:#f6f7f7;}'
-			. 'h1{font-size:20px;} h2{font-size:15px;margin-top:24px;border-bottom:1px solid #dcdcde;padding-bottom:4px;}'
-			. 'table.diag{border-collapse:collapse;width:100%;} table.diag th{ text-align:left;width:180px;color:#50575e;font-weight:600;padding:3px 8px;vertical-align:top;} table.diag td{padding:3px 8px;}'
-			. 'fieldset{border:1px solid #dcdcde;margin:0 0 16px;padding:8px 16px;background:#fff;} legend{font-weight:600;padding:0 6px;}'
-			. 'input,select,textarea{font:inherit;box-sizing:border-box;} label{display:block;}'
-			. '.flash{background:#e6f4ea;border:1px solid #46b450;padding:8px 12px;} .warn{background:#fcf0f1;border:1px solid #dc3232;padding:8px 12px;}'
-			. 'ul.issues{list-style:none;padding:0;} ul.issues li{padding:2px 0;border-bottom:1px solid #eee;}'
-			. 'pre{background:#fff;border:1px solid #dcdcde;padding:12px;overflow:auto;}'
-			. '</style></head><body>';
+		// Intentionally unstyled: plain HTML/text so it is fast and trivial for a
+		// script to parse. No CSS, no JavaScript.
+		echo '<!doctype html><html><head><meta charset="utf-8" />';
+		echo '<meta name="robots" content="noindex,nofollow" /><title>' . esc_html( $title ) . '</title></head><body>';
 		echo '<h1>ACPS Sitemap &mdash; ' . esc_html__( 'Control panel', 'acps-sitemap' ) . '</h1>';
 		echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Assembled from escaped parts.
 		echo '</body></html>';

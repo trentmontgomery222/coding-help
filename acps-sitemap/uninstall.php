@@ -18,6 +18,11 @@ delete_option( 'acps_sitemap_safe_mode' );
 delete_option( 'acps_sitemap_issues' );
 delete_option( 'acps_sitemap_remote_pw' );
 delete_option( 'acps_sitemap_remote_last_edit' );
+delete_option( 'acps_sitemap_selfheal' );
+
+if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+	wp_clear_scheduled_hook( 'acps_sitemap_selfheal_cron' );
+}
 
 // Update-lookup transients.
 delete_transient( 'acps_sitemap_update_remote' );

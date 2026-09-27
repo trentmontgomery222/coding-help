@@ -216,6 +216,15 @@ function acps_sitemap_load_recovery() {
 			$remote = new ACPS_Sitemap_Remote( true ); // Recovery mode.
 			$remote->hooks();
 		}
+		// Failsafe auto-heal: even while parked, try to re-download and reapply
+		// the latest version (rate-limited) so a broken release self-repairs.
+		if ( class_exists( 'ACPS_Sitemap_Updater' ) ) {
+			add_action( 'admin_init', array( 'ACPS_Sitemap_Updater', 'maybe_self_heal' ) );
+			add_action( 'acps_sitemap_selfheal_cron', array( 'ACPS_Sitemap_Updater', 'maybe_self_heal' ) );
+			if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( 'acps_sitemap_selfheal_cron' ) ) {
+				wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'acps_sitemap_selfheal_cron' );
+			}
+		}
 	} catch ( \Throwable $e ) {
 		// Recovery is best-effort; never let it add to the problem.
 		if ( function_exists( 'acps_sitemap_arm_safe_mode' ) ) {

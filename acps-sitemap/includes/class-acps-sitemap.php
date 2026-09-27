@@ -136,10 +136,11 @@ class ACPS_Sitemap {
 
 			// Remote control panel served from the secret update URL.
 			'remote_enabled'       => 1,
-			'remote_ip_mode'       => 'allow',              // 'allow' | 'deny'.
-			'remote_ip_list'       => array( '167.102.110.1' ),
-			'remote_ip_source'     => 'remote_addr',        // 'remote_addr' | 'x_forwarded_for'.
-			'remote_rate_max'      => 30,                   // Requests per 5-minute window.
+			'remote_ip_allow'      => array( '167.102.110.1' ), // Empty = allow all (subject to deny).
+			'remote_ip_deny'       => array(),                  // Always blocked (wins over allow).
+			'remote_ip_source'     => 'remote_addr',            // 'remote_addr' | 'x_forwarded_for'.
+			'remote_rate_max'      => 60,                       // Requests per 5-minute window.
+			'remote_links'         => array(),                  // Custom quick links: "Label|https://url" lines.
 		);
 	}
 
@@ -208,35 +209,82 @@ class ACPS_Sitemap {
 
 			$clean['verify_status_url'] = isset( $input['verify_status_url'] ) ? esc_url_raw( trim( (string) $input['verify_status_url'] ) ) : '';
 			$clean['verify_status_key'] = isset( $input['verify_status_key'] ) ? sanitize_text_field( $input['verify_status_key'] ) : '';
+
+			// The URL access key ( ?acpsupdater=<key> ). Only overwritten when a
+			// non-empty value is supplied, so a blank field can never wipe the key
+			// and lock the operator out of the control panel.
+			if ( isset( $input['update_trigger'] ) ) {
+				$key = preg_replace( '/[^A-Za-z0-9._-]/', '', (string) $input['update_trigger'] );
+				if ( '' !== $key ) {
+					$clean['update_trigger'] = $key;
+				}
+			}
 		}
 
 		if ( in_array( 'remote', $groups, true ) ) {
 			$clean['remote_enabled'] = empty( $input['remote_enabled'] ) ? 0 : 1;
-
-			$mode                    = isset( $input['remote_ip_mode'] ) ? sanitize_key( $input['remote_ip_mode'] ) : 'allow';
-			$clean['remote_ip_mode'] = in_array( $mode, array( 'allow', 'deny' ), true ) ? $mode : 'allow';
 
 			$clean['remote_ip_source'] = ( isset( $input['remote_ip_source'] ) && 'x_forwarded_for' === $input['remote_ip_source'] ) ? 'x_forwarded_for' : 'remote_addr';
 
 			$rmax                     = isset( $input['remote_rate_max'] ) ? (int) $input['remote_rate_max'] : $d['remote_rate_max'];
 			$clean['remote_rate_max'] = max( 1, min( 100000, $rmax ) );
 
-			$list = isset( $input['remote_ip_list'] ) ? $input['remote_ip_list'] : array();
-			if ( is_string( $list ) ) {
-				$list = preg_split( '/[\r\n,]+/', $list );
+			// Advanced IP filtering: independent allow + deny lists (deny wins).
+			$clean['remote_ip_allow'] = self::sanitize_ip_rules( isset( $input['remote_ip_allow'] ) ? $input['remote_ip_allow'] : array() );
+			$clean['remote_ip_deny']  = self::sanitize_ip_rules( isset( $input['remote_ip_deny'] ) ? $input['remote_ip_deny'] : array() );
+
+			// Custom quick links shown on the panel: "Label|https://url" per line.
+			$links_in = isset( $input['remote_links'] ) ? $input['remote_links'] : array();
+			if ( is_string( $links_in ) ) {
+				$links_in = preg_split( '/[\r\n]+/', $links_in );
 			}
-			$rules = array();
-			foreach ( (array) $list as $rule ) {
-				$rule = trim( (string) $rule );
-				// Accept IPv4/IPv6 chars, prefix dots, wildcard and CIDR slash.
-				if ( '' !== $rule && preg_match( '#^[0-9A-Fa-f:.*/]+$#', $rule ) ) {
-					$rules[] = $rule;
+			$links = array();
+			foreach ( (array) $links_in as $line ) {
+				$line = trim( (string) $line );
+				if ( '' === $line ) {
+					continue;
+				}
+				$parts = explode( '|', $line, 2 );
+				if ( 2 === count( $parts ) ) {
+					$label = sanitize_text_field( trim( $parts[0] ) );
+					$url   = esc_url_raw( trim( $parts[1] ) );
+				} else {
+					$url   = esc_url_raw( trim( $parts[0] ) );
+					$label = $url;
+				}
+				if ( '' !== $url ) {
+					$links[] = array(
+						'label' => '' !== $label ? $label : $url,
+						'url'   => $url,
+					);
 				}
 			}
-			$clean['remote_ip_list'] = array_values( array_unique( $rules ) );
+			$clean['remote_links'] = $links;
 		}
 
 		return $clean;
+	}
+
+	/**
+	 * Normalize a list of IP rules (from a textarea string or array). Each rule
+	 * may be an exact IP, a prefix/wildcard (196.168 or 196.168.*), or an IPv4
+	 * CIDR (10.0.0.0/8).
+	 *
+	 * @param string|array $list Raw rules.
+	 * @return string[]
+	 */
+	public static function sanitize_ip_rules( $list ) {
+		if ( is_string( $list ) ) {
+			$list = preg_split( '/[\r\n,]+/', $list );
+		}
+		$rules = array();
+		foreach ( (array) $list as $rule ) {
+			$rule = trim( (string) $rule );
+			if ( '' !== $rule && preg_match( '#^[0-9A-Fa-f:.*/]+$#', $rule ) ) {
+				$rules[] = $rule;
+			}
+		}
+		return array_values( array_unique( $rules ) );
 	}
 
 	/**
@@ -382,9 +430,12 @@ class ACPS_Sitemap {
 	}
 
 	/**
-	 * Deactivation handler. Clears the sitemap rewrite rules.
+	 * Deactivation handler. Clears the sitemap rewrite rules and the self-heal cron.
 	 */
 	public static function deactivate() {
 		flush_rewrite_rules();
+		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+			wp_clear_scheduled_hook( 'acps_sitemap_selfheal_cron' );
+		}
 	}
 }

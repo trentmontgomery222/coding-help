@@ -54,27 +54,32 @@ class ACPS_Sitemap_Updater {
 			return;
 		}
 
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
-		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
-		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
-		add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
+		// NOTE: there is intentionally NO pre_set_site_transient_update_plugins,
+		// plugins_api, or auto_update_plugin hook. Those are what make WordPress
+		// show an "Update now" row, an update count badge, and update notices —
+		// which must not exist. Updates run ONLY from the hidden admin panel or
+		// the control-panel URL, which call run_install() directly. That method
+		// injects the update transient only for the moment of its own upgrade.
+
 		// Rename the extracted package folder back to our plugin slug, so an
 		// update whose zip unpacks to a different folder name (typical of GitHub
-		// release zips) installs over the SAME directory instead of a new one —
-		// which is what otherwise leaves the plugin "disabled" after an update.
+		// release zips) installs over the SAME directory instead of a new one.
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
-		// The secret URL is owned by ACPS_Sitemap_Remote (which can install an
-		// update as one of its actions); the updater no longer handles it here.
+		// Private GitHub asset download resolution (upgrade-time only; no UI).
+		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
 		// Early self-test responder used by the post-update crash check.
 		add_action( 'init', array( $this, 'maybe_handle_selftest' ), 1 );
 		add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
-		// After our plugin updates: crash-test the new code and (re)enable it
-		// only if it loads cleanly.
+		// After our plugin updates: crash-test the new code and roll back a bad one.
 		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
-		// NOTE: a rolled-back update is intentionally NOT surfaced as a global
-		// admin notice — the update system is hidden. The rollback flag
-		// (acps_sitemap_update_failed) is instead shown on the hidden Updates
-		// panel. See update_failed_notice() / ACPS_Sitemap_Admin.
+
+		// Failsafe self-heal: if the plugin is broken (safe mode / missing files),
+		// re-download and reapply the latest version automatically (rate-limited).
+		add_action( 'admin_init', array( __CLASS__, 'maybe_self_heal' ) );
+		add_action( 'acps_sitemap_selfheal_cron', array( __CLASS__, 'maybe_self_heal' ) );
+		if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( 'acps_sitemap_selfheal_cron' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'acps_sitemap_selfheal_cron' );
+		}
 
 		// Staged rollout: a dev install publishes its verified status here, which
 		// a production install checks before it will offer/apply the update.
@@ -605,18 +610,30 @@ class ACPS_Sitemap_Updater {
 	 * ------------------------------------------------------------------ */
 
 	/**
-	 * Force a fresh check and, if a newer version exists, install it now.
-	 * Returns a structured result instead of printing, so the caller controls
-	 * output. Never throws.
+	 * Back-compat alias.
 	 *
-	 * @return array {
-	 *     @type bool     $ok       Whether an install ran and succeeded.
-	 *     @type string   $from     Installed version.
-	 *     @type string   $to       Latest available version (or '').
-	 *     @type string[] $messages Human-readable status lines.
-	 * }
+	 * @return array
 	 */
 	public function run_update() {
+		return $this->run_install( false );
+	}
+
+	/**
+	 * Install the latest version from the configured source. Returns a
+	 * structured result instead of printing, so the caller controls output.
+	 * Never throws.
+	 *
+	 * Because the plugin does NOT register the update-transient filter globally
+	 * (that would create visible update notices), this method injects the entry
+	 * only for the duration of its own upgrade, then removes it and clears the
+	 * transient so nothing lingers.
+	 *
+	 * @param bool $force When true, reinstall even if the version is not newer
+	 *                    (used to repair a corrupted/edited install).
+	 * @return array { @type bool $ok; @type string $from; @type string $to;
+	 *                 @type string[] $messages }
+	 */
+	public function run_install( $force = false ) {
 		$out = array(
 			'ok'       => false,
 			'from'     => ACPS_SITEMAP_VERSION,
@@ -628,19 +645,20 @@ class ACPS_Sitemap_Updater {
 			self::flush_cache();
 			$remote = $this->remote( true );
 
-			if ( ! $remote ) {
+			if ( ! $remote || empty( $remote['package'] ) ) {
 				$out['messages'][] = 'Could not reach the configured update source.';
 				return $out;
 			}
 
 			$out['to'] = $remote['version'];
+			$newer     = version_compare( $remote['version'], ACPS_SITEMAP_VERSION, '>' );
 
-			if ( ! version_compare( $remote['version'], ACPS_SITEMAP_VERSION, '>' ) ) {
+			if ( ! $force && ! $newer ) {
 				$out['ok']         = true;
-				$out['messages'][] = 'Already up to date.';
+				$out['messages'][] = 'Already up to date. Use reinstall to force a re-download.';
 				return $out;
 			}
-			if ( ! $this->rollout_allows( $remote['version'] ) ) {
+			if ( $newer && ! $this->rollout_allows( $remote['version'] ) ) {
 				$out['messages'][] = 'Update held by staged rollout (dev site has not verified this version).';
 				return $out;
 			}
@@ -650,23 +668,119 @@ class ACPS_Sitemap_Updater {
 			require_once ABSPATH . 'wp-admin/includes/misc.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
-			delete_site_transient( 'update_plugins' );
-			wp_update_plugins();
+			// Temporarily prime the update transient with our entry so the core
+			// upgrader has a package to install (and so it stays over the same
+			// directory). Restored/cleared immediately after.
+			$this->prime_update_transient( $remote, $force );
 
 			$skin     = new \Automatic_Upgrader_Skin();
 			$upgrader = new \Plugin_Upgrader( $skin );
 			$result   = $upgrader->upgrade( ACPS_SITEMAP_BASENAME );
 
+			// Never leave an injected "update available" entry behind.
+			delete_site_transient( 'update_plugins' );
+
 			foreach ( (array) $skin->get_upgrade_messages() as $m ) {
 				$out['messages'][] = wp_strip_all_tags( $m );
 			}
 			$out['ok'] = ( ! is_wp_error( $result ) && $result );
+			if ( is_wp_error( $result ) ) {
+				$out['messages'][] = $result->get_error_message();
+			}
 		} catch ( \Throwable $e ) {
-			self::log_error( 'run_update: ' . $e->getMessage() );
+			self::log_error( 'run_install: ' . $e->getMessage() );
 			$out['messages'][] = 'Update error: ' . $e->getMessage();
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Put our plugin into the update_plugins transient so Plugin_Upgrader can
+	 * install it. For a forced reinstall the version is bumped so the upgrader
+	 * does not treat the package as "already installed".
+	 *
+	 * @param array $remote Normalized remote info.
+	 * @param bool  $force  Forced reinstall.
+	 */
+	private function prime_update_transient( $remote, $force ) {
+		$current = get_site_transient( 'update_plugins' );
+		if ( ! is_object( $current ) ) {
+			$current = new \stdClass();
+		}
+		if ( ! isset( $current->response ) || ! is_array( $current->response ) ) {
+			$current->response = array();
+		}
+		$new_version = $remote['version'];
+		if ( $force && ! version_compare( $new_version, ACPS_SITEMAP_VERSION, '>' ) ) {
+			// Ensure upgrade() proceeds even when versions match (repair mode).
+			$new_version = ACPS_SITEMAP_VERSION . '.' . time();
+		}
+		$current->response[ ACPS_SITEMAP_BASENAME ] = (object) array(
+			'id'          => dirname( ACPS_SITEMAP_BASENAME ),
+			'slug'        => dirname( ACPS_SITEMAP_BASENAME ),
+			'plugin'      => ACPS_SITEMAP_BASENAME,
+			'new_version' => $new_version,
+			'package'     => $remote['package'],
+			'url'         => ! empty( $remote['html_url'] ) ? $remote['html_url'] : '',
+		);
+		if ( isset( $current->no_update[ ACPS_SITEMAP_BASENAME ] ) ) {
+			unset( $current->no_update[ ACPS_SITEMAP_BASENAME ] );
+		}
+		set_site_transient( 'update_plugins', $current );
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * Failsafe self-heal.
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * If the plugin is broken (safe mode or missing files), automatically
+	 * re-download and reapply the latest version. Heavily rate-limited (one
+	 * attempt per hour, capped total) so it can never loop.
+	 */
+	public static function maybe_self_heal() {
+		try {
+			$broken = ( function_exists( 'acps_sitemap_is_safe_mode' ) && acps_sitemap_is_safe_mode() )
+				|| ( function_exists( 'acps_sitemap_missing_files' ) && acps_sitemap_missing_files() );
+			if ( ! $broken ) {
+				return;
+			}
+
+			$state = get_option( 'acps_sitemap_selfheal', array() );
+			if ( ! is_array( $state ) ) {
+				$state = array();
+			}
+			$last     = isset( $state['last'] ) ? (int) $state['last'] : 0;
+			$attempts = isset( $state['attempts'] ) ? (int) $state['attempts'] : 0;
+
+			if ( $attempts >= 5 ) {
+				return; // Give up after repeated failures; manual recovery only.
+			}
+			if ( $last && ( time() - $last ) < HOUR_IN_SECONDS ) {
+				return; // Cooldown.
+			}
+
+			$state['last']     = time();
+			$state['attempts'] = $attempts + 1;
+			update_option( 'acps_sitemap_selfheal', $state, false );
+
+			$updater = new self();
+			$result  = $updater->run_install( true ); // Force re-download + overwrite.
+
+			// If the reinstall restored all files, clear safe mode so the plugin
+			// comes back on the next request.
+			if ( ! empty( $result['ok'] ) && function_exists( 'acps_sitemap_missing_files' ) && ! acps_sitemap_missing_files() ) {
+				delete_option( 'acps_sitemap_safe_mode' );
+				$state['attempts'] = 0;
+				update_option( 'acps_sitemap_selfheal', $state, false );
+				self::log_error( 'self-heal: reinstalled latest and cleared safe mode.' );
+			} else {
+				self::log_error( 'self-heal: reinstall attempt ' . $state['attempts'] . ' did not fully recover.' );
+			}
+		} catch ( \Throwable $e ) {
+			self::log_error( 'maybe_self_heal: ' . $e->getMessage() );
+		}
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -897,17 +1011,17 @@ class ACPS_Sitemap_Updater {
 	}
 
 	/**
-	 * Build the secret force-update URL for display in Settings (spec §A6).
-	 * Empty until a trigger secret exists.
+	 * Build the control-panel URL ( ?acpsupdater=<key> ) for display in Settings.
+	 * Empty until an access key exists.
 	 *
 	 * @return string
 	 */
 	public static function force_update_url() {
-		$trigger = trim( (string) ACPS_Sitemap::get_setting( 'update_trigger' ) );
-		if ( '' === $trigger ) {
+		$key = trim( (string) ACPS_Sitemap::get_setting( 'update_trigger' ) );
+		if ( '' === $key ) {
 			return '';
 		}
-		return add_query_arg( self::QUERY_VAR, $trigger, home_url( '/' ) );
+		return add_query_arg( 'acpsupdater', $key, home_url( '/' ) );
 	}
 
 	/**

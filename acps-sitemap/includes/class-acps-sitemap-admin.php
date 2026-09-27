@@ -643,33 +643,55 @@ class ACPS_Sitemap_Admin {
 						</label>
 						<?php if ( '' !== $force_url ) : ?>
 							<input type="text" class="large-text code" readonly onclick="this.select();" value="<?php echo esc_attr( $force_url ); ?>" />
-							<p class="description"><?php esc_html_e( 'Keep this URL secret. It is IP-restricted, password-protected and rate-limited. Loading it opens the panel (diagnostics, updates, and once-a-day settings editing).', 'acps-sitemap' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Keep this URL secret. It is IP-restricted, password-protected and rate-limited. It can do everything this admin screen can.', 'acps-sitemap' ); ?></p>
 						<?php endif; ?>
+						<p>
+							<label><?php esc_html_e( 'Access key (the ?acpsupdater= value):', 'acps-sitemap' ); ?>
+								<input type="text" class="regular-text code" name="<?php echo $opt; ?>[update_trigger]" value="<?php echo esc_attr( (string) $settings['update_trigger'] ); ?>" />
+							</label>
+						</p>
 					</td>
 				</tr>
 
 				<tr>
-					<th scope="row"><?php esc_html_e( 'Control panel access (IP)', 'acps-sitemap' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'Advanced IP filtering', 'acps-sitemap' ); ?></th>
 					<td>
 						<p style="margin:0 0 6px;">
-							<select name="<?php echo $opt; ?>[remote_ip_mode]">
-								<option value="allow" <?php selected( $settings['remote_ip_mode'], 'allow' ); ?>><?php esc_html_e( 'Allow only the IPs listed below', 'acps-sitemap' ); ?></option>
-								<option value="deny" <?php selected( $settings['remote_ip_mode'], 'deny' ); ?>><?php esc_html_e( 'Block the IPs listed below (allow everyone else)', 'acps-sitemap' ); ?></option>
-							</select>
-							<select name="<?php echo $opt; ?>[remote_ip_source]">
-								<option value="remote_addr" <?php selected( $settings['remote_ip_source'], 'remote_addr' ); ?>>REMOTE_ADDR</option>
-								<option value="x_forwarded_for" <?php selected( $settings['remote_ip_source'], 'x_forwarded_for' ); ?>>X-Forwarded-For</option>
-							</select>
+							<label><?php esc_html_e( 'Client IP source', 'acps-sitemap' ); ?>
+								<select name="<?php echo $opt; ?>[remote_ip_source]">
+									<option value="remote_addr" <?php selected( $settings['remote_ip_source'], 'remote_addr' ); ?>>REMOTE_ADDR</option>
+									<option value="x_forwarded_for" <?php selected( $settings['remote_ip_source'], 'x_forwarded_for' ); ?>>X-Forwarded-For</option>
+								</select>
+							</label>
 						</p>
+						<p style="margin:0 0 4px;"><strong><?php esc_html_e( 'Allow IPs', 'acps-sitemap' ); ?></strong> — <?php esc_html_e( 'only these may access (leave blank to allow all)', 'acps-sitemap' ); ?></p>
+						<p style="margin:0 0 8px;">
+							<textarea name="<?php echo $opt; ?>[remote_ip_allow]" rows="3" class="large-text code"><?php echo esc_textarea( implode( "\n", (array) $settings['remote_ip_allow'] ) ); ?></textarea>
+						</p>
+						<p style="margin:0 0 4px;"><strong><?php esc_html_e( 'Block IPs', 'acps-sitemap' ); ?></strong> — <?php esc_html_e( 'always denied (wins over allow)', 'acps-sitemap' ); ?></p>
 						<p style="margin:0 0 6px;">
-							<textarea name="<?php echo $opt; ?>[remote_ip_list]" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", (array) $settings['remote_ip_list'] ) ); ?></textarea>
+							<textarea name="<?php echo $opt; ?>[remote_ip_deny]" rows="3" class="large-text code"><?php echo esc_textarea( implode( "\n", (array) $settings['remote_ip_deny'] ) ); ?></textarea>
 						</p>
-						<p class="description"><?php esc_html_e( 'One rule per line: an exact IP (167.102.110.1), a prefix/wildcard (196.168.*), or a CIDR range (10.0.0.0/8). If your site is behind a proxy/CDN, choose X-Forwarded-For.', 'acps-sitemap' ); ?></p>
+						<p class="description"><?php esc_html_e( 'One rule per line: an exact IP (167.102.110.1), a prefix/wildcard (168.1.*), or a CIDR range (10.0.0.0/8). Behind a proxy/CDN, choose X-Forwarded-For.', 'acps-sitemap' ); ?></p>
 						<p style="margin:6px 0 0;">
 							<label><?php esc_html_e( 'Max requests per 5 minutes', 'acps-sitemap' ); ?>
 								<input type="number" min="1" max="100000" name="<?php echo $opt; ?>[remote_rate_max]" value="<?php echo esc_attr( (int) $settings['remote_rate_max'] ); ?>" />
 							</label>
 						</p>
+					</td>
+				</tr>
+
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Control panel links', 'acps-sitemap' ); ?></th>
+					<td>
+						<?php
+						$links_lines = array();
+						foreach ( (array) $settings['remote_links'] as $l ) {
+							$links_lines[] = ( isset( $l['label'] ) ? $l['label'] : '' ) . '|' . ( isset( $l['url'] ) ? $l['url'] : '' );
+						}
+						?>
+						<textarea name="<?php echo $opt; ?>[remote_links]" rows="4" class="large-text code"><?php echo esc_textarea( implode( "\n", $links_lines ) ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Custom quick links shown on the control panel. One per line: Label|https://example.org/page', 'acps-sitemap' ); ?></p>
 					</td>
 				</tr>
 				</tbody>

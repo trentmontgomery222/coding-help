@@ -49,11 +49,12 @@ it is out of sight.
 | `update_manifest` / `update_manifest_key` | JSON manifest URL + optional `?key=` |
 | `update_role` | `standalone` \| `dev` \| `production` (staged rollout) |
 | `verify_status_url` / `verify_status_key` | Production → dev verification link |
-| `update_trigger` | Secret for the control-panel URL **and** the crash-test marker (seeded on activation) |
+| `update_trigger` | Access key for the control-panel URL (`?acpsupdater=`); seeded on activation, editable in the hidden panel |
 | `remote_enabled` | Master switch for the secret control panel |
-| `remote_ip_mode` / `remote_ip_list` | `allow`/`deny` + the rules (exact / prefix / CIDR) |
+| `remote_ip_allow` / `remote_ip_deny` | Advanced IP filtering — allow + deny lists (exact / prefix / wildcard / CIDR); deny wins |
 | `remote_ip_source` | `remote_addr` or `x_forwarded_for` |
 | `remote_rate_max` | Max control-panel requests per 5 min per IP |
+| `remote_links` | Custom quick links shown on the panel (`[{label,url}]`) |
 
 Options/transients outside the settings array:
 `acps_sitemap_update_remote` (cached lookup, 6 h ok / 15 min fail),
@@ -64,6 +65,7 @@ Options/transients outside the settings array:
 `acps_sitemap_issues` (capped ring buffer shown on the panel),
 `acps_sitemap_remote_pw` (hashed control-panel password; set only in wp-admin),
 `acps_sitemap_remote_last_edit` (once-a-day edit stamp),
+`acps_sitemap_selfheal` (`{last,attempts}` auto-heal state),
 `acps_sitemap_remote_{sess,rl,fail}_*` transients (session / rate limit / lockout).
 
 ## Two sources
@@ -123,32 +125,90 @@ also runs from WP-Cron and logged-out contexts.
   intact, so a bad release cannot lock you out of the recovery URL. From there
   you can clear safe mode or force an update.
 
+## No update notices
+
+The plugin does **not** register the `pre_set_site_transient_update_plugins`,
+`plugins_api`, or `auto_update_plugin` hooks, so there is **no "Update now" row,
+no update-count badge, and no update notice** anywhere in WordPress. Updates
+happen **only** when you press a button in the hidden admin panel (`&updates=1`)
+or the control-panel URL — both call `Updater::run_install()`, which injects the
+update transient just for the moment of its own upgrade and clears it afterward.
+
 ## Secret control panel (the update URL)
 
-Activation seeds a random secret (`update_trigger`). The URL
-`https://your-site/?acps_sitemap_update=<secret>` opens a self-contained,
-logged-out control panel (`class-acps-sitemap-remote.php`). It is **not** linked
-anywhere. Before it shows anything it passes, in order:
+Activation seeds a random access key (`update_trigger`, editable in the hidden
+Updates panel). The URL
+
+```
+https://your-site/?acpsupdater=<key>
+```
+
+opens a self-contained, logged-out, **plain-text (no CSS/JS)** control panel
+(`class-acps-sitemap-remote.php`). It is **not** linked anywhere. It can do
+**everything the wp-admin screen can** — diagnostics, updates, and editing every
+setting. Before it shows anything it passes, in order:
 
 1. **`remote_enabled`** master switch.
-2. **IP gate** — `remote_ip_mode` (`allow`/`deny`) against `remote_ip_list`
-   (exact IP, prefix/wildcard `196.168.*`, or CIDR `10.0.0.0/8`), reading the IP
-   from `remote_ip_source` (`remote_addr` or `x_forwarded_for` for sites behind a
-   proxy/CDN). Default: allow only `167.102.110.1`. A blocked IP gets a plain 404.
+2. **Advanced IP filtering** — independent **allow** (`remote_ip_allow`) and
+   **deny** (`remote_ip_deny`) lists; deny wins, and an empty allow list means
+   "allow all (except denied)". Each rule is an exact IP, a prefix/wildcard
+   (`168.1.*`), or an IPv4 CIDR (`10.0.0.0/8`). The client IP is read from
+   `remote_ip_source` (`remote_addr`, or `x_forwarded_for` behind a proxy/CDN).
+   Default: allow only `167.102.110.1`. A blocked IP gets a plain 404.
 3. **Rate limit** — `remote_rate_max` requests per 5 minutes per IP (429 over).
 4. **Password** — stored **hashed** in `acps_sitemap_remote_pw`, set ONLY from
    wp-admin (hidden Updates panel). 5 wrong tries per IP = 15-minute lockout.
-   A short-lived, IP-bound session cookie avoids re-entering it each request.
 
-Once in, it shows **diagnostics** (versions, peak memory, request time, file
-integrity, safe-mode, update status, recent issues), can **check/install an
-update** or **clear safe mode**, and can **edit every setting** — but only **once
-per 24 hours** (`acps_sitemap_remote_last_edit`). State-changing POSTs carry a
-CSRF token tied to the session.
+Auth works two ways: a browser gets a short-lived, IP-bound session cookie (with
+a CSRF token on state-changing posts); a **script** may instead send the password
+on every POST, which skips the cookie/token dance entirely (see `acps-remote.py`).
 
-> Security note: this is a real attack surface — an unauthenticated endpoint
-> that edits settings and installs code. Keep the IP list tight, use a long
-> password, and prefer `x_forwarded_for` only when you trust the proxy.
+Actions: **check / install / reinstall** (reinstall re-downloads and overwrites
+the current version to repair a mis-edited file), **create the HTML sitemap
+page**, **clear safe mode**, **clear the issue log**, and **edit every setting**
+— the last is limited to **once per 24 hours** (`acps_sitemap_remote_last_edit`).
+Operator-defined **custom links** (`remote_links`, "Label|URL" lines) appear on
+the panel for quick navigation.
+
+### Driving it from Python
+
+`acps-remote.py` (repo root, stdlib only) is a ready example:
+
+```
+export ACPS_URL=https://your-site/ ACPS_KEY=<key> ACPS_PW=<password>
+python3 acps-remote.py status
+python3 acps-remote.py reinstall
+python3 acps-remote.py set enable_xml=1 max_per_sitemap=2000
+```
+
+## Conditional shortcode for page builders
+
+`[acps_if]` shows/hides content by condition, for BeaverBuilder/Gutenberg modules:
+
+```
+[acps_if condition="update_available"]An update is ready[/acps_if]
+[acps_if condition="!xml_enabled"]Sitemap is off[/acps_if]
+[acps_if plugin_inactive="bb-plugin/fl-builder.php"]BeaverBuilder is off[/acps_if]
+```
+
+Conditions: `safe_mode`, `not_safe_mode`, `xml_enabled`, `xml_disabled`,
+`remote_enabled`, `update_available`, `no_update`, `update_failed` (prefix `!`
+to negate); plus `plugin_active="basename"` / `plugin_inactive="basename"` for
+any plugin. (While THIS plugin is itself in safe mode its shortcodes don't run,
+so use a builder-level fallback for the "totally down" case.)
+
+## Failsafe auto-heal
+
+If the plugin ends up broken — safe mode or missing files — it tries to
+**re-download and reapply the latest version automatically** (`Updater::maybe_self_heal()`,
+on `admin_init` and an hourly cron). It is rate-limited to one attempt per hour
+and capped at 5 total (tracked in `acps_sitemap_selfheal`) so it can never loop;
+on a successful repair it clears safe mode. The control-panel URL also keeps
+working in safe mode (reduced recovery mode) so you can always intervene by hand.
+
+> Security note: this is a real attack surface — a logged-out endpoint that edits
+> settings and installs code. Keep the allow list tight, use a long password,
+> and choose `x_forwarded_for` only when you trust the proxy in front of the site.
 
 ## Staged rollout (optional)
 
