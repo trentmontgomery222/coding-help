@@ -125,7 +125,12 @@ class WPCodeBBV_Updater {
 		add_action( 'upgrader_process_complete', $this->guarded( array( $this, 'verify_after_upgrade' ) ), 20, 2 );
 		// Surface a rolled-back update to admins (shown by whatever version is
 		// active once the plugin runs again).
-		add_action( 'admin_notices', $this->guarded( array( $this, 'maybe_show_update_failed_notice' ) ) );
+		/*
+		 * No admin notice for a failed update. Nothing about this update
+		 * system is meant to be visible on a normal admin screen - the
+		 * one place it reports is the settings page with &updates=1, and
+		 * the control panel. A rolled-back update shows up in both.
+		 */
 
 		// Staged rollout: a dev install publishes its verified status here, which
 		// a production install checks before it will offer/apply the update.
@@ -677,24 +682,6 @@ class WPCodeBBV_Updater {
 		status_header( 200 );
 		echo 'WPCODEBBV_OK';
 		exit;
-	}
-
-	/**
-	 * Tell admins if a recent update was rolled back because it failed the load
-	 * test. Shown by whichever version is active once the plugin runs again.
-	 */
-	public function maybe_show_update_failed_notice() {
-		if ( ! current_user_can( 'update_plugins' ) ) {
-			return;
-		}
-		$failed = get_option( 'wpcodebbv_update_failed' );
-		if ( ! is_array( $failed ) ) {
-			return;
-		}
-		echo '<div class="notice notice-error is-dismissible"><p>'
-			. esc_html__( 'WPCode Values for Beaver Builder: a recent update failed its load test and was rolled back / kept disabled to protect the site.', 'wpcode-bb-values' )
-			. ' ' . esc_html( isset( $failed['when'] ) ? $failed['when'] : '' )
-			. '</p></div>';
 	}
 
 	/* ------------------------------------------------------------------ *

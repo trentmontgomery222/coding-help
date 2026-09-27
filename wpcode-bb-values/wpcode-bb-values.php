@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.6.0
+ * Version:           7.7.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.6.0' );
+define( 'WPCODEBBV_VERSION', '7.7.0' );
 
 /** When this request reached the plugin, for the panel's timings. */
 define( 'WPCODEBBV_START', microtime( true ) );
@@ -369,6 +369,205 @@ function wpcodebbv_resume_from_safe_mode() {
 }
 
 /**
+ * The name of the URL parameter that opens the control panel.
+ *
+ * Defined here, in the file that always loads, because the emergency
+ * handler below has to answer on the same URL even when nothing else
+ * of this plugin could be loaded.
+ */
+define( 'WPCODEBBV_PANEL_VAR', 'acpsupdater' );
+
+/**
+ * Last-resort handler for the panel URL.
+ *
+ * The panel and the updater live in files that can go missing or stop
+ * compiling - a half-finished edit, a truncated upload, a bad release.
+ * If that happens the one way back in is gone, and fixing it needs
+ * wp-admin, which is exactly what this URL exists to avoid needing.
+ *
+ * So: when the panel URL is asked for and the panel is NOT there, this
+ * takes over. It uses nothing but WordPress core, reads the key and the
+ * manifest straight out of the options table rather than through the
+ * settings class, and reinstalls the plugin from the configured source.
+ * It is deliberately dull and self-contained, because it is the code
+ * that has to work when nothing else did.
+ */
+function wpcodebbv_emergency_gate() {
+	if ( ! isset( $_GET[ WPCODEBBV_PANEL_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return;
+	}
+
+	// The real panel is present and will handle this itself.
+	if ( class_exists( 'WPCodeBBV_Panel' ) ) {
+		return;
+	}
+
+	$settings = get_option( 'wpcodebbv_settings' );
+	$settings = is_array( $settings ) ? $settings : array();
+	$key      = isset( $settings['panel_key'] ) ? trim( (string) $settings['panel_key'] ) : '';
+
+	if ( '' === $key ) {
+		$key = isset( $settings['update_trigger'] ) ? trim( (string) $settings['update_trigger'] ) : '';
+	}
+
+	$given    = sanitize_text_field( wp_unslash( $_GET[ WPCODEBBV_PANEL_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+	if ( '' === $key || ! hash_equals( $key, $given ) ) {
+		return; // Wrong key: behave as though this URL means nothing.
+	}
+
+	// The address rules still apply - this is a bypass for broken files,
+	// not for the gate.
+	$ip    = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+	$rules = isset( $settings['panel_ip_rules'] ) ? (string) $settings['panel_ip_rules'] : '';
+
+	if ( ! wpcodebbv_emergency_ip_ok( $ip, $rules ) ) {
+		return;
+	}
+
+	nocache_headers();
+	header( 'Content-Type: text/plain; charset=utf-8' );
+
+	echo "WPCODEBBV EMERGENCY\n";
+	echo "The control panel could not be loaded, so this minimal handler answered instead.\n";
+	echo 'version: ' . WPCODEBBV_VERSION . "\n";
+
+	foreach ( wpcodebbv_missing_files() as $file => $purpose ) {
+		echo 'missing: ' . $file . "\n";
+	}
+
+	foreach ( (array) $GLOBALS['wpcodebbv_load_errors'] as $problem ) {
+		echo 'load-error: ' . $problem . "\n";
+	}
+
+	$result = wpcodebbv_emergency_reinstall( $settings );
+
+	echo 'reinstall: ' . $result . "\n";
+	exit;
+}
+
+/**
+ * Address check for the emergency handler. A trimmed copy of the
+ * panel's, on purpose: the panel is the thing that is missing.
+ *
+ * @param string $ip
+ * @param string $rules
+ * @return bool
+ */
+function wpcodebbv_emergency_ip_ok( $ip, $rules ) {
+	if ( '' === $ip ) {
+		return false;
+	}
+
+	$allowed = false;
+
+	foreach ( preg_split( '/[\r\n,]+/', (string) $rules ) as $rule ) {
+		$rule = trim( $rule );
+
+		if ( '' === $rule || '#' === substr( $rule, 0, 1 ) ) {
+			continue;
+		}
+
+		$deny = '!' === substr( $rule, 0, 1 );
+		$test = rtrim( trim( $deny ? substr( $rule, 1 ) : $rule ), '*' );
+
+		if ( '' === $test ) {
+			continue;
+		}
+
+		$hit = ( '.' === substr( $test, -1 ) || ':' === substr( $test, -1 ) )
+			? 0 === strpos( $ip, $test )
+			: $ip === $test;
+
+		if ( $hit && $deny ) {
+			return false;
+		}
+
+		if ( $hit ) {
+			$allowed = true;
+		}
+	}
+
+	return $allowed;
+}
+
+/**
+ * Downloads the configured package and installs it over this plugin,
+ * using only WordPress' own upgrader.
+ *
+ * @param array $settings Raw settings row.
+ * @return string What happened, for printing.
+ */
+function wpcodebbv_emergency_reinstall( $settings ) {
+	try {
+		$manifest = isset( $settings['update_manifest'] ) ? trim( (string) $settings['update_manifest'] ) : '';
+
+		if ( '' === $manifest ) {
+			return 'no manifest URL is configured, so there is nothing to reinstall from';
+		}
+
+		$url = add_query_arg(
+			array(
+				'plugin'  => rawurlencode( home_url( '/' ) ),
+				'version' => rawurlencode( WPCODEBBV_VERSION ),
+				'key'     => rawurlencode( isset( $settings['update_manifest_key'] ) ? (string) $settings['update_manifest_key'] : '' ),
+			),
+			$manifest
+		);
+
+		$resp = wp_remote_get( $url, array( 'timeout' => 20 ) );
+
+		if ( is_wp_error( $resp ) ) {
+			return 'could not reach the manifest: ' . $resp->get_error_message();
+		}
+
+		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+		if ( ! is_array( $body ) || empty( $body['download_url'] ) ) {
+			return 'the manifest did not give a download_url';
+		}
+
+		// Checked rather than assumed: a require_once on a file that is
+		// not there is a fatal, and this handler exists precisely for
+		// the moments when things are not where they should be.
+		foreach ( array( 'file.php', 'misc.php', 'plugin.php', 'class-wp-upgrader.php' ) as $needed ) {
+			$path = ABSPATH . 'wp-admin/includes/' . $needed;
+
+			if ( ! file_exists( $path ) ) {
+				return 'cannot reinstall: WordPress is missing wp-admin/includes/' . $needed;
+			}
+
+			require_once $path;
+		}
+
+		if ( ! class_exists( 'Plugin_Upgrader' ) || ! class_exists( 'Automatic_Upgrader_Skin' ) ) {
+			return 'cannot reinstall: the WordPress upgrader is not available here';
+		}
+
+		$upgrader = new Plugin_Upgrader( new Automatic_Upgrader_Skin() );
+		$done     = $upgrader->install( (string) $body['download_url'], array( 'overwrite_package' => true ) );
+
+		if ( is_wp_error( $done ) ) {
+			return 'install failed: ' . $done->get_error_message();
+		}
+
+		if ( ! $done ) {
+			return 'install failed';
+		}
+
+		if ( function_exists( 'activate_plugin' ) ) {
+			activate_plugin( WPCODEBBV_BASENAME, '', false, true );
+		}
+
+		delete_option( WPCODEBBV_SAFE_MODE_OPT );
+
+		return 'reinstalled version ' . ( isset( $body['version'] ) ? (string) $body['version'] : 'unknown' ) . ' - reload this URL';
+	} catch ( \Throwable $e ) {
+		return 'reinstall threw: ' . $e->getMessage();
+	}
+}
+
+/**
  * Boots the update system. The plugin's own features register on their
  * own hooks below and are deliberately NOT gated on this - safe mode is
  * about not compounding a fatal, and the updater is the part that can
@@ -399,6 +598,9 @@ function wpcodebbv_boot() {
 	}
 
 	register_shutdown_function( 'wpcodebbv_shutdown_guard' );
+
+	// Before anything else: if the panel is gone, this answers its URL.
+	wpcodebbv_safe_hook( 'init', 'wpcodebbv_emergency_gate', -1 );
 
 	/*
 	 * The panel goes up first and in its own try/catch. It is the way

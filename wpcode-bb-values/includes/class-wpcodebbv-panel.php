@@ -3,11 +3,17 @@
  * The control panel served at the update URL.
  *
  * A front-end page, reachable without logging in, that reports on the
- * plugin and lets its settings be changed from outside wp-admin. That
- * is a lot of power on a public URL, so it is gated four ways and each
- * gate is checked before the next: the caller's IP, a rate limit, the
- * secret in the URL, and - for anything that writes - a password that
- * can only be set while logged into wp-admin.
+ * plugin and lets everything wp-admin can do be done from outside it.
+ * That is a lot of power on a public URL, so it is gated four ways and
+ * each gate is checked before the next: the caller's IP, a rate limit,
+ * the secret in the URL, and - for anything that writes - a password
+ * that can only be set while logged into wp-admin.
+ *
+ * The page is deliberately plain: no CSS, no JavaScript, no images.
+ * Everything is text, the forms are ordinary HTML forms, and every
+ * field name is stable, so a script can post to it as easily as a
+ * person can click it. `&view=raw` drops the forms entirely and
+ * returns text/plain.
  *
  * @package WPCodeBBV
  */
@@ -22,8 +28,8 @@ if ( ! defined( 'WPCODEBBV_VERSION' ) ) {
 
 class WPCodeBBV_Panel {
 
-	/** Query var that opens the panel - the same secret as the force update. */
-	const QUERY_VAR = 'wpcodebbv_update';
+	/** Query var that opens the panel. */
+	const QUERY_VAR = 'acpsupdater';
 
 	/** Rolling record of recent problems, for the panel to report. */
 	const LOG_OPT = 'wpcodebbv_recent_issues';
@@ -34,10 +40,53 @@ class WPCodeBBV_Panel {
 	/** Most recent issues kept. */
 	const LOG_MAX = 25;
 
+	/**
+	 * Settings the panel may never write, whatever is posted.
+	 *
+	 * The password is the gate this page stands behind; letting the page
+	 * change it would let anyone who got through once lock the owner out
+	 * for good. It is set in wp-admin and nowhere else.
+	 *
+	 * @var string[]
+	 */
+	private static $read_only = array( 'panel_password_hash' );
+
 	public function register() {
 		// Priority 0: before anything else gets a chance to fail, so the
 		// panel still answers when the rest of the plugin is unhappy.
 		add_action( 'init', array( $this, 'maybe_handle' ), 0 );
+	}
+
+	/**
+	 * The key that opens the panel: panel_key if one is set, otherwise
+	 * the update secret, so an install that predates panel_key keeps
+	 * working without anyone having to go and set it.
+	 *
+	 * @return string
+	 */
+	public static function key() {
+		$key = trim( (string) WPCodeBBV_Settings::get( 'panel_key' ) );
+
+		if ( '' !== $key ) {
+			return $key;
+		}
+
+		return trim( (string) WPCodeBBV_Settings::get( 'update_trigger' ) );
+	}
+
+	/**
+	 * The panel's own address, for printing on the admin screen.
+	 *
+	 * @return string Empty when there is no key to use.
+	 */
+	public static function url() {
+		$key = self::key();
+
+		if ( '' === $key ) {
+			return '';
+		}
+
+		return add_query_arg( self::QUERY_VAR, rawurlencode( $key ), home_url( '/' ) );
 	}
 
 	/* -----------------------------------------------------------------
@@ -65,10 +114,14 @@ class WPCodeBBV_Panel {
 	 *
 	 * One rule per line:
 	 *
-	 *   167.102.110.1   allow exactly this address
-	 *   196.168.        allow anything starting with this
-	 *   !203.0.113.7    never allow this address
-	 *   !10.            never allow anything starting with this
+	 *   167.102.110.1     allow exactly this address
+	 *   168.1.            allow anything starting with this
+	 *   168.1.*           the same thing, written the other way
+	 *   10.0.0.0/8        allow anything in this range
+	 *   !203.0.113.7      never allow this address
+	 *   !10.              never allow anything starting with this
+	 *   !192.168.0.0/16   never allow anything in this range
+	 *   *                 allow everything (only ever what you meant)
 	 *
 	 * A deny always wins. If any allow rules are present the address has
 	 * to match one of them, so the default of a single address means
@@ -121,24 +174,83 @@ class WPCodeBBV_Panel {
 	}
 
 	/**
-	 * Exact address, or a prefix ("196.168." / "196.168.*").
+	 * Exact address, a prefix ("168.1." / "168.1*"), a CIDR range, or
+	 * "*" for everything.
 	 *
 	 * @param string $ip
 	 * @param string $rule
 	 * @return bool
 	 */
 	private static function ip_matches( $ip, $rule ) {
-		$rule = rtrim( trim( $rule ), '*' );
+		$rule = trim( $rule );
 
 		if ( '' === $rule ) {
 			return false;
 		}
 
-		if ( '.' === substr( $rule, -1 ) || ':' === substr( $rule, -1 ) ) {
+		if ( '*' === $rule ) {
+			return true;
+		}
+
+		if ( false !== strpos( $rule, '/' ) ) {
+			return self::ip_in_cidr( $ip, $rule );
+		}
+
+		$rule = rtrim( $rule, '*' );
+
+		if ( '' === $rule ) {
+			return false;
+		}
+
+		// Anything that is not a complete address is read as a prefix,
+		// so "168.1" works as well as "168.1." - people write both and
+		// only ever mean the same thing by them.
+		if ( '.' === substr( $rule, -1 ) || ':' === substr( $rule, -1 ) || ! filter_var( $rule, FILTER_VALIDATE_IP ) ) {
 			return 0 === strpos( $ip, $rule );
 		}
 
 		return $ip === $rule;
+	}
+
+	/**
+	 * Whether an address falls inside a CIDR range. IPv4 and IPv6 both.
+	 *
+	 * @param string $ip
+	 * @param string $cidr
+	 * @return bool
+	 */
+	private static function ip_in_cidr( $ip, $cidr ) {
+		$parts = explode( '/', $cidr, 2 );
+		$net    = trim( $parts[0] );
+		$bits   = isset( $parts[1] ) ? (int) trim( $parts[1] ) : -1;
+
+		$a = @inet_pton( $ip );
+		$b = @inet_pton( $net );
+
+		if ( false === $a || false === $b || strlen( $a ) !== strlen( $b ) ) {
+			return false;
+		}
+
+		$max = strlen( $a ) * 8;
+
+		if ( $bits < 0 || $bits > $max ) {
+			return false;
+		}
+
+		$whole = intdiv( $bits, 8 );
+		$rest  = $bits % 8;
+
+		if ( $whole > 0 && substr( $a, 0, $whole ) !== substr( $b, 0, $whole ) ) {
+			return false;
+		}
+
+		if ( 0 === $rest ) {
+			return true;
+		}
+
+		$mask = chr( 0xff << ( 8 - $rest ) & 0xff );
+
+		return ( $a[ $whole ] & $mask ) === ( $b[ $whole ] & $mask );
 	}
 
 	/* -----------------------------------------------------------------
@@ -249,12 +361,17 @@ class WPCodeBBV_Panel {
 
 		$missing = array();
 
-		if ( '' === trim( (string) WPCodeBBV_Settings::get( 'update_trigger' ) ) ) {
-			$missing[] = 'no secret';
+		if ( '' === self::key() ) {
+			return 'no key set - this page is unreachable once that is true';
 		}
 
 		if ( ! class_exists( 'WPCodeBBV_Updater' ) ) {
 			$missing[] = 'updater not loaded';
+		}
+
+		if ( '' === trim( (string) WPCodeBBV_Settings::get( 'update_manifest' ) )
+			&& 'github' !== WPCodeBBV_Settings::get( 'update_source' ) ) {
+			$missing[] = 'no manifest URL';
 		}
 
 		return $missing ? implode( ', ', $missing ) : 'healthy';
@@ -269,14 +386,14 @@ class WPCodeBBV_Panel {
 		$out = array();
 
 		$out['Performance'] = array(
-			'Memory in use'  => size_format( memory_get_usage( true ) ),
-			'Peak memory'    => size_format( memory_get_peak_usage( true ) ),
-			'Memory limit'   => (string) ini_get( 'memory_limit' ),
-			'This request'   => defined( 'WPCODEBBV_START' )
+			'Memory in use' => size_format( memory_get_usage( true ) ),
+			'Peak memory'   => size_format( memory_get_peak_usage( true ) ),
+			'Memory limit'  => (string) ini_get( 'memory_limit' ),
+			'This request'  => defined( 'WPCODEBBV_START' )
 				? number_format( ( microtime( true ) - WPCODEBBV_START ) * 1000, 1 ) . ' ms'
 				: 'n/a',
-			'PHP'            => PHP_VERSION,
-			'WordPress'      => get_bloginfo( 'version' ),
+			'PHP'           => PHP_VERSION,
+			'WordPress'     => get_bloginfo( 'version' ),
 		);
 
 		$missing = function_exists( 'wpcodebbv_missing_files' ) ? wpcodebbv_missing_files() : array();
@@ -301,13 +418,15 @@ class WPCodeBBV_Panel {
 			$settings += isset( $snippet['settings'] ) ? count( $snippet['settings'] ) : 0;
 		}
 
-		$remote = class_exists( 'WPCodeBBV_Updater' ) ? WPCodeBBV_Updater::peek_status() : array( 'checked' => false, 'remote' => false );
+		$remote = class_exists( 'WPCodeBBV_Updater' )
+			? WPCodeBBV_Updater::peek_status()
+			: array( 'checked' => false, 'remote' => false );
 
 		$out['Plugin'] = array(
-			'Snippets read'   => (string) count( $snippets ),
-			'Settings found'  => (string) $settings,
-			'Update source'   => (string) WPCodeBBV_Settings::get( 'update_source' ),
-			'Latest seen'     => ! empty( $remote['remote']['version'] ) ? (string) $remote['remote']['version'] : 'not checked yet',
+			'Snippets read'  => (string) count( $snippets ),
+			'Settings found' => (string) $settings,
+			'Update source'  => (string) WPCodeBBV_Settings::get( 'update_source' ),
+			'Latest seen'    => ! empty( $remote['remote']['version'] ) ? (string) $remote['remote']['version'] : 'not checked yet',
 		);
 
 		return $out;
@@ -323,9 +442,9 @@ class WPCodeBBV_Panel {
 				return;
 			}
 
-			$given  = sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$secret = trim( (string) WPCodeBBV_Settings::get( 'update_trigger' ) );
-			$ip     = self::client_ip();
+			$given = sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$key   = self::key();
+			$ip    = self::client_ip();
 
 			// Gate 1. Anyone not on the list gets the same 404 an unknown
 			// URL would give, so this address does not advertise itself.
@@ -343,12 +462,12 @@ class WPCodeBBV_Panel {
 				nocache_headers();
 				header( 'Retry-After: ' . (int) $rate['window'] );
 				header( 'Content-Type: text/plain; charset=utf-8' );
-				echo "Too many requests.\n";
+				echo "RESULT: RATE_LIMITED\nToo many requests.\n";
 				exit;
 			}
 
-			// Gate 3. Timing-safe, and a wrong secret is a 404 as well.
-			if ( '' === $secret || ! hash_equals( $secret, $given ) ) {
+			// Gate 3. Timing-safe, and a wrong key is a 404 as well.
+			if ( '' === $key || ! hash_equals( $key, $given ) ) {
 				self::record_issue( 'panel refused: wrong key from ' . $ip );
 				$this->not_found();
 			}
@@ -365,7 +484,7 @@ class WPCodeBBV_Panel {
 				header( 'Content-Type: text/plain; charset=utf-8' );
 			}
 
-			echo "The control panel hit an error. The site is unaffected.\n";
+			echo "RESULT: ERROR\n" . esc_html( $e->getMessage() ) . "\nThe site is unaffected.\n";
 			exit;
 		}
 	}
@@ -378,6 +497,105 @@ class WPCodeBBV_Panel {
 		exit;
 	}
 
+	/* -----------------------------------------------------------------
+	 * Actions
+	 * -------------------------------------------------------------- */
+
+	/**
+	 * Every action the panel offers: the name a form posts, and the
+	 * sentence next to its button.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function actions() {
+		return array(
+			'save'           => 'Save the settings above',
+			'update'         => 'Check for a newer version and install it',
+			'reinstall'      => 'Re-download and re-install the current latest version over this one',
+			'flush'          => 'Forget the cached update check',
+			'rescan'         => 'Re-read every snippet',
+			'reset_sitewide' => 'Clear every stored site-wide value',
+			'resume'         => 'Leave safe mode',
+			'clear_log'      => 'Empty the problem log',
+		);
+	}
+
+	/**
+	 * Runs one action. Everything here is already past all four gates.
+	 *
+	 * @param string $action
+	 * @return array{0:bool, 1:string} Whether it worked, and what to say.
+	 */
+	private function run_action( $action ) {
+		switch ( $action ) {
+			case 'update':
+				if ( ! class_exists( 'WPCodeBBV_Updater' ) ) {
+					return array( false, 'The updater is not available on this install.' );
+				}
+
+				// Prints its own report and exits, so say how it went
+				// in the first line before handing over.
+				if ( ! headers_sent() ) {
+					header( 'Content-Type: text/plain; charset=utf-8' );
+				}
+
+				echo "RESULT: OK\n";
+
+				$updater = new WPCodeBBV_Updater();
+				$updater->force_update_now();
+
+				return array( false, 'The updater returned without printing anything.' );
+
+			case 'reinstall':
+				if ( ! function_exists( 'wpcodebbv_emergency_reinstall' ) ) {
+					return array( false, 'Reinstalling is not available on this install.' );
+				}
+
+				$said = wpcodebbv_emergency_reinstall( WPCodeBBV_Settings::all() );
+
+				return array( 0 === strpos( $said, 'reinstalled' ), $said );
+
+			case 'flush':
+				if ( class_exists( 'WPCodeBBV_Updater' ) ) {
+					WPCodeBBV_Updater::flush_cache();
+				}
+
+				return array( true, 'The cached update check was cleared.' );
+
+			case 'rescan':
+				if ( defined( 'WPCODEBBV_CACHE' ) ) {
+					delete_transient( WPCODEBBV_CACHE );
+				}
+
+				$count = function_exists( 'wpcodebbv_snippets' ) ? count( wpcodebbv_snippets( true ) ) : 0;
+
+				return array( true, 'Re-read ' . $count . ' snippet(s).' );
+
+			case 'reset_sitewide':
+				if ( ! defined( 'WPCODEBBV_OPTION' ) ) {
+					return array( false, 'Nothing to reset on this install.' );
+				}
+
+				delete_option( WPCODEBBV_OPTION );
+
+				return array( true, 'Every stored site-wide value was cleared.' );
+
+			case 'resume':
+				if ( defined( 'WPCODEBBV_SAFE_MODE_OPT' ) ) {
+					delete_option( WPCODEBBV_SAFE_MODE_OPT );
+				}
+
+				return array( true, 'Safe mode was cleared. Reload to see the plugin running again.' );
+
+			case 'clear_log':
+				delete_option( self::LOG_OPT );
+
+				return array( true, 'The problem log was emptied.' );
+		}
+
+		return array( false, 'Unknown action.' );
+	}
+
 	/**
 	 * Past the gates: show the panel, and act on anything posted.
 	 */
@@ -386,6 +604,7 @@ class WPCodeBBV_Panel {
 		header( 'X-Robots-Tag: noindex, nofollow', true );
 
 		$notices = array();
+		$ok      = true;
 		$action  = isset( $_POST['wpcodebbv_action'] ) ? sanitize_key( wp_unslash( $_POST['wpcodebbv_action'] ) ) : '';
 
 		if ( '' !== $action ) {
@@ -393,189 +612,348 @@ class WPCodeBBV_Panel {
 
 			if ( ! self::password_ok( $password ) ) {
 				self::record_issue( 'panel: wrong password from ' . self::client_ip() );
-				$notices[] = array( 'bad', 'That password is not right. Nothing was changed.' );
-			} elseif ( 'update' === $action ) {
-				// Handing off to the updater, which prints its own output
-				// and exits.
-				if ( class_exists( 'WPCodeBBV_Updater' ) ) {
-					$updater = new WPCodeBBV_Updater();
-					$updater->force_update_now();
-				}
-
-				$notices[] = array( 'bad', 'The updater is not available on this install.' );
+				$ok        = false;
+				$notices[] = 'That password is not right. Nothing was changed.';
 			} elseif ( 'save' === $action ) {
-				$edit = self::edit_allowed();
-
-				if ( ! $edit['ok'] ) {
-					$notices[] = array(
-						'bad',
-						'Settings can only be changed once a day from here. Next change allowed at '
-							. gmdate( 'Y-m-d H:i', $edit['next'] ) . ' UTC.',
-					);
-				} else {
-					$posted = isset( $_POST['wpcodebbv_settings'] ) && is_array( $_POST['wpcodebbv_settings'] )
-						? wp_unslash( $_POST['wpcodebbv_settings'] )
-						: array();
-
-					// The password and who may reach this page are set in
-					// wp-admin only. Letting the panel change either would
-					// make the panel able to hand itself away.
-					unset( $posted['panel_password_hash'], $posted['panel_ip_rules'] );
-
-					foreach ( array( 'update_enabled', 'update_auto' ) as $flag ) {
-						if ( ! isset( $posted[ $flag ] ) ) {
-							$posted[ $flag ] = 0;
-						}
-					}
-
-					WPCodeBBV_Settings::save( $posted );
-					update_option( self::EDIT_OPT, time(), false );
-
-					$notices[] = array( 'good', 'Settings saved. The next change from here is allowed in a day.' );
-				}
+				list( $ok, $said ) = $this->save_settings();
+				$notices[]         = $said;
+			} else {
+				list( $ok, $said ) = $this->run_action( $action );
+				$notices[]         = $said;
 			}
 		}
 
-		$this->render( $notices );
+		$this->render( $notices, $action, $ok );
 		exit;
 	}
 
 	/**
-	 * @param array $notices
+	 * The save action, kept apart because it is the only one that is
+	 * rate limited to once a day and the only one that reads a whole
+	 * array of input.
+	 *
+	 * @return array{0:bool, 1:string}
 	 */
-	private function render( $notices ) {
+	private function save_settings() {
+		$edit = self::edit_allowed();
+
+		if ( ! $edit['ok'] ) {
+			return array(
+				false,
+				'Settings can only be changed once a day from here. Next change allowed at '
+					. gmdate( 'Y-m-d H:i', $edit['next'] ) . ' UTC.',
+			);
+		}
+
+		$posted = isset( $_POST['wpcodebbv_settings'] ) && is_array( $_POST['wpcodebbv_settings'] ) // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			? wp_unslash( $_POST['wpcodebbv_settings'] ) // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			: array();
+
+		foreach ( self::$read_only as $key ) {
+			unset( $posted[ $key ] );
+		}
+
+		// A checkbox that is off sends nothing at all, so an absent flag
+		// has to be read as zero - but only when the form was the one
+		// carrying flags. A script posting a single key should not have
+		// the others silently turned off, so this only fires when the
+		// form's own marker came with it.
+		if ( isset( $_POST['wpcodebbv_full_form'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			foreach ( array( 'update_enabled', 'update_auto' ) as $flag ) {
+				if ( ! isset( $posted[ $flag ] ) ) {
+					$posted[ $flag ] = 0;
+				}
+			}
+		}
+
+		if ( empty( $posted ) ) {
+			return array( false, 'Nothing was posted to save.' );
+		}
+
+		WPCodeBBV_Settings::save( $posted );
+		update_option( self::EDIT_OPT, time(), false );
+
+		return array( true, 'Saved ' . count( $posted ) . ' setting(s). The next change from here is allowed in a day.' );
+	}
+
+	/* -----------------------------------------------------------------
+	 * Output
+	 * -------------------------------------------------------------- */
+
+	/**
+	 * The extra links configured in wp-admin, as label => url.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function links() {
+		$out = array();
+
+		foreach ( preg_split( '/[\r\n]+/', (string) WPCodeBBV_Settings::get( 'panel_links' ) ) as $line ) {
+			$line = trim( $line );
+
+			if ( '' === $line ) {
+				continue;
+			}
+
+			if ( false !== strpos( $line, '|' ) ) {
+				list( $label, $url ) = array_map( 'trim', explode( '|', $line, 2 ) );
+			} else {
+				$label = $line;
+				$url   = $line;
+			}
+
+			$url = esc_url_raw( $url );
+
+			if ( '' === $url || '' === $label ) {
+				continue;
+			}
+
+			$out[ $label ] = $url;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * How a given setting should be shown: 'flag', 'choice', 'lines' or
+	 * 'line'. Derived from the key rather than a hand-kept list, so a
+	 * new setting turns up here on its own.
+	 *
+	 * @param string $key
+	 * @return array{type:string, choices:array}
+	 */
+	private static function field_shape( $key ) {
+		$choices = array(
+			'update_source' => array( 'url', 'github' ),
+			'update_role'   => array( 'standalone', 'dev', 'production' ),
+		);
+
+		if ( isset( $choices[ $key ] ) ) {
+			return array( 'type' => 'choice', 'choices' => $choices[ $key ] );
+		}
+
+		if ( in_array( $key, array( 'update_enabled', 'update_auto' ), true ) ) {
+			return array( 'type' => 'flag', 'choices' => array() );
+		}
+
+		if ( in_array( $key, array( 'panel_ip_rules', 'panel_links' ), true ) ) {
+			return array( 'type' => 'lines', 'choices' => array() );
+		}
+
+		return array( 'type' => 'line', 'choices' => array() );
+	}
+
+	/**
+	 * The whole report as plain text. Used for `&view=raw`, and printed
+	 * at the top of the page so a scraper can read one block instead of
+	 * walking the markup.
+	 *
+	 * @return string
+	 */
+	public static function report() {
+		$lines = array();
+
+		$lines[] = 'WPCODEBBV PANEL';
+		$lines[] = 'site: ' . get_bloginfo( 'name' );
+		$lines[] = 'home: ' . home_url( '/' );
+		$lines[] = 'you: ' . self::client_ip();
+		$lines[] = 'time: ' . gmdate( 'Y-m-d H:i:s' ) . ' UTC';
+		$lines[] = '';
+
+		foreach ( self::diagnostics() as $section => $rows ) {
+			$lines[] = '[' . strtoupper( $section ) . ']';
+
+			foreach ( $rows as $label => $value ) {
+				$lines[] = $label . ': ' . $value;
+			}
+
+			$lines[] = '';
+		}
+
+		$lines[] = '[SETTINGS]';
+
+		foreach ( WPCodeBBV_Settings::all() as $key => $value ) {
+			if ( 'panel_password_hash' === $key ) {
+				$lines[] = $key . ': ' . ( '' !== (string) $value ? '(set)' : '(not set)' );
+				continue;
+			}
+
+			if ( 'gh_token' === $key ) {
+				$lines[] = $key . ': ' . ( '' !== (string) $value ? '(set)' : '(not set)' );
+				continue;
+			}
+
+			$lines[] = $key . ': ' . str_replace( array( "\r\n", "\n" ), ' | ', (string) $value );
+		}
+
+		$lines[] = '';
+		$lines[] = '[PROBLEMS]';
+
+		$issues = get_option( self::LOG_OPT, array() );
+		$issues = is_array( $issues ) ? array_reverse( $issues ) : array();
+
+		if ( empty( $issues ) ) {
+			$lines[] = 'none';
+		} else {
+			foreach ( $issues as $issue ) {
+				$lines[] = gmdate( 'Y-m-d H:i', (int) $issue['time'] ) . 'Z ' . $issue['msg'];
+			}
+		}
+
+		$links = self::links();
+
+		if ( $links ) {
+			$lines[] = '';
+			$lines[] = '[LINKS]';
+
+			foreach ( $links as $label => $url ) {
+				$lines[] = $label . ': ' . $url;
+			}
+		}
+
+		return implode( "\n", $lines ) . "\n";
+	}
+
+	/**
+	 * @param string[] $notices
+	 * @param string   $action  What was just run, if anything.
+	 * @param bool     $ok      Whether it worked.
+	 */
+	private function render( $notices, $action = '', $ok = true ) {
+		$raw = isset( $_GET['view'] ) && 'raw' === $_GET['view']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$result = '' === $action ? 'READ' : ( $ok ? 'OK' : 'FAIL' );
+
+		if ( $raw ) {
+			header( 'Content-Type: text/plain; charset=utf-8' );
+
+			// Deliberately not escaped: this is text/plain, where HTML
+			// entities would be shown literally and a scraper would have
+			// to undo them. Nothing here can be interpreted as markup.
+			echo 'RESULT: ' . $result . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+
+			foreach ( $notices as $notice ) {
+				echo 'NOTICE: ' . str_replace( array( "\r", "\n" ), ' ', $notice ) . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			}
+
+			echo "\n" . self::report(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+
+			return;
+		}
+
 		$settings = WPCodeBBV_Settings::all();
 		$edit     = self::edit_allowed();
-		$issues   = get_option( self::LOG_OPT, array() );
-		$issues   = is_array( $issues ) ? array_reverse( $issues ) : array();
+		$here     = esc_url( add_query_arg( self::QUERY_VAR, rawurlencode( self::key() ), home_url( '/' ) ) );
 
 		header( 'Content-Type: text/html; charset=utf-8' );
+
+		// No stylesheet, no script, no images. Everything below is text
+		// and plain form controls on purpose: this page has to stay
+		// readable and postable by a script that knows nothing about it.
 		?>
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex,nofollow" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Control panel</title>
-<style>
-body{font:14px/1.55 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;margin:0;background:#f6f7f7;color:#2c3338}
-.wrap{max-width:860px;margin:0 auto;padding:24px 16px 60px}
-h1{font-size:20px;margin:0 0 4px}
-h2{font-size:15px;margin:28px 0 8px;text-transform:uppercase;letter-spacing:.4px;color:#646970}
-.card{background:#fff;border:1px solid #dcdcde;border-radius:6px;padding:14px 16px;margin-bottom:14px}
-table{width:100%;border-collapse:collapse}
-td{padding:5px 0;vertical-align:top;border-bottom:1px solid #f0f0f1}
-td:first-child{width:200px;color:#646970}
-tr:last-child td{border-bottom:0}
-label{display:block;margin:10px 0 3px;color:#646970;font-size:13px}
-input[type=text],input[type=url],input[type=password],select,textarea{width:100%;padding:7px 9px;border:1px solid #8c8f94;border-radius:4px;font:inherit;box-sizing:border-box}
-button{background:#2271b1;color:#fff;border:0;border-radius:4px;padding:9px 16px;font:inherit;cursor:pointer;margin-top:12px}
-button.secondary{background:#50575e}
-.n{padding:10px 12px;border-radius:4px;margin-bottom:12px}
-.n.good{background:#edfaef;border-left:4px solid #00a32a}
-.n.bad{background:#fcf0f1;border-left:4px solid #d63638}
-.muted{color:#787c82;font-size:12px}
-code{background:#f0f0f1;padding:1px 4px;border-radius:3px;font-size:12px}
-.issue{border-bottom:1px solid #f0f0f1;padding:6px 0;font-size:13px}
-.issue:last-child{border-bottom:0}
-</style></head><body><div class="wrap">
-<h1>Control panel</h1>
-<p class="muted">
-	<?php echo esc_html( get_bloginfo( 'name' ) ); ?> &middot;
-	<?php esc_html_e( 'plugin version', 'wpcode-bb-values' ); ?> <?php echo esc_html( WPCODEBBV_VERSION ); ?> &middot;
-	<?php echo esc_html( self::client_ip() ); ?>
-</p>
-
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<title>WPCODEBBV PANEL</title>
+</head>
+<body>
+<p>RESULT: <?php echo esc_html( $result ); ?></p>
 <?php foreach ( $notices as $notice ) : ?>
-	<div class="n <?php echo esc_attr( $notice[0] ); ?>"><?php echo esc_html( $notice[1] ); ?></div>
+<p>NOTICE: <?php echo esc_html( $notice ); ?></p>
 <?php endforeach; ?>
 
-<?php foreach ( self::diagnostics() as $section => $rows ) : ?>
-	<h2><?php echo esc_html( $section ); ?></h2>
-	<div class="card"><table>
-		<?php foreach ( $rows as $label => $value ) : ?>
-			<tr><td><?php echo esc_html( $label ); ?></td><td><?php echo esc_html( $value ); ?></td></tr>
+<hr>
+<pre><?php echo esc_html( self::report() ); ?></pre>
+<hr>
+
+<h2>Settings</h2>
+<?php if ( ! $edit['ok'] ) : ?>
+<p>Settings were changed from here recently. The next change is allowed at
+	<?php echo esc_html( gmdate( 'Y-m-d H:i', $edit['next'] ) ); ?> UTC.</p>
+<?php endif; ?>
+<form method="post" action="<?php echo $here; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>">
+<input type="hidden" name="wpcodebbv_action" value="save">
+<input type="hidden" name="wpcodebbv_full_form" value="1">
+<table>
+<?php foreach ( $settings as $key => $value ) : ?>
+	<?php
+	if ( in_array( $key, self::$read_only, true ) ) {
+		continue;
+	}
+
+	$shape = self::field_shape( $key );
+	$name  = 'wpcodebbv_settings[' . $key . ']';
+	?>
+<tr>
+	<td><label for="f_<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $key ); ?></label></td>
+	<td>
+	<?php if ( 'choice' === $shape['type'] ) : ?>
+		<select id="f_<?php echo esc_attr( $key ); ?>" name="<?php echo esc_attr( $name ); ?>">
+		<?php foreach ( $shape['choices'] as $choice ) : ?>
+			<option value="<?php echo esc_attr( $choice ); ?>" <?php selected( (string) $value, $choice ); ?>><?php echo esc_html( $choice ); ?></option>
 		<?php endforeach; ?>
-	</table></div>
-<?php endforeach; ?>
-
-<h2><?php esc_html_e( 'Recent problems', 'wpcode-bb-values' ); ?></h2>
-<div class="card">
-	<?php if ( empty( $issues ) ) : ?>
-		<p class="muted"><?php esc_html_e( 'Nothing recorded.', 'wpcode-bb-values' ); ?></p>
+		</select>
+	<?php elseif ( 'flag' === $shape['type'] ) : ?>
+		<select id="f_<?php echo esc_attr( $key ); ?>" name="<?php echo esc_attr( $name ); ?>">
+			<option value="1" <?php selected( (int) $value, 1 ); ?>>1</option>
+			<option value="0" <?php selected( (int) $value, 0 ); ?>>0</option>
+		</select>
+	<?php elseif ( 'lines' === $shape['type'] ) : ?>
+		<textarea id="f_<?php echo esc_attr( $key ); ?>" name="<?php echo esc_attr( $name ); ?>" rows="6" cols="60"><?php echo esc_textarea( (string) $value ); ?></textarea>
 	<?php else : ?>
-		<?php foreach ( $issues as $issue ) : ?>
-			<div class="issue">
-				<span class="muted"><?php echo esc_html( gmdate( 'Y-m-d H:i', (int) $issue['time'] ) ); ?>Z</span>
-				&nbsp;<?php echo esc_html( $issue['msg'] ); ?>
-			</div>
-		<?php endforeach; ?>
+		<input type="text" size="60" id="f_<?php echo esc_attr( $key ); ?>" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_attr( (string) $value ); ?>">
 	<?php endif; ?>
-</div>
+	</td>
+</tr>
+<?php endforeach; ?>
+<tr>
+	<td><label for="f_pw_save">password</label></td>
+	<td><input type="password" id="f_pw_save" name="wpcodebbv_password" size="40" autocomplete="off"></td>
+</tr>
+</table>
+<p><button type="submit" name="submit" value="save">Save settings</button></p>
+</form>
 
-<h2><?php esc_html_e( 'Settings', 'wpcode-bb-values' ); ?></h2>
-<div class="card">
-	<?php if ( ! $edit['ok'] ) : ?>
-		<div class="n bad">
-			<?php
-			printf(
-				/* translators: %s: a UTC timestamp */
-				esc_html__( 'Settings were changed from here recently. The next change is allowed at %s UTC.', 'wpcode-bb-values' ),
-				esc_html( gmdate( 'Y-m-d H:i', $edit['next'] ) )
-			);
-			?>
-		</div>
-	<?php endif; ?>
+<hr>
+<h2>Actions</h2>
+<?php foreach ( self::actions() as $name => $label ) : ?>
+	<?php if ( 'save' === $name ) { continue; } ?>
+<form method="post" action="<?php echo $here; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>">
+<input type="hidden" name="wpcodebbv_action" value="<?php echo esc_attr( $name ); ?>">
+<p>
+	<label for="f_pw_<?php echo esc_attr( $name ); ?>"><?php echo esc_html( $label ); ?> - password</label>
+	<input type="password" id="f_pw_<?php echo esc_attr( $name ); ?>" name="wpcodebbv_password" size="40" autocomplete="off">
+	<button type="submit" name="submit" value="<?php echo esc_attr( $name ); ?>"><?php echo esc_html( $name ); ?></button>
+</p>
+</form>
+<?php endforeach; ?>
 
-	<form method="post">
-		<label><?php esc_html_e( 'Update source', 'wpcode-bb-values' ); ?></label>
-		<select name="wpcodebbv_settings[update_source]">
-			<option value="url" <?php selected( $settings['update_source'], 'url' ); ?>>Manifest URL</option>
-			<option value="github" <?php selected( $settings['update_source'], 'github' ); ?>>GitHub releases</option>
-		</select>
+<?php $links = self::links(); ?>
+<?php if ( $links ) : ?>
+<hr>
+<h2>Links</h2>
+<ul>
+<?php foreach ( $links as $label => $url ) : ?>
+	<li><a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html( $label ); ?></a></li>
+<?php endforeach; ?>
+</ul>
+<?php endif; ?>
 
-		<label><?php esc_html_e( 'Manifest URL', 'wpcode-bb-values' ); ?></label>
-		<input type="url" name="wpcodebbv_settings[update_manifest]" value="<?php echo esc_attr( $settings['update_manifest'] ); ?>" />
+<hr>
+<h2>For scripts</h2>
+<pre>GET  <?php echo esc_html( $here ); ?>&amp;view=raw     text/plain, no forms
+POST <?php echo esc_html( $here ); ?>
+     wpcodebbv_action     one of: <?php echo esc_html( implode( ', ', array_keys( self::actions() ) ) ); ?>
 
-		<label><?php esc_html_e( 'Manifest key', 'wpcode-bb-values' ); ?></label>
-		<input type="text" name="wpcodebbv_settings[update_manifest_key]" value="<?php echo esc_attr( $settings['update_manifest_key'] ); ?>" />
-
-		<label><?php esc_html_e( 'GitHub owner / repo / asset', 'wpcode-bb-values' ); ?></label>
-		<input type="text" name="wpcodebbv_settings[gh_owner]" value="<?php echo esc_attr( $settings['gh_owner'] ); ?>" placeholder="owner" />
-		<input type="text" name="wpcodebbv_settings[gh_repo]" value="<?php echo esc_attr( $settings['gh_repo'] ); ?>" placeholder="repo" />
-		<input type="text" name="wpcodebbv_settings[gh_asset]" value="<?php echo esc_attr( $settings['gh_asset'] ); ?>" placeholder="asset.zip" />
-
-		<label><?php esc_html_e( 'Rollout role', 'wpcode-bb-values' ); ?></label>
-		<select name="wpcodebbv_settings[update_role]">
-			<option value="standalone" <?php selected( $settings['update_role'], 'standalone' ); ?>>Standalone</option>
-			<option value="dev" <?php selected( $settings['update_role'], 'dev' ); ?>>Dev / staging</option>
-			<option value="production" <?php selected( $settings['update_role'], 'production' ); ?>>Production</option>
-		</select>
-
-		<label>
-			<input type="checkbox" name="wpcodebbv_settings[update_enabled]" value="1" <?php checked( $settings['update_enabled'], 1 ); ?> />
-			<?php esc_html_e( 'Check for updates', 'wpcode-bb-values' ); ?>
-		</label>
-
-		<label><?php esc_html_e( 'Password', 'wpcode-bb-values' ); ?></label>
-		<input type="password" name="wpcodebbv_password" autocomplete="off" />
-		<p class="muted"><?php esc_html_e( 'Set in wp-admin. Required for anything on this page that writes.', 'wpcode-bb-values' ); ?></p>
-
-		<input type="hidden" name="wpcodebbv_action" value="save" />
-		<button type="submit"><?php esc_html_e( 'Save settings', 'wpcode-bb-values' ); ?></button>
-	</form>
-</div>
-
-<h2><?php esc_html_e( 'Update now', 'wpcode-bb-values' ); ?></h2>
-<div class="card">
-	<form method="post">
-		<label><?php esc_html_e( 'Password', 'wpcode-bb-values' ); ?></label>
-		<input type="password" name="wpcodebbv_password" autocomplete="off" />
-		<input type="hidden" name="wpcodebbv_action" value="update" />
-		<button type="submit" class="secondary"><?php esc_html_e( 'Check and install now', 'wpcode-bb-values' ); ?></button>
-		<p class="muted"><?php esc_html_e( 'Not limited to once a day - only settings changes are.', 'wpcode-bb-values' ); ?></p>
-	</form>
-</div>
-
-</div></body></html>
+     wpcodebbv_password   the password set in wp-admin
+     wpcodebbv_settings[KEY]=VALUE  with wpcodebbv_action=save
+     wpcodebbv_full_form=1          also zeroes any flag you leave out
+The first line of every response is "RESULT: OK", "RESULT: FAIL",
+"RESULT: READ", "RESULT: RATE_LIMITED" or "RESULT: ERROR".</pre>
+</body>
+</html>
 		<?php
 	}
 }

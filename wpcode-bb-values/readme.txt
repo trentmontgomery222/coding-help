@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.6.0
+Stable tag: 7.7.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -191,6 +191,35 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.7.0 =
+* The control panel now lives at ?acpsupdater=KEY, where KEY is set on the
+  hidden updates screen (it falls back to the update secret until you set one).
+* The panel has no styling at all any more - no CSS, no JavaScript, plain
+  forms with stable field names, and every response opens with a RESULT: line
+  so a script can read it. Add &view=raw for text/plain with no forms at all.
+* Everything the hidden updates screen can do can now be done from the panel:
+  every setting is listed and editable, and there are buttons to update,
+  re-download and re-install the current version over this one, forget the
+  cached update check, re-read every snippet, clear all site-wide values,
+  leave safe mode and empty the problem log. The password is still the one
+  thing only wp-admin can set.
+* Address rules understand more: a bare prefix ("168.1"), a trailing star
+  ("196.168.*"), CIDR ranges for IPv4 and IPv6 ("10.0.0.0/8"), and "*" for
+  everyone. A deny still beats an allow, and an empty box still allows nobody.
+* Extra links can be listed on the panel, set on the updates screen as
+  "Label | https://...", one per line.
+* If the panel's own file is ever missing or broken, the same address is
+  answered by a handler in the plugin's main file, which reports what is
+  wrong and re-downloads the latest version.
+* New [wpcodebbv_if] shortcode for Beaver Builder: show content only when a
+  plugin is active or inactive, when a configurable setting has a given
+  value, when files are missing, or when safe mode is on - with an optional
+  [wpcodebbv_else] branch.
+* Removed the last admin notice the update system could raise. Nothing about
+  updates appears anywhere in wp-admin except the settings page with
+  &updates=1.
+* tools/acps-panel.py drives the panel from the command line.
 
 = 7.6.0 =
 * Repaired this readme: since 7.5.0 a section had been sitting above the

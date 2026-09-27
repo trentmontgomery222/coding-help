@@ -1178,13 +1178,12 @@ function wpcodebbv_render_update_settings() {
 		return;
 	}
 
-	$s       = WPCodeBBV_Settings::all();
-	$trigger = trim( (string) $s['update_trigger'] );
+	$s = WPCodeBBV_Settings::all();
 	?>
 	<hr />
 	<h2><?php esc_html_e( 'Updates', 'wpcode-bb-values' ); ?></h2>
 	<p class="description">
-		<?php esc_html_e( 'This plugin does not live on wordpress.org, so it checks a source you control and then shows "Update now" on the Plugins screen like any other plugin. A release that fails its load test after installing is rolled back rather than left broken.', 'wpcode-bb-values' ); ?>
+		<?php esc_html_e( 'This plugin does not live on wordpress.org, so it checks a source you control. Nothing about it appears on the Plugins screen or anywhere else in wp-admin: this page and the control panel are the only two places it reports. A release that fails its load test after installing is rolled back rather than left broken.', 'wpcode-bb-values' ); ?>
 	</p>
 
 	<form method="post">
@@ -1262,11 +1261,15 @@ function wpcodebbv_render_update_settings() {
 				<td>
 					<textarea id="wpcodebbv_ips" class="large-text code" rows="5" name="wpcodebbv_settings[panel_ip_rules]"><?php echo esc_textarea( $s['panel_ip_rules'] ); ?></textarea>
 					<p class="description">
-						<?php esc_html_e( 'One rule per line. An address on its own is allowed; a trailing dot is a prefix; a leading ! denies. A deny always wins, and an empty box allows nobody.', 'wpcode-bb-values' ); ?>
+						<?php esc_html_e( 'One rule per line. A whole address is allowed exactly; anything shorter is read as a prefix; a range in CIDR form is allowed as a range; a leading ! denies instead. A deny always wins over an allow, and an empty box allows nobody.', 'wpcode-bb-values' ); ?>
 					</p>
 					<pre style="margin:6px 0 0;">167.102.110.1   <?php esc_html_e( 'just this address', 'wpcode-bb-values' ); ?>
-196.168.        <?php esc_html_e( 'anything starting 196.168.', 'wpcode-bb-values' ); ?>
-!203.0.113.7    <?php esc_html_e( 'never this one', 'wpcode-bb-values' ); ?></pre>
+168.1           <?php esc_html_e( 'anything starting 168.1', 'wpcode-bb-values' ); ?>
+196.168.*       <?php esc_html_e( 'the same idea, written the other way', 'wpcode-bb-values' ); ?>
+10.0.0.0/8      <?php esc_html_e( 'anything in this range', 'wpcode-bb-values' ); ?>
+!203.0.113.7    <?php esc_html_e( 'never this one', 'wpcode-bb-values' ); ?>
+!192.168.0.0/16 <?php esc_html_e( 'never anything in this range', 'wpcode-bb-values' ); ?>
+*               <?php esc_html_e( 'everyone - only if that is really what you want', 'wpcode-bb-values' ); ?></pre>
 					<p class="description">
 						<?php
 						printf(
@@ -1297,15 +1300,37 @@ function wpcodebbv_render_update_settings() {
 				</td>
 			</tr>
 			<tr>
+				<th scope="row"><label for="wpcodebbv_panel_key"><?php esc_html_e( 'Control panel key', 'wpcode-bb-values' ); ?></label></th>
+				<td>
+					<input type="text" class="regular-text" id="wpcodebbv_panel_key" name="wpcodebbv_settings[panel_key]" value="<?php echo esc_attr( $s['panel_key'] ); ?>" />
+					<p class="description">
+						<?php esc_html_e( 'The value after acpsupdater= in the panel address. Leave it blank to keep using the update secret. Saving a blank box never clears it, so the panel cannot be locked away by accident.', 'wpcode-bb-values' ); ?>
+					</p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="wpcodebbv_panel_links"><?php esc_html_e( 'Extra links on the panel', 'wpcode-bb-values' ); ?></label></th>
+				<td>
+					<textarea id="wpcodebbv_panel_links" class="large-text code" rows="4" name="wpcodebbv_settings[panel_links]" placeholder="Staging | https://staging.example.com/"><?php echo esc_textarea( $s['panel_links'] ); ?></textarea>
+					<p class="description">
+						<?php esc_html_e( 'One per line, as "Label | https://…". They are listed at the bottom of the control panel, so the panel can become the one page you open to get anywhere.', 'wpcode-bb-values' ); ?>
+					</p>
+				</td>
+			</tr>
+			<tr>
 				<th scope="row"><?php esc_html_e( 'Control panel', 'wpcode-bb-values' ); ?></th>
 				<td>
-					<?php if ( '' !== $trigger ) : ?>
-						<code><?php echo esc_html( add_query_arg( 'wpcodebbv_update', $trigger, home_url( '/' ) ) ); ?></code>
+					<?php $wpcodebbv_panel_url = class_exists( 'WPCodeBBV_Panel' ) ? WPCodeBBV_Panel::url() : ''; ?>
+					<?php if ( '' !== $wpcodebbv_panel_url ) : ?>
+						<code><?php echo esc_html( $wpcodebbv_panel_url ); ?></code>
 						<p class="description">
-							<?php esc_html_e( 'Opens the control panel: how the install is doing, recent problems, the settings above, and a button to check and install. It needs no login, and is gated on the address rules, the rate limit, the secret in the URL, and the password for anything that writes.', 'wpcode-bb-values' ); ?>
+							<?php esc_html_e( 'Opens the control panel: how the install is doing, recent problems, every setting on this page, and buttons to update, reinstall, rescan and reset. It needs no login, and is gated on the address rules, the rate limit, the key in the URL, and the password below for anything that writes. The page has no styling at all, so a script can read and post to it; add &view=raw for plain text with no forms.', 'wpcode-bb-values' ); ?>
+						</p>
+						<p class="description">
+							<?php esc_html_e( 'If the panel\'s own file is ever missing or broken, this same address is answered by a handler in the plugin\'s main file that reports what is wrong and re-downloads the latest version.', 'wpcode-bb-values' ); ?>
 						</p>
 					<?php else : ?>
-						<p class="description"><?php esc_html_e( 'No secret yet. Deactivate and reactivate the plugin to generate one.', 'wpcode-bb-values' ); ?></p>
+						<p class="description"><?php esc_html_e( 'No key yet. Set one above, or deactivate and reactivate the plugin to generate the update secret.', 'wpcode-bb-values' ); ?></p>
 					<?php endif; ?>
 				</td>
 			</tr>
@@ -1555,6 +1580,30 @@ CONFIG.match('Schools Closed Friday')        // 'noSchoolEvent'</pre>
 			<textarea readonly="readonly" rows="16" class="widefat code" onclick="this.select();"><?php echo esc_textarea( $helper ); ?></textarea>
 		<?php endif; ?>
 
+		<h2><?php esc_html_e( 'Showing something else when a thing is not there', 'wpcode-bb-values' ); ?></h2>
+		<p><?php esc_html_e( 'Put this round content in a Beaver Builder Text module and the page says something sensible whether or not the thing it depends on is switched on. Everything you name has to hold; anything you leave out is not asked about, and a condition that cannot be worked out shows the content rather than hiding it.', 'wpcode-bb-values' ); ?></p>
+		<pre>[wpcodebbv_if inactive="beaver-builder-lite-version"]
+    The calendar needs Beaver Builder, which is switched off right now.
+[/wpcodebbv_if]
+
+[wpcodebbv_if key="showLegend" value="true" snippet="123"]
+    &lt;the legend&gt;
+[wpcodebbv_else]
+    &lt;nothing to see&gt;
+[/wpcodebbv_if]</pre>
+		<table class="widefat striped" style="max-width:820px;">
+			<tbody>
+				<tr><td><code>active</code></td><td><?php esc_html_e( 'A plugin folder, a plugin folder/file.php, a class name or a function name - all of which must be present. "this" means this plugin, which counts as off while safe mode holds it down.', 'wpcode-bb-values' ); ?></td></tr>
+				<tr><td><code>inactive</code></td><td><?php esc_html_e( 'The same list, all of which must be absent.', 'wpcode-bb-values' ); ?></td></tr>
+				<tr><td><code>key</code> / <code>value</code></td><td><?php esc_html_e( 'A configurable setting and what it has to be. Give key on its own to ask only whether it is switched on. Add snippet="123" to read one snippet\'s site-wide values in particular.', 'wpcode-bb-values' ); ?></td></tr>
+				<tr><td><code>compare</code></td><td><?php esc_html_e( 'Set it to != to invert the value test.', 'wpcode-bb-values' ); ?></td></tr>
+				<tr><td><code>safe_mode</code></td><td><?php esc_html_e( 'yes or no - whether this plugin is currently dormant after a caught fatal.', 'wpcode-bb-values' ); ?></td></tr>
+				<tr><td><code>files</code></td><td><?php esc_html_e( 'ok or missing - whether all of this plugin\'s files are present.', 'wpcode-bb-values' ); ?></td></tr>
+				<tr><td><code>editing</code></td><td><?php esc_html_e( 'yes or no - whether the Beaver Builder editor is open.', 'wpcode-bb-values' ); ?></td></tr>
+			</tbody>
+		</table>
+		<p><?php esc_html_e( '[wpcode_if] does the same thing, if that name reads better on your pages.', 'wpcode-bb-values' ); ?></p>
+
 		<?php wpcodebbv_render_update_settings(); ?>
 
 		<h2><?php esc_html_e( 'Files', 'wpcode-bb-values' ); ?></h2>
@@ -1594,3 +1643,256 @@ CONFIG.match('Schools Closed Friday')        // 'noSchoolEvent'</pre>
 	</div>
 	<?php
 }
+
+/* ---------------------------------------------------------------------
+ * The conditional shortcode.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Whether one named thing is present.
+ *
+ * The name can be a plugin folder/file ("beaver-builder/fl-builder.php"),
+ * a plugin folder on its own ("beaver-builder"), a class name, or a
+ * function name - whichever is easiest to write for the thing being
+ * asked about.
+ *
+ * @param string $name
+ * @return bool
+ */
+function wpcodebbv_thing_active( $name ) {
+	$name = trim( (string) $name );
+
+	if ( '' === $name ) {
+		return false;
+	}
+
+	if ( 'this' === $name || 'self' === $name ) {
+		// This plugin counts as off whenever it is dormant, so a page
+		// can say something useful while safe mode is holding it down.
+		return ! ( function_exists( 'wpcodebbv_is_safe_mode' ) && wpcodebbv_is_safe_mode() );
+	}
+
+	if ( class_exists( $name ) || function_exists( $name ) ) {
+		return true;
+	}
+
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		if ( ! defined( 'ABSPATH' ) || ! file_exists( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
+			return false;
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+
+	if ( false !== strpos( $name, '/' ) ) {
+		return is_plugin_active( $name );
+	}
+
+	// A bare folder name: match whichever active plugin lives in it.
+	foreach ( (array) get_option( 'active_plugins', array() ) as $active ) {
+		if ( 0 === strpos( (string) $active, $name . '/' ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Works out whether the conditions on one [wpcodebbv_if] hold.
+ *
+ * Every attribute that is given has to pass; ones that are left out are
+ * not asked about. Unknown attributes are ignored rather than failing,
+ * so a typo shows the content instead of silently hiding a page's worth
+ * of it.
+ *
+ * @param array $atts
+ * @return bool
+ */
+function wpcodebbv_condition_holds( $atts ) {
+	// active / inactive: a comma-separated list, all of which must be
+	// in the state named.
+	foreach ( array( 'active' => true, 'inactive' => false ) as $att => $want ) {
+		if ( '' === (string) $atts[ $att ] ) {
+			continue;
+		}
+
+		foreach ( explode( ',', (string) $atts[ $att ] ) as $name ) {
+			$name = trim( $name );
+
+			if ( '' === $name ) {
+				continue;
+			}
+
+			if ( wpcodebbv_thing_active( $name ) !== $want ) {
+				return false;
+			}
+		}
+	}
+
+	if ( '' !== (string) $atts['safe_mode'] ) {
+		$on   = function_exists( 'wpcodebbv_is_safe_mode' ) && wpcodebbv_is_safe_mode();
+		$want = wpcodebbv_truthy_att( $atts['safe_mode'] );
+
+		if ( $on !== $want ) {
+			return false;
+		}
+	}
+
+	if ( '' !== (string) $atts['files'] ) {
+		$missing = function_exists( 'wpcodebbv_missing_files' ) ? wpcodebbv_missing_files() : array();
+		$want    = 'missing' === strtolower( trim( (string) $atts['files'] ) );
+
+		if ( ( ! empty( $missing ) ) !== $want ) {
+			return false;
+		}
+	}
+
+	if ( '' !== (string) $atts['editing'] ) {
+		$editing = function_exists( 'wpcodebbv_is_editing' ) && wpcodebbv_is_editing();
+
+		if ( $editing !== wpcodebbv_truthy_att( $atts['editing'] ) ) {
+			return false;
+		}
+	}
+
+	// A configurable value, read the same way a snippet reads it.
+	if ( '' !== (string) $atts['key'] ) {
+		if ( ! function_exists( 'wpcodebbv_cfg' ) ) {
+			return false;
+		}
+
+		$key    = (string) $atts['key'];
+		$actual = null;
+
+		// A snippet ID narrows the lookup to that snippet's stored
+		// values; without one this reads exactly what a snippet calling
+		// wpcodebbv_cfg() would read.
+		if ( (int) $atts['snippet'] > 0 && function_exists( 'wpcodebbv_globals_for' ) ) {
+			$stored = wpcodebbv_globals_for( (int) $atts['snippet'] );
+			$actual = isset( $stored[ $key ] ) ? $stored[ $key ] : null;
+		}
+
+		if ( null === $actual ) {
+			$actual = wpcodebbv_cfg( $key, null );
+		}
+
+		if ( '' === (string) $atts['value'] ) {
+			// No value to compare against: the question is whether the
+			// setting is on.
+			return ! ( null === $actual || false === $actual || '' === $actual || '0' === $actual );
+		}
+
+		if ( is_bool( $actual ) ) {
+			$actual = $actual ? 'true' : 'false';
+		}
+
+		if ( is_array( $actual ) ) {
+			$actual = wp_json_encode( $actual );
+		}
+
+		$same = 0 === strcasecmp( trim( (string) $actual ), trim( (string) $atts['value'] ) );
+
+		if ( $same !== ( '!=' !== (string) $atts['compare'] ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/**
+ * Reads a yes/no attribute. Anything that looks like agreement counts.
+ *
+ * @param mixed $value
+ * @return bool
+ */
+function wpcodebbv_truthy_att( $value ) {
+	return in_array(
+		strtolower( trim( (string) $value ) ),
+		array( '1', 'true', 'yes', 'on', 'y' ),
+		true
+	);
+}
+
+/**
+ * [wpcodebbv_if] - show the content only when the conditions hold, and
+ * show whatever follows [wpcodebbv_else] when they do not.
+ *
+ * Written for Beaver Builder: drop a Text module on the page, put the
+ * shortcode round the content, and the page says something sensible
+ * whether or not the thing it depends on is there.
+ *
+ *   [wpcodebbv_if inactive="beaver-builder-lite-version"]
+ *       The calendar needs Beaver Builder, which is switched off.
+ *   [/wpcodebbv_if]
+ *
+ *   [wpcodebbv_if key="showLegend" value="true" snippet="123"]
+ *       <the legend>
+ *   [wpcodebbv_else]
+ *       <nothing to see>
+ *   [/wpcodebbv_if]
+ *
+ * @param array       $atts
+ * @param string|null $content
+ * @return string
+ */
+function wpcodebbv_if_shortcode( $atts, $content = null ) {
+	try {
+		$atts = shortcode_atts(
+			array(
+				'active'    => '',
+				'inactive'  => '',
+				'safe_mode' => '',
+				'files'     => '',
+				'editing'   => '',
+				'key'       => '',
+				'value'     => '',
+				'compare'   => '=',
+				'snippet'   => 0,
+			),
+			is_array( $atts ) ? $atts : array(),
+			'wpcodebbv_if'
+		);
+
+		$content = (string) $content;
+		$else    = '';
+
+		// The else marker is split out of the raw content rather than
+		// registered as a shortcode of its own, so it cannot be used
+		// anywhere it would not make sense.
+		$parts = preg_split( '/\[wpcodebbv_else\s*\/?\]/i', $content, 2 );
+
+		if ( is_array( $parts ) && count( $parts ) === 2 ) {
+			$content = $parts[0];
+			$else    = $parts[1];
+		}
+
+		$show = wpcodebbv_condition_holds( $atts ) ? $content : $else;
+
+		return do_shortcode( $show );
+	} catch ( \Throwable $e ) {
+		wpcodebbv_log( 'conditional shortcode failed: ' . $e->getMessage() );
+
+		// A condition that could not be worked out must not eat the
+		// page's content, so fall back to showing it.
+		return is_string( $content ) ? $content : '';
+	}
+}
+
+/**
+ * Registers the conditional shortcode, and an alias so the more obvious
+ * name works too.
+ */
+function wpcodebbv_register_shortcodes() {
+	if ( ! function_exists( 'add_shortcode' ) ) {
+		return;
+	}
+
+	add_shortcode( 'wpcodebbv_if', 'wpcodebbv_if_shortcode' );
+
+	if ( ! shortcode_exists( 'wpcode_if' ) ) {
+		add_shortcode( 'wpcode_if', 'wpcodebbv_if_shortcode' );
+	}
+}
+wpcodebbv_safe_hook( 'init', 'wpcodebbv_register_shortcodes', 20 );

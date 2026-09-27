@@ -46,6 +46,8 @@ class WPCodeBBV_Settings {
 			'panel_rate_limit'    => 20,
 			'panel_rate_window'   => 300,
 			'panel_edit_interval' => 86400,           // Settings changes from the panel: once a day.
+			'panel_links'         => '',              // Extra links to show, "Label | https://..." per line.
+			'panel_key'           => '',              // Key for ?acpsupdater=... ; falls back to update_trigger.
 		);
 	}
 
@@ -124,6 +126,7 @@ class WPCodeBBV_Settings {
 					$clean[ $key ] = max( 1, (int) $value );
 					break;
 
+				case 'panel_links':
 				case 'panel_ip_rules':
 					// Newlines matter here, so this cannot go through
 					// sanitize_text_field like the rest.
@@ -154,6 +157,7 @@ class WPCodeBBV_Settings {
 					$clean[ $key ] = esc_url_raw( trim( (string) $value ) );
 					break;
 
+				case 'panel_key':
 				case 'update_trigger':
 					// A URL-safe secret. Never sanitised away to empty by
 					// accident - an empty one would leave the force-update
