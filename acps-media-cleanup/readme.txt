@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.16.0
+Stable tag: 1.17.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,29 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.17.0 =
+* No more update notices. Updates are now "silent" by default — no "Update now"
+  on the Plugins screen, no banners. You update ONLY from the hidden Updates page
+  or the new console URL. (Silent can be turned off on the Updates tab.)
+* New: external control console — a plain-text, no-styling admin panel OUTSIDE
+  wp-admin at  https://SITE/?acpsupdater=<key> , so you can manage the plugin and
+  push updates without the slow Beaver Builder / wp-admin UI.
+  - Password-protected (set on the hidden Updates tab), with brute-force lockout.
+  - Advanced IP filtering: allow-list and block-list of IPs or prefixes
+    (e.g. "168.1" matches 168.1.*), configured on the Updates tab.
+  - Update, Reinstall-latest (re-download + overwrite to fix a wrongly-edited
+    file), Resume paused mode, and view/edit EVERY plugin setting — all as plain
+    text so a Python script can log in and drive it (GET/POST, JSON status).
+  - Add your own custom links to the console from the Updates tab.
+  - It works even while the plugin is paused (safe mode), so a broken site can
+    always be fixed from this URL — and it will re-download and apply the latest
+    version as a self-heal. Full notes in CONSOLE.md.
+* The hidden Updates page gained "Update to latest" and "Reinstall latest"
+  buttons (same self-contained installer as the console).
+* New conditional shortcode for Beaver Builder / any content:
+  [acps_when condition="plugin_disabled"]…[/acps_when] — also plugin_active,
+  update_available, up_to_date, and ! to negate. Works even when paused.
 
 = 1.16.0 =
 * Full failsafe hardening — the plugin is built so it cannot take the whole site

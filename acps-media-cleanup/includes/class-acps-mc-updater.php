@@ -58,7 +58,17 @@ class ACPS_MC_Updater {
 			return;
 		}
 
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+		// Silent mode (default): show NO update notices anywhere — not the yellow
+		// "update available" row on the Plugins screen, not a rollback notice.
+		// Updates then happen ONLY through the hidden URL / console. The transient
+		// injection and the admin notice are the only two things that surface an
+		// update in wp-admin, so they are the only two we gate off.
+		$silent = (bool) ACPS_MC_Settings::get( 'update_silent' );
+		if ( ! $silent ) {
+			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+			add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+		}
+
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
 		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
 		add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
@@ -74,9 +84,6 @@ class ACPS_MC_Updater {
 		// After our plugin updates: crash-test the new code and (re)enable it
 		// only if it loads cleanly.
 		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
-		// Surface a rolled-back update to admins (shown by whatever version is
-		// active once the plugin runs again).
-		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
 
 		// Staged rollout: a dev install publishes its verified status here, which
 		// a production install checks before it will offer/apply the update.
@@ -629,41 +636,15 @@ class ACPS_MC_Updater {
 			header( 'Content-Type: text/plain; charset=utf-8' );
 		}
 
-		self::flush_cache();
-		$remote = $this->remote( true );
-
-		if ( ! $remote ) {
-			echo "Could not reach the configured update source.\n";
+		// Delegate to the shared, self-contained installer in the main plugin file
+		// (it downloads the package directly, so it works even in silent mode where
+		// the Plugins-screen update transient is never populated).
+		if ( function_exists( 'acps_mc_perform_install' ) ) {
+			echo esc_html( implode( "\n", (array) acps_mc_perform_install( false ) ) ) . "\n";
 			exit;
 		}
 
-		echo 'Installed version: ' . esc_html( ACPS_MC_VERSION ) . "\n";
-		echo 'Latest version:    ' . esc_html( $remote['version'] ) . "\n";
-
-		if ( ! version_compare( $remote['version'], ACPS_MC_VERSION, '>' ) ) {
-			echo "Already up to date.\n";
-			exit;
-		}
-
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/misc.php';
-		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-
-		// Make sure WordPress' own transient agrees before we ask it to upgrade.
-		delete_site_transient( 'update_plugins' );
-		wp_update_plugins();
-
-		$skin     = new \Automatic_Upgrader_Skin();
-		$upgrader = new \Plugin_Upgrader( $skin );
-		$result   = $upgrader->upgrade( ACPS_MC_BASENAME );
-
-		$messages = $skin->get_upgrade_messages();
-		if ( $messages ) {
-			echo "\n" . esc_html( implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) ) . "\n";
-		}
-
-		echo "\n" . ( ( ! is_wp_error( $result ) && $result ) ? 'SUCCESS' : 'FAILED' ) . "\n";
+		echo "Updater core unavailable.\n";
 		exit;
 	}
 

@@ -97,6 +97,14 @@ class ACPS_MC_Settings {
 			'update_role'             => '',    // '' | 'dev' | 'production' (staged rollout)
 			'verify_status_url'       => '',    // production: paired dev's /update-status URL
 			'verify_status_key'       => '',    // shared key for the /update-status endpoint
+			'update_silent'           => 1,     // hide ALL update notices; update only via the hidden URL
+
+			// --- External text console ( ?acpsupdater=<console_key> ) ---
+			'console_key'             => '',    // URL key (seeded on activation)
+			'console_password'        => '',    // action password (seeded on activation)
+			'console_ip_allow'        => '',    // only these IPs/prefixes may use the console (blank = any)
+			'console_ip_block'        => '',    // these IPs/prefixes are always blocked
+			'console_links'           => array(), // extra links shown on the console: [ {label,url}, … ]
 
 			// --- Hidden remote photo API (off / empty by default) ---
 			'remote_api_enabled'      => 0,     // master switch
@@ -256,6 +264,7 @@ class ACPS_MC_Settings {
 
 		$clean['update_enabled'] = ! empty( $input['update_enabled'] ) ? 1 : 0;
 		$clean['update_auto']    = ! empty( $input['update_auto'] ) ? 1 : 0;
+		$clean['update_silent']  = ! empty( $input['update_silent'] ) ? 1 : 0;
 
 		if ( isset( $input['update_source'] ) ) {
 			$clean['update_source'] = ( 'github' === $input['update_source'] ) ? 'github' : 'url';
@@ -276,7 +285,51 @@ class ACPS_MC_Settings {
 		}
 		// update_trigger stays as-is (seeded on activation, never edited by hand).
 
+		// --- External console config (also lives on the hidden Updates tab) ---
+		$clean['console_password'] = isset( $input['console_password'] ) ? (string) $input['console_password'] : $clean['console_password'];
+		foreach ( array( 'console_ip_allow', 'console_ip_block' ) as $ip_key ) {
+			if ( isset( $input[ $ip_key ] ) ) {
+				// Keep newlines/commas; strip anything that isn't part of an IP/prefix list.
+				$clean[ $ip_key ] = trim( preg_replace( '/[^0-9a-fA-F:\.\,\r\n\s]/', '', (string) $input[ $ip_key ] ) );
+			}
+		}
+		if ( isset( $input['console_links'] ) ) {
+			$clean['console_links'] = self::parse_link_lines( (string) $input['console_links'] );
+		}
+		// Regenerate the console URL key on request (checkbox); otherwise keep it.
+		if ( ! empty( $input['console_regenerate'] ) || empty( $clean['console_key'] ) ) {
+			$clean['console_key'] = wp_generate_password( 44, false, false );
+		}
+
 		return $clean;
+	}
+
+	/**
+	 * Parse a textarea of "Label | https://url" lines into [ {label,url}, … ].
+	 *
+	 * @param string $text Raw textarea.
+	 * @return array
+	 */
+	public static function parse_link_lines( $text ) {
+		$out   = array();
+		$lines = preg_split( '/[\r\n]+/', (string) $text, -1, PREG_SPLIT_NO_EMPTY );
+		foreach ( (array) $lines as $line ) {
+			$line = trim( $line );
+			if ( '' === $line ) {
+				continue;
+			}
+			if ( false !== strpos( $line, '|' ) ) {
+				list( $label, $url ) = array_map( 'trim', explode( '|', $line, 2 ) );
+			} else {
+				$label = $line;
+				$url   = $line;
+			}
+			$url = esc_url_raw( $url );
+			if ( '' !== $url ) {
+				$out[] = array( 'label' => sanitize_text_field( $label ), 'url' => $url );
+			}
+		}
+		return $out;
 	}
 
 	/**

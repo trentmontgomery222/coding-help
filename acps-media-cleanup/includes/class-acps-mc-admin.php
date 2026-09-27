@@ -30,6 +30,7 @@ class ACPS_MC_Admin {
 		add_action( 'admin_post_acps_mc_save_settings', array( $this, 'save_settings' ) );
 		// Hidden pages (registered with no menu entry) — each has its own save.
 		add_action( 'admin_post_acps_mc_save_updates', array( $this, 'save_updates' ) );
+		add_action( 'admin_post_acps_mc_run_update', array( $this, 'run_update' ) );
 		add_action( 'admin_post_acps_mc_save_remote', array( $this, 'save_remote' ) );
 	}
 
@@ -641,6 +642,25 @@ class ACPS_MC_Admin {
 				<?php esc_html_e( 'This page has no menu link on purpose — it is reachable only by typing its URL — so the self-update configuration can’t be changed by accident. Let this plugin update itself from a source you control (a GitHub release or a JSON manifest), showing “Update now” on the Plugins screen. A failed update is crash-tested and rolled back, and a fatal error puts the plugin into a safe paused mode instead of taking the site down.', 'acps-media-cleanup' ); ?>
 			</p>
 
+			<?php
+			$last_log = get_transient( 'acps_mc_last_update_log' );
+			delete_transient( 'acps_mc_last_update_log' );
+			if ( is_array( $last_log ) && $last_log ) :
+				?>
+				<div class="notice notice-info"><p><strong><?php esc_html_e( 'Last update run:', 'acps-media-cleanup' ); ?></strong></p><pre style="white-space:pre-wrap;margin:0 0 8px;"><?php echo esc_html( implode( "\n", $last_log ) ); ?></pre></div>
+			<?php endif; ?>
+
+			<div class="acps-mc-card">
+				<h2><?php esc_html_e( 'Update now', 'acps-media-cleanup' ); ?></h2>
+				<p class="description"><?php printf( esc_html__( 'Installed version: %s. These run the same self-contained installer used by the console URL (works even in silent mode).', 'acps-media-cleanup' ), esc_html( ACPS_MC_VERSION ) ); ?></p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+					<?php wp_nonce_field( 'acps_mc_run_update', 'acps_mc_run_update_nonce' ); ?>
+					<input type="hidden" name="action" value="acps_mc_run_update">
+					<button type="submit" name="mode" value="update" class="button button-primary"><?php esc_html_e( 'Update to latest', 'acps-media-cleanup' ); ?></button>
+					<button type="submit" name="mode" value="reinstall" class="button" onclick="return confirm('<?php echo esc_js( __( 'Re-download and overwrite the plugin with the latest version (fixes a wrongly-edited file)?', 'acps-media-cleanup' ) ); ?>');"><?php esc_html_e( 'Reinstall latest (fix broken files)', 'acps-media-cleanup' ); ?></button>
+				</form>
+			</div>
+
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="acps-mc-card">
 				<?php wp_nonce_field( 'acps_mc_updates', 'acps_mc_updates_nonce' ); ?>
 				<input type="hidden" name="action" value="acps_mc_save_updates">
@@ -652,6 +672,8 @@ class ACPS_MC_Admin {
 							<label><input type="checkbox" name="update_enabled" value="1" <?php checked( $s['update_enabled'] ); ?>> <?php esc_html_e( 'Check the source below for new versions and offer them on the Plugins screen', 'acps-media-cleanup' ); ?></label>
 							<br>
 							<label><input type="checkbox" name="update_auto" value="1" <?php checked( $s['update_auto'] ); ?>> <?php esc_html_e( 'Also install updates automatically in the background (uses the same crash-test protection)', 'acps-media-cleanup' ); ?></label>
+							<br>
+							<label><input type="checkbox" name="update_silent" value="1" <?php checked( $s['update_silent'] ); ?>> <?php esc_html_e( 'Silent — never show any update notice in wp-admin (no “Update now” on the Plugins screen). Update only from this page or the console URL.', 'acps-media-cleanup' ); ?></label>
 						</td>
 					</tr>
 					<tr>
@@ -759,6 +781,65 @@ class ACPS_MC_Admin {
 					</tr>
 				</table>
 
+				<h3><?php esc_html_e( 'External control console', 'acps-media-cleanup' ); ?></h3>
+				<p class="description" style="max-width:760px;">
+					<?php
+					$console_url = ( '' !== (string) $s['console_key'] ) ? home_url( '/?' . rawurlencode( 'acpsupdater' ) . '=' . rawurlencode( $s['console_key'] ) ) : '';
+					esc_html_e( 'A plain-text, no-styling control panel outside wp-admin — open a fast page instead of the slow Beaver Builder / wp-admin. It can update, reinstall, resume paused mode, and view/edit every plugin setting, all behind the password below. It works even if the plugin is paused, so a broken site can always be fixed from it. A Python script can log in and drive it (see the “For scripts” lines it prints).', 'acps-media-cleanup' );
+					?>
+				</p>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Console URL', 'acps-media-cleanup' ); ?></th>
+						<td>
+							<?php if ( '' !== $console_url ) : ?>
+								<input type="text" readonly onclick="this.select()" value="<?php echo esc_attr( $console_url ); ?>" class="large-text code">
+								<p><label><input type="checkbox" name="console_regenerate" value="1"> <?php esc_html_e( 'Generate a NEW console key when I save (invalidates the current URL)', 'acps-media-cleanup' ); ?></label></p>
+							<?php else : ?>
+								<p class="description"><?php esc_html_e( 'Set a password and save to activate the console.', 'acps-media-cleanup' ); ?></p>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="console_password"><?php esc_html_e( 'Console password', 'acps-media-cleanup' ); ?></label></th>
+						<td>
+							<input type="text" id="console_password" name="console_password" value="<?php echo esc_attr( $s['console_password'] ); ?>" class="regular-text code" autocomplete="off">
+							<p class="description"><?php esc_html_e( 'Required for every console action. Sent as the “pw” field/param — a Python script posts pw=THIS. Blank turns the console off.', 'acps-media-cleanup' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="console_ip_allow"><?php esc_html_e( 'Allow only these IPs', 'acps-media-cleanup' ); ?></label></th>
+						<td>
+							<textarea id="console_ip_allow" name="console_ip_allow" rows="3" class="large-text code" placeholder="168.1&#10;203.0.113.7"><?php echo esc_textarea( $s['console_ip_allow'] ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'One IP or prefix per line (or comma-separated). A prefix like 168.1 matches 168.1.*. Leave blank to allow any IP.', 'acps-media-cleanup' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="console_ip_block"><?php esc_html_e( 'Block these IPs', 'acps-media-cleanup' ); ?></label></th>
+						<td>
+							<textarea id="console_ip_block" name="console_ip_block" rows="3" class="large-text code" placeholder="10.0&#10;192.168"><?php echo esc_textarea( $s['console_ip_block'] ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'Always blocked, even if in the allow list. Same prefix rules.', 'acps-media-cleanup' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="console_links"><?php esc_html_e( 'Extra links on the console', 'acps-media-cleanup' ); ?></label></th>
+						<td>
+							<?php
+							$link_lines = '';
+							if ( is_array( $s['console_links'] ) ) {
+								foreach ( $s['console_links'] as $l ) {
+									if ( is_array( $l ) && ! empty( $l['url'] ) ) {
+										$link_lines .= ( ! empty( $l['label'] ) ? $l['label'] : $l['url'] ) . ' | ' . $l['url'] . "\n";
+									}
+								}
+							}
+							?>
+							<textarea id="console_links" name="console_links" rows="4" class="large-text code" placeholder="Label | https://example.org/page"><?php echo esc_textarea( $link_lines ); ?></textarea>
+							<p class="description"><?php esc_html_e( 'One per line: “Label | https://url”. These appear as clickable links on the console page.', 'acps-media-cleanup' ); ?></p>
+						</td>
+					</tr>
+				</table>
+
 				<?php submit_button( __( 'Save update settings', 'acps-media-cleanup' ) ); ?>
 			</form>
 		</div>
@@ -782,6 +863,31 @@ class ACPS_MC_Admin {
 		wp_safe_redirect(
 			add_query_arg(
 				array( 'page' => self::UPDATES_SLUG, 'acps_mc_saved' => 1 ),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Run the self-contained installer (update or reinstall) from the hidden
+	 * Updates page, then redirect back with the log for display.
+	 */
+	public function run_update() {
+		if ( ! current_user_can( ACPS_MC_CAP ) ) {
+			wp_die( esc_html__( 'Permission denied.', 'acps-media-cleanup' ) );
+		}
+		check_admin_referer( 'acps_mc_run_update', 'acps_mc_run_update_nonce' );
+
+		$mode  = ( isset( $_POST['mode'] ) && 'reinstall' === $_POST['mode'] ) ? true : false;
+		$log   = function_exists( 'acps_mc_perform_install' )
+			? (array) acps_mc_perform_install( $mode )
+			: array( 'ERROR: the installer core is unavailable.' );
+		set_transient( 'acps_mc_last_update_log', $log, 5 * MINUTE_IN_SECONDS );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array( 'page' => self::UPDATES_SLUG ),
 				admin_url( 'admin.php' )
 			)
 		);
