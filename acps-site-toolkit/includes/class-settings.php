@@ -147,6 +147,12 @@ class Settings {
 			'console_pass_hash'     => '', // password hash; set ONLY from wp-admin.
 			'console_ip_mode'       => 'allow', // 'allow' = only listed IPs may see it; 'deny' = all except listed.
 			'console_ips'           => '167.102.110.1', // one IP or prefix (e.g. 196.168) per line/comma.
+			'console_links'         => '', // custom links shown on the console: "Label | URL" per line.
+			'console_auto_recover'  => 0,  // if in safe mode, auto-reinstall latest from the update source (failsafe).
+			// Show WordPress' own "update available" / Update-now UI + auto-update.
+			// OFF by default: no update notices anywhere — update only via the
+			// hidden Updates tab, the force-update URL, or the remote console.
+			'updates_in_wp'         => 0,
 
 			// Device fingerprint (GPU/WebGL). Hidden with the updates; feeds the
 			// visitor system with a strong per-device hash + hardware profile.
@@ -262,6 +268,8 @@ class Settings {
 			'device_fp_enabled',
 			'console_enabled',
 			'gf_integrate',
+			'console_auto_recover',
+			'updates_in_wp',
 		);
 		foreach ( $checkboxes as $key ) {
 			$out[ $key ] = empty( $input[ $key ] ) ? 0 : 1;
@@ -369,6 +377,14 @@ class Settings {
 			$out['console_pass_hash'] = '';
 		} elseif ( ! empty( $input['console_password'] ) ) {
 			$out['console_pass_hash'] = wp_hash_password( (string) $input['console_password'] );
+		}
+		// Custom console links: one "Label | URL" per line. Keep it plain text;
+		// the console escapes each label and URL when it renders them.
+		if ( isset( $input['console_links'] ) ) {
+			$lines = preg_split( '/\r\n|\r|\n/', (string) $input['console_links'] );
+			$lines = array_map( 'sanitize_text_field', array_map( 'trim', (array) $lines ) );
+			$lines = array_filter( $lines, 'strlen' );
+			$out['console_links'] = implode( "\n", $lines );
 		}
 
 		// Page ID lists.

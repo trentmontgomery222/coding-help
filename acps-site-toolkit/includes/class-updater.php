@@ -55,10 +55,20 @@ class Updater {
 			return;
 		}
 
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
-		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
+		// WP-facing "update available" surfaces (Plugins screen offer, background
+		// auto-update, the rolled-back notice) are shown ONLY when explicitly
+		// enabled. By default there are NO update notices anywhere — updates run
+		// only from the hidden Updates tab, the secret force-update URL, or the
+		// remote console. The machinery below (download fix, folder rename, crash
+		// test, status feed) always loads so those paths work.
+		if ( Settings::get( 'updates_in_wp' ) ) {
+			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+			add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
+			add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
+			add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
+		}
+
 		add_filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 10, 3 );
-		add_filter( 'auto_update_plugin', array( $this, 'maybe_auto_update' ), 10, 2 );
 		// Rename the extracted package folder back to our plugin slug, so an
 		// update whose zip unpacks to a different folder name (typical of GitHub
 		// release zips) installs over the SAME directory instead of a new one —
@@ -71,13 +81,14 @@ class Updater {
 		// After our plugin updates: crash-test the new code and (re)enable it
 		// only if it loads cleanly.
 		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
-		// Surface a rolled-back update to admins (shown by whatever version is
-		// active once the plugin runs again).
-		add_action( 'admin_notices', array( $this, 'maybe_show_update_failed_notice' ) );
 
 		// Staged rollout: a dev install publishes its verified status here, which
 		// a production install checks before it will offer/apply the update.
 		add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
+
+		// Auto-heal failsafe: if enabled and the plugin is in safe mode, a cron
+		// event reinstalls the latest version from the update source.
+		add_action( 'acps_st_autoheal', array( __CLASS__, 'autoheal' ) );
 	}
 
 	/**
@@ -616,52 +627,119 @@ class Updater {
 	}
 
 	/**
-	 * Force a fresh check and, if newer, install it now. Prints a plain-text
-	 * status page and exits — this is meant to be hit by curl/cron/a browser,
-	 * not rendered as part of a normal page.
+	 * Force a fresh check and install now. Prints a plain-text status page and
+	 * exits — meant to be hit by curl/cron/a browser. Add ?reinstall=1 to
+	 * re-apply the latest package even when the version is unchanged (repair).
 	 */
 	private function run_force_update() {
 		if ( ! headers_sent() ) {
 			nocache_headers();
 			header( 'Content-Type: text/plain; charset=utf-8' );
 		}
+		$force = ! empty( $_GET['reinstall'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$res   = $this->install_now( $force );
 
-		self::flush_cache();
-		$remote = $this->remote( true );
-
-		if ( ! $remote ) {
-			echo "Could not reach the configured update source.\n";
-			exit;
+		echo 'Installed version: ' . esc_html( isset( $res['from'] ) ? $res['from'] : ACPS_ST_VERSION ) . "\n";
+		if ( isset( $res['to'] ) ) {
+			echo 'Latest version:    ' . esc_html( $res['to'] ) . "\n";
 		}
-
-		echo 'Installed version: ' . ACPS_ST_VERSION . "\n";
-		echo 'Latest version:    ' . $remote['version'] . "\n";
-
-		if ( ! version_compare( $remote['version'], ACPS_ST_VERSION, '>' ) ) {
-			echo "Already up to date.\n";
-			exit;
-		}
-
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		require_once ABSPATH . 'wp-admin/includes/file.php';
-		require_once ABSPATH . 'wp-admin/includes/misc.php';
-		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-
-		// Make sure WordPress' own transient agrees before we ask it to upgrade.
-		delete_site_transient( 'update_plugins' );
-		wp_update_plugins();
-
-		$skin     = new \Automatic_Upgrader_Skin();
-		$upgrader = new \Plugin_Upgrader( $skin );
-		$result   = $upgrader->upgrade( ACPS_ST_BASENAME );
-
-		$messages = $skin->get_upgrade_messages();
-		if ( $messages ) {
-			echo "\n" . implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) . "\n";
-		}
-
-		echo "\n" . ( ( ! is_wp_error( $result ) && $result ) ? 'SUCCESS' : 'FAILED' ) . "\n";
+		echo "\n" . esc_html( isset( $res['message'] ) ? $res['message'] : '' ) . "\n";
+		echo ( ! empty( $res['ok'] ) ? 'SUCCESS' : 'FAILED' ) . "\n";
 		exit;
+	}
+
+	/**
+	 * Download and install the latest version now. Returns a result array rather
+	 * than printing, so the console / force URL / auto-heal can all share it.
+	 *
+	 * @param bool $force Reinstall even if the installed version is already latest.
+	 * @return array{ok:bool,message:string,from:string,to:string,noop:bool}
+	 */
+	public function install_now( $force = false ) {
+		$from = ACPS_ST_VERSION;
+		try {
+			self::flush_cache();
+			$remote = $this->remote( true );
+			if ( ! $remote || empty( $remote['version'] ) || empty( $remote['package'] ) ) {
+				return array( 'ok' => false, 'message' => 'Could not reach the configured update source.', 'from' => $from, 'to' => '', 'noop' => false );
+			}
+			$to    = (string) $remote['version'];
+			$newer = version_compare( $to, $from, '>' );
+			if ( ! $newer && ! $force ) {
+				return array( 'ok' => true, 'message' => 'Already up to date (' . $from . ').', 'from' => $from, 'to' => $to, 'noop' => true );
+			}
+
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/misc.php';
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+			// Force an offer into the update transient so upgrade() has a package
+			// to install — this is what lets a reinstall of the SAME version work.
+			$transient = get_site_transient( 'update_plugins' );
+			if ( ! is_object( $transient ) ) {
+				$transient = new \stdClass();
+			}
+			if ( empty( $transient->response ) || ! is_array( $transient->response ) ) {
+				$transient->response = array();
+			}
+			$transient->response[ ACPS_ST_BASENAME ] = (object) array(
+				'id'          => $this->slug(),
+				'slug'        => $this->slug(),
+				'plugin'      => ACPS_ST_BASENAME,
+				'new_version' => $to,
+				'package'     => $remote['package'],
+				'url'         => ! empty( $remote['html_url'] ) ? $remote['html_url'] : '',
+			);
+			set_site_transient( 'update_plugins', $transient );
+
+			$skin     = new \Automatic_Upgrader_Skin();
+			$upgrader = new \Plugin_Upgrader( $skin );
+			$result   = $upgrader->upgrade( ACPS_ST_BASENAME );
+
+			$messages = $skin->get_upgrade_messages();
+			$note     = $messages ? ' ' . implode( ' | ', array_map( 'wp_strip_all_tags', $messages ) ) : '';
+			$ok       = ( ! is_wp_error( $result ) && $result );
+
+			if ( ! $ok && is_wp_error( $result ) ) {
+				$note .= ' ' . $result->get_error_message();
+			}
+			return array(
+				'ok'      => (bool) $ok,
+				'message' => ( $ok ? ( $force && ! $newer ? 'Reinstalled ' . $to . '.' : 'Updated ' . $from . ' -> ' . $to . '.' ) : 'Install failed.' ) . $note,
+				'from'    => $from,
+				'to'      => $to,
+				'noop'    => false,
+			);
+		} catch ( \Throwable $e ) {
+			self::log_error( 'install_now: ' . $e->getMessage() );
+			return array( 'ok' => false, 'message' => 'Install error: ' . $e->getMessage(), 'from' => $from, 'to' => '', 'noop' => false );
+		}
+	}
+
+	/**
+	 * Auto-heal failsafe (cron): if the plugin is dormant in safe mode, reinstall
+	 * the latest version from the update source. Gated by the console_auto_recover
+	 * setting and only runs while safe mode is active, at most once per run.
+	 */
+	public static function autoheal() {
+		try {
+			if ( ! Settings::get( 'console_auto_recover' ) ) {
+				return;
+			}
+			if ( ! ( function_exists( __NAMESPACE__ . '\\is_safe_mode' ) && is_safe_mode() ) ) {
+				return; // Only heal when actually broken.
+			}
+			$res = ( new self() )->install_now( true );
+			self::log_error( 'autoheal: ' . ( isset( $res['message'] ) ? $res['message'] : '' ) );
+			if ( ! empty( $res['ok'] ) ) {
+				// A clean reinstall means the fatal is (hopefully) gone — clear safe
+				// mode so the fresh code loads normally on the next request.
+				delete_option( ACPS_ST_SAFE_MODE_OPT );
+			}
+		} catch ( \Throwable $e ) {
+			self::log_error( 'autoheal error: ' . $e->getMessage() );
+		}
 	}
 
 	/* ------------------------------------------------------------------ *

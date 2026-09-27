@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Form Manager
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.62.0
+ * Version:           1.63.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.62.0' );
+define( 'ACPS_ST_VERSION', '1.63.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).
@@ -210,6 +210,15 @@ function boot() {
 	// Always allow resuming, even while dormant.
 	add_action( 'admin_post_acps_st_resume', __NAMESPACE__ . '\\resume_from_safe_mode' );
 
+	// The conditional shortcode [acps_if] is registered in EVERY state (including
+	// safe mode) so a Beaver Builder "plugin disabled → show this" fallback still
+	// renders rather than leaving a raw shortcode on the page.
+	try {
+		if ( is_readable( ACPS_ST_PATH . 'includes/class-conditional.php' ) ) {
+			Conditional::register();
+		}
+	} catch ( \Throwable $e ) { /* ignore */ }
+
 	if ( is_safe_mode() ) {
 		if ( is_admin() ) {
 			add_action( 'admin_notices', __NAMESPACE__ . '\\safe_mode_notice' );
@@ -226,6 +235,7 @@ function boot() {
 		} catch ( \Throwable $e ) { /* stay dormant */ }
 		try {
 			if ( is_readable( ACPS_ST_PATH . 'includes/class-updater.php' ) ) {
+				add_action( 'acps_st_autoheal', array( __NAMESPACE__ . '\\Updater', 'autoheal' ) );
 				add_action(
 					'init',
 					function () {
@@ -237,6 +247,12 @@ function boot() {
 					},
 					1
 				);
+				// Failsafe auto-heal: while dormant, schedule a one-off cron to
+				// reinstall the latest version (Updater::autoheal checks the
+				// console_auto_recover setting before doing anything).
+				if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( 'acps_st_autoheal' ) ) {
+					wp_schedule_single_event( time() + 120, 'acps_st_autoheal' );
+				}
 			}
 		} catch ( \Throwable $e ) { /* stay dormant */ }
 

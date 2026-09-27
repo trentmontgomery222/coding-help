@@ -578,10 +578,14 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 			<?php
 			if ( isset( $_GET['checked'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
 				if ( ! empty( $_GET['found'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
-					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'A newer version was found — see the Plugins screen to install it.', 'acps-site-toolkit' ) . '</p></div>';
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'A newer version was found — use “Install latest now” below.', 'acps-site-toolkit' ) . '</p></div>';
 				} else {
 					echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Checked — this is already the latest version.', 'acps-site-toolkit' ) . '</p></div>';
 				}
+			}
+			if ( isset( $_GET['installed'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+				$imsg = isset( $_GET['installmsg'] ) ? sanitize_text_field( wp_unslash( $_GET['installmsg'] ) ) : ''; // phpcs:ignore
+				echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Install result:', 'acps-site-toolkit' ) . ' ' . esc_html( $imsg ) . '</p></div>';
 			}
 			?>
 
@@ -590,6 +594,7 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 					<th scope="row"><?php esc_html_e( 'Self-updates', 'acps-site-toolkit' ); ?></th>
 					<td>
 						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'update_enabled' ) ); ?>" value="1" <?php echo $checked( 'update_enabled' ); ?>> <?php esc_html_e( 'On — check the source below and offer "Update now" when a newer version exists', 'acps-site-toolkit' ); ?></label><br>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'updates_in_wp' ) ); ?>" value="1" <?php echo $checked( 'updates_in_wp' ); ?>> <?php esc_html_e( 'Show update notices in WordPress (the “Update now” offer on the Plugins screen). OFF by default — no update notices appear anywhere; update only from this tab, the force-update URL, or the console.', 'acps-site-toolkit' ); ?></label><br>
 						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'update_auto' ) ); ?>" value="1" <?php echo $checked( 'update_auto' ); ?>> <?php esc_html_e( 'Also install new versions automatically in the background (WordPress\' normal auto-update cron)', 'acps-site-toolkit' ); ?></label>
 					</td>
 				</tr>
@@ -756,6 +761,20 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 						<p class="description"><?php esc_html_e( 'Your current IP address as this server sees it:', 'acps-site-toolkit' ); ?> <code><?php echo esc_html( \ACPS\SiteToolkit\Remote_Console::client_ip() ); ?></code></p>
 					</td>
 				</tr>
+				<tr>
+					<th scope="row"><label for="acps-console-links"><?php esc_html_e( 'Console links', 'acps-site-toolkit' ); ?></label></th>
+					<td>
+						<textarea id="acps-console-links" name="<?php echo esc_attr( $name( 'console_links' ) ); ?>" rows="4" class="large-text code" placeholder="Feedback inbox | https://example.org/wp-admin/admin.php?page=acps-st"><?php echo esc_textarea( $s['console_links'] ); ?></textarea>
+						<p class="description"><?php esc_html_e( 'Extra quick links shown on the console page — one per line as “Label | URL”. Handy for jumping straight to specific admin pages without loading the slow full admin.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Auto-recover', 'acps-site-toolkit' ); ?></th>
+					<td>
+						<label><input type="checkbox" name="<?php echo esc_attr( $name( 'console_auto_recover' ) ); ?>" value="1" <?php echo $checked( 'console_auto_recover' ); ?>> <?php esc_html_e( 'If the plugin ever crashes into safe mode, automatically re-download and reinstall the latest version from the update source', 'acps-site-toolkit' ); ?></label>
+						<p class="description"><?php esc_html_e( 'A last-resort failsafe: runs on a background cron only while the plugin is dormant, so a bad file can heal itself without you touching anything.', 'acps-site-toolkit' ); ?></p>
+					</td>
+				</tr>
 			</table>
 		</div>
 		<?php endif; // $show_updates ?>
@@ -796,6 +815,19 @@ acpsLog({ error: err.message }, { form: 'another-form-slug' });</pre>
 			<button type="submit" class="button"><?php esc_html_e( 'Check for updates now', 'acps-site-toolkit' ); ?></button>
 		</form>
 		<p class="description"><?php esc_html_e( 'This checks the configured source right away instead of waiting for the normal cache window, and refreshes the Plugins screen\'s update status. Save any changed settings on the Updates tab first.', 'acps-site-toolkit' ); ?></p>
+
+		<h3><?php esc_html_e( 'Install / reinstall now', 'acps-site-toolkit' ); ?></h3>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+			<?php wp_nonce_field( 'acps_st_install_update' ); ?>
+			<input type="hidden" name="action" value="acps_st_install_update">
+			<button type="submit" name="mode" value="update" class="button button-primary"><?php esc_html_e( 'Install latest now', 'acps-site-toolkit' ); ?></button>
+		</form>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+			<?php wp_nonce_field( 'acps_st_install_update' ); ?>
+			<input type="hidden" name="action" value="acps_st_install_update">
+			<button type="submit" name="mode" value="reinstall" class="button" onclick="return confirm('<?php echo esc_js( __( 'Re-download and reinstall the latest version now (even if unchanged)?', 'acps-site-toolkit' ) ); ?>');"><?php esc_html_e( 'Reinstall latest (repair)', 'acps-site-toolkit' ); ?></button>
+		</form>
+		<p class="description"><?php esc_html_e( 'Installs the latest version from the configured source directly (no WordPress “update available” notice needed). “Reinstall” re-applies the latest package even if the version is unchanged — handy if a file was edited wrong.', 'acps-site-toolkit' ); ?></p>
 	</div>
 	<?php endif; // $show_updates ?>
 </div>

@@ -41,6 +41,7 @@ class Admin {
 		add_action( 'admin_post_acps_st_visitor_action', array( $this, 'handle_visitor_action' ) );
 		add_action( 'admin_post_acps_st_db_action', array( $this, 'handle_db_action' ) );
 		add_action( 'admin_post_acps_st_check_update', array( $this, 'handle_check_update' ) );
+		add_action( 'admin_post_acps_st_install_update', array( $this, 'handle_install_update' ) );
 		add_action( 'wp_ajax_acps_st_active', array( $this, 'ajax_active' ) );
 		add_action( 'wp_dashboard_setup', array( $this, 'dashboard_widget' ) );
 		// Overlap Gravity Forms' menu when it's installed — registered late so
@@ -214,6 +215,28 @@ class Admin {
 				'checked' => 1,
 				'found'   => $found ? 1 : 0,
 			),
+			self::settings_url()
+		);
+		wp_safe_redirect( $url . '#acps-tab-updates' );
+		exit;
+	}
+
+	/**
+	 * Install / reinstall the latest version directly from the hidden Updates tab
+	 * (no WordPress "update available" notice required).
+	 */
+	public function handle_install_update() {
+		$this->require_cap( 'manage_options' );
+		check_admin_referer( 'acps_st_install_update' );
+
+		$force   = isset( $_POST['mode'] ) && 'reinstall' === sanitize_key( wp_unslash( $_POST['mode'] ) );
+		$message = __( 'Updater unavailable.', 'acps-site-toolkit' );
+		if ( class_exists( '\\ACPS\\SiteToolkit\\Updater' ) ) {
+			$res     = ( new \ACPS\SiteToolkit\Updater() )->install_now( $force );
+			$message = isset( $res['message'] ) ? $res['message'] : '';
+		}
+		$url = add_query_arg(
+			array( 'installed' => 1, 'installmsg' => rawurlencode( wp_strip_all_tags( $message ) ) ),
 			self::settings_url()
 		);
 		wp_safe_redirect( $url . '#acps-tab-updates' );
