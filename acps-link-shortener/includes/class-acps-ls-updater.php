@@ -583,14 +583,16 @@ class ACPS_LS_Updater {
 	}
 
 	/**
-	 * Run a fresh check and, if newer, install the latest release. Returns a
-	 * plain-text log. Safe to call from anywhere (does not exit); every failure
-	 * is caught and reported in the returned text.
+	 * Run a fresh check and, if newer (or $force), install the latest release.
+	 * Returns a plain-text log. Safe to call from anywhere (does not exit); every
+	 * failure is caught and reported in the returned text.
 	 *
+	 * @param bool $force Reinstall the latest even if it equals the installed
+	 *                    version (used by the "re-download / reinstall" action).
 	 * @return string
 	 */
-	public function perform_update() {
-		$out = "Cayden Link Shortener — update\n\n";
+	public function perform_update( $force = false ) {
+		$out = $force ? "Cayden Link Shortener — reinstall latest\n\n" : "Cayden Link Shortener — update\n\n";
 		try {
 			$this->flush_cache();
 			$remote = $this->remote( true );
@@ -602,8 +604,8 @@ class ACPS_LS_Updater {
 			$out .= 'Installed: ' . ACPS_LS_VERSION . "\n";
 			$out .= 'Latest:    ' . $remote['version'] . "\n\n";
 
-			if ( version_compare( $remote['version'], ACPS_LS_VERSION, '<=' ) ) {
-				return $out . "Already up to date. Nothing to do.\n";
+			if ( ! $force && version_compare( $remote['version'], ACPS_LS_VERSION, '<=' ) ) {
+				return $out . "Already up to date. Nothing to do. (Use Reinstall to re-download this version.)\n";
 			}
 
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -611,24 +613,40 @@ class ACPS_LS_Updater {
 			require_once ABSPATH . 'wp-admin/includes/misc.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
-			delete_site_transient( 'update_plugins' );
-			wp_update_plugins();
-
 			$skin     = new Automatic_Upgrader_Skin();
 			$upgrader = new Plugin_Upgrader( $skin );
-			$result   = $upgrader->upgrade( ACPS_LS_BASENAME );
 
-			$out .= 'Installing ' . $remote['version'] . "...\n";
+			if ( $force && version_compare( $remote['version'], ACPS_LS_VERSION, '<=' ) ) {
+				// Same (or older) version: WordPress' normal upgrade path would skip
+				// it, so reinstall by overwriting the plugin directory directly from
+				// the package.
+				$out .= "Re-downloading and overwriting the current files...\n";
+				$result = $upgrader->run(
+					array(
+						'package'           => $remote['package'],
+						'destination'       => WP_PLUGIN_DIR . '/' . dirname( ACPS_LS_BASENAME ),
+						'clear_destination' => true,
+						'clear_working'     => true,
+						'hook_extra'        => array( 'type' => 'plugin', 'action' => 'update', 'plugin' => ACPS_LS_BASENAME ),
+					)
+				);
+			} else {
+				delete_site_transient( 'update_plugins' );
+				wp_update_plugins();
+				$out   .= 'Installing ' . $remote['version'] . "...\n";
+				$result = $upgrader->upgrade( ACPS_LS_BASENAME );
+			}
+
 			foreach ( (array) $skin->get_upgrade_messages() as $m ) {
 				$out .= ' - ' . wp_strip_all_tags( (string) $m ) . "\n";
 			}
 
 			if ( is_wp_error( $result ) ) {
 				$out .= "\nResult: FAILED — " . $result->get_error_message() . "\n";
-			} elseif ( false === $result ) {
+			} elseif ( false === $result || null === $result ) {
 				$out .= "\nResult: FAILED — the upgrader could not write the files (filesystem permissions?).\n";
 			} else {
-				$out .= "\nResult: SUCCESS. Updated to " . $remote['version'] . ".\n";
+				$out .= "\nResult: SUCCESS (" . $remote['version'] . ").\n";
 			}
 			return $out;
 		} catch ( Throwable $e ) {

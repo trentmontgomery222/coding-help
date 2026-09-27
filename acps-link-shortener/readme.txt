@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.21.0
+Stable tag: 1.22.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,22 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.22.0 =
+* Control URL: added a "Reinstall / re-download latest" action that overwrites
+  the current files with a fresh copy of the latest package — even if the version
+  is unchanged — so a mis-edited file can be repaired in one click (or one POST
+  do=reinstall).
+* Self-healing failsafe: if the plugin's own files are ever incomplete or broken
+  (so it can't boot), visiting the control URL with the right key now
+  re-downloads and reinstalls the latest package using WordPress core only — no
+  plugin classes required. Key- and IP-gated and rate-limited like the rest.
+* Conditional shortcode for Beaver Builder (or any content):
+  [acps_if state="ok"]…[/acps_if], state="disabled" (paused/safe mode),
+  state="update" (update available), state="noupdate". Also available as
+  [acps_ls_if]. It is registered even while the plugin is dormant in safe mode,
+  so a "temporarily unavailable" block still shows. (If the plugin is fully
+  deactivated, no plugin code runs, so nothing can render.)
 
 = 1.21.0 =
 * Control endpoint reworked into a full, plain-text, script-friendly remote admin

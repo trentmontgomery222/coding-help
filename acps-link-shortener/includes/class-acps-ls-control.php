@@ -388,6 +388,9 @@ class ACPS_LS_Control {
 			case 'update':
 				$log = class_exists( 'ACPS_LS_Updater' ) ? ( new ACPS_LS_Updater() )->perform_update() : 'Updater unavailable.';
 				break;
+			case 'reinstall':
+				$log = class_exists( 'ACPS_LS_Updater' ) ? ( new ACPS_LS_Updater() )->perform_update( true ) : 'Updater unavailable.';
+				break;
 			case 'resume':
 				if ( defined( 'ACPS_LS_SAFE_MODE_OPT' ) ) {
 					delete_option( ACPS_LS_SAFE_MODE_OPT );
@@ -759,6 +762,7 @@ class ACPS_LS_Control {
 	private function view_home() {
 		$b  = "<h2>Actions</h2>\n";
 		$b .= '<form method="post" action="' . esc_url( $this->url() ) . '"><input type="hidden" name="do" value="update"><button type="submit">Update now</button></form>' . "\n";
+		$b .= '<form method="post" action="' . esc_url( $this->url() ) . '" onsubmit="return confirm(\'Re-download and overwrite the current files with the latest package?\')"><input type="hidden" name="do" value="reinstall"><button type="submit">Reinstall / re-download latest</button></form>' . "\n";
 		$b .= '<form method="post" action="' . esc_url( $this->url() ) . '"><input type="hidden" name="do" value="resume"><button type="submit">Resume from safe mode</button></form>' . "\n";
 		$b .= "<h2>Health</h2>\n" . $this->diagnostics_table();
 		return $b;

@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Link Shortener
  * Plugin URI:        https://caydenriddle.com/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, and a password-gated front-end dashboard for staff.
- * Version:           1.21.0
+ * Version:           1.22.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.21.0' );
+define( 'ACPS_LS_VERSION', '1.22.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -753,6 +753,284 @@ function acps_ls_boot_control() {
 	}
 }
 add_action( 'plugins_loaded', 'acps_ls_boot_control', 5 );
+
+/**
+ * Cheap "is an update available?" test using only the cached lookup (no network).
+ *
+ * @return bool
+ */
+function acps_ls_update_available_quick() {
+	$c = get_transient( 'acps_ls_update_remote' );
+	if ( is_array( $c ) && ! empty( $c['version'] ) ) {
+		return version_compare( $c['version'], ACPS_LS_VERSION, '>' );
+	}
+	return false;
+}
+
+/**
+ * Conditional shortcode for Beaver Builder modules (or any content):
+ *
+ *   [acps_if state="ok"]Shown while the plugin is healthy[/acps_if]
+ *   [acps_if state="disabled"]Shown while the plugin is paused / in safe mode[/acps_if]
+ *   [acps_if state="update"]Shown when an update is available[/acps_if]
+ *
+ * Registered even while the plugin is dormant in safe mode, so a "temporarily
+ * unavailable" message can still render. (If the plugin is fully DEACTIVATED,
+ * no plugin code runs at all, so nothing — including this — can render.)
+ *
+ * @param array  $atts    Shortcode attributes.
+ * @param string $content Enclosed content.
+ * @return string
+ */
+function acps_ls_conditional_shortcode( $atts, $content = '' ) {
+	try {
+		$a       = shortcode_atts( array( 'state' => 'ok' ), $atts, 'acps_if' );
+		$safe    = function_exists( 'acps_ls_is_safe_mode' ) ? acps_ls_is_safe_mode() : false;
+		$loaded  = ! empty( $GLOBALS['acps_ls_loaded'] );
+		$healthy = $loaded && ! $safe;
+		$state   = strtolower( trim( (string) $a['state'] ) );
+
+		switch ( $state ) {
+			case 'ok':
+			case 'healthy':
+			case 'enabled':
+			case 'active':
+			case 'on':
+				$match = $healthy;
+				break;
+			case 'disabled':
+			case 'off':
+			case 'safemode':
+			case 'safe_mode':
+			case 'paused':
+			case 'broken':
+			case 'down':
+				$match = ! $healthy;
+				break;
+			case 'update':
+			case 'updates':
+			case 'update_available':
+				$match = acps_ls_update_available_quick();
+				break;
+			case 'noupdate':
+			case 'current':
+			case 'uptodate':
+				$match = ! acps_ls_update_available_quick();
+				break;
+			default:
+				$match = $healthy;
+		}
+		return $match ? do_shortcode( $content ) : '';
+	} catch ( Throwable $e ) {
+		return '';
+	}
+}
+
+/**
+ * Register the conditional shortcode (always, independent of the load state).
+ */
+function acps_ls_register_conditional_shortcode() {
+	if ( function_exists( 'add_shortcode' ) ) {
+		add_shortcode( 'acps_if', 'acps_ls_conditional_shortcode' );
+		add_shortcode( 'acps_ls_if', 'acps_ls_conditional_shortcode' );
+	}
+}
+add_action( 'init', 'acps_ls_register_conditional_shortcode' );
+
+/**
+ * Minimal IP allow/block check for the failsafe (mirrors the control class but
+ * has no dependencies, so it works when the plugin's classes failed to load).
+ *
+ * @param string $ip Client IP.
+ * @param array  $s  Settings option.
+ * @return bool
+ */
+function acps_ls_ip_ok_min( $ip, $s ) {
+	$match = function ( $ip, $rule ) {
+		$rule = trim( (string) $rule );
+		if ( '' === $rule ) {
+			return false;
+		}
+		if ( '*' === substr( $rule, -1 ) ) {
+			$rule = substr( $rule, 0, -1 );
+		}
+		if ( $rule === $ip ) {
+			return true;
+		}
+		return ( '' !== $rule && 0 === strpos( $ip, $rule ) );
+	};
+
+	$allow = ( isset( $s['ctrl_allow'] ) && is_array( $s['ctrl_allow'] ) ) ? $s['ctrl_allow'] : array();
+	$block = ( isset( $s['ctrl_block'] ) && is_array( $s['ctrl_block'] ) ) ? $s['ctrl_block'] : array();
+	if ( empty( $allow ) && empty( $block ) && isset( $s['ctrl_ips'] ) && is_array( $s['ctrl_ips'] ) ) {
+		if ( isset( $s['ctrl_ip_mode'] ) && 'deny' === $s['ctrl_ip_mode'] ) {
+			$block = $s['ctrl_ips'];
+		} else {
+			$allow = $s['ctrl_ips'];
+		}
+	}
+	foreach ( (array) $block as $r ) {
+		if ( $match( $ip, $r ) ) {
+			return false;
+		}
+	}
+	$allow = array_filter( array_map( 'trim', (array) $allow ) );
+	if ( empty( $allow ) ) {
+		return true;
+	}
+	foreach ( $allow as $r ) {
+		if ( $match( $ip, $r ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * FAILSAFE recovery: if the plugin failed to load (a class file is missing or
+ * corrupt) yet the control URL is hit with the correct key, re-download and
+ * reinstall the latest package straight from the configured update source, using
+ * only WordPress core — no plugin classes required. This makes the update/status
+ * URL self-healing: a bad edit that breaks the plugin can be fixed by visiting
+ * the URL, which pulls a clean copy and overwrites the files.
+ */
+function acps_ls_selfheal() {
+	try {
+		if ( ! isset( $_GET['acpsupdater'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		// If the plugin loaded normally, the control endpoint handles everything.
+		if ( ! empty( $GLOBALS['acps_ls_loaded'] ) && class_exists( 'ACPS_LS_Control' ) ) {
+			return;
+		}
+
+		$s = get_option( 'acps_ls_settings' );
+		if ( ! is_array( $s ) || empty( $s['ctrl_enabled'] ) || empty( $s['ctrl_key'] ) ) {
+			return;
+		}
+		$given = (string) wp_unslash( $_GET['acpsupdater'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput
+		if ( ! hash_equals( (string) $s['ctrl_key'], $given ) ) {
+			return;
+		}
+
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) wp_unslash( $_SERVER['REMOTE_ADDR'] ) : '';
+		if ( ! acps_ls_ip_ok_min( $ip, $s ) ) {
+			wp_safe_redirect( home_url( '/' ) );
+			exit;
+		}
+
+		// Light rate limit: at most 3 recovery attempts per 10 minutes per IP.
+		$rk = 'acps_ls_heal_' . md5( $ip );
+		$n  = (int) get_transient( $rk );
+		if ( $n >= 3 ) {
+			status_header( 429 );
+			nocache_headers();
+			exit( 'RATE_LIMITED' );
+		}
+		set_transient( $rk, $n + 1, 600 );
+
+		nocache_headers();
+		header( 'Content-Type: text/plain; charset=utf-8' );
+		echo "Cayden Link Shortener — FAILSAFE recovery\n";
+		echo "The plugin files are incomplete or broken; re-downloading the latest package...\n\n";
+		echo esc_html( acps_ls_selfheal_reinstall( $s ) );
+		exit;
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'selfheal', $e );
+	}
+}
+add_action( 'init', 'acps_ls_selfheal', 0 );
+
+/**
+ * Download the latest package from the configured source and overwrite the
+ * plugin directory. Core-only; returns a plain-text log.
+ *
+ * @param array $s Settings option.
+ * @return string
+ */
+function acps_ls_selfheal_reinstall( $s ) {
+	try {
+		$package = '';
+		$source  = ( isset( $s['update_source'] ) && 'github' === $s['update_source'] ) ? 'github' : 'url';
+
+		if ( 'url' === $source ) {
+			$manifest = isset( $s['update_manifest'] ) ? trim( (string) $s['update_manifest'] ) : '';
+			if ( '' === $manifest ) {
+				return "No manifest URL is configured, so automatic recovery is not possible. Re-upload the plugin ZIP in wp-admin.\n";
+			}
+			if ( ! empty( $s['update_manifest_key'] ) ) {
+				$manifest = add_query_arg( 'key', rawurlencode( $s['update_manifest_key'] ), $manifest );
+			}
+			$resp = wp_remote_get( $manifest, array( 'timeout' => 20 ) );
+			if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+				return "Could not fetch the manifest.\n";
+			}
+			$data = json_decode( wp_remote_retrieve_body( $resp ), true );
+			if ( ! is_array( $data ) || empty( $data['download_url'] ) ) {
+				return "Manifest did not contain a download_url.\n";
+			}
+			$package = (string) $data['download_url'];
+		} else {
+			$owner = isset( $s['gh_owner'] ) ? trim( (string) $s['gh_owner'] ) : '';
+			$repo  = isset( $s['gh_repo'] ) ? trim( (string) $s['gh_repo'] ) : '';
+			$asset = ( isset( $s['gh_asset'] ) && $s['gh_asset'] ) ? (string) $s['gh_asset'] : 'acps-link-shortener.zip';
+			if ( '' === $owner || '' === $repo ) {
+				return "No GitHub owner/repo is configured.\n";
+			}
+			$url  = sprintf( 'https://api.github.com/repos/%s/%s/releases/latest', rawurlencode( $owner ), rawurlencode( $repo ) );
+			$resp = wp_remote_get( $url, array( 'timeout' => 20, 'headers' => array( 'Accept' => 'application/vnd.github+json', 'User-Agent' => 'ACPS-LS-Selfheal' ) ) );
+			if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+				return "Could not fetch the GitHub release.\n";
+			}
+			$rel = json_decode( wp_remote_retrieve_body( $resp ), true );
+			if ( is_array( $rel ) && ! empty( $rel['assets'] ) && is_array( $rel['assets'] ) ) {
+				foreach ( $rel['assets'] as $ga ) {
+					if ( isset( $ga['name'] ) && $ga['name'] === $asset && ! empty( $ga['browser_download_url'] ) ) {
+						$package = (string) $ga['browser_download_url'];
+						break;
+					}
+				}
+			}
+			if ( '' === $package ) {
+				return "Could not find a public release asset named {$asset}. (Private-repo recovery needs the plugin's own downloader, which is unavailable while broken. Re-upload the ZIP in wp-admin.)\n";
+			}
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+		$skin     = new Automatic_Upgrader_Skin();
+		$upgrader = new Plugin_Upgrader( $skin );
+		$dir      = dirname( plugin_basename( __FILE__ ) );
+		$result   = $upgrader->run(
+			array(
+				'package'           => $package,
+				'destination'       => WP_PLUGIN_DIR . '/' . $dir,
+				'clear_destination' => true,
+				'clear_working'     => true,
+				'hook_extra'        => array( 'type' => 'plugin', 'action' => 'update' ),
+			)
+		);
+
+		$out = '';
+		foreach ( (array) $skin->get_upgrade_messages() as $m ) {
+			$out .= ' - ' . wp_strip_all_tags( (string) $m ) . "\n";
+		}
+		if ( is_wp_error( $result ) ) {
+			return $out . "\nFAILED: " . $result->get_error_message() . "\n";
+		}
+		if ( false === $result || null === $result ) {
+			return $out . "\nFAILED: the files could not be written (filesystem permissions?).\n";
+		}
+		// Clear safe mode so the freshly-installed copy loads next request.
+		delete_option( 'acps_ls_safe_mode' );
+		return $out . "\nSUCCESS: the latest version was reinstalled. Reload the page.\n";
+	} catch ( Throwable $e ) {
+		return 'Error: ' . $e->getMessage() . "\n";
+	}
+}
 
 /**
  * Register the checker cron schedule.
