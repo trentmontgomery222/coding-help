@@ -219,6 +219,10 @@ to whatever the snippet prints, so they work even when the scan finds nothing.
 * Removed the last admin notice the update system could raise. Nothing about
   updates appears anywhere in wp-admin except the settings page with
   &updates=1.
+* Every response carries its verdict in an X-WPCodeBBV-Result header as
+  well as in the body, so a script can read it whichever format it asked
+  for. Only a &view=raw response starts with a RESULT: line; the HTML
+  page shows the same verdict in its first paragraph.
 * tools/acps-panel.py drives the panel from the command line.
 
 = 7.6.0 =

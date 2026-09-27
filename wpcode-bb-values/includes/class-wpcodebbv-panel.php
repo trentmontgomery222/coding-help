@@ -461,6 +461,7 @@ class WPCodeBBV_Panel {
 				status_header( 429 );
 				nocache_headers();
 				header( 'Retry-After: ' . (int) $rate['window'] );
+				header( 'X-WPCodeBBV-Result: RATE_LIMITED' );
 				header( 'Content-Type: text/plain; charset=utf-8' );
 				echo "RESULT: RATE_LIMITED\nToo many requests.\n";
 				exit;
@@ -481,10 +482,13 @@ class WPCodeBBV_Panel {
 			// Never leave a half-rendered page behind.
 			if ( ! headers_sent() ) {
 				status_header( 500 );
+				header( 'X-WPCodeBBV-Result: ERROR' );
 				header( 'Content-Type: text/plain; charset=utf-8' );
 			}
 
-			echo "RESULT: ERROR\n" . esc_html( $e->getMessage() ) . "\nThe site is unaffected.\n";
+			// text/plain: escaping here would turn the one message
+			// somebody needs to read into HTML entities.
+			echo "RESULT: ERROR\n" . $e->getMessage() . "\nThe site is unaffected.\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			exit;
 		}
 	}
@@ -533,18 +537,61 @@ class WPCodeBBV_Panel {
 					return array( false, 'The updater is not available on this install.' );
 				}
 
-				// Prints its own report and exits, so say how it went
-				// in the first line before handing over.
 				if ( ! headers_sent() ) {
 					header( 'Content-Type: text/plain; charset=utf-8' );
 				}
 
-				echo "RESULT: OK\n";
+				/*
+				 * The updater prints its own report and then exits, so
+				 * there is no return value to turn into a RESULT line -
+				 * and printing one first would have to guess, which is
+				 * worse than not printing it at all.
+				 *
+				 * An output-buffer callback reads what the updater
+				 * actually said and puts the right line in front of it.
+				 * PHP runs the callback when the buffer is flushed,
+				 * which happens at shutdown, so the updater's exit()
+				 * does not skip it.
+				 */
+				ob_start(
+					function ( $printed ) {
+						$ok = false !== strpos( $printed, 'SUCCESS' )
+							|| false !== strpos( $printed, 'Already up to date' );
 
-				$updater = new WPCodeBBV_Updater();
-				$updater->force_update_now();
+						$verdict = $ok ? 'OK' : 'FAIL';
 
-				return array( false, 'The updater returned without printing anything.' );
+						if ( ! headers_sent() ) {
+							header( 'X-WPCodeBBV-Result: ' . $verdict );
+						}
+
+						return 'RESULT: ' . $verdict . "\n" . $printed;
+					}
+				);
+
+				/*
+				 * Anything thrown in here is caught on the spot rather
+				 * than left to the handler in maybe_handle(). That
+				 * handler would print a verdict of its own, and the
+				 * buffer above is already going to print one - a
+				 * response carrying two RESULT lines is worse than
+				 * either of them alone.
+				 */
+				try {
+					$updater = new WPCodeBBV_Updater();
+					$updater->force_update_now();
+				} catch ( \Throwable $e ) {
+					if ( function_exists( 'wpcodebbv_log' ) ) {
+						wpcodebbv_log( 'update from the panel failed: ' . $e->getMessage() );
+					}
+
+					echo "\nThe update could not be finished: " . $e->getMessage() . "\n";
+					echo "FAILED\n";
+				}
+
+				// Only reachable if force_update_now() stops exiting;
+				// the buffer is ours to close in that case.
+				ob_end_flush();
+				exit;
 
 			case 'reinstall':
 				if ( ! function_exists( 'wpcodebbv_emergency_reinstall' ) ) {
@@ -824,6 +871,17 @@ class WPCodeBBV_Panel {
 
 		$result = '' === $action ? 'READ' : ( $ok ? 'OK' : 'FAIL' );
 
+		/*
+		 * The verdict goes in a header as well as in the body. The body
+		 * carries it as a first line only in the raw view; in the HTML
+		 * view it is a paragraph like everything else, and a script that
+		 * had been told to read "the first line" would find markup and
+		 * read every success as a failure. A header is true of both.
+		 */
+		if ( ! headers_sent() ) {
+			header( 'X-WPCodeBBV-Result: ' . $result );
+		}
+
 		if ( $raw ) {
 			header( 'Content-Type: text/plain; charset=utf-8' );
 
@@ -950,8 +1008,11 @@ POST <?php echo esc_html( $here ); ?>
      wpcodebbv_password   the password set in wp-admin
      wpcodebbv_settings[KEY]=VALUE  with wpcodebbv_action=save
      wpcodebbv_full_form=1          also zeroes any flag you leave out
-The first line of every response is "RESULT: OK", "RESULT: FAIL",
-"RESULT: READ", "RESULT: RATE_LIMITED" or "RESULT: ERROR".</pre>
+
+The verdict is one of OK, FAIL, READ, RATE_LIMITED or ERROR. Every
+response carries it in the X-WPCodeBBV-Result header; a &amp;view=raw
+response also carries it as its first line, "RESULT: &lt;verdict&gt;".
+Post to the &amp;view=raw address to get both.</pre>
 </body>
 </html>
 		<?php

@@ -47,22 +47,32 @@ def panel_url(site, key, raw=True):
 
 
 def request(url, fields=None):
-    """GET, or POST when there are fields. Returns (status, body)."""
+    """GET, or POST when there are fields. Returns (status, body, verdict).
+
+    The verdict comes from the X-WPCodeBBV-Result header, which every
+    response carries whatever its format. The RESULT: first line is only
+    there in the raw view, so it is the fallback, not the source.
+    """
     data = urllib.parse.urlencode(fields, doseq=True).encode() if fields else None
     req = urllib.request.Request(url, data=data, headers={"User-Agent": "acps-panel/1"})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            return resp.status, resp.read().decode("utf-8", "replace")
+            body = resp.read().decode("utf-8", "replace")
+            return resp.status, body, verdict_of(resp.headers, body)
     except urllib.error.HTTPError as err:
         # 404 (not on the IP list, or the wrong key) and 429 (rate
         # limited) are answers, not failures to connect.
-        return err.code, err.read().decode("utf-8", "replace")
+        body = err.read().decode("utf-8", "replace")
+        return err.code, body, verdict_of(err.headers, body)
     except urllib.error.URLError as err:
-        return 0, "could not reach the site: %s" % err.reason
+        return 0, "could not reach the site: %s" % err.reason, ""
 
 
-def result_of(body):
-    """The RESULT: token, or '' when the body does not carry one."""
+def verdict_of(headers, body):
+    """OK / FAIL / READ / RATE_LIMITED / ERROR, or '' if absent."""
+    from_header = (headers.get("X-WPCodeBBV-Result") or "").strip()
+    if from_header:
+        return from_header
     for line in body.splitlines():
         if line.startswith("RESULT:"):
             return line.split(":", 1)[1].strip()
@@ -102,14 +112,14 @@ def main():
     url = panel_url(args.site, args.key)
 
     if args.command == "status":
-        status, body = request(url)
+        status, body, verdict = request(url)
         print(body, end="")
-        return 0 if result_of(body) in ("READ", "OK") else 1
+        return 0 if verdict in ("READ", "OK") else 1
 
     if args.command == "get":
         if not args.rest:
             sys.exit("get needs a setting name.")
-        status, body = request(url)
+        status, body, _ = request(url)
         settings = parse_report(body).get("SETTINGS", {})
         missing = False
         for name in args.rest:
@@ -132,22 +142,22 @@ def main():
                 sys.exit("%r is not KEY=VALUE." % pair)
             name, value = pair.split("=", 1)
             fields["wpcodebbv_settings[%s]" % name] = value
-        status, body = request(url, fields)
+        status, body, verdict = request(url, fields)
         print(body, end="")
-        return 0 if result_of(body) == "OK" else 1
+        return 0 if verdict == "OK" else 1
 
     if args.command in ACTIONS:
         fields = {
             "wpcodebbv_action": args.command,
             "wpcodebbv_password": need_password(args),
         }
-        status, body = request(url, fields)
+        status, body, verdict = request(url, fields)
         print(body, end="")
-        # `update` hands over to the updater, which prints SUCCESS or
-        # FAILED of its own rather than a second RESULT line.
+        # `update` hands over to the updater, which also prints its own
+        # SUCCESS / FAILED line; either one saying no is a no.
         if "FAILED" in body:
             return 1
-        return 0 if result_of(body) in ("OK", "") else 1
+        return 0 if verdict in ("OK", "") else 1
 
     sys.exit("Unknown command %r. Try: status, get, set, %s" % (args.command, ", ".join(ACTIONS)))
 
