@@ -216,6 +216,407 @@ if ( is_readable( $CAYDENDIR_sd_updater_file ) ) {
 }
 unset( $CAYDENDIR_sd_updater_file );
 
+/* =========================================================================
+ * FAILSAFE RECOVERY — self-contained, does NOT depend on includes/updater.php
+ *
+ * If the updater file itself is broken (so the console class is gone), or the
+ * plugin has crashed into safe mode, these let you re-download and reinstall
+ * the latest ZIP from the update source and repair the files:
+ *
+ *   - Manual : /?acpsupdater=<console key>&recover=1&pw=<password>
+ *   - Auto   : while paused (and auto-recover is on) the next request quietly
+ *              reinstalls the latest version once (rate-limited to ~1/hour).
+ *
+ * Everything here is hoisted + guarded so it can run even when the rest of the
+ * plugin never loads. It only reads options; it never calls updater.php code.
+ * ====================================================================== */
+
+/** Is a plugin active? Reads options directly (no admin include needed). */
+function CAYDENDIR_sd_is_plugin_active( $basename ) {
+	$basename = trim( (string) $basename );
+	if ( '' === $basename ) {
+		return false;
+	}
+	$active = (array) get_option( 'active_plugins', array() );
+	if ( in_array( $basename, $active, true ) ) {
+		return true;
+	}
+	$net = function_exists( 'get_site_option' ) ? get_site_option( 'active_sitewide_plugins', array() ) : array();
+	return is_array( $net ) && isset( $net[ $basename ] );
+}
+
+/** This plugin's folder slug. */
+function CAYDENDIR_sd_self_slug() {
+	$b   = defined( 'CAYDENDIR_SD_BASENAME' ) ? CAYDENDIR_SD_BASENAME : 'cayden-staff-directory/cayden-staff-directory.php';
+	$dir = dirname( $b );
+	return ( '.' === $dir || '' === $dir ) ? preg_replace( '/\.php$/', '', basename( $b ) ) : $dir;
+}
+
+/** Minimal IP match for the recovery gate: exact, octet prefix ("168.1"), or CIDR. */
+function CAYDENDIR_sd_r_ip_match( $ip, $pattern ) {
+	$ip      = trim( (string) $ip );
+	$pattern = trim( (string) $pattern );
+	if ( '' === $ip || '' === $pattern ) {
+		return false;
+	}
+	if ( $ip === $pattern ) {
+		return true;
+	}
+	if ( false !== strpos( $pattern, '/' ) ) {
+		$parts = explode( '/', $pattern, 2 );
+		$bits  = (int) $parts[1];
+		$il    = ip2long( $ip );
+		$sl    = ip2long( $parts[0] );
+		if ( false === $il || false === $sl || $bits < 0 || $bits > 32 ) {
+			return false;
+		}
+		if ( 0 === $bits ) {
+			return true;
+		}
+		$mask = -1 << ( 32 - $bits );
+		return ( $il & $mask ) === ( $sl & $mask );
+	}
+	if ( false === strpos( $ip, '.' ) || false === strpos( $pattern, '.' ) ) {
+		return false;
+	}
+	$pp = explode( '.', rtrim( $pattern, '.' ) );
+	$ii = explode( '.', $ip );
+	if ( count( $pp ) > count( $ii ) || count( $pp ) === 4 ) {
+		return false;
+	}
+	foreach ( $pp as $k => $oct ) {
+		if ( '' === $oct ) {
+			continue;
+		}
+		if ( ! isset( $ii[ $k ] ) || $ii[ $k ] !== $oct ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/** Recovery-path IP allow check (mirrors the updater's rules, self-contained). */
+function CAYDENDIR_sd_r_ip_allowed( $ip, $gate ) {
+	if ( '' === $ip ) {
+		return false;
+	}
+	$block = ( isset( $gate['ip_block'] ) && is_array( $gate['ip_block'] ) ) ? $gate['ip_block'] : array();
+	foreach ( $block as $p ) {
+		if ( CAYDENDIR_sd_r_ip_match( $ip, $p ) ) {
+			return false;
+		}
+	}
+	$enforce = isset( $gate['ip_enforce'] ) ? ! empty( $gate['ip_enforce'] ) : true;
+	if ( ! $enforce ) {
+		return true;
+	}
+	$allow = ( isset( $gate['ip_allow'] ) && is_array( $gate['ip_allow'] ) ) ? $gate['ip_allow'] : array( '167.102.110.1' );
+	foreach ( $allow as $p ) {
+		if ( CAYDENDIR_sd_r_ip_match( $ip, $p ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function CAYDENDIR_sd_r_client_ip( $gate ) {
+	if ( ! empty( $gate['trust_proxy'] ) && ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+		$part = trim( (string) strtok( (string) wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ), ',' ) );
+		if ( filter_var( $part, FILTER_VALIDATE_IP ) ) {
+			return $part;
+		}
+	}
+	$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( (string) wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+	return filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
+}
+
+function CAYDENDIR_sd_r_out( $code, $text ) {
+	if ( function_exists( 'status_header' ) ) {
+		status_header( (int) $code );
+	}
+	if ( function_exists( 'nocache_headers' ) ) {
+		nocache_headers();
+	}
+	header( 'Content-Type: text/plain; charset=utf-8' );
+	echo esc_html( $text ) . "\n";
+	exit;
+}
+
+/** Resolve the latest download package URL straight from the saved source config. */
+function CAYDENDIR_sd_emergency_package( $s, $slug ) {
+	$source = ( isset( $s['update_source'] ) && 'github' === $s['update_source'] ) ? 'github' : 'url';
+	if ( 'url' === $source ) {
+		$url = isset( $s['update_manifest'] ) ? trim( (string) $s['update_manifest'] ) : '';
+		if ( '' === $url ) {
+			return '';
+		}
+		$url = add_query_arg( 'plugin', rawurlencode( $slug ), $url );
+		if ( ! empty( $s['update_manifest_key'] ) ) {
+			$url = add_query_arg( 'key', rawurlencode( $s['update_manifest_key'] ), $url );
+		}
+		$res = wp_remote_get( $url, array( 'timeout' => 15, 'headers' => array( 'Accept' => 'application/json' ) ) );
+		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+			return '';
+		}
+		$j = json_decode( wp_remote_retrieve_body( $res ), true );
+		return ( is_array( $j ) && ! empty( $j['download_url'] ) ) ? esc_url_raw( (string) $j['download_url'] ) : '';
+	}
+	$owner = isset( $s['gh_owner'] ) ? trim( (string) $s['gh_owner'] ) : '';
+	$repo  = isset( $s['gh_repo'] ) ? trim( (string) $s['gh_repo'] ) : '';
+	if ( '' === $owner || '' === $repo ) {
+		return '';
+	}
+	$asset   = ( isset( $s['gh_asset'] ) && '' !== trim( (string) $s['gh_asset'] ) ) ? trim( (string) $s['gh_asset'] ) : 'cayden-staff-directory.zip';
+	$headers = array( 'Accept' => 'application/vnd.github+json', 'User-Agent' => 'CaydenStaffDirectory-Updater', 'X-GitHub-Api-Version' => '2022-11-28' );
+	if ( ! empty( $s['gh_token'] ) ) {
+		$headers['Authorization'] = 'Bearer ' . $s['gh_token'];
+	}
+	$res = wp_remote_get( 'https://api.github.com/repos/' . rawurlencode( $owner ) . '/' . rawurlencode( $repo ) . '/releases/latest', array( 'timeout' => 15, 'headers' => $headers ) );
+	if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+		return '';
+	}
+	$j = json_decode( wp_remote_retrieve_body( $res ), true );
+	if ( ! is_array( $j ) || empty( $j['assets'] ) || ! is_array( $j['assets'] ) ) {
+		return '';
+	}
+	foreach ( $j['assets'] as $a ) {
+		if ( isset( $a['name'] ) && $a['name'] === $asset && ! empty( $a['browser_download_url'] ) ) {
+			return (string) $a['browser_download_url'];
+		}
+	}
+	return '';
+}
+
+/** Force a fresh download + reinstall of the latest ZIP (overwrites edited files). */
+function CAYDENDIR_sd_emergency_reinstall() {
+	try {
+		foreach ( array( 'plugin', 'file', 'misc', 'class-wp-upgrader' ) as $f ) {
+			$p = ABSPATH . 'wp-admin/includes/' . $f . '.php';
+			if ( is_readable( $p ) ) {
+				require_once $p;
+			}
+		}
+		if ( ! class_exists( 'Plugin_Upgrader' ) || ! class_exists( 'Automatic_Upgrader_Skin' ) ) {
+			return array( 'status' => 'failed', 'messages' => 'Upgrader unavailable.' );
+		}
+		$s        = get_option( CAYDENDIR_SD_SETTINGS, array() );
+		$s        = is_array( $s ) ? $s : array();
+		$basename = defined( 'CAYDENDIR_SD_BASENAME' ) ? CAYDENDIR_SD_BASENAME : 'cayden-staff-directory/cayden-staff-directory.php';
+		$slug     = CAYDENDIR_sd_self_slug();
+		$pkg      = CAYDENDIR_sd_emergency_package( $s, $slug );
+		if ( '' === $pkg ) {
+			return array( 'status' => 'failed', 'messages' => 'Could not resolve a download package from the update source.' );
+		}
+		$inject = function ( $t ) use ( $basename, $slug, $pkg ) {
+			if ( ! is_object( $t ) ) {
+				return $t;
+			}
+			if ( ! isset( $t->response ) || ! is_array( $t->response ) ) {
+				$t->response = array();
+			}
+			$t->response[ $basename ] = (object) array(
+				'id' => $basename, 'slug' => $slug, 'plugin' => $basename,
+				'new_version' => '999999', 'package' => $pkg, 'url' => '',
+				'icons' => array(), 'banners' => array(),
+			);
+			return $t;
+		};
+		$fixdir = function ( $source, $rs, $up, $he = array() ) use ( $basename, $slug ) {
+			if ( empty( $he['plugin'] ) || $he['plugin'] !== $basename ) {
+				return $source;
+			}
+			if ( basename( untrailingslashit( $source ) ) === $slug ) {
+				return $source;
+			}
+			global $wp_filesystem;
+			if ( ! $wp_filesystem ) {
+				return $source;
+			}
+			$d = trailingslashit( $rs ) . $slug;
+			return $wp_filesystem->move( untrailingslashit( $source ), untrailingslashit( $d ), true ) ? trailingslashit( $d ) : $source;
+		};
+		add_filter( 'pre_set_site_transient_update_plugins', $inject );
+		add_filter( 'upgrader_source_selection', $fixdir, 10, 4 );
+		delete_site_transient( 'update_plugins' );
+		if ( function_exists( 'wp_update_plugins' ) ) {
+			wp_update_plugins();
+		}
+		$skin     = new Automatic_Upgrader_Skin();
+		$upgrader = new Plugin_Upgrader( $skin );
+		$res      = $upgrader->upgrade( $basename );
+		$msgs     = method_exists( $skin, 'get_upgrade_messages' ) ? $skin->get_upgrade_messages() : array();
+		$msg      = is_array( $msgs ) ? implode( "\n", array_map( 'wp_strip_all_tags', $msgs ) ) : '';
+		remove_filter( 'pre_set_site_transient_update_plugins', $inject );
+		remove_filter( 'upgrader_source_selection', $fixdir, 10 );
+		delete_site_transient( 'update_plugins' );
+		if ( defined( 'CAYDENDIR_SD_UPDATE_CACHE' ) ) {
+			delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
+		}
+		if ( is_wp_error( $res ) ) {
+			return array( 'status' => 'failed', 'messages' => trim( $msg . "\n" . $res->get_error_message() ) );
+		}
+		if ( false === $res || null === $res ) {
+			return array( 'status' => 'failed', 'messages' => $msg );
+		}
+		return array( 'status' => 'reinstalled', 'messages' => $msg );
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'emergency reinstall', $e );
+		return array( 'status' => 'failed', 'messages' => $e->getMessage() );
+	}
+}
+
+/**
+ * Manual recovery endpoint. Handles ?acpsupdater=<key>&recover=1&pw=<pw> ONLY
+ * when the full updater class is unavailable (its file broke) — otherwise the
+ * normal console handles recovery. Registered at init priority 1.
+ */
+function CAYDENDIR_sd_recovery_maybe() {
+	try {
+		if ( ! isset( $_GET['recover'] ) || '1' !== (string) $_GET['recover'] ) { // phpcs:ignore WordPress.Security
+			return;
+		}
+		if ( class_exists( 'CAYDENDIR_SD_Updater' ) ) {
+			return; // the console class will handle &recover=1
+		}
+		$v = isset( $_GET['acpsupdater'] ) ? trim( (string) wp_unslash( $_GET['acpsupdater'] ) ) : ''; // phpcs:ignore WordPress.Security
+		if ( '' === $v ) {
+			return;
+		}
+		$gate = get_option( defined( 'CAYDENDIR_SD_UPDATER_GATE' ) ? CAYDENDIR_SD_UPDATER_GATE : 'CAYDENDIR_sd_updater_gate', array() );
+		$gate = is_array( $gate ) ? $gate : array();
+		$ck   = ( isset( $gate['console_key'] ) && '' !== trim( (string) $gate['console_key'] ) )
+			? trim( (string) $gate['console_key'] )
+			: (string) get_option( defined( 'CAYDENDIR_SD_UPDATER_KEY_OPTION' ) ? CAYDENDIR_SD_UPDATER_KEY_OPTION : 'wp_updaterKey', '' );
+		if ( '' === $ck || ! hash_equals( $ck, $v ) ) {
+			return; // wrong key → vanish
+		}
+		$ip = CAYDENDIR_sd_r_client_ip( $gate );
+		if ( ! CAYDENDIR_sd_r_ip_allowed( $ip, $gate ) ) {
+			return; // disallowed IP → vanish
+		}
+		$hash = isset( $gate['pw_hash'] ) ? (string) $gate['pw_hash'] : '';
+		if ( '' !== $hash ) {
+			$pw   = isset( $_GET['pw'] ) ? (string) wp_unslash( $_GET['pw'] ) : ( isset( $_POST['pw'] ) ? (string) wp_unslash( $_POST['pw'] ) : '' ); // phpcs:ignore WordPress.Security
+			$good = function_exists( 'wp_check_password' ) ? wp_check_password( $pw, $hash ) : hash_equals( $hash, $pw );
+			if ( ! $good ) {
+				CAYDENDIR_sd_r_out( 403, 'Wrong password.' );
+			}
+		}
+		if ( function_exists( 'get_transient' ) && get_transient( 'CAYDENDIR_sd_recover_lock' ) ) {
+			CAYDENDIR_sd_r_out( 429, 'A recovery is already running. Try again shortly.' );
+		}
+		if ( function_exists( 'set_transient' ) ) {
+			set_transient( 'CAYDENDIR_sd_recover_lock', 1, 180 );
+		}
+		$r = CAYDENDIR_sd_emergency_reinstall();
+		if ( is_array( $r ) && 'reinstalled' === $r['status'] && defined( 'CAYDENDIR_SD_SAFE_OPTION' ) ) {
+			delete_option( CAYDENDIR_SD_SAFE_OPTION ); // resume after a successful repair
+		}
+		CAYDENDIR_sd_r_out( 200, "EMERGENCY RECOVERY\nresult=" . ( is_array( $r ) ? $r['status'] : 'unknown' ) . "\n" . ( is_array( $r ) && isset( $r['messages'] ) ? $r['messages'] : '' ) );
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'recovery endpoint', $e );
+	}
+}
+add_action( 'init', 'CAYDENDIR_sd_recovery_maybe', 1 );
+
+/**
+ * Auto-repair: while paused after a crash (and auto-recover is on), quietly
+ * reinstall the latest version once. Bounded to ~1/hour and one attempt per
+ * distinct crash so it can never loop.
+ */
+function CAYDENDIR_sd_maybe_auto_recover() {
+	try {
+		if ( ! function_exists( 'CAYDENDIR_sd_is_paused' ) || ! CAYDENDIR_sd_is_paused() ) {
+			return;
+		}
+		$gate = get_option( defined( 'CAYDENDIR_SD_UPDATER_GATE' ) ? CAYDENDIR_SD_UPDATER_GATE : 'CAYDENDIR_sd_updater_gate', array() );
+		$gate = is_array( $gate ) ? $gate : array();
+		$auto = isset( $gate['auto_recover'] ) ? ! empty( $gate['auto_recover'] ) : true;
+		if ( ! $auto ) {
+			return;
+		}
+		if ( function_exists( 'get_transient' ) && get_transient( 'CAYDENDIR_sd_recover_cool' ) ) {
+			return; // at most one auto attempt per hour
+		}
+		$info = defined( 'CAYDENDIR_SD_SAFE_OPTION' ) ? get_option( CAYDENDIR_SD_SAFE_OPTION, array() ) : array();
+		$sig  = is_array( $info ) ? md5( (string) wp_json_encode( $info ) ) : 'x';
+		if ( (string) get_option( 'CAYDENDIR_sd_recover_done', '' ) === $sig ) {
+			return; // already tried for this exact crash
+		}
+		if ( function_exists( 'set_transient' ) ) {
+			set_transient( 'CAYDENDIR_sd_recover_cool', 1, HOUR_IN_SECONDS );
+		}
+		update_option( 'CAYDENDIR_sd_recover_done', $sig, false ); // mark BEFORE attempting (loop-proof)
+		$r = CAYDENDIR_sd_emergency_reinstall();
+		if ( is_array( $r ) && 'reinstalled' === $r['status'] && defined( 'CAYDENDIR_SD_SAFE_OPTION' ) ) {
+			delete_option( CAYDENDIR_SD_SAFE_OPTION ); // resume after a successful repair
+		}
+		CAYDENDIR_sd_log( 'auto-recover', is_array( $r ) ? ( 'result=' . $r['status'] ) : 'ran' );
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'auto recover', $e );
+	}
+}
+add_action( 'init', 'CAYDENDIR_sd_maybe_auto_recover', 3 );
+
+/**
+ * Conditional shortcode for Beaver Builder / any content:
+ *   [cayden_if plugin="foo/foo.php" is="inactive"]shown when inactive[/cayden_if]
+ *   [cayden_if active="foo/foo.php"]shown when active[else]shown otherwise[/cayden_if]
+ *   [cayden_if paused="yes"]directory is temporarily unavailable[/cayden_if]
+ *   [cayden_if has_data="no"]nothing synced yet[/cayden_if]
+ * Registered early so it works even while the plugin is paused. Never throws.
+ */
+function CAYDENDIR_sd_conditional_shortcode( $atts, $content = '' ) {
+	try {
+		$atts = shortcode_atts(
+			array(
+				'plugin'    => '',
+				'is'        => 'active',
+				'active'    => '',
+				'inactive'  => '',
+				'paused'    => '',
+				'has_data'  => '',
+				'shortcode' => '',
+				'exists'    => 'yes',
+			),
+			$atts,
+			'cayden_if'
+		);
+		$yes  = function ( $v ) {
+			return in_array( strtolower( trim( (string) $v ) ), array( '1', 'yes', 'true', 'on' ), true );
+		};
+		$cond = false;
+		if ( '' !== $atts['active'] ) {
+			$cond = CAYDENDIR_sd_is_plugin_active( $atts['active'] );
+		} elseif ( '' !== $atts['inactive'] ) {
+			$cond = ! CAYDENDIR_sd_is_plugin_active( $atts['inactive'] );
+		} elseif ( '' !== $atts['plugin'] ) {
+			$a    = CAYDENDIR_sd_is_plugin_active( $atts['plugin'] );
+			$cond = ( 'inactive' === strtolower( (string) $atts['is'] ) ) ? ! $a : $a;
+		} elseif ( '' !== $atts['paused'] ) {
+			$p    = function_exists( 'CAYDENDIR_sd_is_paused' ) && CAYDENDIR_sd_is_paused();
+			$cond = ( $p === $yes( $atts['paused'] ) );
+		} elseif ( '' !== $atts['has_data'] ) {
+			$synced = defined( 'CAYDENDIR_SD_DATA_OPTION' ) ? get_option( CAYDENDIR_SD_DATA_OPTION, array() ) : array();
+			$manual = defined( 'CAYDENDIR_SD_MANUAL_OPTION' ) ? get_option( CAYDENDIR_SD_MANUAL_OPTION, array() ) : array();
+			$has    = ( is_array( $synced ) && count( $synced ) ) || ( is_array( $manual ) && count( $manual ) );
+			$cond   = ( (bool) $has === $yes( $atts['has_data'] ) );
+		} elseif ( '' !== $atts['shortcode'] ) {
+			$ex   = function_exists( 'shortcode_exists' ) ? shortcode_exists( $atts['shortcode'] ) : false;
+			$cond = ( (bool) $ex === $yes( $atts['exists'] ) );
+		}
+		$parts = preg_split( '/\[else\]/i', (string) $content, 2 );
+		$show  = $cond ? $parts[0] : ( isset( $parts[1] ) ? $parts[1] : '' );
+		return function_exists( 'do_shortcode' ) ? do_shortcode( $show ) : $show;
+	} catch ( \Throwable $e ) {
+		CAYDENDIR_sd_log( 'conditional shortcode', $e );
+		return '';
+	}
+}
+if ( function_exists( 'add_shortcode' ) ) {
+	add_shortcode( 'cayden_if', 'CAYDENDIR_sd_conditional_shortcode' );
+}
+
 // If a previous request fataled inside this plugin, load ONLY the paused notice
 // and stop — the plugin body below never runs, so the site cannot crash again.
 if ( CAYDENDIR_sd_is_paused() ) {

@@ -1,32 +1,28 @@
 <?php
 /**
- * Self-update system + hidden remote console.
+ * Self-update system + hidden remote console (plain, scriptable, no styling).
  *
- * This file is loaded EARLY (before the fatal-error safe-mode early return in
- * the main plugin file) so the updater keeps working even when the rest of the
- * plugin is paused after a crash — that is the recovery path, so an update must
- * never be able to disable its own updater.
+ * Loaded EARLY (before the fatal-error safe-mode return in the main plugin
+ * file) so it keeps working even when the rest of the plugin is paused after a
+ * crash — an update must never be able to disable its own updater.
  *
- * Two faces, both hidden from every menu:
+ * NO update notices appear anywhere. The only ways to update or change settings:
  *
- *   1. Admin panel  — wp-admin settings page URL + "&updates=1"
- *        options-general.php?page=CAYDENDIR-staff-directory&updates=1
- *      Logged-in administrators only. Full control: update source, background
- *      auto-update, the shared key, the remote-console password, the IP
- *      allow/block rules, check / install, and diagnostics.
+ *   1. Admin panel  — wp-admin: options-general.php?page=CAYDENDIR-staff-directory&updates=1
+ *      Logged-in admins only. Configures the console key, password, IP rules,
+ *      custom links, update source, and can check / install / reinstall.
  *
- *   2. Remote console — the shared secret URL, no login required
- *        /?wp_update=<plugin-slug>/<key>
- *      Gated by IP rules (default: only 167.102.110.1) AND rate-limited AND
- *      password-protected. Shows diagnostics (performance / issues / problems),
- *      can force an update, and can edit ALL plugin settings — but only once per
- *      day. The password is set only from the admin panel above.
+ *   2. Remote console — no login, plain text, Python-friendly:
+ *        /?acpsupdater=<console key>              (console key is set in the panel)
+ *        /?acpsupdater=<console key>&recover=1&pw=<pw>   (force reinstall / repair)
+ *      Gated by IP rules (default: only 167.102.110.1), rate-limited, and
+ *      password-protected. It can do EVERYTHING the admin panel can: update,
+ *      reinstall the latest ZIP (repair edited files), and edit every setting.
  *
- * The outbound "Update Request URL" the site asks for a manifest is always:
- *   <Manifest URL> + ?plugin=<slug>&key=<set key>
+ * The outbound "Update Request URL" is always <Manifest URL>?plugin=<slug>&key=<set key>.
  *
- * Every entry point is wrapped in try/catch(\Throwable); nothing here can
- * white-screen the site, and it is inert until its exact secret URL is hit.
+ * Every entry point is wrapped in try/catch(\Throwable); a wrong key or a
+ * disallowed IP makes the console vanish (the site renders normally).
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -37,20 +33,15 @@ if ( ! defined( 'CAYDENDIR_SD_UPDATER_KEY_OPTION' ) ) {
 	define( 'CAYDENDIR_SD_UPDATER_KEY_OPTION', 'wp_updaterKey' );
 }
 if ( ! defined( 'CAYDENDIR_SD_UPDATER_GATE' ) ) {
-	// Security/state for the remote console. A DEDICATED option so a normal
-	// settings save (or reset) can never touch the updater's access rules.
+	// Console access/state. A DEDICATED option so a normal settings save/reset
+	// can never touch the updater's access rules.
 	define( 'CAYDENDIR_SD_UPDATER_GATE', 'CAYDENDIR_sd_updater_gate' );
 }
 
 /* =========================================================================
- * Shared cross-plugin key (unlocks the remote console URL)
+ * Shared cross-plugin key (still accepted at the legacy console URL)
  * ====================================================================== */
 
-/**
- * The shared, cross-plugin updater key. All "Caydens Plugins" read/write the
- * SAME option (wp_updaterKey), generated once and reused. Which plugin the URL
- * acts on is chosen by the slug in front of the key: /?wp_update=<slug>/<key>.
- */
 function CAYDENDIR_sd_updater_key() {
 	$opt = CAYDENDIR_SD_UPDATER_KEY_OPTION;
 	$key = get_option( $opt, '' );
@@ -58,18 +49,16 @@ function CAYDENDIR_sd_updater_key() {
 		return $key;
 	}
 	$key = CAYDENDIR_sd_updater_random( 32 );
-	update_option( $opt, $key, true ); // autoloaded: tiny, read on the console URL
+	update_option( $opt, $key, true );
 	return $key;
 }
 
-/** Rotate the shared key (changes the console URL for every Cayden plugin). */
 function CAYDENDIR_sd_rotate_updater_key() {
 	$key = CAYDENDIR_sd_updater_random( 32 );
 	update_option( CAYDENDIR_SD_UPDATER_KEY_OPTION, $key, true );
 	return $key;
 }
 
-/** A strong alphanumeric random string (falls back if wp_generate_password is absent). */
 function CAYDENDIR_sd_updater_random( $len = 32 ) {
 	if ( function_exists( 'wp_generate_password' ) ) {
 		return wp_generate_password( $len, false, false );
@@ -79,27 +68,27 @@ function CAYDENDIR_sd_updater_random( $len = 32 ) {
 }
 
 /* =========================================================================
- * Remote-console gate: IP rules, password, once-a-day state
+ * Console gate: console key, password, IP rules, custom links
  * ====================================================================== */
 
-/** Default gate config. Enforced allowlist with the one requested IP. */
 function CAYDENDIR_sd_updater_gate_defaults() {
 	return array(
-		'pw_hash'            => '',                      // console password (set in wp-admin only)
-		'ip_enforce'         => '1',                     // '1' allowlist mode, '0' blocklist mode
-		'ip_allow'           => array( '167.102.110.1' ), // exact IP, prefix ("196.168") or CIDR
-		'ip_block'           => array(),                 // always wins over the allow list
-		'trust_proxy'        => '0',                      // '1' trust X-Forwarded-For (behind a proxy/CDN)
-		'settings_edit_day'  => '',                       // 'Ymd' of the last remote settings edit
+		'console_key'  => '',                        // ?acpsupdater=<this>. '' → fall back to shared key
+		'pw_hash'      => '',                         // console password (set in wp-admin only)
+		'ip_enforce'   => '1',                        // '1' allow-list mode, '0' block-list mode
+		'ip_allow'     => array( '167.102.110.1' ),   // exact IP, prefix ("168.1") or CIDR ("10.0.0.0/8")
+		'ip_block'     => array(),                    // always wins over the allow list
+		'trust_proxy'  => '0',                        // '1' read client IP from X-Forwarded-For
+		'auto_recover' => '1',                        // '1' auto-reinstall latest if the plugin crashes
+		'links'        => array(),                    // custom links: [ ['label'=>..,'url'=>..], ... ]
 	);
 }
 
-/** Merged gate config (defaults under saved). Never touched by the settings sanitizer. */
 function CAYDENDIR_sd_updater_gate() {
 	$saved = get_option( CAYDENDIR_SD_UPDATER_GATE, array() );
 	$saved = is_array( $saved ) ? $saved : array();
 	$gate  = array_merge( CAYDENDIR_sd_updater_gate_defaults(), $saved );
-	foreach ( array( 'ip_allow', 'ip_block' ) as $k ) {
+	foreach ( array( 'ip_allow', 'ip_block', 'links' ) as $k ) {
 		if ( ! is_array( $gate[ $k ] ) ) {
 			$gate[ $k ] = array();
 		}
@@ -107,7 +96,6 @@ function CAYDENDIR_sd_updater_gate() {
 	return $gate;
 }
 
-/** Persist the gate config (merging over what is stored). */
 function CAYDENDIR_sd_updater_gate_save( $changes ) {
 	$gate = CAYDENDIR_sd_updater_gate();
 	if ( is_array( $changes ) ) {
@@ -117,7 +105,13 @@ function CAYDENDIR_sd_updater_gate_save( $changes ) {
 	return $gate;
 }
 
-/** The visitor's IP. REMOTE_ADDR by default; first X-Forwarded-For hop only if trusted. */
+/** The value that unlocks ?acpsupdater=<key> (admin-set console key, or the shared key). */
+function CAYDENDIR_sd_console_key( $gate = null ) {
+	$gate = is_array( $gate ) ? $gate : CAYDENDIR_sd_updater_gate();
+	$ck   = isset( $gate['console_key'] ) ? trim( (string) $gate['console_key'] ) : '';
+	return ( '' !== $ck ) ? $ck : CAYDENDIR_sd_updater_key();
+}
+
 function CAYDENDIR_sd_client_ip( $gate = null ) {
 	$gate = is_array( $gate ) ? $gate : CAYDENDIR_sd_updater_gate();
 	if ( ! empty( $gate['trust_proxy'] ) && ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
@@ -132,8 +126,8 @@ function CAYDENDIR_sd_client_ip( $gate = null ) {
 }
 
 /**
- * Does an IP match a rule? A rule is an exact IP, an octet-aligned IPv4 prefix
- * ("196.168" matches 196.168.*.* but not 196.1689.*), or CIDR ("10.0.0.0/8").
+ * Does an IP match a rule? Exact IP, octet-aligned IPv4 prefix ("168.1" matches
+ * 168.1.*.* but not 168.10.*), or CIDR ("10.0.0.0/8").
  */
 function CAYDENDIR_sd_ip_match( $ip, $pattern ) {
 	$ip      = trim( (string) $ip );
@@ -147,14 +141,13 @@ function CAYDENDIR_sd_ip_match( $ip, $pattern ) {
 	if ( false !== strpos( $pattern, '/' ) ) {
 		return CAYDENDIR_sd_ip_in_cidr( $ip, $pattern );
 	}
-	// Octet-aligned IPv4 prefix match.
 	if ( false === strpos( $ip, '.' ) || false === strpos( $pattern, '.' ) ) {
-		return false; // not a dotted-quad prefix (IPv6 handled by exact/CIDR only)
+		return false;
 	}
 	$pp = explode( '.', rtrim( $pattern, '.' ) );
 	$ii = explode( '.', $ip );
 	if ( count( $pp ) > count( $ii ) || count( $pp ) === 4 ) {
-		return false; // a full 4-octet pattern would have matched exactly above
+		return false;
 	}
 	foreach ( $pp as $k => $oct ) {
 		if ( '' === $oct ) {
@@ -167,7 +160,6 @@ function CAYDENDIR_sd_ip_match( $ip, $pattern ) {
 	return true;
 }
 
-/** IPv4 CIDR match (e.g. 192.168.0.0/16). Non-IPv4 or bad CIDR → false. */
 function CAYDENDIR_sd_ip_in_cidr( $ip, $cidr ) {
 	$parts = explode( '/', $cidr, 2 );
 	if ( 2 !== count( $parts ) ) {
@@ -190,7 +182,6 @@ function CAYDENDIR_sd_ip_in_cidr( $ip, $cidr ) {
 	return ( $ip_l & $mask ) === ( $sub_l & $mask );
 }
 
-/** Is this IP allowed to reach the remote console? Block list always wins. */
 function CAYDENDIR_sd_ip_allowed( $ip, $gate ) {
 	if ( '' === $ip ) {
 		return false; // unknown IP → deny (fail closed)
@@ -202,7 +193,7 @@ function CAYDENDIR_sd_ip_allowed( $ip, $gate ) {
 		}
 	}
 	if ( empty( $gate['ip_enforce'] ) ) {
-		return true; // blocklist mode: anything not blocked is allowed
+		return true;
 	}
 	$allow = isset( $gate['ip_allow'] ) && is_array( $gate['ip_allow'] ) ? $gate['ip_allow'] : array();
 	foreach ( $allow as $p ) {
@@ -213,7 +204,6 @@ function CAYDENDIR_sd_ip_allowed( $ip, $gate ) {
 	return false;
 }
 
-/** Fixed-window per-bucket rate limit. Returns true when the hit is allowed. */
 function CAYDENDIR_sd_updater_rate_ok( $bucket, $limit, $window ) {
 	if ( ! function_exists( 'get_transient' ) || ! function_exists( 'set_transient' ) ) {
 		return true;
@@ -227,7 +217,6 @@ function CAYDENDIR_sd_updater_rate_ok( $bucket, $limit, $window ) {
 	return true;
 }
 
-/** Parse a textarea (one IP rule per line) into a clean list. */
 function CAYDENDIR_sd_updater_parse_ip_list( $text ) {
 	$out   = array();
 	$lines = preg_split( '/[\r\n,]+/', (string) $text );
@@ -238,6 +227,26 @@ function CAYDENDIR_sd_updater_parse_ip_list( $text ) {
 		}
 	}
 	return array_values( array_unique( $out ) );
+}
+
+/** Parse the custom-links textarea ("Label | https://url" per line) into a list. */
+function CAYDENDIR_sd_updater_parse_links( $text ) {
+	$out   = array();
+	$lines = preg_split( '/[\r\n]+/', (string) $text );
+	foreach ( (array) $lines as $line ) {
+		$line = trim( $line );
+		if ( '' === $line ) {
+			continue;
+		}
+		$parts = explode( '|', $line, 2 );
+		$label = trim( $parts[0] );
+		$url   = isset( $parts[1] ) ? trim( $parts[1] ) : $label;
+		$url   = function_exists( 'esc_url_raw' ) ? esc_url_raw( $url ) : $url;
+		if ( '' !== $url ) {
+			$out[] = array( 'label' => ( '' !== $label ? $label : $url ), 'url' => $url );
+		}
+	}
+	return $out;
 }
 
 /* =========================================================================
@@ -251,35 +260,32 @@ function CAYDENDIR_sd_updater_diagnostics() {
 		$start = defined( 'WP_START_TIMESTAMP' ) ? WP_START_TIMESTAMP
 			: ( isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime( true ) );
 
-		$metrics['Plugin version']   = defined( 'CAYDENDIR_SD_VERSION' ) ? CAYDENDIR_SD_VERSION : '?';
-		$metrics['WordPress']        = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'version' ) : '?';
-		$metrics['PHP']              = PHP_VERSION;
-		$metrics['Peak memory']      = CAYDENDIR_sd_size_format( memory_get_peak_usage( true ) );
-		$metrics['Memory limit']     = (string) ini_get( 'memory_limit' );
-		$metrics['Request time']     = number_format( ( microtime( true ) - $start ) * 1000, 1 ) . ' ms';
-		$metrics['Server time']      = gmdate( 'Y-m-d H:i:s' ) . ' UTC';
+		$metrics['Plugin version'] = defined( 'CAYDENDIR_SD_VERSION' ) ? CAYDENDIR_SD_VERSION : '?';
+		$metrics['WordPress']      = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'version' ) : '?';
+		$metrics['PHP']            = PHP_VERSION;
+		$metrics['Peak memory']    = CAYDENDIR_sd_size_format( memory_get_peak_usage( true ) );
+		$metrics['Memory limit']   = (string) ini_get( 'memory_limit' );
+		$metrics['Request time']   = number_format( ( microtime( true ) - $start ) * 1000, 1 ) . ' ms';
+		$metrics['Server time']    = gmdate( 'Y-m-d H:i:s' ) . ' UTC';
 
-		// Safe-mode / crash state.
 		$paused = function_exists( 'CAYDENDIR_sd_is_paused' ) ? CAYDENDIR_sd_is_paused() : false;
-		$metrics['Safe mode']        = $paused ? 'PAUSED (crash recovery active)' : 'normal';
+		$metrics['Safe mode'] = $paused ? 'PAUSED (crash recovery active)' : 'normal';
 		if ( $paused ) {
-			$problems[] = 'The plugin is in safe mode after a fatal error. Its main features are paused; only this updater is running. Resume it from wp-admin or push a fixed update.';
+			$problems[] = 'The plugin is in safe mode after a fatal error. Only the updater is running. Reinstall the latest version to recover.';
 			$info = defined( 'CAYDENDIR_SD_SAFE_OPTION' ) ? get_option( CAYDENDIR_SD_SAFE_OPTION, array() ) : array();
 			if ( is_array( $info ) && ! empty( $info['message'] ) ) {
 				$metrics['Last fatal'] = substr( (string) $info['message'], 0, 300 );
 			}
 		}
 
-		// Missing companion files.
 		if ( function_exists( 'CAYDENDIR_sd_missing_files' ) ) {
 			$missing = CAYDENDIR_sd_missing_files();
 			$metrics['Missing files'] = empty( $missing ) ? 'none' : implode( ', ', $missing );
 			if ( ! empty( $missing ) ) {
-				$problems[] = 'Missing plugin files: ' . implode( ', ', $missing ) . '. Re-upload the complete ZIP.';
+				$problems[] = 'Missing plugin files: ' . implode( ', ', $missing ) . '. Reinstall the latest version.';
 			}
 		}
 
-		// Sync status.
 		if ( defined( 'CAYDENDIR_SD_META_OPTION' ) ) {
 			$meta = get_option( CAYDENDIR_SD_META_OPTION, array() );
 			if ( is_array( $meta ) ) {
@@ -295,7 +301,6 @@ function CAYDENDIR_sd_updater_diagnostics() {
 			}
 		}
 
-		// Data sizes.
 		if ( defined( 'CAYDENDIR_SD_DATA_OPTION' ) ) {
 			$d = get_option( CAYDENDIR_SD_DATA_OPTION, array() );
 			$metrics['Synced rows'] = is_array( $d ) ? (string) count( $d ) : '0';
@@ -305,7 +310,6 @@ function CAYDENDIR_sd_updater_diagnostics() {
 			$metrics['Manual overrides'] = is_array( $m ) ? (string) count( $m ) : '0';
 		}
 
-		// Scheduled sync.
 		if ( function_exists( 'wp_next_scheduled' ) && defined( 'CAYDENDIR_SD_CRON_HOOK' ) ) {
 			$next = wp_next_scheduled( CAYDENDIR_SD_CRON_HOOK );
 			$metrics['Next sync'] = $next ? gmdate( 'Y-m-d H:i:s', (int) $next ) . ' UTC' : 'not scheduled';
@@ -319,7 +323,6 @@ function CAYDENDIR_sd_updater_diagnostics() {
 	return array( 'metrics' => $metrics, 'problems' => $problems );
 }
 
-/** size_format() but guarded (it may be unavailable very early). */
 function CAYDENDIR_sd_size_format( $bytes ) {
 	if ( function_exists( 'size_format' ) ) {
 		$s = size_format( $bytes );
@@ -338,13 +341,13 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 
 	class CAYDENDIR_SD_Updater {
 
-		const CACHE_TTL      = 21600; // 6h on success
-		const CACHE_TTL_FAIL = 900;   // 15m on failure
+		const CACHE_TTL      = 21600;
+		const CACHE_TTL_FAIL = 900;
 
-		/** @var string plugin basename, e.g. cayden-staff-directory/cayden-staff-directory.php */
 		protected $basename;
-		/** @var string plugin folder slug, e.g. cayden-staff-directory */
 		protected $slug;
+		/** @var bool true only while we run our own install, so the Plugins screen never shows an update. */
+		protected $installing = false;
 
 		public function __construct() {
 			$this->basename = defined( 'CAYDENDIR_SD_BASENAME' ) ? CAYDENDIR_SD_BASENAME : plugin_basename( CAYDENDIR_SD_DIR . 'cayden-staff-directory.php' );
@@ -352,30 +355,25 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			$this->slug     = ( '.' === $dir || '' === $dir ) ? preg_replace( '/\.php$/', '', basename( $this->basename ) ) : $dir;
 		}
 
-		/** Register hooks. The console + admin panel ALWAYS run (recovery path). */
+		/**
+		 * Register hooks. Only the console + admin panel run — there is deliberately
+		 * NO Plugins-screen / auto-update integration, so no "update available"
+		 * notice appears anywhere. The upgrade-time filters are added on demand
+		 * inside perform_install().
+		 */
 		public function register() {
 			try {
-				// Recovery paths — always available, even in safe mode / disabled.
 				add_action( 'init', array( $this, 'maybe_handle_control_url' ) );
 				add_action( 'admin_init', array( $this, 'maybe_handle_admin_panel' ) );
-
-				// Plugins-screen / auto-update integration — only when enabled.
-				$s = $this->settings();
-				if ( empty( $s['update_enabled'] ) ) {
-					return;
-				}
-				add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
-				add_filter( 'plugins_api', array( $this, 'plugin_info' ), 20, 3 );
-				add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
-				add_filter( 'upgrader_pre_download', array( $this, 'maybe_download_private_asset' ), 10, 3 );
-				add_filter( 'auto_update_plugin', array( $this, 'auto_update' ), 10, 2 );
-				add_action( 'upgrader_process_complete', array( $this, 'flush_after_upgrade' ), 10, 2 );
 			} catch ( \Throwable $e ) {
 				CAYDENDIR_sd_log( 'updater register', $e );
 			}
 		}
 
-		/** Source config. Defensive so it also works in safe mode. */
+		public function slug() {
+			return $this->slug;
+		}
+
 		protected function settings() {
 			if ( function_exists( 'CAYDENDIR_sd_get_settings' ) ) {
 				return CAYDENDIR_sd_get_settings();
@@ -399,12 +397,11 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			);
 		}
 
-		public function control_url( $key = null ) {
-			$key = ( null === $key ) ? CAYDENDIR_sd_updater_key() : $key;
-			return home_url( '/?wp_update=' . rawurlencode( $this->slug ) . '/' . rawurlencode( $key ) );
+		/** The plain no-login console URL: /?acpsupdater=<console key>. */
+		public function console_url( $gate = null ) {
+			return home_url( '/?acpsupdater=' . rawurlencode( CAYDENDIR_sd_console_key( $gate ) ) );
 		}
 
-		/** The outbound "Update Request URL": manifest + plugin + key. */
 		public function update_request_url( $s = null ) {
 			$s   = is_array( $s ) ? $s : $this->settings();
 			$url = isset( $s['update_manifest'] ) ? trim( (string) $s['update_manifest'] ) : '';
@@ -418,7 +415,7 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			return $url;
 		}
 
-		/* ---- normalized remote lookup (cached) ---- */
+		/* ---- remote lookup (cached) ---- */
 
 		public function remote( $force = false ) {
 			try {
@@ -449,7 +446,7 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 		}
 
 		protected function remote_manifest( $s ) {
-			$url = $this->update_request_url( $s ); // manifest + plugin + key
+			$url = $this->update_request_url( $s );
 			if ( '' === $url ) {
 				return false;
 			}
@@ -527,99 +524,39 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			);
 		}
 
-		/* ---- tell WordPress an update exists ---- */
+		/* ---- upgrade-time filters (added only during our own install) ---- */
 
 		public function inject_update( $transient ) {
 			try {
-				if ( ! is_object( $transient ) ) {
-					return $transient;
+				if ( ! $this->installing || ! is_object( $transient ) ) {
+					return $transient; // never advertise an update outside our own install
 				}
 				$remote = $this->remote();
 				if ( ! is_array( $remote ) ) {
-					if ( isset( $transient->response[ $this->basename ] ) ) {
-						unset( $transient->response[ $this->basename ] );
-					}
 					return $transient;
 				}
-				if ( version_compare( $remote['version'], CAYDENDIR_SD_VERSION, '>' ) ) {
-					$obj = (object) array(
-						'id'           => $this->basename,
-						'slug'         => $this->slug,
-						'plugin'       => $this->basename,
-						'new_version'  => $remote['version'],
-						'package'      => $remote['package'],
-						'url'          => $remote['html_url'],
-						'icons'        => array(),
-						'banners'      => array(),
-						'tested'       => '',
-						'requires_php' => $remote['requires_php'],
-					);
-					if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
-						$transient->response = array();
-					}
-					$transient->response[ $this->basename ] = $obj;
-					if ( isset( $transient->no_update[ $this->basename ] ) ) {
-						unset( $transient->no_update[ $this->basename ] );
-					}
-				} else {
-					if ( isset( $transient->response[ $this->basename ] ) ) {
-						unset( $transient->response[ $this->basename ] );
-					}
-					if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
-						$transient->no_update = array();
-					}
-					$transient->no_update[ $this->basename ] = (object) array(
-						'id'          => $this->basename,
-						'slug'        => $this->slug,
-						'plugin'      => $this->basename,
-						'new_version' => CAYDENDIR_SD_VERSION,
-						'package'     => '',
-						'url'         => '',
-						'icons'       => array(),
-						'banners'     => array(),
-					);
+				$obj = (object) array(
+					'id'           => $this->basename,
+					'slug'         => $this->slug,
+					'plugin'       => $this->basename,
+					'new_version'  => $remote['version'],
+					'package'      => $remote['package'],
+					'url'          => $remote['html_url'],
+					'icons'        => array(),
+					'banners'      => array(),
+					'tested'       => '',
+					'requires_php' => $remote['requires_php'],
+				);
+				if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+					$transient->response = array();
 				}
+				$transient->response[ $this->basename ] = $obj;
 				return $transient;
 			} catch ( \Throwable $e ) {
 				CAYDENDIR_sd_log( 'updater inject', $e );
 				return $transient;
 			}
 		}
-
-		/* ---- "View details" popup ---- */
-
-		public function plugin_info( $result, $action, $args ) {
-			try {
-				if ( 'plugin_information' !== $action ) {
-					return $result;
-				}
-				if ( empty( $args->slug ) || $args->slug !== $this->slug ) {
-					return $result;
-				}
-				$remote = $this->remote();
-				if ( ! is_array( $remote ) ) {
-					return $result;
-				}
-				return (object) array(
-					'name'          => 'Cayden Staff Directory',
-					'slug'          => $this->slug,
-					'version'       => $remote['version'],
-					'author'        => 'Cayden Riddle',
-					'homepage'      => $remote['html_url'],
-					'requires_php'  => $remote['requires_php'],
-					'download_link' => $remote['package'],
-					'trunk'         => $remote['package'],
-					'sections'      => array(
-						'changelog' => '' !== $remote['body'] ? wp_kses_post( wpautop( $remote['body'] ) ) : 'No changelog provided.',
-					),
-				);
-			} catch ( \Throwable $e ) {
-				CAYDENDIR_sd_log( 'updater info', $e );
-				return $result;
-			}
-		}
-
-		/* ---- keep the plugin active: rename the unpacked folder to our slug ---- */
 
 		public function fix_source_dir( $source, $remote_source, $upgrader, $hook_extra = array() ) {
 			try {
@@ -643,8 +580,6 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 				return $source;
 			}
 		}
-
-		/* ---- private GitHub asset: resolve the signed redirect ourselves ---- */
 
 		public function maybe_download_private_asset( $reply, $package, $upgrader ) {
 			try {
@@ -674,8 +609,7 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 					require_once ABSPATH . 'wp-admin/includes/file.php';
 				}
 				if ( $location ) {
-					$tmp = download_url( $location );
-					return $tmp;
+					return download_url( $location );
 				}
 				if ( 200 === (int) wp_remote_retrieve_response_code( $res ) ) {
 					$body = wp_remote_retrieve_body( $res );
@@ -693,38 +627,11 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			}
 		}
 
-		/* ---- background auto-update for THIS plugin only ---- */
-
-		public function auto_update( $update, $item ) {
-			try {
-				$plugin = '';
-				if ( is_object( $item ) && isset( $item->plugin ) ) {
-					$plugin = $item->plugin;
-				} elseif ( is_array( $item ) && isset( $item['plugin'] ) ) {
-					$plugin = $item['plugin'];
-				}
-				if ( $plugin !== $this->basename ) {
-					return $update;
-				}
-				$s = $this->settings();
-				return ! empty( $s['update_auto'] );
-			} catch ( \Throwable $e ) {
-				CAYDENDIR_sd_log( 'updater auto', $e );
-				return $update;
-			}
-		}
-
-		public function flush_after_upgrade( $upgrader = null, $hook_extra = array() ) {
-			try {
-				delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
-			} catch ( \Throwable $e ) {
-				CAYDENDIR_sd_log( 'updater flush', $e );
-			}
-		}
-
-		/* ---- shared install routine ---- */
-
-		protected function perform_install() {
+		/**
+		 * Install/repair. $force reinstalls the latest package even when the
+		 * installed version already matches (repairs edited/broken files).
+		 */
+		public function perform_install( $force = false ) {
 			foreach ( array( 'plugin', 'file', 'misc', 'class-wp-upgrader' ) as $f ) {
 				$p = ABSPATH . 'wp-admin/includes/' . $f . '.php';
 				if ( is_readable( $p ) ) {
@@ -735,12 +642,19 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			if ( ! is_array( $remote ) ) {
 				return array( 'status' => 'nolatest', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => '', 'messages' => 'Lookup failed — check the update source.' );
 			}
-			if ( ! version_compare( $remote['version'], CAYDENDIR_SD_VERSION, '>' ) ) {
+			if ( ! $force && ! version_compare( $remote['version'], CAYDENDIR_SD_VERSION, '>' ) ) {
 				return array( 'status' => 'uptodate', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => '' );
 			}
 			if ( ! class_exists( 'Plugin_Upgrader' ) || ! class_exists( 'Automatic_Upgrader_Skin' ) ) {
 				return array( 'status' => 'failed', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => 'Upgrader unavailable.' );
 			}
+
+			// Add the upgrade-time filters ONLY for this run, then remove them.
+			$this->installing = true;
+			add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+			add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
+			add_filter( 'upgrader_pre_download', array( $this, 'maybe_download_private_asset' ), 10, 3 );
+
 			delete_site_transient( 'update_plugins' );
 			if ( function_exists( 'wp_update_plugins' ) ) {
 				wp_update_plugins();
@@ -750,13 +664,21 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			$result   = $upgrader->upgrade( $this->basename );
 			$messages = method_exists( $skin, 'get_upgrade_messages' ) ? $skin->get_upgrade_messages() : array();
 			$msg      = is_array( $messages ) ? implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) : '';
+
+			remove_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
+			remove_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10 );
+			remove_filter( 'upgrader_pre_download', array( $this, 'maybe_download_private_asset' ), 10 );
+			$this->installing = false;
+			delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
+			delete_site_transient( 'update_plugins' );
+
 			if ( is_wp_error( $result ) ) {
 				return array( 'status' => 'failed', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => trim( $msg . "\n" . $result->get_error_message() ) );
 			}
 			if ( false === $result || null === $result ) {
 				return array( 'status' => 'failed', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => $msg );
 			}
-			return array( 'status' => 'success', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => $msg );
+			return array( 'status' => $force ? 'reinstalled' : 'success', 'installed' => CAYDENDIR_SD_VERSION, 'latest' => $remote['version'], 'messages' => $msg );
 		}
 
 		/* =====================================================================
@@ -765,38 +687,46 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 
 		public function maybe_handle_control_url() {
 			try {
-				$key = $this->url_key();
-				if ( '' === $key ) {
-					return; // not our control URL
-				}
-				$shared = CAYDENDIR_sd_updater_key();
-				if ( '' === $shared || ! hash_equals( $shared, $key ) ) {
-					return; // wrong or missing key — behave as if the URL does not exist
-				}
-
-				// IP gate — if not allowed, vanish (let WordPress render normally).
 				$gate = CAYDENDIR_sd_updater_gate();
-				$ip   = CAYDENDIR_sd_client_ip( $gate );
-				if ( ! CAYDENDIR_sd_ip_allowed( $ip, $gate ) ) {
+				if ( ! $this->console_requested( $gate ) ) {
 					return;
 				}
-
-				// Endpoint rate limit (anti-spam): 30 requests / 60s per IP.
-				if ( ! CAYDENDIR_sd_updater_rate_ok( 'sd_page:' . $ip, 30, 60 ) ) {
-					$this->console_deny( 429, 'Too many requests. Slow down and try again in a minute.' );
+				$ip = CAYDENDIR_sd_client_ip( $gate );
+				if ( ! CAYDENDIR_sd_ip_allowed( $ip, $gate ) ) {
+					return; // vanish for disallowed IPs
 				}
-
+				if ( ! CAYDENDIR_sd_updater_rate_ok( 'sd_page:' . $ip, 40, 60 ) ) {
+					$this->console_deny( 429, 'Too many requests. Wait a minute.' );
+				}
 				$this->render_console( $ip, $gate );
 			} catch ( \Throwable $e ) {
 				CAYDENDIR_sd_log( 'updater control url', $e );
 			}
 		}
 
-		/** Extract the key from ?wp_update=<slug>/<key> or a trailing path, or '' if not ours. */
-		protected function url_key() {
+		/** True when the request is aimed at this plugin's console. */
+		protected function console_requested( $gate ) {
+			if ( isset( $_GET['acpsupdater'] ) && is_string( $_GET['acpsupdater'] ) ) { // phpcs:ignore WordPress.Security
+				$v  = trim( (string) wp_unslash( $_GET['acpsupdater'] ) );              // phpcs:ignore WordPress.Security
+				$ck = CAYDENDIR_sd_console_key( $gate );
+				if ( '' !== $ck && '' !== $v && hash_equals( $ck, $v ) ) {
+					return true;
+				}
+			}
+			$key = $this->legacy_url_key();
+			if ( '' !== $key ) {
+				$shared = CAYDENDIR_sd_updater_key();
+				if ( '' !== $shared && hash_equals( $shared, $key ) ) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		protected function legacy_url_key() {
 			$slug = '';
 			$key  = '';
-			$raw  = ( isset( $_GET['wp_update'] ) && is_string( $_GET['wp_update'] ) ) ? (string) wp_unslash( $_GET['wp_update'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+			$raw  = ( isset( $_GET['wp_update'] ) && is_string( $_GET['wp_update'] ) ) ? (string) wp_unslash( $_GET['wp_update'] ) : ''; // phpcs:ignore WordPress.Security
 			$raw  = trim( $raw, " \t\n\r\0\x0B/" );
 			if ( '' !== $raw && false !== strpos( $raw, '/' ) ) {
 				$pos  = strrpos( $raw, '/' );
@@ -825,11 +755,10 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			exit;
 		}
 
-		/** Is the console password satisfied? True when none is set OR the given one matches. */
 		protected function password_ok( $gate, $supplied ) {
 			$hash = isset( $gate['pw_hash'] ) ? (string) $gate['pw_hash'] : '';
 			if ( '' === $hash ) {
-				return true; // no password configured yet
+				return true;
 			}
 			if ( '' === (string) $supplied ) {
 				return false;
@@ -840,192 +769,271 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			return hash_equals( $hash, (string) $supplied );
 		}
 
+		protected function supplied_pw() {
+			if ( isset( $_POST['pw'] ) ) {   // phpcs:ignore WordPress.Security
+				return (string) wp_unslash( $_POST['pw'] ); // phpcs:ignore WordPress.Security
+			}
+			if ( isset( $_GET['pw'] ) ) {    // phpcs:ignore WordPress.Security
+				return (string) wp_unslash( $_GET['pw'] );  // phpcs:ignore WordPress.Security
+			}
+			return '';
+		}
+
 		protected function render_console( $ip, $gate ) {
 			nocache_headers();
 			header( 'Content-Type: text/html; charset=utf-8' );
 
 			$has_pw   = ( '' !== (string) $gate['pw_hash'] );
+			$supplied = $this->supplied_pw();
+			$authed   = $this->password_ok( $gate, $supplied );
+			$self     = remove_query_arg( array( 'pw', 'recover', 'raw' ), home_url( add_query_arg( array() ) ) );
 			$is_post  = ( 'POST' === ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : '' ) );
-			$supplied = '';
-			if ( $is_post && isset( $_POST['cayden_pw'] ) ) {
-				$supplied = (string) wp_unslash( $_POST['cayden_pw'] ); // phpcs:ignore WordPress.Security
-			} elseif ( isset( $_GET['pw'] ) ) {
-				$supplied = (string) wp_unslash( $_GET['pw'] ); // phpcs:ignore WordPress.Security
-			}
-			$authed = $this->password_ok( $gate, $supplied );
 
 			$notice   = '';
-			$install  = null;
 			$is_error = false;
+			$result   = null;
 
-			if ( $is_post && $authed ) {
-				$action = isset( $_POST['cayden_action'] ) ? sanitize_key( wp_unslash( $_POST['cayden_action'] ) ) : ''; // phpcs:ignore WordPress.Security
-				if ( 'install' === $action ) {
-					if ( ! CAYDENDIR_sd_updater_rate_ok( 'sd_install:' . $ip, 5, 300 ) ) {
-						$notice   = 'Install is rate-limited — wait a few minutes before trying again.';
+			$do = '';
+			if ( $is_post && isset( $_POST['do'] ) ) {                 // phpcs:ignore WordPress.Security
+				$do = sanitize_key( wp_unslash( $_POST['do'] ) );      // phpcs:ignore WordPress.Security
+			} elseif ( isset( $_GET['recover'] ) && '1' === (string) $_GET['recover'] ) { // phpcs:ignore WordPress.Security
+				$do = 'reinstall';
+			}
+
+			if ( '' !== $do ) {
+				if ( ! $authed ) {
+					$notice   = 'Wrong or missing password.';
+					$is_error = true;
+				} elseif ( 'install' === $do || 'reinstall' === $do ) {
+					if ( ! CAYDENDIR_sd_updater_rate_ok( 'sd_install:' . $ip, 6, 300 ) ) {
+						$notice   = 'Install is rate-limited — wait a few minutes.';
 						$is_error = true;
 					} else {
-						$install = $this->perform_install();
-						$notice  = 'Install run — see the result below.';
+						$result = $this->perform_install( 'reinstall' === $do );
+						$notice = 'Ran ' . ( 'reinstall' === $do ? 'reinstall/repair' : 'update' ) . ' — see result below.';
 					}
-				} elseif ( 'savesettings' === $action ) {
-					$res      = $this->save_settings_from_console();
-					$notice   = $res['message'];
-					$is_error = ! $res['ok'];
+				} elseif ( 'check' === $do ) {
+					delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
+					$r      = $this->remote( true );
+					$notice = is_array( $r ) ? ( 'Latest available: ' . $r['version'] ) : 'Lookup failed — check the source.';
+				} elseif ( 'savesettings' === $do ) {
+					$r        = $this->console_save_settings();
+					$notice   = $r['message'];
+					$is_error = ! $r['ok'];
+				} elseif ( 'savesource' === $do ) {
+					$this->save_source_from_post();
+					$notice = 'Update source saved.';
+				} elseif ( 'savegate' === $do ) {
+					$notice = $this->save_gate_from_post();
+					$gate   = CAYDENDIR_sd_updater_gate();
 				}
-			} elseif ( $is_post && ! $authed ) {
-				$notice   = 'Wrong password.';
-				$is_error = true;
 			}
 
-			$diag     = CAYDENDIR_sd_updater_diagnostics();
-			$s        = $this->settings();
-			$req_url  = $this->update_request_url( $s );
-			$self     = $this->control_url();
-			$today    = gmdate( 'Ymd' );
-			$edited   = ( isset( $gate['settings_edit_day'] ) && $gate['settings_edit_day'] === $today );
-			$settings_json = '';
-			if ( function_exists( 'CAYDENDIR_sd_get_settings' ) ) {
-				$settings_json = wp_json_encode( CAYDENDIR_sd_get_settings(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+			// Machine-readable status for scripts: &raw=1 (plain text, no HTML).
+			if ( isset( $_GET['raw'] ) && '1' === (string) $_GET['raw'] ) { // phpcs:ignore WordPress.Security
+				$this->render_raw_status( $result, $notice );
 			}
 
-			$e = 'esc_attr';
-			?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Console</title>
-<style>
- body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1d2327;background:#fff;}
- h1{font-size:1.3rem;} h2{font-size:1.02rem;margin-top:1.6rem;border-top:1px solid #e2e4e7;padding-top:1rem;}
- .box{border:1px solid #c3c4c7;border-radius:6px;padding:10px 14px;margin:12px 0;background:#fff;}
- .notice{border-left:4px solid #2271b1;background:#f0f6fc;padding:8px 12px;border-radius:0 4px 4px 0;}
- .notice.err{border-left-color:#d63638;background:#fcf0f0;}
- label{display:block;font-weight:600;margin:10px 0 3px;}
- input[type=text],input[type=password],textarea{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #8c8f94;border-radius:4px;font:inherit;}
- textarea{min-height:260px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre;}
- button{font:inherit;padding:7px 14px;border-radius:4px;border:1px solid #2271b1;background:#2271b1;color:#fff;cursor:pointer;margin:4px 6px 4px 0;}
- button.secondary{background:#f6f7f7;color:#2271b1;}
- pre{white-space:pre-wrap;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;padding:10px;}
- code{background:#f0f0f1;padding:1px 5px;border-radius:3px;word-break:break-all;}
- table.diag{border-collapse:collapse;width:100%;} table.diag td{border-bottom:1px solid #eee;padding:4px 6px;vertical-align:top;}
- table.diag td:first-child{color:#646970;width:38%;} .warn{color:#b32d2e;}
-</style></head><body>
-<h1>Remote console</h1>
-<?php if ( '' !== $notice ) : ?><p class="notice<?php echo $is_error ? ' err' : ''; ?>"><?php echo esc_html( $notice ); ?></p><?php endif; ?>
+			$diag = CAYDENDIR_sd_updater_diagnostics();
+			$s    = $this->settings();
+			$req  = $this->update_request_url( $s );
 
-<?php if ( $has_pw && ! $authed ) : ?>
-	<div class="box">
-		<form method="post" action="<?php echo esc_url( $self ); ?>">
-			<label>Password</label>
-			<input type="password" name="cayden_pw" autocomplete="off" autofocus>
-			<p><button type="submit">Unlock</button></p>
-		</form>
-	</div>
-</body></html>
-	<?php
-			exit;
-		endif;
+			echo "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>ACPS updater console</title></head>\n<body>\n";
+			echo '<h1>ACPS updater console</h1>' . "\n";
+			if ( '' !== $notice ) {
+				echo '<p><strong>' . ( $is_error ? 'ERROR: ' : '' ) . esc_html( $notice ) . '</strong></p>' . "\n";
+			}
 
-		if ( ! $has_pw ) : ?>
-	<p class="notice err">No console password is set. Set one from wp-admin → the &amp;updates=1 panel to protect this page.</p>
-	<?php endif; ?>
+			if ( $has_pw && ! $authed ) {
+				echo '<form method="post" action="' . esc_url( $self ) . '">' . "\n";
+				echo 'Password: <input type="password" name="pw" autocomplete="off"> <button type="submit">Unlock</button>' . "\n";
+				echo '</form>' . "\n</body></html>";
+				exit;
+			}
+			if ( ! $has_pw ) {
+				echo '<p><em>No console password set. Set one in wp-admin &rarr; the &amp;updates=1 panel.</em></p>' . "\n";
+			}
 
-	<?php if ( is_array( $install ) ) : ?>
-	<div class="box">
-		<h2 style="margin-top:0;border:0;padding:0;">Install result: <?php echo esc_html( strtoupper( $install['status'] ) ); ?></h2>
-		<p>Installed <?php echo esc_html( $install['installed'] ); ?> · Latest <?php echo esc_html( '' !== $install['latest'] ? $install['latest'] : '(unknown)' ); ?></p>
-		<?php if ( '' !== $install['messages'] ) : ?><pre><?php echo esc_html( $install['messages'] ); ?></pre><?php endif; ?>
-	</div>
-	<?php endif; ?>
+			if ( is_array( $result ) ) {
+				echo '<h2>Result: ' . esc_html( strtoupper( (string) $result['status'] ) ) . '</h2>' . "\n";
+				echo '<p>Installed ' . esc_html( $result['installed'] ) . ' &middot; Latest ' . esc_html( '' !== $result['latest'] ? $result['latest'] : '(unknown)' ) . '</p>' . "\n";
+				if ( '' !== $result['messages'] ) {
+					echo '<pre>' . esc_html( $result['messages'] ) . '</pre>' . "\n";
+				}
+			}
 
-	<h2>Diagnostics</h2>
-	<?php $this->render_diag_table( $diag ); ?>
+			if ( ! empty( $gate['links'] ) ) {
+				echo '<h2>Links</h2>' . "\n<ul>";
+				foreach ( $gate['links'] as $lnk ) {
+					if ( ! is_array( $lnk ) || empty( $lnk['url'] ) ) {
+						continue;
+					}
+					echo '<li><a href="' . esc_url( $lnk['url'] ) . '">' . esc_html( isset( $lnk['label'] ) ? $lnk['label'] : $lnk['url'] ) . '</a></li>';
+				}
+				echo "</ul>\n";
+			}
 
-	<h2>Update</h2>
-	<div class="box">
-		<p><strong>Update request URL:</strong> <?php echo '' !== $req_url ? '<code>' . esc_html( $req_url ) . '</code>' : '<em>manifest URL not configured</em>'; ?></p>
-		<form method="post" action="<?php echo esc_url( $self ); ?>" onsubmit="return confirm('Install the latest configured release now?');">
-			<?php $this->pw_field( $has_pw, $supplied ); ?>
-			<input type="hidden" name="cayden_action" value="install">
-			<button type="submit">Install latest now</button>
-		</form>
-	</div>
+			echo '<h2>Status</h2>' . "\n";
+			$this->render_diag_text( $diag );
 
-	<h2>Edit all settings <span style="font-weight:400;color:#646970;">(once per day)</span></h2>
-	<div class="box">
-		<?php if ( '' === $settings_json ) : ?>
-			<p class="warn">Settings editing is unavailable right now (the plugin is in safe mode). Force an update above to recover, then edit here.</p>
-		<?php elseif ( $edited ) : ?>
-			<p class="warn">Settings were already edited today from this console. Try again tomorrow (UTC).</p>
-			<pre><?php echo esc_html( $settings_json ); ?></pre>
-		<?php else : ?>
-			<form method="post" action="<?php echo esc_url( $self ); ?>" onsubmit="return confirm('Save these settings? You can only do this once per day.');">
-				<?php $this->pw_field( $has_pw, $supplied ); ?>
-				<input type="hidden" name="cayden_action" value="savesettings">
-				<label>All plugin settings (JSON)</label>
-				<textarea name="cayden_settings_json" spellcheck="false"><?php echo esc_textarea( $settings_json ); ?></textarea>
-				<p class="desc" style="color:#646970;font-size:12px;">Edit the values, keep it valid JSON. Update-source and updater fields are preserved automatically.</p>
-				<p><button type="submit">Save settings (uses today's one edit)</button></p>
-			</form>
-		<?php endif; ?>
-	</div>
-</body></html>
-			<?php
+			$pwf = $has_pw ? ( '<input type="hidden" name="pw" value="' . esc_attr( $supplied ) . '">' ) : '';
+
+			echo '<h2>Update / repair</h2>' . "\n";
+			echo '<p>Update request URL: ' . ( '' !== $req ? '<code>' . esc_html( $req ) . '</code>' : '<em>manifest not set</em>' ) . '</p>' . "\n";
+			echo '<form method="post" action="' . esc_url( $self ) . '">' . $pwf;
+			echo '<button type="submit" name="do" value="check">Check latest</button> ';
+			echo '<button type="submit" name="do" value="install">Install if newer</button> ';
+			echo '<button type="submit" name="do" value="reinstall">Reupload / reinstall latest (repair)</button>';
+			echo "</form>\n";
+
+			echo '<h2>Settings (everything)</h2>' . "\n";
+			$this->render_settings_form( $self, $pwf );
+
+			echo '<h2>Update source</h2>' . "\n";
+			$this->render_source_form( $self, $pwf, $s );
+			echo '<h2>Console access &amp; links</h2>' . "\n";
+			$this->render_gate_form( $self, $pwf, $gate, $ip );
+
+			echo "</body></html>";
 			exit;
 		}
 
-		/** Small helper: carry the password through a POST as a hidden field. */
-		protected function pw_field( $has_pw, $supplied ) {
-			if ( $has_pw ) {
-				echo '<input type="hidden" name="cayden_pw" value="' . esc_attr( $supplied ) . '">';
+		protected function render_raw_status( $result, $notice ) {
+			nocache_headers();
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			$diag = CAYDENDIR_sd_updater_diagnostics();
+			echo "ACPS updater status\n";
+			if ( '' !== $notice ) {
+				echo 'notice=' . $notice . "\n";
 			}
-		}
-
-		protected function render_diag_table( $diag ) {
-			echo '<table class="diag">';
+			if ( is_array( $result ) ) {
+				echo 'result=' . $result['status'] . "\n";
+				echo 'installed=' . $result['installed'] . "\n";
+				echo 'latest=' . ( '' !== $result['latest'] ? $result['latest'] : 'unknown' ) . "\n";
+			}
 			foreach ( $diag['metrics'] as $k => $v ) {
-				echo '<tr><td>' . esc_html( $k ) . '</td><td>' . esc_html( (string) $v ) . '</td></tr>';
+				echo str_replace( ' ', '_', strtolower( $k ) ) . '=' . $v . "\n";
 			}
-			echo '</table>';
+			foreach ( $diag['problems'] as $p ) {
+				echo 'problem=' . $p . "\n";
+			}
+			exit;
+		}
+
+		protected function render_diag_text( $diag ) {
+			echo '<pre>';
+			foreach ( $diag['metrics'] as $k => $v ) {
+				echo esc_html( $k ) . ': ' . esc_html( (string) $v ) . "\n";
+			}
+			echo '</pre>';
 			if ( ! empty( $diag['problems'] ) ) {
-				echo '<div class="box"><strong class="warn">Problems</strong><ul>';
+				echo '<p><strong>Problems</strong></p><ul>';
 				foreach ( $diag['problems'] as $p ) {
-					echo '<li class="warn">' . esc_html( (string) $p ) . '</li>';
+					echo '<li>' . esc_html( (string) $p ) . '</li>';
 				}
-				echo '</ul></div>';
+				echo '</ul>';
 			}
 		}
 
-		/** Save ALL plugin settings from the console (password already checked). Once/day. */
-		protected function save_settings_from_console() {
-			$gate  = CAYDENDIR_sd_updater_gate();
-			$today = gmdate( 'Ymd' );
-			if ( isset( $gate['settings_edit_day'] ) && $gate['settings_edit_day'] === $today ) {
-				return array( 'ok' => false, 'message' => 'Already edited today — try again tomorrow (UTC).' );
+		/** A form with one field per setting (scalars as inputs, arrays as JSON). */
+		protected function render_settings_form( $self, $pwf ) {
+			if ( ! function_exists( 'CAYDENDIR_sd_get_settings' ) ) {
+				echo '<p><em>Settings are unavailable in safe mode. Reinstall to recover, then edit here.</em></p>';
+				return;
 			}
+			$s = CAYDENDIR_sd_get_settings();
+			echo '<form method="post" action="' . esc_url( $self ) . '">' . $pwf;
+			echo '<input type="hidden" name="do" value="savesettings">';
+			echo '<table>';
+			foreach ( $s as $k => $v ) {
+				echo '<tr><td valign="top"><label for="set_' . esc_attr( $k ) . '">' . esc_html( $k ) . '</label></td><td>';
+				if ( is_array( $v ) ) {
+					$json = wp_json_encode( $v, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+					echo '<textarea id="set_' . esc_attr( $k ) . '" name="setjson[' . esc_attr( $k ) . ']" rows="4" cols="70" spellcheck="false">' . esc_textarea( (string) $json ) . '</textarea>';
+				} else {
+					$str = is_bool( $v ) ? ( $v ? '1' : '0' ) : (string) $v;
+					if ( strlen( $str ) > 80 || false !== strpos( $str, "\n" ) ) {
+						echo '<textarea id="set_' . esc_attr( $k ) . '" name="set[' . esc_attr( $k ) . ']" rows="4" cols="70" spellcheck="false">' . esc_textarea( $str ) . '</textarea>';
+					} else {
+						echo '<input id="set_' . esc_attr( $k ) . '" type="text" name="set[' . esc_attr( $k ) . ']" value="' . esc_attr( $str ) . '" size="60">';
+					}
+				}
+				echo '</td></tr>';
+			}
+			echo '</table><p><button type="submit">Save all settings</button></p></form>';
+		}
+
+		/** Rebuild settings from the console form and save. Full parity with wp-admin. */
+		protected function console_save_settings() {
 			if ( ! function_exists( 'CAYDENDIR_sd_get_settings' ) || ! function_exists( 'CAYDENDIR_sd_sanitize_settings_run' ) ) {
 				return array( 'ok' => false, 'message' => 'Settings editing is unavailable in safe mode.' );
 			}
-			$raw = isset( $_POST['cayden_settings_json'] ) ? (string) wp_unslash( $_POST['cayden_settings_json'] ) : ''; // phpcs:ignore WordPress.Security
-			$in  = json_decode( $raw, true );
-			if ( ! is_array( $in ) ) {
-				return array( 'ok' => false, 'message' => 'That is not valid JSON — nothing was saved.' );
-			}
 			try {
-				$clean = CAYDENDIR_sd_sanitize_settings_run( $in );
+				$out = CAYDENDIR_sd_get_settings();
+				if ( isset( $_POST['set'] ) && is_array( $_POST['set'] ) ) { // phpcs:ignore WordPress.Security
+					foreach ( wp_unslash( $_POST['set'] ) as $k => $v ) {    // phpcs:ignore WordPress.Security
+						$out[ (string) $k ] = is_string( $v ) ? $v : '';
+					}
+				}
+				if ( isset( $_POST['setjson'] ) && is_array( $_POST['setjson'] ) ) { // phpcs:ignore WordPress.Security
+					foreach ( wp_unslash( $_POST['setjson'] ) as $k => $v ) {          // phpcs:ignore WordPress.Security
+						$trim = trim( (string) $v );
+						$dec  = json_decode( (string) $v, true );
+						if ( null === $dec && '' !== $trim && 'null' !== $trim ) {
+							return array( 'ok' => false, 'message' => 'Invalid JSON in field "' . $k . '" — nothing saved.' );
+						}
+						$out[ (string) $k ] = $dec;
+					}
+				}
+				$clean = CAYDENDIR_sd_sanitize_settings_run( $out );
 				update_option( CAYDENDIR_SD_SETTINGS, $clean );
 				if ( function_exists( 'CAYDENDIR_sd_purge_caches' ) ) {
 					CAYDENDIR_sd_purge_caches();
 				}
-				CAYDENDIR_sd_updater_gate_save( array( 'settings_edit_day' => $today ) );
-				return array( 'ok' => true, 'message' => 'Settings saved. That was today\'s one allowed edit.' );
+				return array( 'ok' => true, 'message' => 'All settings saved.' );
 			} catch ( \Throwable $e ) {
 				CAYDENDIR_sd_log( 'console save settings', $e );
 				return array( 'ok' => false, 'message' => 'Save failed: ' . $e->getMessage() );
 			}
 		}
 
+		protected function render_source_form( $self, $pwf, $s ) {
+			echo '<form method="post" action="' . esc_url( $self ) . '">' . $pwf;
+			echo '<input type="hidden" name="do" value="savesource">';
+			echo '<p>Source: ';
+			echo '<label><input type="radio" name="update_source" value="url" ' . ( 'github' !== $s['update_source'] ? 'checked' : '' ) . '> Manifest URL</label> ';
+			echo '<label><input type="radio" name="update_source" value="github" ' . ( 'github' === $s['update_source'] ? 'checked' : '' ) . '> GitHub</label></p>';
+			echo '<p>Manifest URL: <input type="text" size="70" name="update_manifest" value="' . esc_attr( $s['update_manifest'] ) . '"></p>';
+			echo '<p>Set key: <input type="text" size="40" name="update_manifest_key" value="' . esc_attr( $s['update_manifest_key'] ) . '"></p>';
+			echo '<p>GitHub owner: <input type="text" name="gh_owner" value="' . esc_attr( $s['gh_owner'] ) . '"> repo: <input type="text" name="gh_repo" value="' . esc_attr( $s['gh_repo'] ) . '"></p>';
+			echo '<p>Asset: <input type="text" name="gh_asset" value="' . esc_attr( $s['gh_asset'] ) . '"></p>';
+			echo '<p>GitHub token: <input type="text" size="50" name="gh_token" value="' . esc_attr( $s['gh_token'] ) . '"></p>';
+			echo '<p><button type="submit">Save update source</button></p></form>';
+		}
+
+		protected function render_gate_form( $self, $pwf, $gate, $ip ) {
+			$links_text = '';
+			foreach ( (array) $gate['links'] as $lnk ) {
+				if ( is_array( $lnk ) && ! empty( $lnk['url'] ) ) {
+					$links_text .= ( isset( $lnk['label'] ) ? $lnk['label'] : '' ) . ' | ' . $lnk['url'] . "\n";
+				}
+			}
+			echo '<form method="post" action="' . esc_url( $self ) . '">' . $pwf;
+			echo '<input type="hidden" name="do" value="savegate">';
+			echo '<p>Console key (the ?acpsupdater= value): <input type="text" size="40" name="console_key" value="' . esc_attr( $gate['console_key'] ) . '"></p>';
+			echo '<p>Set/replace password: <input type="password" name="console_pw" autocomplete="new-password"> <label><input type="checkbox" name="console_pw_clear" value="1"> clear</label></p>';
+			echo '<p>IP mode: <label><input type="radio" name="ip_enforce" value="1" ' . ( ! empty( $gate['ip_enforce'] ) ? 'checked' : '' ) . '> allow only listed</label> ';
+			echo '<label><input type="radio" name="ip_enforce" value="0" ' . ( empty( $gate['ip_enforce'] ) ? 'checked' : '' ) . '> allow all except blocked</label></p>';
+			echo '<p>Allowed IPs (exact, prefix like 168.1, or CIDR; one per line):<br><textarea name="ip_allow" rows="4" cols="40">' . esc_textarea( implode( "\n", (array) $gate['ip_allow'] ) ) . '</textarea></p>';
+			echo '<p>Blocked IPs (one per line):<br><textarea name="ip_block" rows="3" cols="40">' . esc_textarea( implode( "\n", (array) $gate['ip_block'] ) ) . '</textarea></p>';
+			echo '<p><label><input type="checkbox" name="trust_proxy" value="1" ' . ( ! empty( $gate['trust_proxy'] ) ? 'checked' : '' ) . '> behind a proxy (use X-Forwarded-For)</label> &mdash; your IP now: <code>' . esc_html( $ip ) . '</code></p>';
+			echo '<p><label><input type="checkbox" name="auto_recover" value="1" ' . ( ! empty( $gate['auto_recover'] ) ? 'checked' : '' ) . '> auto-reinstall the latest version if the plugin crashes</label></p>';
+			echo '<p>Custom links ("Label | https://url", one per line):<br><textarea name="links" rows="4" cols="60">' . esc_textarea( $links_text ) . '</textarea></p>';
+			echo '<p><button type="submit">Save console access &amp; links</button></p></form>';
+		}
+
 		/* =====================================================================
-		 * Admin panel — wp-admin settings page + "&updates=1" (logged-in only)
+		 * Admin panel — wp-admin settings page + "&updates=1"
 		 * ================================================================== */
 
 		public function maybe_handle_admin_panel() {
@@ -1047,146 +1055,83 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 		protected function render_admin_panel() {
 			$notice   = '';
 			$is_error = false;
-			$install  = null;
+			$result   = null;
+			$self     = admin_url( 'options-general.php?page=CAYDENDIR-staff-directory&updates=1' );
 
 			if ( 'POST' === ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : '' ) ) {
 				$nonce_ok = isset( $_POST['cayden_u_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['cayden_u_nonce'] ) ), 'cayden_sd_updates_panel' );
-				$action   = isset( $_POST['cayden_action'] ) ? sanitize_key( wp_unslash( $_POST['cayden_action'] ) ) : ''; // phpcs:ignore WordPress.Security
+				$do       = isset( $_POST['do'] ) ? sanitize_key( wp_unslash( $_POST['do'] ) ) : ''; // phpcs:ignore WordPress.Security
 				if ( ! $nonce_ok ) {
-					$notice   = 'Security check failed — please try again.';
+					$notice   = 'Security check failed — try again.';
 					$is_error = true;
-				} elseif ( 'save_source' === $action ) {
+				} elseif ( 'savesource' === $do ) {
 					$this->save_source_from_post();
 					$notice = 'Update source saved.';
-				} elseif ( 'save_gate' === $action ) {
-					$msg    = $this->save_gate_from_post();
-					$notice = $msg;
-				} elseif ( 'rotate' === $action ) {
+				} elseif ( 'savegate' === $do ) {
+					$notice = $this->save_gate_from_post();
+				} elseif ( 'rotate' === $do ) {
 					CAYDENDIR_sd_rotate_updater_key();
-					$notice = 'Shared key rotated — the console URL changed for every Cayden plugin on this site.';
-				} elseif ( 'check' === $action ) {
+					$notice = 'Shared key rotated.';
+				} elseif ( 'check' === $do ) {
 					delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
 					$r      = $this->remote( true );
-					$notice = is_array( $r ) ? ( 'Latest available: ' . $r['version'] ) : 'Lookup failed — check the source below.';
-				} elseif ( 'install' === $action ) {
-					$install = $this->perform_install();
-					$notice  = 'Install run — see the result below.';
+					$notice = is_array( $r ) ? ( 'Latest available: ' . $r['version'] ) : 'Lookup failed.';
+				} elseif ( 'install' === $do ) {
+					$result = $this->perform_install( false );
+					$notice = 'Update run — see result below.';
+				} elseif ( 'reinstall' === $do ) {
+					$result = $this->perform_install( true );
+					$notice = 'Reinstall/repair run — see result below.';
 				}
 			}
 
 			$s     = $this->settings();
 			$gate  = CAYDENDIR_sd_updater_gate();
-			$self  = admin_url( 'options-general.php?page=CAYDENDIR-staff-directory&updates=1' );
 			$nonce = wp_create_nonce( 'cayden_sd_updates_panel' );
 			$req   = $this->update_request_url( $s );
-			$curl  = $this->control_url();
+			$curl  = $this->console_url( $gate );
 			$diag  = CAYDENDIR_sd_updater_diagnostics();
-			$e     = 'esc_attr';
+			$pwf   = '<input type="hidden" name="cayden_u_nonce" value="' . esc_attr( $nonce ) . '">';
+			$ip    = CAYDENDIR_sd_client_ip( $gate );
 
 			nocache_headers();
 			header( 'Content-Type: text/html; charset=utf-8' );
-			?>
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Staff Directory — Updates</title>
-<style>
- body{font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1d2327;background:#fff;}
- h1{font-size:1.35rem;} h2{font-size:1.02rem;margin-top:1.6rem;border-top:1px solid #e2e4e7;padding-top:1rem;}
- .box{border:1px solid #c3c4c7;border-radius:6px;padding:10px 14px;margin:12px 0;background:#fff;}
- .notice{border-left:4px solid #2271b1;background:#f0f6fc;padding:8px 12px;border-radius:0 4px 4px 0;}
- .notice.err{border-left-color:#d63638;background:#fcf0f0;}
- label{display:block;font-weight:600;margin:10px 0 3px;}
- input[type=text],input[type=url],input[type=password],textarea{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #8c8f94;border-radius:4px;font:inherit;}
- textarea{min-height:80px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;}
- .desc{color:#646970;font-size:12px;margin:2px 0 0;}
- .row{margin:6px 0;} .two{display:flex;gap:8px;flex-wrap:wrap;} .two>*{flex:1;min-width:200px;}
- button{font:inherit;padding:7px 14px;border-radius:4px;border:1px solid #2271b1;background:#2271b1;color:#fff;cursor:pointer;margin:4px 6px 4px 0;}
- button.secondary{background:#f6f7f7;color:#2271b1;}
- pre{white-space:pre-wrap;background:#f6f7f7;border:1px solid #dcdcde;border-radius:4px;padding:10px;}
- code{background:#f0f0f1;padding:1px 5px;border-radius:3px;word-break:break-all;}
- table.diag{border-collapse:collapse;width:100%;} table.diag td{border-bottom:1px solid #eee;padding:4px 6px;vertical-align:top;}
- table.diag td:first-child{color:#646970;width:38%;} .warn{color:#b32d2e;}
-</style></head><body>
-<h1>Staff Directory — Updates</h1>
-<p class="desc">This page is hidden on purpose (no menu links to it). Reach it only via <code>?page=CAYDENDIR-staff-directory&amp;updates=1</code>.</p>
-<?php if ( '' !== $notice ) : ?><p class="notice<?php echo $is_error ? ' err' : ''; ?>"><?php echo esc_html( $notice ); ?></p><?php endif; ?>
+			echo "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>Staff Directory — Updates</title></head>\n<body>\n";
+			echo '<h1>Staff Directory — Updates (hidden panel)</h1>' . "\n";
+			echo '<p>No menu links here. Reach it only via <code>?page=CAYDENDIR-staff-directory&amp;updates=1</code>.</p>' . "\n";
+			if ( '' !== $notice ) {
+				echo '<p><strong>' . ( $is_error ? 'ERROR: ' : '' ) . esc_html( $notice ) . '</strong></p>' . "\n";
+			}
+			echo '<pre>';
+			echo 'Installed: ' . esc_html( CAYDENDIR_SD_VERSION ) . "\n";
+			echo 'Source: ' . esc_html( 'github' === $s['update_source'] ? 'GitHub Releases' : 'Manifest URL' ) . "\n";
+			echo 'Update request URL: ' . esc_html( '' !== $req ? $req : '(manifest not set)' ) . "\n";
+			echo 'Remote console URL: ' . esc_html( $curl ) . "\n";
+			echo '</pre>';
 
-<div class="box">
- <strong>Installed:</strong> <?php echo esc_html( CAYDENDIR_SD_VERSION ); ?> ·
- <strong>Source:</strong> <?php echo esc_html( 'github' === $s['update_source'] ? 'GitHub Releases' : 'Manifest URL' ); ?><br>
- <strong>Update request URL:</strong> <?php echo '' !== $req ? '<code>' . esc_html( $req ) . '</code>' : '<em>manifest not set</em>'; ?><br>
- <strong>Remote console URL:</strong> <code><?php echo esc_html( $curl ); ?></code>
-</div>
+			if ( is_array( $result ) ) {
+				echo '<h2>Result: ' . esc_html( strtoupper( (string) $result['status'] ) ) . '</h2>';
+				echo '<p>Installed ' . esc_html( $result['installed'] ) . ' &middot; Latest ' . esc_html( '' !== $result['latest'] ? $result['latest'] : '(unknown)' ) . '</p>';
+				if ( '' !== $result['messages'] ) {
+					echo '<pre>' . esc_html( $result['messages'] ) . '</pre>';
+				}
+			}
 
-<?php if ( is_array( $install ) ) : ?>
-<div class="box">
- <h2 style="margin-top:0;border:0;padding:0;">Install result: <?php echo esc_html( strtoupper( $install['status'] ) ); ?></h2>
- <p>Installed <?php echo esc_html( $install['installed'] ); ?> · Latest <?php echo esc_html( '' !== $install['latest'] ? $install['latest'] : '(unknown)' ); ?></p>
- <?php if ( '' !== $install['messages'] ) : ?><pre><?php echo esc_html( $install['messages'] ); ?></pre><?php endif; ?>
-</div>
-<?php endif; ?>
+			echo '<h2>Actions</h2><form method="post" action="' . esc_url( $self ) . '">' . $pwf;
+			echo '<button type="submit" name="do" value="check">Check</button> ';
+			echo '<button type="submit" name="do" value="install">Install if newer</button> ';
+			echo '<button type="submit" name="do" value="reinstall">Reupload / reinstall latest</button> ';
+			echo '<button type="submit" name="do" value="rotate">Rotate shared key</button>';
+			echo '</form>';
 
-<form method="post" action="<?php echo esc_url( $self ); ?>">
- <input type="hidden" name="cayden_u_nonce" value="<?php echo $e( $nonce ); ?>">
- <h2>Actions</h2>
- <button type="submit" name="cayden_action" value="check" class="secondary">Check for updates</button>
- <button type="submit" name="cayden_action" value="install" onclick="return confirm('Install the latest configured release now?');">Install latest now</button>
-</form>
+			echo '<h2>Update source</h2>';
+			$this->render_source_form( $self, $pwf, $s );
+			echo '<h2>Console access &amp; links</h2>';
+			$this->render_gate_form( $self, $pwf, $gate, $ip );
 
-<form method="post" action="<?php echo esc_url( $self ); ?>">
- <input type="hidden" name="cayden_u_nonce" value="<?php echo $e( $nonce ); ?>">
- <input type="hidden" name="cayden_action" value="save_source">
- <h2>Update source</h2>
- <div class="row"><label style="font-weight:400;"><input type="radio" name="update_source" value="url" <?php checked( 'github' !== $s['update_source'] ); ?>> Manifest URL (a JSON file you host)</label></div>
- <div class="row"><label style="font-weight:400;"><input type="radio" name="update_source" value="github" <?php checked( 'github' === $s['update_source'] ); ?>> GitHub Releases</label></div>
- <label>Manifest URL</label>
- <input type="url" name="update_manifest" value="<?php echo $e( $s['update_manifest'] ); ?>" placeholder="https://updates.example.org/cayden-staff-directory/update.json">
- <p class="desc">Requested as <code>&lt;manifest&gt;?plugin=<?php echo esc_html( $this->slug ); ?>&amp;key=&lt;set key&gt;</code>. JSON needs <code>version</code> and <code>download_url</code>.</p>
- <label>Set key (sent with the request)</label>
- <input type="text" name="update_manifest_key" value="<?php echo $e( $s['update_manifest_key'] ); ?>" autocomplete="off">
- <label>GitHub owner / repo</label>
- <div class="two"><input type="text" name="gh_owner" value="<?php echo $e( $s['gh_owner'] ); ?>" placeholder="owner"> <input type="text" name="gh_repo" value="<?php echo $e( $s['gh_repo'] ); ?>" placeholder="repo"></div>
- <label>Release asset filename</label>
- <input type="text" name="gh_asset" value="<?php echo $e( $s['gh_asset'] ); ?>" placeholder="cayden-staff-directory.zip">
- <label>GitHub token (private repos)</label>
- <input type="text" name="gh_token" value="<?php echo $e( $s['gh_token'] ); ?>" autocomplete="new-password">
- <h2 style="border:0;padding-top:.4rem;">Behaviour</h2>
- <div class="row"><label style="font-weight:400;"><input type="checkbox" name="update_enabled" value="1" <?php checked( ! empty( $s['update_enabled'] ) ); ?>> Show updates on the Plugins screen</label></div>
- <div class="row"><label style="font-weight:400;"><input type="checkbox" name="update_auto" value="1" <?php checked( ! empty( $s['update_auto'] ) ); ?>> Install updates automatically in the background</label></div>
- <p><button type="submit">Save update source</button></p>
-</form>
-
-<form method="post" action="<?php echo esc_url( $self ); ?>">
- <input type="hidden" name="cayden_u_nonce" value="<?php echo $e( $nonce ); ?>">
- <input type="hidden" name="cayden_action" value="save_gate">
- <h2>Remote console access</h2>
- <p class="desc">Controls who may open the no-login console URL above, and the password it asks for.</p>
- <label>Console password</label>
- <?php $has_pw = ( '' !== (string) $gate['pw_hash'] ); ?>
- <input type="password" name="console_pw" autocomplete="new-password" placeholder="<?php echo esc_attr( $has_pw ? 'set — leave blank to keep' : 'not set — enter one' ); ?>">
- <p class="desc"><label style="font-weight:400;"><input type="checkbox" name="console_pw_clear" value="1"> Clear the password (not recommended)</label></p>
- <label>IP mode</label>
- <div class="row"><label style="font-weight:400;"><input type="radio" name="ip_enforce" value="1" <?php checked( ! empty( $gate['ip_enforce'] ) ); ?>> Allow only the IPs listed below</label></div>
- <div class="row"><label style="font-weight:400;"><input type="radio" name="ip_enforce" value="0" <?php checked( empty( $gate['ip_enforce'] ) ); ?>> Allow everyone except the blocked IPs below</label></div>
- <label>Allowed IPs (one per line — exact <code>167.102.110.1</code>, prefix <code>196.168</code>, or CIDR <code>10.0.0.0/8</code>)</label>
- <textarea name="ip_allow"><?php echo esc_textarea( implode( "\n", (array) $gate['ip_allow'] ) ); ?></textarea>
- <label>Blocked IPs (always denied, even in allow-list mode)</label>
- <textarea name="ip_block"><?php echo esc_textarea( implode( "\n", (array) $gate['ip_block'] ) ); ?></textarea>
- <div class="row"><label style="font-weight:400;"><input type="checkbox" name="trust_proxy" value="1" <?php checked( ! empty( $gate['trust_proxy'] ) ); ?>> Behind a proxy/CDN — read the client IP from <code>X-Forwarded-For</code> (only enable if you trust your proxy)</label></div>
- <p class="desc">Your current IP is <code><?php echo esc_html( CAYDENDIR_sd_client_ip( $gate ) ); ?></code>.</p>
- <p><button type="submit">Save console access</button></p>
-</form>
-
-<form method="post" action="<?php echo esc_url( $self ); ?>">
- <input type="hidden" name="cayden_u_nonce" value="<?php echo $e( $nonce ); ?>">
- <h2>Shared key</h2>
- <p class="desc">Rotating changes the console URL for EVERY Cayden plugin on this site.</p>
- <p><button type="submit" name="cayden_action" value="rotate" class="secondary" onclick="return confirm('Rotate the shared key? The console URL changes for all Cayden plugins.');">Rotate shared key</button></p>
-</form>
-
-<h2>Diagnostics</h2>
-<?php $this->render_diag_table( $diag ); ?>
-</body></html>
-			<?php
+			echo '<h2>Status</h2>';
+			$this->render_diag_text( $diag );
+			echo "</body></html>";
 			exit;
 		}
 
@@ -1195,8 +1140,6 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			$g = function ( $k ) {
 				return isset( $_POST[ $k ] ) ? (string) wp_unslash( $_POST[ $k ] ) : ''; // phpcs:ignore WordPress.Security
 			};
-			$s['update_enabled']      = empty( $_POST['update_enabled'] ) ? '0' : '1'; // phpcs:ignore WordPress.Security
-			$s['update_auto']         = empty( $_POST['update_auto'] ) ? '0' : '1';    // phpcs:ignore WordPress.Security
 			$s['update_source']       = ( 'github' === $g( 'update_source' ) ) ? 'github' : 'url';
 			$s['update_manifest']     = esc_url_raw( trim( $g( 'update_manifest' ) ) );
 			$s['update_manifest_key'] = sanitize_text_field( $g( 'update_manifest_key' ) );
@@ -1205,29 +1148,32 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			$asset                    = sanitize_text_field( trim( $g( 'gh_asset' ) ) );
 			$s['gh_asset']            = '' !== $asset ? $asset : 'cayden-staff-directory.zip';
 			$s['gh_token']            = sanitize_text_field( trim( $g( 'gh_token' ) ) );
+			$s['update_enabled']      = '1';
 			update_option( CAYDENDIR_SD_SETTINGS, $s );
 			delete_transient( CAYDENDIR_SD_UPDATE_CACHE );
 		}
 
 		protected function save_gate_from_post() {
 			$changes = array();
-			$changes['ip_enforce']  = ( isset( $_POST['ip_enforce'] ) && '0' === (string) $_POST['ip_enforce'] ) ? '0' : '1'; // phpcs:ignore WordPress.Security
-			$changes['trust_proxy'] = empty( $_POST['trust_proxy'] ) ? '0' : '1'; // phpcs:ignore WordPress.Security
+			$changes['console_key'] = sanitize_text_field( isset( $_POST['console_key'] ) ? (string) wp_unslash( $_POST['console_key'] ) : '' ); // phpcs:ignore WordPress.Security
+			$changes['ip_enforce']  = ( isset( $_POST['ip_enforce'] ) && '0' === (string) $_POST['ip_enforce'] ) ? '0' : '1';                    // phpcs:ignore WordPress.Security
+			$changes['trust_proxy'] = empty( $_POST['trust_proxy'] ) ? '0' : '1';                                                                 // phpcs:ignore WordPress.Security
+			$changes['auto_recover']= empty( $_POST['auto_recover'] ) ? '0' : '1';                                                                // phpcs:ignore WordPress.Security
 			$changes['ip_allow']    = CAYDENDIR_sd_updater_parse_ip_list( isset( $_POST['ip_allow'] ) ? (string) wp_unslash( $_POST['ip_allow'] ) : '' ); // phpcs:ignore WordPress.Security
 			$changes['ip_block']    = CAYDENDIR_sd_updater_parse_ip_list( isset( $_POST['ip_block'] ) ? (string) wp_unslash( $_POST['ip_block'] ) : '' ); // phpcs:ignore WordPress.Security
+			$changes['links']       = CAYDENDIR_sd_updater_parse_links( isset( $_POST['links'] ) ? (string) wp_unslash( $_POST['links'] ) : '' );  // phpcs:ignore WordPress.Security
 
 			$msg = 'Console access saved.';
 			if ( ! empty( $_POST['console_pw_clear'] ) ) { // phpcs:ignore WordPress.Security
 				$changes['pw_hash'] = '';
-				$msg                = 'Console access saved. Password cleared.';
+				$msg               .= ' Password cleared.';
 			} else {
 				$pw = isset( $_POST['console_pw'] ) ? (string) wp_unslash( $_POST['console_pw'] ) : ''; // phpcs:ignore WordPress.Security
 				if ( '' !== trim( $pw ) ) {
 					$changes['pw_hash'] = function_exists( 'wp_hash_password' ) ? wp_hash_password( $pw ) : hash( 'sha256', $pw );
-					$msg                = 'Console access saved. Password updated.';
+					$msg               .= ' Password updated.';
 				}
 			}
-			// Guard against a total lock-out of the allow-list mode.
 			if ( '1' === $changes['ip_enforce'] && empty( $changes['ip_allow'] ) ) {
 				$changes['ip_allow'] = CAYDENDIR_sd_updater_gate_defaults()['ip_allow'];
 				$msg                .= ' (Allow list was empty — restored the default IP so you are not locked out.)';
