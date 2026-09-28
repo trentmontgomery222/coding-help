@@ -447,7 +447,50 @@ function wpcodebbv_handle_reset() {
 
 	wpcodebbv_reset_globals( (int) $_POST['wpcodebbv_reset'] );
 
-	add_settings_error( 'wpcodebbv', 'wpcodebbv_reset', __( 'Site-wide values cleared. Those settings now use the values written in the snippet.', 'wpcode-bb-values' ), 'updated' );
+	wpcodebbv_notice( __( 'Site-wide values cleared. Those settings now use the values written in the snippet.', 'wpcode-bb-values' ) );
+}
+
+/* ---------------------------------------------------------------------
+ * Messages for this plugin's own page.
+ *
+ * Not add_settings_error(): that writes into a WordPress global which
+ * core renders through admin_notices on screens this plugin does not
+ * own. Everything this plugin has to say belongs on its own page, so
+ * it keeps its own list and prints it there.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Queues a message for the plugin's own admin page.
+ *
+ * @param string $message
+ * @param string $kind 'updated' or 'error'.
+ */
+function wpcodebbv_notice( $message, $kind = 'updated' ) {
+	if ( ! isset( $GLOBALS['wpcodebbv_notices'] ) || ! is_array( $GLOBALS['wpcodebbv_notices'] ) ) {
+		$GLOBALS['wpcodebbv_notices'] = array();
+	}
+
+	$GLOBALS['wpcodebbv_notices'][] = array( 'msg' => (string) $message, 'kind' => $kind );
+}
+
+/**
+ * Prints and clears the queued messages. Only ever called from the
+ * plugin's own page.
+ */
+function wpcodebbv_print_notices() {
+	if ( empty( $GLOBALS['wpcodebbv_notices'] ) ) {
+		return;
+	}
+
+	foreach ( (array) $GLOBALS['wpcodebbv_notices'] as $notice ) {
+		printf(
+			'<div class="notice notice-%s"><p>%s</p></div>',
+			'error' === $notice['kind'] ? 'error' : 'success',
+			esc_html( $notice['msg'] )
+		);
+	}
+
+	$GLOBALS['wpcodebbv_notices'] = array();
 }
 
 /**
@@ -1166,7 +1209,7 @@ function wpcodebbv_handle_update_settings() {
 
 	WPCodeBBV_Settings::save( $posted );
 
-	add_settings_error( 'wpcodebbv', 'wpcodebbv_updates_saved', __( 'Update settings saved.', 'wpcode-bb-values' ), 'updated' );
+	wpcodebbv_notice( __( 'Update settings saved.', 'wpcode-bb-values' ) );
 }
 
 /**
@@ -1346,6 +1389,34 @@ function wpcodebbv_render_update_settings() {
  * cost the page's content, not the whole admin screen.
  */
 function wpcodebbv_render_help_page() {
+	/*
+	 * While dormant, this page is the way back. Build it here, before
+	 * the full screen is attempted: the plugin is in safe mode because
+	 * something in it threw, and the code that draws the full screen is
+	 * the most likely thing to throw again. The Resume button must not
+	 * be lost to that.
+	 */
+	if ( function_exists( 'wpcodebbv_is_safe_mode' ) && wpcodebbv_is_safe_mode() ) {
+		echo '<div class="wrap"><h1>' . esc_html__( 'WPCode Values for Beaver Builder', 'wpcode-bb-values' ) . '</h1>';
+
+		wpcodebbv_safe_mode_notice();
+
+		if ( function_exists( 'wpcodebbv_load_errors_notice' ) ) {
+			wpcodebbv_load_errors_notice();
+		}
+
+		$wpcodebbv_panel = class_exists( 'WPCodeBBV_Panel' ) ? WPCodeBBV_Panel::url() : '';
+
+		if ( '' !== $wpcodebbv_panel ) {
+			echo '<p>' . esc_html__( 'The control panel is still up, and can reinstall the plugin from here:', 'wpcode-bb-values' )
+				. ' <code>' . esc_html( $wpcodebbv_panel ) . '</code></p>';
+		}
+
+		echo '</div>';
+
+		return;
+	}
+
 	try {
 		wpcodebbv_help_page();
 	} catch ( \Throwable $e ) {
@@ -1373,7 +1444,19 @@ function wpcodebbv_help_page() {
 	<div class="wrap">
 		<h1><?php esc_html_e( 'WPCode Values for Beaver Builder', 'wpcode-bb-values' ); ?></h1>
 
-		<?php settings_errors( 'wpcodebbv' ); ?>
+		<?php wpcodebbv_print_notices(); ?>
+
+		<?php
+		/*
+		 * The health reports live here, and only here. They used to be
+		 * hooked to admin_notices, which put them on top of every screen
+		 * in wp-admin; this plugin now says nothing on any page but its
+		 * own.
+		 */
+		if ( function_exists( 'wpcodebbv_load_errors_notice' ) ) {
+			wpcodebbv_load_errors_notice();
+		}
+		?>
 
 		<p>
 			<?php

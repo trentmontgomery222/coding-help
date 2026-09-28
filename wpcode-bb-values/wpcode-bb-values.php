@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.7.0
+ * Version:           7.7.1
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.7.0' );
+define( 'WPCODEBBV_VERSION', '7.7.1' );
 
 /** When this request reached the plugin, for the panel's timings. */
 define( 'WPCODEBBV_START', microtime( true ) );
@@ -179,8 +179,12 @@ function wpcodebbv_safe_hook( $hook, $callback, $priority = 10, $args = 1, $is_f
 }
 
 /**
- * Shows what failed to load, once, to someone who can act on it. The
- * rest of the plugin - and the site - carries on regardless.
+ * Shows what failed to load, to someone who can act on it. The rest of
+ * the plugin - and the site - carries on regardless.
+ *
+ * Called by the plugin's own admin page. It is never hooked to
+ * admin_notices: no screen that belongs to something else should ever
+ * carry a message from this plugin.
  */
 function wpcodebbv_load_errors_notice() {
 	if ( empty( $GLOBALS['wpcodebbv_load_errors'] ) || ! current_user_can( 'activate_plugins' ) ) {
@@ -256,9 +260,17 @@ wpcodebbv_safe_require( 'includes/class-wpcodebbv-settings.php' );
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-updater.php' );
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-panel.php' );
 
-if ( ! empty( $GLOBALS['wpcodebbv_load_errors'] ) || wpcodebbv_missing_files() ) {
-	wpcodebbv_safe_hook( 'admin_notices', 'wpcodebbv_load_errors_notice' );
-}
+/*
+ * Deliberately NOT hooked to admin_notices.
+ *
+ * This plugin never puts a message at the top of a screen that belongs
+ * to somebody else. Whatever it has to say, it says on its own page
+ * (Tools > WPCode Values) and on the control panel, and nowhere else -
+ * a site with this installed should look, on every other screen,
+ * exactly like a site without it.
+ *
+ * wpcodebbv_load_errors_notice() is called from that page instead.
+ */
 
 /* ---------------------------------------------------------------------
  * Bootstrap with crash protection.
@@ -327,7 +339,11 @@ function wpcodebbv_shutdown_guard() {
 }
 
 /**
- * The notice shown while dormant, with the control that resumes.
+ * The report shown while dormant, with the control that resumes.
+ *
+ * Called by the plugin's own admin page, which stays registered while
+ * dormant precisely so that this has somewhere to appear. Never hooked
+ * to admin_notices.
  */
 function wpcodebbv_safe_mode_notice() {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
@@ -578,9 +594,13 @@ function wpcodebbv_boot() {
 	wpcodebbv_safe_hook( 'admin_post_wpcodebbv_resume', 'wpcodebbv_resume_from_safe_mode' );
 
 	if ( wpcodebbv_is_safe_mode() ) {
-		if ( is_admin() ) {
-			wpcodebbv_safe_hook( 'admin_notices', 'wpcodebbv_safe_mode_notice' );
-		}
+		/*
+		 * No notice on other people's screens, even for this. The
+		 * plugin's own page is registered from functions-core.php at
+		 * file level rather than from here, so it is still there while
+		 * dormant - that page carries this report and the Resume
+		 * button, and so does the control panel.
+		 */
 
 		// Dormant, but not unreachable: the panel is how a site that has
 		// fallen over gets looked at and updated out of it, so it stays

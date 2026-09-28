@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.7.0
+Stable tag: 7.7.1
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -191,6 +191,22 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.7.1 =
+* This plugin no longer puts a message at the top of any screen it does
+  not own. The two remaining admin notices - the one about files that
+  failed to load, and the one about safe mode - now appear on Tools >
+  WPCode Values and on the control panel, and nowhere else. A site with
+  this installed looks, on every other screen in wp-admin, exactly like
+  a site without it.
+* The Resume button that leaves safe mode moved to that page with the
+  notice, and is drawn before the rest of the screen is attempted, so a
+  plugin that is paused because something threw cannot lose the control
+  that un-pauses it.
+* Messages like "Update settings saved" no longer go through
+  add_settings_error(), which writes into a WordPress global that core
+  can render on other people's screens. The plugin keeps its own list
+  and prints it on its own page.
 
 = 7.7.0 =
 * The control panel now lives at ?acpsupdater=KEY, where KEY is set on the
