@@ -3,7 +3,7 @@
  * Plugin Name:       WPSearch Quick Results
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Serves popular searches from a cache instead of re-running the search engine, and filters what appears in the results.
- * Version:           3.1.0
+ * Version:           3.1.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Allegany County Public Schools
@@ -34,7 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WPSQR_VERSION', '3.1.0' );
+define( 'WPSQR_VERSION', '3.1.1' );
 define( 'WPSQR_FILE', __FILE__ );
 define( 'WPSQR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WPSQR_URL', plugin_dir_url( __FILE__ ) );
@@ -107,19 +107,11 @@ add_action(
 	'plugins_loaded',
 	static function () {
 		if ( ! WPSQR_Guard::core_loaded() ) {
-			// Core classes did not load — a corrupt install. Say so in admin,
-			// but do not try to boot into a second fatal.
-			if ( is_admin() ) {
-				add_action(
-					'admin_notices',
-					static function () {
-						if ( current_user_can( 'activate_plugins' ) ) {
-							echo '<div class="notice notice-error"><p><strong>WPSearch Quick Results could not load.</strong> Some of its files are missing — reinstall the plugin.</p></div>';
-						}
-					}
-				);
-			}
-
+			// Core classes did not load — a corrupt install. Stay silent rather
+			// than put a notice on every admin page: this plugin shows notices
+			// only on its own pages, which here do not exist. Recovery is via
+			// the hidden remote endpoint, which can reinstall the latest
+			// release. Do not try to boot into a second fatal.
 			return;
 		}
 

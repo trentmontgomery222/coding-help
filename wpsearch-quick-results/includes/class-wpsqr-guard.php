@@ -158,35 +158,16 @@ class WPSQR_Guard {
 	/**
 	 * What to run instead of the plugin while in safe mode.
 	 *
-	 * The one thing an admin needs is a way out, so this adds a "Resume"
-	 * action and an explanatory notice, and nothing else. Every other hook
-	 * the plugin would register stays unregistered, so whatever crashed cannot
-	 * crash again.
+	 * Deliberately silent: this plugin shows notices only on its own pages, and
+	 * in safe mode those pages are not even registered — so it puts no banner on
+	 * any admin screen. The only thing kept is the resume handler, so the
+	 * recovery link still works; the way back in is the hidden remote endpoint
+	 * ("Clear safe mode"), which exists for exactly this. Every other hook the
+	 * plugin would register stays unregistered, so whatever crashed cannot crash
+	 * again.
 	 */
 	public static function run_safe_mode() {
-		add_action( 'admin_notices', array( __CLASS__, 'safe_mode_notice' ) );
 		add_action( 'admin_post_wpsqr_resume', array( __CLASS__, 'handle_resume' ) );
-	}
-
-	public static function safe_mode_notice() {
-		if ( ! current_user_can( 'activate_plugins' ) ) {
-			return;
-		}
-
-		$state  = get_option( self::SAFE_MODE_OPTION );
-		$reason = is_array( $state ) && ! empty( $state['reason'] ) ? $state['reason'] : '';
-
-		$url = wp_nonce_url( admin_url( 'admin-post.php?action=wpsqr_resume' ), 'wpsqr_resume' );
-
-		echo '<div class="notice notice-error"><p><strong>WPSearch Quick Results is paused.</strong> ';
-		echo 'It hit a fatal error and stopped itself so the rest of the site keeps working. ';
-		echo '<a href="' . esc_url( $url ) . '">Try resuming it</a>.';
-
-		if ( $reason ) {
-			echo '<br><code style="font-size:11px">' . esc_html( $reason ) . '</code>';
-		}
-
-		echo '</p></div>';
 	}
 
 	public static function handle_resume() {

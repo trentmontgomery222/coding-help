@@ -21,7 +21,9 @@ class WPSQR_PostList {
 		add_action( 'admin_init', array( $this, 'handle_row_action' ) );
 
 		add_action( 'admin_init', array( $this, 'register_list_hooks' ) );
-		add_action( 'admin_notices', array( $this, 'bulk_notice' ) );
+		// No admin_notices: this plugin shows notices only on its own pages, and
+		// the posts list is not one. The Search column already shows the result
+		// of a bulk hide/show, so no banner is needed.
 	}
 
 	protected function post_types() {
@@ -226,24 +228,10 @@ class WPSQR_PostList {
 			}
 		}
 
-		return add_query_arg( 'wpsqr_bulk', $count, $redirect );
-	}
+		// No feedback query arg: the plugin shows no notice on the posts list.
+		unset( $count );
 
-	public function bulk_notice() {
-		if ( ! isset( $_GET['wpsqr_bulk'] ) ) {
-			return;
-		}
-
-		printf(
-			'<div class="notice notice-success is-dismissible"><p>%s</p></div>',
-			esc_html(
-				sprintf(
-					/* translators: %d: number of posts */
-					_n( 'Search visibility updated for %d item.', 'Search visibility updated for %d items.', (int) $_GET['wpsqr_bulk'], 'wpsqr' ),
-					(int) $_GET['wpsqr_bulk']
-				)
-			)
-		);
+		return $redirect;
 	}
 
 	public function add_column( $columns ) {

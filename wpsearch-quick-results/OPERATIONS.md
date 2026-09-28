@@ -12,13 +12,18 @@ would see. Keep this file out of the shipped zip if that matters to you.
   it. Reported on the remote status page as "Missing files".
 - **A fatal in this plugin's own code trips safe mode.** A shutdown handler
   checks whether the fatal was in this plugin's directory — and only then —
-  and sets a flag. The next request loads *only* a recovery notice with a
-  "resume" link, so a bad release cannot white-screen the site. An unrelated
+  and sets a flag. The next request loads *nothing* of the plugin but the
+  resume handler, so a bad release cannot white-screen the site. An unrelated
   plugin's fatal is left alone.
 - **`boot()` is wrapped in try/catch**, so a thrown error during setup becomes
   safe mode rather than a broken page.
 
-Resume from the admin notice, or remotely (see below).
+**No admin notices anywhere.** This plugin never puts a banner at the top of a
+wp-admin page it did not make — not for a bulk action, not even for safe mode
+or a failed load. In safe mode its own menu is gone, so there is no in-admin
+sign it stopped; **recovery is via the hidden remote endpoint** ("Clear safe
+mode" / "Reinstall current version"). The only in-wp-admin notices left are on
+the plugin's own settings/dashboard pages.
 
 ## Self-updates
 
