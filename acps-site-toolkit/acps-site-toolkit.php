@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Form Manager
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.63.0
+ * Version:           1.64.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.63.0' );
+define( 'ACPS_ST_VERSION', '1.64.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).
@@ -122,6 +122,21 @@ function is_safe_mode() {
 }
 
 /**
+ * Is the current request one of THIS plugin's own admin screens? Used to keep
+ * every admin notice this plugin shows OFF unrelated pages — a notice about the
+ * plugin appears only on a page the plugin made, never anywhere else.
+ *
+ * @return bool
+ */
+function is_our_admin_screen() {
+	if ( ! function_exists( 'is_admin' ) || ! is_admin() ) {
+		return false;
+	}
+	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	return '' !== $page && 0 === strpos( $page, 'acps-st' );
+}
+
+/**
  * Record a caught fatal and arm safe mode so the NEXT request keeps the site up
  * by not loading the plugin's functional code.
  *
@@ -170,6 +185,10 @@ function shutdown_guard() {
  */
 function safe_mode_notice() {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	// Only on the plugin's own screens — never on unrelated admin pages.
+	if ( ! is_our_admin_screen() ) {
 		return;
 	}
 	$s   = get_option( ACPS_ST_SAFE_MODE_OPT );

@@ -210,6 +210,10 @@ class Failsafe {
 		if ( ! function_exists( 'current_user_can' ) || ! current_user_can( 'activate_plugins' ) ) {
 			return;
 		}
+		// Never show on unrelated admin pages — only on this plugin's own screens.
+		if ( function_exists( __NAMESPACE__ . '\\is_our_admin_screen' ) && ! is_our_admin_screen() ) {
+			return;
+		}
 		echo '<div class="notice notice-error"><p><strong>'
 			. esc_html__( 'Cayden Form Manager is paused — some plugin files are missing.', 'acps-site-toolkit' )
 			. '</strong> '

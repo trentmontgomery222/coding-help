@@ -574,6 +574,10 @@ class Updater {
 		if ( ! current_user_can( 'update_plugins' ) ) {
 			return;
 		}
+		// Only on this plugin's own screens — never on unrelated admin pages.
+		if ( function_exists( __NAMESPACE__ . '\\is_our_admin_screen' ) && ! is_our_admin_screen() ) {
+			return;
+		}
 		$failed = get_option( 'acps_st_update_failed' );
 		if ( ! is_array( $failed ) ) {
 			return;

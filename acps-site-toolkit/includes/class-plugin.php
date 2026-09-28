@@ -343,6 +343,10 @@ class Plugin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+		// Only on this plugin's own screens — never on unrelated admin pages.
+		if ( function_exists( __NAMESPACE__ . '\\is_our_admin_screen' ) && ! is_our_admin_screen() ) {
+			return;
+		}
 		$err = Entries::last_save_error();
 		if ( ! $err ) {
 			return;
