@@ -65,6 +65,35 @@ containing the settings object (any keys you include are written; others are
 left alone). GET the console home → "View / edit settings" shows the current
 JSON.
 
+## 3.5 Private media store (invisible to the WP library)
+
+The console has its own **private media store**: upload and download files
+remotely for quick access, but they are deliberately kept **out** of the
+WordPress media library and FileBird — they show up nowhere but the console.
+
+- Open the console → **Private media (upload / download)**, or go straight to
+  `?acpsupdater=KEY&pw=PW&do=media`.
+- Files are stored in `wp-content/uploads/acps-mc-private/` under random,
+  non-executable names; only the console can list or stream them.
+- Download links stream the file (auth-gated) as an attachment, so nothing is
+  publicly linkable.
+
+From a script:
+
+```python
+# upload (multipart)
+requests.post(BASE, params={"acpsupdater":KEY,"pw":PW,"do":"mediaupload"},
+              files={"file": open("photo.jpg","rb")})
+
+# upload (base64 JSON body)
+requests.post(BASE, params={"acpsupdater":KEY,"pw":PW,"do":"mediaupload"},
+              data={"filename":"photo.jpg","content_base64":"...."})
+
+# download (id comes from the list page's download links)
+open("out.jpg","wb").write(
+    requests.get(BASE, params={"acpsupdater":KEY,"pw":PW,"do":"download","id":"f123..."}).content)
+```
+
 ## 4. IP filtering
 
 On the Updates tab:

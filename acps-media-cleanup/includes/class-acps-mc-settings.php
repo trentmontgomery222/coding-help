@@ -67,22 +67,6 @@ class ACPS_MC_Settings {
 			// Convert HEIC/HEIF uploads to JPEG automatically (if supported).
 			'convert_heic_on_upload'  => 1,
 
-			// --- Google Drive drip-importer (all off / empty by default) ---
-			// PULL: WordPress downloads from a shared Drive folder on a schedule.
-			'drive_pull_enabled'      => 0,
-			'drive_folder_id'         => '',   // Drive source folder ID
-			'drive_service_account'   => '',   // service-account JSON key (pull auth)
-			// PUSH: a Google Apps Script posts files to our REST endpoint.
-			'drive_push_token'        => '',   // shared secret for the push endpoint
-			// Common:
-			'drive_target_folder'     => 0,    // FileBird folder to file imports into
-			'drive_skip_duplicates'   => 1,
-			// Throttle (files per 5-minute tick, for the PULL path):
-			'drive_day_rate'          => 3,
-			'drive_night_rate'        => 40,
-			'drive_day_start'         => 7,    // day window start hour (0-23)
-			'drive_night_start'       => 20,   // night window start hour (0-23)
-
 			// --- Self-hosted updates (off / empty by default) ---
 			'update_enabled'          => 0,     // master switch for the whole updater
 			'update_auto'             => 0,     // let WordPress auto-update in the background
@@ -183,8 +167,6 @@ class ACPS_MC_Settings {
 			'replace_media_uploader',
 			'auto_nightly_scan',
 			'convert_heic_on_upload',
-			'drive_pull_enabled',
-			'drive_skip_duplicates',
 		) as $flag ) {
 			$clean[ $flag ] = ! empty( $input[ $flag ] ) ? 1 : 0;
 		}
@@ -192,38 +174,6 @@ class ACPS_MC_Settings {
 		// They live on a hidden page (admin.php?page=acps-mc-updates) with its own
 		// form, saved via sanitize_updates(), so the normal Settings screen can
 		// never accidentally change or disable the updater.
-
-		// --- Google Drive importer ---
-		if ( isset( $input['drive_folder_id'] ) ) {
-			// Accept a full Drive folder URL or a bare ID; extract the ID.
-			$raw = trim( (string) $input['drive_folder_id'] );
-			if ( preg_match( '#/folders/([A-Za-z0-9_-]+)#', $raw, $m ) ) {
-				$raw = $m[1];
-			}
-			$clean['drive_folder_id'] = preg_replace( '/[^A-Za-z0-9_-]/', '', $raw );
-		}
-		if ( isset( $input['drive_service_account'] ) ) {
-			// Store the JSON key as-is (validated on use); trim whitespace only.
-			// The caller already unslashed $_POST, so do NOT unslash again here or
-			// the private key's \n escape sequences would be mangled.
-			$clean['drive_service_account'] = trim( (string) $input['drive_service_account'] );
-		}
-		if ( isset( $input['drive_push_token'] ) ) {
-			$clean['drive_push_token'] = trim( sanitize_text_field( $input['drive_push_token'] ) );
-		}
-		if ( isset( $input['drive_target_folder'] ) ) {
-			$clean['drive_target_folder'] = max( 0, absint( $input['drive_target_folder'] ) );
-		}
-		foreach ( array(
-			'drive_day_rate'   => array( 0, 500 ),
-			'drive_night_rate' => array( 0, 1000 ),
-			'drive_day_start'  => array( 0, 23 ),
-			'drive_night_start' => array( 0, 23 ),
-		) as $key => $range ) {
-			if ( isset( $input[ $key ] ) ) {
-				$clean[ $key ] = min( $range[1], max( $range[0], absint( $input[ $key ] ) ) );
-			}
-		}
 
 		// Excluded extensions: comma / space separated -> array of clean tokens.
 		if ( isset( $input['excluded_extensions'] ) ) {

@@ -20,18 +20,38 @@ $options = array(
 	'acps_media_cleanup_scan_meta',
 	'acps_mc_usage_index',
 	'acps_media_cleanup_activated',
+	// Legacy Google Drive importer (removed in 1.18.0) — clean up if present.
 	'acps_mc_drive_status',
 	'acps_mc_drive_log',
 	// Self-hosted updater bookkeeping.
 	'acps_mc_verified',
 	'acps_mc_update_failed',
 	'acps_mc_safe_mode',
+	// Private console media store index.
+	'acps_mc_private_files',
 );
 foreach ( $options as $opt ) {
 	delete_option( $opt );
 }
 
-// Cached Google Drive access token + updater lookups.
+// Delete the private console media store directory and everything in it.
+$uploads = wp_get_upload_dir();
+if ( ! empty( $uploads['basedir'] ) ) {
+	$dir = trailingslashit( $uploads['basedir'] ) . 'acps-mc-private';
+	if ( is_dir( $dir ) ) {
+		$items = glob( trailingslashit( $dir ) . '*' );
+		if ( is_array( $items ) ) {
+			foreach ( $items as $f ) {
+				if ( is_file( $f ) ) {
+					@unlink( $f ); // phpcs:ignore
+				}
+			}
+		}
+		@rmdir( $dir ); // phpcs:ignore
+	}
+}
+
+// Cached legacy Drive token + updater lookups.
 delete_transient( 'acps_mc_drive_token' );
 delete_transient( 'acps_mc_update_remote' );
 delete_transient( 'acps_mc_devstatus' );

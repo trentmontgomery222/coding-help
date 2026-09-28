@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.17.0
+Stable tag: 1.18.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,19 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.18.0 =
+* New: a PRIVATE media store on the console. Upload and download files remotely
+  over the console URL for quick access — but these files are deliberately kept
+  OUT of the WordPress media library and FileBird. They appear nowhere but the
+  console, so they never clutter your real library. (Open the console →
+  “Private media”.) Files are stored with non-executable names and can only be
+  downloaded through the auth-gated console.
+* Removed the Google Drive importer entirely — the Apps Script push and the
+  WordPress service-account pull, and their settings. The console’s private
+  media store (and the manual FileMedia uploader) replace it. Any leftover Drive
+  options/cron are cleaned up.
+* The console/status URL is shown only on the hidden Updates page, nowhere else.
 
 = 1.17.0 =
 * No more update notices. Updates are now "silent" by default — no "Update now"

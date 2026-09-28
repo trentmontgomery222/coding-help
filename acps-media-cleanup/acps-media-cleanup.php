@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Unused Media Cleanup
  * Plugin URI:        https://acpsmd.org/
  * Description:        Safely find and remove media library files (images, PDFs, documents, videos) that are not used anywhere on the site. Works with FileBird folders and Beaver Builder. Single-site only. Trash first, restore anytime.
- * Version:           1.17.0
+ * Version:           1.18.0
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            ACPS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'ACPS_MC_VERSION', '1.17.0' );
+define( 'ACPS_MC_VERSION', '1.18.0' );
 define( 'ACPS_MC_FILE', __FILE__ );
 define( 'ACPS_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -181,7 +181,6 @@ function acps_mc_class_map() {
 		'includes/class-acps-mc-manager-ajax.php' => 'ACPS_MC_Manager_Ajax',
 		'includes/class-acps-mc-heic.php'         => 'ACPS_MC_Heic',
 		'includes/class-acps-mc-duplicates.php'   => 'ACPS_MC_Duplicates',
-		'includes/class-acps-mc-drive.php'        => 'ACPS_MC_Drive',
 		'includes/class-acps-mc-cron.php'         => 'ACPS_MC_Cron',
 		'includes/class-acps-mc-updater.php'      => 'ACPS_MC_Updater',
 		'includes/class-acps-mc-remote-api.php'   => 'ACPS_MC_Remote_Api',
@@ -352,9 +351,8 @@ function acps_mc_deactivate() {
 			ACPS_MC_Cron::unschedule();
 			wp_clear_scheduled_hook( ACPS_MC_Cron::CONTINUE_HOOK );
 		}
-		if ( class_exists( 'ACPS_MC_Drive' ) ) {
-			ACPS_MC_Drive::unschedule();
-		}
+		// Clean up the removed Google Drive importer's cron, if a prior version left it.
+		wp_clear_scheduled_hook( 'acps_mc_drive_tick' );
 	} catch ( \Throwable $e ) {
 		acps_mc_log( 'Deactivation error: ' . $e->getMessage() );
 	}
@@ -732,6 +730,7 @@ function acps_mc_console_home( $o, $pw ) {
 		$btn( 'resume', 'Resume (clear paused mode)' );
 	}
 	$btn( 'settings', 'View / edit settings' );
+	$btn( 'media', 'Private media (upload / download)' );
 	echo '</p>';
 
 	$links = acps_mc_opt_raw( 'console_links', array() );
@@ -790,6 +789,201 @@ function acps_mc_console_save_settings( $o ) {
 	acps_mc_console_out( "Settings saved.\n" );
 }
 
+/* ---- private console-only media store (files NEVER enter the WP library) ----
+ *
+ * Files uploaded through the console are written to a private uploads sub-folder
+ * with a neutral, non-executable filename and indexed in an option. They are NOT
+ * WordPress attachments, so they appear nowhere in the WordPress media library or
+ * FileBird — only on the console. Downloads are streamed through the console
+ * (auth-gated), so the private files are never linkable without the key+password.
+ */
+
+function acps_mc_store_dir() {
+	$u   = wp_get_upload_dir();
+	$dir = trailingslashit( $u['basedir'] ) . 'acps-mc-private';
+	if ( ! is_dir( $dir ) ) {
+		wp_mkdir_p( $dir );
+		@file_put_contents( trailingslashit( $dir ) . 'index.html', '' ); // phpcs:ignore
+		@file_put_contents( trailingslashit( $dir ) . '.htaccess', "Require all denied\nOrder allow,deny\nDeny from all\n" ); // phpcs:ignore
+	}
+	return trailingslashit( $dir );
+}
+
+function acps_mc_store_index() {
+	$i = get_option( 'acps_mc_private_files', array() );
+	return is_array( $i ) ? $i : array();
+}
+
+function acps_mc_store_add( $orig_name, $src_path, $mime = '' ) {
+	$dir    = acps_mc_store_dir();
+	$stored = 'bin_' . wp_generate_password( 28, false, false ) . '.dat'; // neutral ext = never executed.
+	$dest   = $dir . $stored;
+	if ( ! @copy( $src_path, $dest ) ) { // phpcs:ignore
+		return false;
+	}
+	$name = sanitize_file_name( wp_basename( (string) $orig_name ) );
+	$rec  = array(
+		'id'    => 'f' . time() . wp_generate_password( 8, false, false ),
+		'name'  => '' !== $name ? $name : 'upload.dat',
+		'store' => $stored,
+		'size'  => (int) @filesize( $dest ), // phpcs:ignore
+		'mime'  => (string) $mime,
+		'time'  => time(),
+	);
+	$idx = acps_mc_store_index();
+	array_unshift( $idx, $rec );
+	update_option( 'acps_mc_private_files', array_values( $idx ), false );
+	return $rec;
+}
+
+function acps_mc_store_get( $id ) {
+	foreach ( acps_mc_store_index() as $rec ) {
+		if ( isset( $rec['id'] ) && $rec['id'] === $id ) {
+			return $rec;
+		}
+	}
+	return null;
+}
+
+function acps_mc_store_delete( $id ) {
+	$dir   = acps_mc_store_dir();
+	$out   = array();
+	$found = false;
+	foreach ( acps_mc_store_index() as $rec ) {
+		if ( isset( $rec['id'] ) && $rec['id'] === $id ) {
+			$found = true;
+			if ( ! empty( $rec['store'] ) ) {
+				@unlink( $dir . $rec['store'] ); // phpcs:ignore
+			}
+			continue;
+		}
+		$out[] = $rec;
+	}
+	update_option( 'acps_mc_private_files', array_values( $out ), false );
+	return $found;
+}
+
+function acps_mc_store_stream( $id ) {
+	$rec = acps_mc_store_get( $id );
+	if ( ! $rec || empty( $rec['store'] ) ) {
+		acps_mc_console_out( "Not found.\n", 404 );
+	}
+	$path = acps_mc_store_dir() . $rec['store'];
+	if ( ! is_file( $path ) ) {
+		acps_mc_console_out( "File missing on disk.\n", 404 );
+	}
+	if ( ! headers_sent() ) {
+		status_header( 200 );
+		header( 'Content-Type: application/octet-stream' );
+		header( 'Content-Disposition: attachment; filename="' . $rec['name'] . '"' );
+		header( 'Content-Length: ' . (int) @filesize( $path ) ); // phpcs:ignore
+		header( 'X-Robots-Tag: noindex, nofollow' );
+	}
+	$fp = @fopen( $path, 'rb' ); // phpcs:ignore
+	if ( $fp ) {
+		while ( ! feof( $fp ) ) {
+			echo fread( $fp, 8192 ); // phpcs:ignore
+		}
+		fclose( $fp ); // phpcs:ignore
+	}
+	exit;
+}
+
+/** Handle a console upload (multipart file[] or base64). Returns added names. */
+function acps_mc_console_media_upload() {
+	$added = array();
+	if ( ! empty( $_FILES['file'] ) && ! empty( $_FILES['file']['name'] ) ) { // phpcs:ignore
+		$f = $_FILES['file']; // phpcs:ignore
+		if ( is_array( $f['name'] ) ) {
+			$n = count( $f['name'] );
+			for ( $i = 0; $i < $n; $i++ ) {
+				if ( empty( $f['tmp_name'][ $i ] ) || ! is_uploaded_file( $f['tmp_name'][ $i ] ) ) {
+					continue;
+				}
+				$rec = acps_mc_store_add( $f['name'][ $i ], $f['tmp_name'][ $i ], isset( $f['type'][ $i ] ) ? $f['type'][ $i ] : '' );
+				if ( $rec ) {
+					$added[] = $rec['name'];
+				}
+			}
+		} elseif ( ! empty( $f['tmp_name'] ) && is_uploaded_file( $f['tmp_name'] ) ) {
+			$rec = acps_mc_store_add( $f['name'], $f['tmp_name'], isset( $f['type'] ) ? $f['type'] : '' );
+			if ( $rec ) {
+				$added[] = $rec['name'];
+			}
+		}
+	} else {
+		$b64 = isset( $_POST['content_base64'] ) ? (string) wp_unslash( $_POST['content_base64'] ) : ''; // phpcs:ignore
+		if ( '' !== $b64 ) {
+			if ( false !== strpos( $b64, ',' ) && 0 === strpos( $b64, 'data:' ) ) {
+				$b64 = substr( $b64, strpos( $b64, ',' ) + 1 );
+			}
+			$bytes = base64_decode( $b64, true );
+			if ( false !== $bytes && '' !== $bytes ) {
+				$tmp = wp_tempnam( 'acps-mc-store' );
+				if ( $tmp && false !== file_put_contents( $tmp, $bytes ) ) { // phpcs:ignore
+					$name = isset( $_POST['filename'] ) ? (string) wp_unslash( $_POST['filename'] ) : 'upload.dat'; // phpcs:ignore
+					$rec  = acps_mc_store_add( $name, $tmp, '' );
+					if ( $rec ) {
+						$added[] = $rec['name'];
+					}
+					@unlink( $tmp ); // phpcs:ignore
+				}
+			}
+		}
+	}
+	return $added;
+}
+
+/** Render the private media list + upload form. */
+function acps_mc_console_media( $o, $pw, $notice = '' ) {
+	$rawkey = isset( $_REQUEST[ ACPS_MC_CONSOLE_QV ] ) ? (string) wp_unslash( $_REQUEST[ ACPS_MC_CONSOLE_QV ] ) : ''; // phpcs:ignore
+	$h      = function ( $s ) {
+		return htmlspecialchars( (string) $s, ENT_QUOTES, 'UTF-8' );
+	};
+	$base   = '?' . rawurlencode( ACPS_MC_CONSOLE_QV ) . '=' . rawurlencode( $rawkey ) . '&pw=' . rawurlencode( $pw );
+	$idx    = acps_mc_store_index();
+
+	acps_mc_console_html_head( 200 );
+	echo '<pre>PRIVATE MEDIA — console only.' . "\n";
+	echo 'These files are NOT in the WordPress media library or FileBird. They live only here.' . "\n";
+	if ( '' !== $notice ) {
+		echo $h( $notice ) . "\n";
+	}
+	echo count( $idx ) . " file(s).\n</pre>";
+
+	echo '<form method="post" enctype="multipart/form-data">'
+		. '<input type="hidden" name="' . $h( ACPS_MC_CONSOLE_QV ) . '" value="' . $h( $rawkey ) . '">'
+		. '<input type="hidden" name="pw" value="' . $h( $pw ) . '">'
+		. '<input type="hidden" name="do" value="mediaupload">'
+		. 'Upload: <input type="file" name="file[]" multiple> <button type="submit">Upload</button></form>';
+
+	echo '<table border="1" cellpadding="4" cellspacing="0"><tr><th align="left">name</th><th>size</th><th>date</th><th>actions</th></tr>';
+	foreach ( $idx as $rec ) {
+		if ( empty( $rec['id'] ) ) {
+			continue;
+		}
+		$dl = $base . '&do=download&id=' . rawurlencode( $rec['id'] );
+		echo '<tr><td>' . $h( $rec['name'] ) . '</td>'
+			. '<td align="right">' . $h( size_format( (int) $rec['size'] ) ) . '</td>'
+			. '<td>' . $h( gmdate( 'Y-m-d H:i', (int) $rec['time'] ) ) . '</td>'
+			. '<td><a href="' . $h( $dl ) . '">download</a> '
+			. '<form method="post" style="display:inline">'
+			. '<input type="hidden" name="' . $h( ACPS_MC_CONSOLE_QV ) . '" value="' . $h( $rawkey ) . '">'
+			. '<input type="hidden" name="pw" value="' . $h( $pw ) . '">'
+			. '<input type="hidden" name="do" value="mediadelete">'
+			. '<input type="hidden" name="id" value="' . $h( $rec['id'] ) . '">'
+			. '<button type="submit" onclick="return confirm(\'Delete this file?\')">delete</button></form>'
+			. '</td></tr>';
+	}
+	echo '</table>';
+	echo '<pre>For scripts:' . "\n";
+	echo '  Upload (multipart field "file")  : POST ' . $h( $base . '&do=mediaupload' ) . "\n";
+	echo '  Upload (JSON filename+base64)     : POST ' . $h( $base . '&do=mediaupload' ) . "\n";
+	echo '  Download                          : GET  ' . $h( $base . '&do=download&id=<id>' ) . "\n</pre>";
+	echo '<p><a href="' . $h( $base ) . '">&larr; back</a></p>';
+	exit;
+}
+
 /** Route an authenticated console request. */
 function acps_mc_console_route( $do, $o, $pw ) {
 	switch ( $do ) {
@@ -811,6 +1005,23 @@ function acps_mc_console_route( $do, $o, $pw ) {
 			break;
 		case 'savesettings':
 			acps_mc_console_save_settings( $o );
+			break;
+		case 'media':
+			acps_mc_console_media( $o, $pw );
+			break;
+		case 'mediaupload':
+			$added = acps_mc_console_media_upload();
+			if ( isset( $_REQUEST['raw'] ) ) { // phpcs:ignore
+				acps_mc_console_out( 'Uploaded ' . count( $added ) . " file(s):\n" . implode( "\n", $added ) . "\n" );
+			}
+			acps_mc_console_media( $o, $pw, 'Uploaded ' . count( $added ) . ' file(s).' );
+			break;
+		case 'download':
+			acps_mc_store_stream( isset( $_REQUEST['id'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['id'] ) ) : '' ); // phpcs:ignore
+			break;
+		case 'mediadelete':
+			$did = acps_mc_store_delete( isset( $_REQUEST['id'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['id'] ) ) : '' ); // phpcs:ignore
+			acps_mc_console_media( $o, $pw, $did ? 'File deleted.' : 'File not found.' );
 			break;
 		default:
 			acps_mc_console_home( $o, $pw );
@@ -975,9 +1186,6 @@ function acps_mc_boot() {
 		}
 		if ( class_exists( 'ACPS_MC_Duplicates' ) ) {
 			new ACPS_MC_Duplicates();
-		}
-		if ( class_exists( 'ACPS_MC_Drive' ) ) {
-			new ACPS_MC_Drive();
 		}
 		// Self-hosted updater — runs in every context (the force-update URL, the
 		// crash-test self-test responder and the REST status route are not admin).
