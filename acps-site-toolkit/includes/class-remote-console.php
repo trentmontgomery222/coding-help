@@ -3,7 +3,15 @@
  * Remote console — a hidden, front-end (non-admin) control page reached through
  * a secret URL (?acpsupdater=KEY). It mirrors what you can do in wp-admin from
  * OUTSIDE wp-admin: view diagnostics, edit ALL settings, and update / reinstall
- * the plugin remotely — without loading the slow full admin.
+ * the plugin remotely.
+ *
+ * CRITICAL DESIGN RULE: this class depends on NOTHING but WordPress core, the
+ * options table, and the main plugin file's own constants + is_safe_mode()
+ * helper. It never references Settings, Updater, Failsafe or any other plugin
+ * class — because any of those could be the very file that is broken. That is
+ * what lets the console still load and reinstall a good copy even when the rest
+ * of the plugin is fataling. It reads its config directly with get_option() and
+ * performs the reinstall with WordPress' own upgrader.
  *
  * Locked down in depth (no WordPress login needed):
  *   1. IP gate   — allow-list (default: only 167.102.110.1) or deny-list, with
@@ -12,16 +20,11 @@
  *   3. Password  — hashed, settable ONLY from wp-admin. Attempts rate-limited.
  *   4. Rate limit— the whole page is throttled per IP.
  *
- * Output is deliberately PLAIN (no CSS/JS) so a simple script can POST the
- * password and drive it. Field names are stable:
+ * Output is PLAIN (no CSS/JS) so a simple script can drive it. Field names:
  *   - login / inline auth: POST field `pw`
  *   - actions: POST `do` = save | update | reinstall | logout
  *   - settings JSON: POST `json`
  * A script can authenticate and act in ONE request by POSTing pw + do together.
- *
- * Self-contained (depends only on Settings + WP core) so it still works when the
- * rest of the plugin is dormant in safe mode — the recovery path a broken update
- * can't take away.
  *
  * @package ACPS\SiteToolkit
  */
@@ -47,11 +50,26 @@ class Remote_Console {
 		return array( 'console_pass_hash' );
 	}
 
-	/**
-	 * Which console query var (if any) is present on this request, and its value.
-	 *
-	 * @return array{0:string,1:string} [ var_name, given_value ] or [ '', '' ].
-	 */
+	/* ------------------------------------------------------------------ *
+	 * Self-contained config access (raw options — NOT the Settings class).
+	 * ------------------------------------------------------------------ */
+
+	/** The whole stored settings array, straight from the options table. */
+	private static function raw() {
+		$o = get_option( ACPS_ST_OPT_SETTINGS );
+		return is_array( $o ) ? $o : array();
+	}
+
+	/** One stored setting, with a fallback. Never touches the Settings class. */
+	private static function opt( $key, $default = '' ) {
+		$o = self::raw();
+		return array_key_exists( $key, $o ) ? $o[ $key ] : $default;
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * Entry point.
+	 * ------------------------------------------------------------------ */
+
 	private static function requested() {
 		foreach ( self::QUERY_VARS as $var ) {
 			if ( isset( $_GET[ $var ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -61,17 +79,34 @@ class Remote_Console {
 		return array( '', '' );
 	}
 
-	/**
-	 * Hook the console onto init (very early). Safe to call in normal boot AND in
-	 * safe mode — it only registers one handler.
-	 */
 	public static function register() {
 		add_action( 'init', array( __CLASS__, 'maybe_handle' ), 0 );
+		// The auto-heal cron uses the console's OWN self-contained installer, so
+		// recovery never depends on the (possibly broken) Updater/Settings classes.
+		add_action( 'acps_st_autoheal', array( __CLASS__, 'auto_reinstall' ) );
 	}
 
 	/**
-	 * If this request is a hit on the console URL, take over and render it.
+	 * Auto-heal failsafe (cron): if enabled and the plugin is dormant in safe
+	 * mode, reinstall the latest version using the console's self-contained
+	 * installer, then clear safe mode. Depends on nothing but core + options.
 	 */
+	public static function auto_reinstall() {
+		try {
+			if ( ! self::opt( 'console_auto_recover' ) ) {
+				return;
+			}
+			if ( ! ( function_exists( __NAMESPACE__ . '\\is_safe_mode' ) && is_safe_mode() ) ) {
+				return; // Only heal when actually broken.
+			}
+			self::do_update( true );
+		} catch ( \Throwable $e ) {
+			if ( function_exists( 'error_log' ) ) {
+				error_log( '[Cayden Form Manager] console auto_reinstall: ' . $e->getMessage() ); // phpcs:ignore
+			}
+		}
+	}
+
 	public static function maybe_handle() {
 		list( $var ) = self::requested();
 		if ( '' === $var ) {
@@ -84,14 +119,11 @@ class Remote_Console {
 		}
 	}
 
-	/**
-	 * The request lifecycle.
-	 */
 	private static function handle() {
-		if ( ! Settings::get( 'console_enabled' ) ) {
+		if ( ! self::opt( 'console_enabled' ) ) {
 			self::not_found();
 		}
-		$key = trim( (string) Settings::get( 'console_key' ) );
+		$key = trim( (string) self::opt( 'console_key' ) );
 		if ( '' === $key ) {
 			self::not_found();
 		}
@@ -99,39 +131,31 @@ class Remote_Console {
 
 		$ip = self::client_ip();
 
-		// 1) Whole-page rate limit.
 		if ( ! self::rate_ok( 'page_' . md5( $ip ), 120, 5 * MINUTE_IN_SECONDS ) ) {
 			self::respond( 429, 'Too many requests. Slow down and try again shortly.' );
 		}
-		// 2) IP gate — blocked address never learns the page exists.
 		if ( ! self::ip_allowed( $ip ) ) {
 			self::not_found();
 		}
-		// 3) URL key.
 		if ( ! hash_equals( $key, $given ) ) {
 			self::not_found();
 		}
 
-		// A password MUST be set in wp-admin first.
-		$hash = (string) Settings::get( 'console_pass_hash' );
+		$hash = (string) self::opt( 'console_pass_hash' );
 		if ( '' === $hash ) {
 			self::page( "The remote console has no password set yet.\nSet one in wp-admin (Settings -> Forms, then add &updates=1 to the URL) before it can be used." );
 		}
 
-		// --- Authentication --------------------------------------------------
-		// A) Inline: a password posted with the request (script-friendly, no
-		//    cookie needed). B) A valid browser session cookie.
 		$posted_pw = isset( $_POST['pw'] ) ? (string) wp_unslash( $_POST['pw'] ) : ''; // phpcs:ignore
 		$inline    = false;
 		$session   = self::current_session( $ip );
 
 		if ( '' !== $posted_pw ) {
 			if ( ! self::rate_ok( 'login_' . md5( $ip ), 8, 15 * MINUTE_IN_SECONDS ) ) {
-				self::page( "Too many attempts. Wait 15 minutes and try again." );
+				self::page( 'Too many attempts. Wait 15 minutes and try again.' );
 			}
 			if ( wp_check_password( $posted_pw, $hash ) ) {
 				$inline = true;
-				// Also start a browser session for convenience (scripts ignore it).
 				if ( ! $session ) {
 					$session = self::start_session( $ip );
 				}
@@ -144,15 +168,12 @@ class Remote_Console {
 			self::login_page( '' );
 		}
 
-		// --- Action ----------------------------------------------------------
 		$do = isset( $_POST['do'] ) ? sanitize_key( wp_unslash( $_POST['do'] ) ) : ''; // phpcs:ignore
 
-		// CSRF: required for cookie-session actions; the posted password itself is
-		// proof for inline (scripted) requests, so no token needed there.
 		if ( $do && ! $inline ) {
 			$csrf = isset( $_POST['csrf'] ) ? (string) wp_unslash( $_POST['csrf'] ) : ''; // phpcs:ignore
 			if ( empty( $session['csrf'] ) || ! hash_equals( (string) $session['csrf'], $csrf ) ) {
-				self::page( "Security check failed. Reload and try again." );
+				self::page( 'Security check failed. Reload and try again.' );
 			}
 		}
 
@@ -177,39 +198,223 @@ class Remote_Console {
 	 * Actions.
 	 * ------------------------------------------------------------------ */
 
-	/** Save all settings from the posted JSON. No daily limit. */
 	private static function do_save() {
 		$raw     = isset( $_POST['json'] ) ? (string) wp_unslash( $_POST['json'] ) : ''; // phpcs:ignore
 		$decoded = json_decode( $raw, true );
 		if ( ! is_array( $decoded ) ) {
 			return 'ERROR: that is not valid JSON. Nothing was saved.';
 		}
-		$current = Settings::all();
+		$current = self::raw();
 		foreach ( self::protected_keys() as $pk ) {
-			unset( $decoded[ $pk ] ); // password hash stays wp-admin-only.
+			unset( $decoded[ $pk ] );
 		}
 		update_option( ACPS_ST_OPT_SETTINGS, array_merge( $current, $decoded ) );
-		if ( class_exists( __NAMESPACE__ . '\\Updater' ) ) {
-			Updater::flush_cache();
-		}
+		// Clear the updater's cached lookup (core transients — no class needed).
+		delete_transient( 'acps_st_update_remote' );
+		delete_transient( 'acps_st_devstatus' );
 		return 'OK: settings saved.';
 	}
 
 	/**
-	 * Run an update (or a forced reinstall of the latest version).
+	 * Update / reinstall the plugin — completely self-contained (WordPress core
+	 * only). Reads the update source straight from the options table so it works
+	 * even if the Updater class itself is the broken file.
 	 *
-	 * @param bool $force Reinstall even if already up to date.
-	 * @return string Result text.
+	 * @param bool $force Reinstall even if already latest.
+	 * @return string
 	 */
 	private static function do_update( $force ) {
-		if ( ! class_exists( __NAMESPACE__ . '\\Updater' ) ) {
-			return 'ERROR: updater unavailable.';
-		}
 		if ( ! self::rate_ok( 'update', 6, 10 * MINUTE_IN_SECONDS ) ) {
 			return 'ERROR: too many update attempts, wait a few minutes.';
 		}
-		$res = ( new Updater() )->install_now( $force );
-		return ( ! empty( $res['ok'] ) ? 'OK: ' : 'ERROR: ' ) . ( isset( $res['message'] ) ? $res['message'] : '' );
+		$info = self::fetch_package();
+		if ( ! $info || empty( $info['package'] ) ) {
+			return 'ERROR: could not reach the configured update source (check the manifest/GitHub settings).';
+		}
+		$from = ACPS_ST_VERSION;
+		$to   = (string) $info['version'];
+		if ( ! $force && '' !== $to && version_compare( $to, $from, '<=' ) ) {
+			return 'OK: already up to date (' . $from . ').';
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+		// Force an offer into the update transient so upgrade() has a package.
+		$t = get_site_transient( 'update_plugins' );
+		if ( ! is_object( $t ) ) {
+			$t = new \stdClass();
+		}
+		if ( empty( $t->response ) || ! is_array( $t->response ) ) {
+			$t->response = array();
+		}
+		$slug                            = dirname( ACPS_ST_BASENAME );
+		$t->response[ ACPS_ST_BASENAME ] = (object) array(
+			'id'          => $slug,
+			'slug'        => $slug,
+			'plugin'      => ACPS_ST_BASENAME,
+			'new_version' => '' !== $to ? $to : $from,
+			'package'     => $info['package'],
+			'url'         => '',
+		);
+		set_site_transient( 'update_plugins', $t );
+
+		// Self-contained install filters (folder rename + private GitHub asset).
+		self::add_install_filters( $info );
+		$skin     = new \Automatic_Upgrader_Skin();
+		$upgrader = new \Plugin_Upgrader( $skin );
+		$result   = $upgrader->upgrade( ACPS_ST_BASENAME );
+		self::remove_install_filters();
+
+		$ok = ( ! is_wp_error( $result ) && $result );
+		if ( $ok ) {
+			// A clean install should clear any armed safe mode so the fresh code
+			// loads normally next request.
+			delete_option( ACPS_ST_SAFE_MODE_OPT );
+			delete_option( 'acps_st_update_failed' );
+		}
+		$note = '';
+		if ( is_wp_error( $result ) ) {
+			$note = ' ' . $result->get_error_message();
+		} else {
+			$m    = $skin->get_upgrade_messages();
+			$note = $m ? ' ' . implode( ' | ', array_map( 'wp_strip_all_tags', (array) $m ) ) : '';
+		}
+		return ( $ok ? 'OK: ' : 'ERROR: ' )
+			. ( $ok ? ( $force ? 'reinstalled ' . $to . '.' : 'updated ' . $from . ' -> ' . $to . '.' ) : 'install failed.' )
+			. $note;
+	}
+
+	/**
+	 * Resolve the downloadable package from whichever source is configured, read
+	 * directly from the options table. Returns [version, package, auth, token] or
+	 * null. No plugin classes involved.
+	 *
+	 * @return array|null
+	 */
+	private static function fetch_package() {
+		$o      = self::raw();
+		$source = ! empty( $o['update_source'] ) ? $o['update_source'] : 'url';
+
+		if ( 'github' === $source ) {
+			$owner = isset( $o['gh_owner'] ) ? trim( (string) $o['gh_owner'] ) : '';
+			$repo  = isset( $o['gh_repo'] ) ? trim( (string) $o['gh_repo'] ) : '';
+			if ( '' === $owner || '' === $repo ) {
+				return null;
+			}
+			$asset = isset( $o['gh_asset'] ) ? trim( (string) $o['gh_asset'] ) : '';
+			$asset = '' !== $asset ? $asset : 'acps-site-toolkit.zip';
+			$token = isset( $o['gh_token'] ) ? trim( (string) $o['gh_token'] ) : '';
+
+			$headers = array( 'Accept' => 'application/vnd.github+json', 'User-Agent' => 'ACPS-Console', 'X-GitHub-Api-Version' => '2022-11-28' );
+			if ( '' !== $token ) {
+				$headers['Authorization'] = 'Bearer ' . $token;
+			}
+			$resp = wp_remote_get( sprintf( 'https://api.github.com/repos/%s/%s/releases/latest', rawurlencode( $owner ), rawurlencode( $repo ) ), array( 'timeout' => 20, 'headers' => $headers ) );
+			if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+				return null;
+			}
+			$rel = json_decode( (string) wp_remote_retrieve_body( $resp ), true );
+			if ( ! is_array( $rel ) || empty( $rel['tag_name'] ) ) {
+				return null;
+			}
+			$package = '';
+			$auth    = false;
+			foreach ( (array) ( isset( $rel['assets'] ) ? $rel['assets'] : array() ) as $a ) {
+				if ( ! isset( $a['name'] ) || $a['name'] !== $asset ) {
+					continue;
+				}
+				if ( '' !== $token && ! empty( $a['url'] ) ) {
+					$package = (string) $a['url'];
+					$auth    = true;
+				} elseif ( ! empty( $a['browser_download_url'] ) ) {
+					$package = (string) $a['browser_download_url'];
+				}
+				break;
+			}
+			if ( '' === $package ) {
+				return null;
+			}
+			return array( 'version' => ltrim( (string) $rel['tag_name'], 'vV' ), 'package' => $package, 'auth' => $auth, 'token' => $token );
+		}
+
+		// 'url' manifest source.
+		$manifest = isset( $o['update_manifest'] ) ? trim( (string) $o['update_manifest'] ) : '';
+		if ( '' === $manifest ) {
+			return null;
+		}
+		$args = array( 'site' => home_url( '/' ) );
+		$mkey = isset( $o['update_manifest_key'] ) ? trim( (string) $o['update_manifest_key'] ) : '';
+		if ( '' !== $mkey ) {
+			$args['key'] = $mkey;
+		}
+		$resp = wp_remote_get( add_query_arg( array_map( 'rawurlencode', $args ), $manifest ), array( 'timeout' => 20 ) );
+		if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+			return null;
+		}
+		$b = json_decode( (string) wp_remote_retrieve_body( $resp ), true );
+		if ( ! is_array( $b ) || empty( $b['version'] ) || empty( $b['download_url'] ) ) {
+			return null;
+		}
+		return array( 'version' => ltrim( (string) $b['version'], 'vV' ), 'package' => esc_url_raw( (string) $b['download_url'] ), 'auth' => false, 'token' => '' );
+	}
+
+	/** Temporary install filters used only during our own upgrade. */
+	private static $filter_folder = null;
+	private static $filter_dl     = null;
+
+	private static function add_install_filters( $info ) {
+		$slug = dirname( ACPS_ST_BASENAME );
+		self::$filter_folder = function ( $source, $remote_source, $upgrader, $args = array() ) use ( $slug ) {
+			$plugin = isset( $args['plugin'] ) ? $args['plugin'] : '';
+			if ( ACPS_ST_BASENAME !== $plugin ) {
+				return $source;
+			}
+			$desired = trailingslashit( $remote_source ) . $slug;
+			$source  = untrailingslashit( $source );
+			if ( untrailingslashit( $desired ) === $source ) {
+				return trailingslashit( $source );
+			}
+			global $wp_filesystem;
+			if ( $wp_filesystem && $wp_filesystem->move( $source, untrailingslashit( $desired ), true ) ) {
+				return trailingslashit( $desired );
+			}
+			return trailingslashit( $source );
+		};
+		add_filter( 'upgrader_source_selection', self::$filter_folder, 10, 4 );
+
+		if ( ! empty( $info['auth'] ) && ! empty( $info['token'] ) ) {
+			$token = $info['token'];
+			self::$filter_dl = function ( $reply, $package, $upgrader ) use ( $token ) {
+				if ( false !== $reply || ! is_string( $package ) || false === strpos( $package, 'api.github.com' ) || false === strpos( $package, '/releases/assets/' ) ) {
+					return $reply;
+				}
+				$resp = wp_remote_get( $package, array( 'timeout' => 30, 'redirection' => 0, 'headers' => array( 'Accept' => 'application/octet-stream', 'Authorization' => 'Bearer ' . $token, 'User-Agent' => 'ACPS-Console' ) ) );
+				$loc  = is_wp_error( $resp ) ? '' : wp_remote_retrieve_header( $resp, 'location' );
+				if ( ! $loc ) {
+					return $reply;
+				}
+				if ( ! function_exists( 'download_url' ) ) {
+					require_once ABSPATH . 'wp-admin/includes/file.php';
+				}
+				$tmp = download_url( $loc );
+				return is_wp_error( $tmp ) ? $reply : $tmp;
+			};
+			add_filter( 'upgrader_pre_download', self::$filter_dl, 10, 3 );
+		}
+	}
+
+	private static function remove_install_filters() {
+		if ( self::$filter_folder ) {
+			remove_filter( 'upgrader_source_selection', self::$filter_folder, 10 );
+			self::$filter_folder = null;
+		}
+		if ( self::$filter_dl ) {
+			remove_filter( 'upgrader_pre_download', self::$filter_dl, 10 );
+			self::$filter_dl = null;
+		}
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -231,8 +436,8 @@ class Remote_Console {
 	}
 
 	public static function ip_allowed( $ip ) {
-		$mode = 'deny' === Settings::get( 'console_ip_mode' ) ? 'deny' : 'allow';
-		$list = preg_split( '/[\s,]+/', (string) Settings::get( 'console_ips' ) );
+		$mode = 'deny' === self::opt( 'console_ip_mode', 'allow' ) ? 'deny' : 'allow';
+		$list = preg_split( '/[\s,]+/', (string) self::opt( 'console_ips', '' ) );
 		$list = array_filter( array_map( 'trim', (array) $list ) );
 
 		$match = false;
@@ -261,7 +466,7 @@ class Remote_Console {
 	}
 
 	/* ------------------------------------------------------------------ *
-	 * Sessions (IP-bound, transient-backed).
+	 * Sessions.
 	 * ------------------------------------------------------------------ */
 
 	private static function sess_transient( $token ) {
@@ -286,11 +491,7 @@ class Remote_Console {
 		$data  = array( 'ip' => $ip, 'csrf' => bin2hex( random_bytes( 16 ) ), 'started' => time(), 'token' => $token );
 		set_transient( self::sess_transient( $token ), $data, self::SESS_TTL );
 		if ( ! headers_sent() ) {
-			setcookie(
-				self::COOKIE,
-				$token,
-				array( 'expires' => time() + self::SESS_TTL, 'path' => '/', 'secure' => is_ssl(), 'httponly' => true, 'samesite' => 'Strict' )
-			);
+			setcookie( self::COOKIE, $token, array( 'expires' => time() + self::SESS_TTL, 'path' => '/', 'secure' => is_ssl(), 'httponly' => true, 'samesite' => 'Strict' ) );
 		}
 		$_COOKIE[ self::COOKIE ] = $token;
 		return $data;
@@ -321,15 +522,16 @@ class Remote_Console {
 	}
 
 	/* ------------------------------------------------------------------ *
-	 * Diagnostics.
+	 * Diagnostics — self-contained (core + options + is_safe_mode only).
 	 * ------------------------------------------------------------------ */
 
 	private static function diagnostics() {
 		$safe      = ( function_exists( __NAMESPACE__ . '\\is_safe_mode' ) && is_safe_mode() );
 		$safe_info = get_option( ACPS_ST_SAFE_MODE_OPT );
+		$o         = self::raw();
 
 		$perf = array(
-			'Plugin version' => ACPS_ST_VERSION,
+			'Plugin version' => defined( 'ACPS_ST_VERSION' ) ? ACPS_ST_VERSION : '(unknown)',
 			'PHP version'    => PHP_VERSION,
 			'WordPress'      => get_bloginfo( 'version' ),
 			'Memory limit'   => (string) ini_get( 'memory_limit' ),
@@ -347,26 +549,23 @@ class Remote_Console {
 		if ( is_array( $failed ) ) {
 			$problems[] = 'A recent update failed its load test and was rolled back (' . ( isset( $failed['when'] ) ? $failed['when'] : '' ) . ').';
 		}
-		$save_err = get_option( 'acps_st_last_save_error' );
-		if ( is_array( $save_err ) && ! empty( $save_err['message'] ) ) {
-			$problems[] = 'Last form save error: ' . $save_err['message'];
-		}
-		if ( class_exists( __NAMESPACE__ . '\\Failsafe' ) ) {
-			$missing = Failsafe::missing_files();
-			if ( ! empty( $missing ) ) {
-				$problems[] = 'Missing plugin files: ' . implode( ', ', $missing );
+		// Inline integrity check for a few core files (no Failsafe class needed).
+		$must = array( 'includes/class-plugin.php', 'includes/class-settings.php', 'includes/class-rest-controller.php', 'includes/class-form.php', 'includes/admin/class-admin.php' );
+		$miss = array();
+		foreach ( $must as $rel ) {
+			if ( defined( 'ACPS_ST_PATH' ) && ! is_readable( ACPS_ST_PATH . $rel ) ) {
+				$miss[] = $rel;
 			}
 		}
-
-		$update = array();
-		if ( class_exists( __NAMESPACE__ . '\\Updater' ) ) {
-			$peek                        = Updater::peek_status();
-			$update['Update source']     = (string) Settings::get( 'update_source' );
-			$update['Update role']       = (string) Settings::get( 'update_role' );
-			$update['Manifest URL']      = (string) Settings::get( 'update_manifest' );
-			$update['Latest known']      = ( $peek['remote'] && ! empty( $peek['remote']['version'] ) ) ? $peek['remote']['version'] : '(unknown — run Update)';
-			$update['Update available']  = $peek['has_update'] ? 'yes' : 'no';
+		if ( $miss ) {
+			$problems[] = 'Missing/unreadable core files: ' . implode( ', ', $miss );
 		}
+
+		$update = array(
+			'Update source' => isset( $o['update_source'] ) ? (string) $o['update_source'] : 'url',
+			'Manifest URL'  => isset( $o['update_manifest'] ) ? (string) $o['update_manifest'] : '',
+			'GitHub repo'   => ( isset( $o['gh_owner'] ) ? (string) $o['gh_owner'] : '' ) . '/' . ( isset( $o['gh_repo'] ) ? (string) $o['gh_repo'] : '' ),
+		);
 
 		return array( 'safe_mode' => $safe, 'perf' => $perf, 'update' => $update, 'problems' => $problems );
 	}
@@ -376,10 +575,10 @@ class Remote_Console {
 	 * ------------------------------------------------------------------ */
 
 	public static function console_url() {
-		if ( ! Settings::get( 'console_enabled' ) ) {
+		if ( ! self::opt( 'console_enabled' ) ) {
 			return '';
 		}
-		$key = trim( (string) Settings::get( 'console_key' ) );
+		$key = trim( (string) self::opt( 'console_key' ) );
 		if ( '' === $key ) {
 			return '';
 		}
@@ -387,7 +586,7 @@ class Remote_Console {
 	}
 
 	private static function redirect_self() {
-		$key = trim( (string) Settings::get( 'console_key' ) );
+		$key = trim( (string) self::opt( 'console_key' ) );
 		wp_safe_redirect( add_query_arg( self::QUERY_VARS[0], $key, home_url( '/' ) ) );
 		exit;
 	}
@@ -410,10 +609,9 @@ class Remote_Console {
 	}
 
 	/* ------------------------------------------------------------------ *
-	 * Rendering — plain, unstyled HTML (script-friendly).
+	 * Rendering — plain, unstyled HTML.
 	 * ------------------------------------------------------------------ */
 
-	/** Emit page head/tail with no CSS. $body is already-escaped HTML. */
 	private static function page_shell( $body ) {
 		if ( ! headers_sent() ) {
 			status_header( 200 );
@@ -428,14 +626,12 @@ class Remote_Console {
 		exit;
 	}
 
-	/** A one-off plain message page. */
 	private static function page( $text ) {
 		self::page_shell( '<h1>ACPS Updater Console</h1><pre>' . esc_html( $text ) . '</pre>' );
 	}
 
 	private static function login_page( $error ) {
-		$key = self::QUERY_VARS[0];
-		$b   = '<h1>ACPS Updater Console</h1>';
+		$b = '<h1>ACPS Updater Console</h1>';
 		if ( '' !== $error ) {
 			$b .= '<p><strong>' . esc_html( $error ) . '</strong></p>';
 		}
@@ -454,7 +650,6 @@ class Remote_Console {
 			$b .= '<p><strong>' . esc_html( $msg ) . '</strong></p><hr>';
 		}
 
-		// Custom links (configured in the hidden Updates tab).
 		$links = self::custom_links();
 		if ( $links ) {
 			$b .= '<h2>Links</h2><ul>';
@@ -464,7 +659,6 @@ class Remote_Console {
 			$b .= '</ul>';
 		}
 
-		// Problems.
 		$b .= '<h2>Issues &amp; problems</h2>';
 		if ( empty( $d['problems'] ) ) {
 			$b .= '<p>None detected.</p>';
@@ -476,7 +670,6 @@ class Remote_Console {
 			$b .= '</ul>';
 		}
 
-		// Diagnostics tables (plain).
 		$b .= '<h2>Status</h2><table border="1" cellpadding="4"><tbody>';
 		foreach ( $d['perf'] as $k => $v ) {
 			$b .= '<tr><td>' . esc_html( $k ) . '</td><td>' . esc_html( (string) $v ) . '</td></tr>';
@@ -486,11 +679,9 @@ class Remote_Console {
 		}
 		$b .= '</tbody></table>';
 
-		// Hidden fields shared by the action forms (CSRF for cookie sessions).
-		$csrf = ( is_array( $session ) && ! empty( $session['csrf'] ) ) ? $session['csrf'] : '';
+		$csrf   = ( is_array( $session ) && ! empty( $session['csrf'] ) ) ? $session['csrf'] : '';
 		$hidden = '<input type="hidden" name="csrf" value="' . esc_attr( $csrf ) . '">';
 
-		// Update / reinstall.
 		$b .= '<h2>Update</h2>';
 		$b .= '<form method="post" action="" style="display:inline">' . $hidden
 			. '<input type="hidden" name="do" value="update"><button type="submit">Update to latest</button></form> ';
@@ -498,8 +689,7 @@ class Remote_Console {
 			. '<input type="hidden" name="do" value="reinstall"><button type="submit" onclick="return confirm(\'Re-download and reinstall the latest version now?\')">Reinstall latest (repair)</button></form>';
 		$b .= '<p>Reinstall re-downloads and re-applies the latest package even if the version is unchanged — use it if a file was edited wrong.</p>';
 
-		// Settings editor.
-		$settings = Settings::all();
+		$settings = self::raw();
 		foreach ( self::protected_keys() as $pk ) {
 			if ( isset( $settings[ $pk ] ) ) {
 				$settings[ $pk ] = '(managed in wp-admin)';
@@ -512,20 +702,14 @@ class Remote_Console {
 			. '<p><textarea name="json" rows="24" cols="100" spellcheck="false">' . esc_textarea( (string) $json ) . '</textarea></p>'
 			. '<p><button type="submit">Save settings</button></p></form>';
 
-		// Sign out.
 		$b .= '<hr><form method="post" action="">' . $hidden
 			. '<input type="hidden" name="do" value="logout"><button type="submit">Sign out</button></form>';
 
 		self::page_shell( $b );
 	}
 
-	/**
-	 * Parse the admin-configured custom links (one per line: "Label | URL").
-	 *
-	 * @return array[] Each: label, url.
-	 */
 	private static function custom_links() {
-		$raw   = (string) Settings::get( 'console_links', '' );
+		$raw   = (string) self::opt( 'console_links', '' );
 		$out   = array();
 		$lines = preg_split( '/\r\n|\r|\n/', $raw );
 		foreach ( (array) $lines as $line ) {

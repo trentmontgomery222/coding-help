@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Form Manager
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.64.0
+ * Version:           1.65.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.64.0' );
+define( 'ACPS_ST_VERSION', '1.65.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).
@@ -254,7 +254,6 @@ function boot() {
 		} catch ( \Throwable $e ) { /* stay dormant */ }
 		try {
 			if ( is_readable( ACPS_ST_PATH . 'includes/class-updater.php' ) ) {
-				add_action( 'acps_st_autoheal', array( __NAMESPACE__ . '\\Updater', 'autoheal' ) );
 				add_action(
 					'init',
 					function () {
@@ -266,9 +265,10 @@ function boot() {
 					},
 					1
 				);
-				// Failsafe auto-heal: while dormant, schedule a one-off cron to
-				// reinstall the latest version (Updater::autoheal checks the
-				// console_auto_recover setting before doing anything).
+				// Failsafe auto-heal: while dormant, schedule a one-off cron. The
+				// handler (Remote_Console::auto_reinstall, registered above) uses the
+				// console's OWN self-contained installer, checking the
+				// console_auto_recover option first — so it needs nothing but core.
 				if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( 'acps_st_autoheal' ) ) {
 					wp_schedule_single_event( time() + 120, 'acps_st_autoheal' );
 				}

@@ -85,10 +85,6 @@ class Updater {
 		// Staged rollout: a dev install publishes its verified status here, which
 		// a production install checks before it will offer/apply the update.
 		add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
-
-		// Auto-heal failsafe: if enabled and the plugin is in safe mode, a cron
-		// event reinstalls the latest version from the update source.
-		add_action( 'acps_st_autoheal', array( __CLASS__, 'autoheal' ) );
 	}
 
 	/**
