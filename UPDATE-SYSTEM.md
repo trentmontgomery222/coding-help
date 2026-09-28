@@ -112,9 +112,11 @@ also runs from WP-Cron and logged-out contexts.
   5xx → real crash, the plugin is deactivated and the failure recorded; a
   network error / no marker → inconclusive, left enabled (a blocked loopback
   never disables a good update).
-* **Safe mode**: if the plugin fatals in one of its own files, the next request
-  loads only a “Resume plugin” admin notice and returns, so the theme and other
-  plugins keep working. Fix the problem, then click **Resume**.
+* **Safe mode**: if the plugin fatals in one of its own files, it parks itself
+  and the theme and other plugins keep working. The plugin **never** shows a
+  notice on top of other admin pages — recovery lives only on **Settings ->
+  ACPS Sitemap** (a “Resume plugin” button) and on the control-panel URL. Fix
+  the problem, then Resume (or let auto-heal do it).
 * **File integrity**: before loading anything, the bootstrap checks all plugin
   files exist. `verify_after_upgrade()` re-checks after an update — a release
   that shipped incomplete (missing files) is rolled back like any other crash,

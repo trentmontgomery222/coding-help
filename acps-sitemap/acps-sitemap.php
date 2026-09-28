@@ -146,10 +146,11 @@ register_shutdown_function( 'acps_sitemap_shutdown_guard' );
  * Load and construct the plugin, guarded at every step.
  */
 function acps_sitemap_boot() {
-	// Already parked: load only the recovery notice plus, if possible, the
-	// secret recovery URL — so a bad release can't lock you out of recovery.
+	// Already parked: expose recovery ONLY on the plugin's own Settings page
+	// (never as a notice floating on top of other admin pages), plus the secret
+	// recovery URL — so a bad release can't lock you out of recovery.
 	if ( acps_sitemap_is_safe_mode() ) {
-		add_action( 'admin_notices', 'acps_sitemap_safe_mode_notice' );
+		add_action( 'admin_menu', 'acps_sitemap_recovery_menu' );
 		acps_sitemap_load_recovery();
 		return;
 	}
@@ -165,7 +166,7 @@ function acps_sitemap_boot() {
 				'time'    => time(),
 			)
 		);
-		add_action( 'admin_notices', 'acps_sitemap_safe_mode_notice' );
+		add_action( 'admin_menu', 'acps_sitemap_recovery_menu' );
 		return;
 	}
 
@@ -187,7 +188,7 @@ function acps_sitemap_boot() {
 				'time' => time(),
 			)
 		);
-		add_action( 'admin_notices', 'acps_sitemap_safe_mode_notice' );
+		add_action( 'admin_menu', 'acps_sitemap_recovery_menu' );
 	}
 }
 add_action( 'plugins_loaded', 'acps_sitemap_boot' );
@@ -197,7 +198,7 @@ add_action( 'plugins_loaded', 'acps_sitemap_boot' );
  * (the remote control panel in reduced mode) so an operator can check status,
  * clear safe mode, or force an update from outside wp-admin. Fully guarded: if
  * the files needed for recovery are themselves missing/broken, it simply does
- * nothing and the wp-admin "Resume" notice remains the fallback.
+ * nothing and the Settings -> ACPS Sitemap recovery page remains the fallback.
  */
 function acps_sitemap_load_recovery() {
 	try {
@@ -237,9 +238,24 @@ function acps_sitemap_load_recovery() {
 add_action( 'admin_post_acps_sitemap_resume', 'acps_sitemap_resume_from_safe_mode' );
 
 /**
- * Admin notice shown while the plugin is in safe mode, with a "Resume" button.
+ * Register the recovery screen while the plugin is in safe mode. It lives under
+ * Settings -> ACPS Sitemap (the plugin's own page) and is the ONLY place any
+ * plugin message appears — nothing floats on top of other admin pages.
  */
-function acps_sitemap_safe_mode_notice() {
+function acps_sitemap_recovery_menu() {
+	add_options_page(
+		__( 'ACPS Sitemap', 'acps-sitemap' ),
+		__( 'ACPS Sitemap', 'acps-sitemap' ),
+		'manage_options',
+		'acps-sitemap',
+		'acps_sitemap_recovery_page'
+	);
+}
+
+/**
+ * The safe-mode recovery screen (shown only on the plugin's own settings page).
+ */
+function acps_sitemap_recovery_page() {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
@@ -247,7 +263,8 @@ function acps_sitemap_safe_mode_notice() {
 	$type  = is_array( $state ) && ! empty( $state['type'] ) ? $state['type'] : 'fatal';
 	$url   = wp_nonce_url( admin_url( 'admin-post.php?action=acps_sitemap_resume' ), 'acps_sitemap_resume' );
 
-	echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'ACPS Sitemap is paused (safe mode).', 'acps-sitemap' ) . '</strong> ';
+	echo '<div class="wrap"><h1>' . esc_html__( 'ACPS Sitemap', 'acps-sitemap' ) . '</h1>';
+	echo '<div class="notice notice-error inline"><p><strong>' . esc_html__( 'The plugin is paused (safe mode).', 'acps-sitemap' ) . '</strong> ';
 
 	if ( 'files' === $type ) {
 		echo esc_html__( 'It will not load because one or more of its files are missing. Reinstall the plugin, then resume it. The rest of the site is unaffected.', 'acps-sitemap' );
@@ -266,7 +283,7 @@ function acps_sitemap_safe_mode_notice() {
 		}
 		echo '<p><code>' . esc_html( $detail ) . '</code></p>';
 	}
-	echo '</div>';
+	echo '</div></div>';
 }
 
 /**
