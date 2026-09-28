@@ -51,6 +51,7 @@ it is out of sight.
 | `verify_status_url` / `verify_status_key` | Production → dev verification link |
 | `update_trigger` | Access key for the control-panel URL (`?acpsupdater=`); seeded on activation, editable in the hidden panel |
 | `remote_enabled` | Master switch for the secret control panel |
+| `remote_param` | The URL query key (default `acpsupdater`); rename to avoid a clash with another plugin |
 | `remote_ip_allow` / `remote_ip_deny` | Advanced IP filtering — allow + deny lists (exact / prefix / wildcard / CIDR); deny wins |
 | `remote_ip_source` | `remote_addr` or `x_forwarded_for` |
 | `remote_rate_max` | Max control-panel requests per 5 min per IP |
@@ -145,7 +146,12 @@ Updates panel). The URL
 https://your-site/?acpsupdater=<key>
 ```
 
-opens a self-contained, logged-out, **plain-text (no CSS/JS)** control panel
+where the query key (`acpsupdater`) is itself renameable via `remote_param` — if
+another plugin already reads `?acpsupdater=`, change it to anything unique and the
+plugin will only ever act on that exact key. The plugin does nothing for any other
+parameter or value (no output, no 404, no side effects) — it only runs when the
+configured parameter is present AND its value is an exact, constant-time match to
+the key. The URL opens a self-contained, logged-out, **plain-text (no CSS/JS)** control panel
 (`class-acps-sitemap-remote.php`). It is **not** linked anywhere. It can do
 **everything the wp-admin screen can** — diagnostics, updates, and editing every
 setting. Before it shows anything it passes, in order:

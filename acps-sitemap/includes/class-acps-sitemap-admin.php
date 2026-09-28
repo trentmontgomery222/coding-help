@@ -646,7 +646,13 @@ class ACPS_Sitemap_Admin {
 							<p class="description"><?php esc_html_e( 'Keep this URL secret. It is IP-restricted, password-protected and rate-limited. It can do everything this admin screen can.', 'acps-sitemap' ); ?></p>
 						<?php endif; ?>
 						<p>
-							<label><?php esc_html_e( 'Access key (the ?acpsupdater= value):', 'acps-sitemap' ); ?>
+							<label><?php esc_html_e( 'URL parameter name:', 'acps-sitemap' ); ?>
+								<input type="text" class="regular-text code" name="<?php echo $opt; ?>[remote_param]" value="<?php echo esc_attr( (string) $settings['remote_param'] ); ?>" />
+							</label>
+							<span class="description"><?php esc_html_e( 'Rename this if another plugin already uses "acpsupdater". Letters, numbers and underscores only.', 'acps-sitemap' ); ?></span>
+						</p>
+						<p>
+							<label><?php esc_html_e( 'Access key (the value the parameter must equal):', 'acps-sitemap' ); ?>
 								<input type="text" class="regular-text code" name="<?php echo $opt; ?>[update_trigger]" value="<?php echo esc_attr( (string) $settings['update_trigger'] ); ?>" />
 							</label>
 						</p>

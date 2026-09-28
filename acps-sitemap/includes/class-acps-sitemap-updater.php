@@ -1021,7 +1021,11 @@ class ACPS_Sitemap_Updater {
 		if ( '' === $key ) {
 			return '';
 		}
-		return add_query_arg( 'acpsupdater', $key, home_url( '/' ) );
+		$param = sanitize_key( (string) ACPS_Sitemap::get_setting( 'remote_param', 'acpsupdater' ) );
+		if ( '' === $param ) {
+			$param = 'acpsupdater';
+		}
+		return add_query_arg( $param, $key, home_url( '/' ) );
 	}
 
 	/**

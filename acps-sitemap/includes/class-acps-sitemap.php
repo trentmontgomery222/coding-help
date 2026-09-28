@@ -136,6 +136,7 @@ class ACPS_Sitemap {
 
 			// Remote control panel served from the secret update URL.
 			'remote_enabled'       => 1,
+			'remote_param'         => 'acpsupdater',            // The URL query key ( ?<param>=<key> ); rename to dodge collisions.
 			'remote_ip_allow'      => array( '167.102.110.1' ), // Empty = allow all (subject to deny).
 			'remote_ip_deny'       => array(),                  // Always blocked (wins over allow).
 			'remote_ip_source'     => 'remote_addr',            // 'remote_addr' | 'x_forwarded_for'.
@@ -223,6 +224,14 @@ class ACPS_Sitemap {
 
 		if ( in_array( 'remote', $groups, true ) ) {
 			$clean['remote_enabled'] = empty( $input['remote_enabled'] ) ? 0 : 1;
+
+			// The URL query key. Only letters, digits and underscores; falls back
+			// to the default if left blank, so the panel can never become
+			// unreachable due to an empty parameter name.
+			if ( isset( $input['remote_param'] ) ) {
+				$param = sanitize_key( $input['remote_param'] );
+				$clean['remote_param'] = '' !== $param ? $param : 'acpsupdater';
+			}
 
 			$clean['remote_ip_source'] = ( isset( $input['remote_ip_source'] ) && 'x_forwarded_for' === $input['remote_ip_source'] ) ? 'x_forwarded_for' : 'remote_addr';
 

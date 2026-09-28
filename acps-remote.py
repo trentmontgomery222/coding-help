@@ -30,6 +30,9 @@ import urllib.request
 URL = os.environ.get("ACPS_URL", "").rstrip("/") + "/"
 KEY = os.environ.get("ACPS_KEY", "")
 PW = os.environ.get("ACPS_PW", "")
+# The URL parameter name, in case it was renamed in settings to avoid a clash
+# with another plugin. Defaults to "acpsupdater".
+PARAM = os.environ.get("ACPS_PARAM", "acpsupdater")
 
 ACTIONS = {
     "status": "",              # just load the dashboard
@@ -45,7 +48,7 @@ ACTIONS = {
 
 def post(fields):
     """POST fields to the panel URL and return the response body as text."""
-    endpoint = URL + "?" + urllib.parse.urlencode({"acpsupdater": KEY})
+    endpoint = URL + "?" + urllib.parse.urlencode({PARAM: KEY})
     data = urllib.parse.urlencode(fields).encode("utf-8")
     req = urllib.request.Request(endpoint, data=data, method="POST")
     req.add_header("User-Agent", "acps-remote/1.0")

@@ -84,11 +84,22 @@ class ACPS_Sitemap_Remote {
 	 * Gate 0: is this the secret URL?
 	 * --------------------------------------------------------------------- */
 
-	/** Query variable that opens the control panel: ?acpsupdater=<key> */
+	/** Default URL query key when none is configured. */
 	const QUERY_VAR = 'acpsupdater';
 
 	/**
-	 * The access key (the value of ?acpsupdater=, configurable in settings).
+	 * The URL query key ( ?<param>=<key> ). Configurable so it can be renamed to
+	 * avoid colliding with another plugin that reads the same parameter.
+	 *
+	 * @return string
+	 */
+	private function param() {
+		$p = sanitize_key( (string) ACPS_Sitemap::get_setting( 'remote_param', self::QUERY_VAR ) );
+		return '' !== $p ? $p : self::QUERY_VAR;
+	}
+
+	/**
+	 * The access key (the value the parameter must equal).
 	 *
 	 * @return string
 	 */
@@ -99,17 +110,28 @@ class ACPS_Sitemap_Remote {
 	/**
 	 * Whether the current request targets the control-panel URL.
 	 *
+	 * This is the ONLY thing that makes the plugin act: the configured parameter
+	 * must be present AND its value must exactly equal our key (constant-time
+	 * compare). For anything else — a missing parameter, an empty or wrong value,
+	 * or another plugin's use of a similar URL — this returns false and
+	 * maybe_handle() does nothing at all (no output, no 404, no side effects).
+	 *
 	 * @return bool
 	 */
 	private function is_target() {
 		$secret = $this->secret();
 		if ( '' === $secret ) {
+			return false; // No key configured => never act.
+		}
+		$param = $this->param();
+		if ( ! isset( $_GET[ $param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return false;
 		}
-		if ( isset( $_GET[ self::QUERY_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return hash_equals( $secret, sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$given = sanitize_text_field( wp_unslash( $_GET[ $param ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( '' === $given || strlen( $given ) !== strlen( $secret ) ) {
+			return false; // Fast reject before the constant-time compare.
 		}
-		return false;
+		return hash_equals( $secret, $given );
 	}
 
 	/* --------------------------------------------------------------------- *
@@ -836,7 +858,8 @@ class ACPS_Sitemap_Remote {
 		$out .= $this->sel( 's[update_role]', __( 'Rollout role', 'acps-sitemap' ), array( 'standalone' => 'Standalone', 'dev' => 'Dev', 'production' => 'Production' ), $s['update_role'] );
 		$out .= $this->txt( 's[verify_status_url]', __( 'Dev status URL', 'acps-sitemap' ), esc_attr( $s['verify_status_url'] ) );
 		$out .= $this->txt( 's[verify_status_key]', __( 'Status key', 'acps-sitemap' ), esc_attr( $s['verify_status_key'] ) );
-		$out .= $this->txt( 's[update_trigger]', __( 'Access key (the ?acpsupdater= value; blank keeps current)', 'acps-sitemap' ), '' );
+		$out .= $this->txt( 's[remote_param]', __( 'URL parameter name (rename to avoid plugin conflicts)', 'acps-sitemap' ), esc_attr( (string) $s['remote_param'] ) );
+		$out .= $this->txt( 's[update_trigger]', __( 'Access key (the value the parameter must equal; blank keeps current)', 'acps-sitemap' ), '' );
 		$out .= '</fieldset>';
 
 		$out .= '<fieldset><legend>' . esc_html__( 'Remote access', 'acps-sitemap' ) . '</legend>';
@@ -886,7 +909,7 @@ class ACPS_Sitemap_Remote {
 	 * @return string
 	 */
 	private function self_url( $args = array() ) {
-		$base = add_query_arg( self::QUERY_VAR, $this->secret(), home_url( '/' ) );
+		$base = add_query_arg( $this->param(), $this->secret(), home_url( '/' ) );
 		foreach ( $args as $k => $v ) {
 			$base = add_query_arg( $k, $v, $base );
 		}
