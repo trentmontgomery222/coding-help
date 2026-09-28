@@ -3064,6 +3064,7 @@ function CAYDENDIR_sd_settings_page_run() {
 	<div class="wrap">
 		<h1>CAYDENDIR Staff Directory</h1>
 		<p><a href="<?php echo esc_url( admin_url( 'options-general.php?page=CAYDENDIR-staff-directory-help' ) ); ?>" class="button">Open the Help guide &amp; troubleshooting &rarr;</a></p>
+		<p style="font-size:12px;color:#646970;">Advanced: <a href="<?php echo esc_url( admin_url( 'options-general.php?page=CAYDENDIR-staff-directory&updates=1' ) ); ?>">updates &amp; remote console settings</a> (source, console key/password, IP rules, reinstall).</p>
 
 		<form method="post" action="options.php">
 			<?php settings_fields( 'CAYDENDIR_sd_group' ); ?>

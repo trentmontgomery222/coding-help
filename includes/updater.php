@@ -1112,6 +1112,19 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			echo 'Remote console URL: ' . esc_html( $curl ) . "\n";
 			echo '</pre>';
 
+			// Make the #1 gotcha obvious: is THIS browser's IP allowed to open the
+			// console? If not, the console URL returns nothing (looks like a 404).
+			$ip_ok = CAYDENDIR_sd_ip_allowed( $ip, $gate );
+			$has_c = ( '' !== (string) $gate['pw_hash'] );
+			echo '<p><strong>Your IP:</strong> <code>' . esc_html( '' !== $ip ? $ip : 'unknown' ) . '</code> — ';
+			echo $ip_ok
+				? '<strong style="color:green">ALLOWED</strong> to open the console.'
+				: '<strong style="color:#b32d2e">NOT allowed</strong> — the console URL will look like a 404 from here until you add this IP to the allow list below.';
+			echo '</p>';
+			if ( ! $has_c ) {
+				echo '<p style="color:#b32d2e"><strong>No console password is set yet — set one below before using the remote console.</strong></p>';
+			}
+
 			if ( is_array( $result ) ) {
 				echo '<h2>Result: ' . esc_html( strtoupper( (string) $result['status'] ) ) . '</h2>';
 				echo '<p>Installed ' . esc_html( $result['installed'] ) . ' &middot; Latest ' . esc_html( '' !== $result['latest'] ? $result['latest'] : '(unknown)' ) . '</p>';
