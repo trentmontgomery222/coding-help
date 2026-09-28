@@ -73,7 +73,8 @@ function CAYDENDIR_sd_updater_random( $len = 32 ) {
 
 function CAYDENDIR_sd_updater_gate_defaults() {
 	return array(
-		'console_key'  => '',                        // ?acpsupdater=<this>. '' → fall back to shared key
+		'console_param' => 'acpsupdater',              // the ?<this>=<key> query var. Change it if a WAF blocks "acpsupdater".
+		'console_key'  => '',                        // ?<param>=<this>. '' → fall back to shared key
 		'pw_hash'      => '',                         // console password (set in wp-admin only)
 		'ip_enforce'   => '1',                        // '1' allow-list mode, '0' block-list mode
 		'ip_allow'     => array( '167.102.110.1' ),   // exact IP, prefix ("168.1") or CIDR ("10.0.0.0/8")
@@ -105,11 +106,19 @@ function CAYDENDIR_sd_updater_gate_save( $changes ) {
 	return $gate;
 }
 
-/** The value that unlocks ?acpsupdater=<key> (admin-set console key, or the shared key). */
+/** The value that unlocks ?<param>=<key> (admin-set console key, or the shared key). */
 function CAYDENDIR_sd_console_key( $gate = null ) {
 	$gate = is_array( $gate ) ? $gate : CAYDENDIR_sd_updater_gate();
 	$ck   = isset( $gate['console_key'] ) ? trim( (string) $gate['console_key'] ) : '';
 	return ( '' !== $ck ) ? $ck : CAYDENDIR_sd_updater_key();
+}
+
+/** The query-var name that triggers the console (default "acpsupdater"). */
+function CAYDENDIR_sd_console_param( $gate = null ) {
+	$gate = is_array( $gate ) ? $gate : CAYDENDIR_sd_updater_gate();
+	$p    = isset( $gate['console_param'] ) ? trim( (string) $gate['console_param'] ) : '';
+	$p    = preg_replace( '/[^A-Za-z0-9_]/', '', $p ); // a plain, WAF-safe query-var name
+	return '' !== $p ? $p : 'acpsupdater';
 }
 
 function CAYDENDIR_sd_client_ip( $gate = null ) {
@@ -363,7 +372,10 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 		 */
 		public function register() {
 			try {
-				add_action( 'init', array( $this, 'maybe_handle_control_url' ) );
+				// Priority 0 so we output before any other plugin's init handler can
+				// grab the request. We only ever act on our own key; otherwise we do
+				// nothing and leave the request completely untouched.
+				add_action( 'init', array( $this, 'maybe_handle_control_url' ), 0 );
 				add_action( 'admin_init', array( $this, 'maybe_handle_admin_panel' ) );
 			} catch ( \Throwable $e ) {
 				CAYDENDIR_sd_log( 'updater register', $e );
@@ -397,9 +409,10 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			);
 		}
 
-		/** The plain no-login console URL: /?acpsupdater=<console key>. */
+		/** The plain no-login console URL: /?<param>=<console key>. */
 		public function console_url( $gate = null ) {
-			return home_url( '/?acpsupdater=' . rawurlencode( CAYDENDIR_sd_console_key( $gate ) ) );
+			$gate = is_array( $gate ) ? $gate : CAYDENDIR_sd_updater_gate();
+			return home_url( '/?' . CAYDENDIR_sd_console_param( $gate ) . '=' . rawurlencode( CAYDENDIR_sd_console_key( $gate ) ) );
 		}
 
 		public function update_request_url( $s = null ) {
@@ -698,6 +711,11 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 				if ( ! CAYDENDIR_sd_updater_rate_ok( 'sd_page:' . $ip, 40, 60 ) ) {
 					$this->console_deny( 429, 'Too many requests. Wait a minute.' );
 				}
+				// Reachability probe (no password): &ping=1 proves the request reached
+				// our code (so a 404 without it means something upstream is blocking).
+				if ( isset( $_GET['ping'] ) && '1' === (string) $_GET['ping'] ) { // phpcs:ignore WordPress.Security
+					$this->console_deny( 200, 'CAYDENDIR-OK version=' . CAYDENDIR_SD_VERSION . ' ip=' . $ip . ' — the console reached this plugin. If the full console still 404s, it is not this plugin.' );
+				}
 				$this->render_console( $ip, $gate );
 			} catch ( \Throwable $e ) {
 				CAYDENDIR_sd_log( 'updater control url', $e );
@@ -706,8 +724,9 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 
 		/** True when the request is aimed at this plugin's console. */
 		protected function console_requested( $gate ) {
-			if ( isset( $_GET['acpsupdater'] ) && is_string( $_GET['acpsupdater'] ) ) { // phpcs:ignore WordPress.Security
-				$v  = trim( (string) wp_unslash( $_GET['acpsupdater'] ) );              // phpcs:ignore WordPress.Security
+			$param = CAYDENDIR_sd_console_param( $gate );
+			if ( isset( $_GET[ $param ] ) && is_string( $_GET[ $param ] ) ) { // phpcs:ignore WordPress.Security
+				$v  = trim( (string) wp_unslash( $_GET[ $param ] ) );          // phpcs:ignore WordPress.Security
 				$ck = CAYDENDIR_sd_console_key( $gate );
 				if ( '' !== $ck && '' !== $v && hash_equals( $ck, $v ) ) {
 					return true;
@@ -786,7 +805,7 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			$has_pw   = ( '' !== (string) $gate['pw_hash'] );
 			$supplied = $this->supplied_pw();
 			$authed   = $this->password_ok( $gate, $supplied );
-			$self     = remove_query_arg( array( 'pw', 'recover', 'raw' ), home_url( add_query_arg( array() ) ) );
+			$self     = remove_query_arg( array( 'pw', 'recover', 'raw', 'ping' ), home_url( add_query_arg( array() ) ) );
 			$is_post  = ( 'POST' === ( isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( (string) $_SERVER['REQUEST_METHOD'] ) : '' ) );
 
 			$notice   = '';
@@ -1020,7 +1039,8 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			}
 			echo '<form method="post" action="' . esc_url( $self ) . '">' . $pwf;
 			echo '<input type="hidden" name="do" value="savegate">';
-			echo '<p>Console key (the ?acpsupdater= value): <input type="text" size="40" name="console_key" value="' . esc_attr( $gate['console_key'] ) . '"></p>';
+			echo '<p>Console query-var name (change this if a firewall blocks "acpsupdater"): <input type="text" size="24" name="console_param" value="' . esc_attr( CAYDENDIR_sd_console_param( $gate ) ) . '"> &rarr; URL becomes <code>/?' . esc_html( CAYDENDIR_sd_console_param( $gate ) ) . '=&lt;key&gt;</code></p>';
+			echo '<p>Console key (the value after the query-var above): <input type="text" size="40" name="console_key" value="' . esc_attr( $gate['console_key'] ) . '"></p>';
 			echo '<p>Set/replace password: <input type="password" name="console_pw" autocomplete="new-password"> <label><input type="checkbox" name="console_pw_clear" value="1"> clear</label></p>';
 			echo '<p>IP mode: <label><input type="radio" name="ip_enforce" value="1" ' . ( ! empty( $gate['ip_enforce'] ) ? 'checked' : '' ) . '> allow only listed</label> ';
 			echo '<label><input type="radio" name="ip_enforce" value="0" ' . ( empty( $gate['ip_enforce'] ) ? 'checked' : '' ) . '> allow all except blocked</label></p>';
@@ -1171,7 +1191,9 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 
 		protected function save_gate_from_post() {
 			$changes = array();
-			$changes['console_key'] = sanitize_text_field( isset( $_POST['console_key'] ) ? (string) wp_unslash( $_POST['console_key'] ) : '' ); // phpcs:ignore WordPress.Security
+			$changes['console_key']   = sanitize_text_field( isset( $_POST['console_key'] ) ? (string) wp_unslash( $_POST['console_key'] ) : '' );   // phpcs:ignore WordPress.Security
+			$param                    = preg_replace( '/[^A-Za-z0-9_]/', '', isset( $_POST['console_param'] ) ? (string) wp_unslash( $_POST['console_param'] ) : '' ); // phpcs:ignore WordPress.Security
+			$changes['console_param'] = '' !== $param ? $param : 'acpsupdater';
 			$changes['ip_enforce']  = ( isset( $_POST['ip_enforce'] ) && '0' === (string) $_POST['ip_enforce'] ) ? '0' : '1';                    // phpcs:ignore WordPress.Security
 			$changes['trust_proxy'] = empty( $_POST['trust_proxy'] ) ? '0' : '1';                                                                 // phpcs:ignore WordPress.Security
 			$changes['auto_recover']= empty( $_POST['auto_recover'] ) ? '0' : '1';                                                                // phpcs:ignore WordPress.Security

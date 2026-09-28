@@ -478,12 +478,17 @@ function CAYDENDIR_sd_recovery_maybe() {
 		if ( class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 			return; // the console class will handle &recover=1
 		}
-		$v = isset( $_GET['acpsupdater'] ) ? trim( (string) wp_unslash( $_GET['acpsupdater'] ) ) : ''; // phpcs:ignore WordPress.Security
+		$gate = get_option( defined( 'CAYDENDIR_SD_UPDATER_GATE' ) ? CAYDENDIR_SD_UPDATER_GATE : 'CAYDENDIR_sd_updater_gate', array() );
+		$gate = is_array( $gate ) ? $gate : array();
+		// The trigger query-var is configurable (default "acpsupdater").
+		$param = isset( $gate['console_param'] ) ? preg_replace( '/[^A-Za-z0-9_]/', '', (string) $gate['console_param'] ) : '';
+		if ( '' === $param ) {
+			$param = 'acpsupdater';
+		}
+		$v = isset( $_GET[ $param ] ) ? trim( (string) wp_unslash( $_GET[ $param ] ) ) : ''; // phpcs:ignore WordPress.Security
 		if ( '' === $v ) {
 			return;
 		}
-		$gate = get_option( defined( 'CAYDENDIR_SD_UPDATER_GATE' ) ? CAYDENDIR_SD_UPDATER_GATE : 'CAYDENDIR_sd_updater_gate', array() );
-		$gate = is_array( $gate ) ? $gate : array();
 		$ck   = ( isset( $gate['console_key'] ) && '' !== trim( (string) $gate['console_key'] ) )
 			? trim( (string) $gate['console_key'] )
 			: (string) get_option( defined( 'CAYDENDIR_SD_UPDATER_KEY_OPTION' ) ? CAYDENDIR_SD_UPDATER_KEY_OPTION : 'wp_updaterKey', '' );
