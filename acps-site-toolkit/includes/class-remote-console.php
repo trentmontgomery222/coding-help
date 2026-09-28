@@ -120,24 +120,30 @@ class Remote_Console {
 	}
 
 	private static function handle() {
-		if ( ! self::opt( 'console_enabled' ) ) {
-			self::not_found();
-		}
-		$key = trim( (string) self::opt( 'console_key' ) );
-		if ( '' === $key ) {
-			self::not_found();
-		}
 		list( , $given ) = self::requested();
 
+		// Do NOTHING unless this is OUR console. Other plugins may use the same
+		// ?acpsupdater= query var with their OWN keys — we must not touch those
+		// requests at all: no 404, no rate limiting, no output. Only when the
+		// supplied key EXACTLY matches this plugin's console key (and the console
+		// is enabled) do we take over. Otherwise just return and let the request
+		// continue to whoever it belongs to.
+		if ( ! self::opt( 'console_enabled' ) ) {
+			return;
+		}
+		$key = trim( (string) self::opt( 'console_key' ) );
+		if ( '' === $key || ! hash_equals( $key, (string) $given ) ) {
+			return;
+		}
+
+		// From here on the key is ours — we own this request. Rate limiting and
+		// the IP gate below therefore only ever affect our own key's traffic.
 		$ip = self::client_ip();
 
 		if ( ! self::rate_ok( 'page_' . md5( $ip ), 120, 5 * MINUTE_IN_SECONDS ) ) {
 			self::respond( 429, 'Too many requests. Slow down and try again shortly.' );
 		}
 		if ( ! self::ip_allowed( $ip ) ) {
-			self::not_found();
-		}
-		if ( ! hash_equals( $key, $given ) ) {
 			self::not_found();
 		}
 
