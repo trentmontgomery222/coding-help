@@ -117,23 +117,30 @@ class ACPS_Sitemap_Remote {
 	 * --------------------------------------------------------------------- */
 
 	/**
-	 * Run the gates and dispatch. Always exits.
+	 * Run the gates and dispatch. Exits, unless access is denied — then it lets
+	 * WordPress render its own (themed) 404 rather than a bare generic one.
 	 */
 	private function run() {
-		if ( ! $this->recovery && ! ACPS_Sitemap::get_setting( 'remote_enabled' ) ) {
-			$this->not_found();
-		}
+		// A logged-in administrator is already fully trusted (they can do all of
+		// this in wp-admin anyway), so they bypass the IP allow-list, rate limit,
+		// and password. This is also the escape hatch when the IP filter is
+		// misconfigured (e.g. behind a proxy) — an admin can always get in and
+		// see the diagnostics to fix it.
+		$is_admin = $this->is_trusted_admin();
+		$ip       = $this->client_ip();
 
-		$ip = $this->client_ip();
-
-		// Gate 1: IP.
-		if ( ! $this->ip_allowed( $ip ) ) {
-			$this->not_found(); // Reveal nothing.
-		}
-
-		// Gate 2: rate limit.
-		if ( $this->rate_limited( $ip ) ) {
-			$this->send( 429, __( 'Too many requests. Please wait and try again.', 'acps-sitemap' ) );
+		if ( ! $is_admin ) {
+			if ( ! $this->recovery && ! ACPS_Sitemap::get_setting( 'remote_enabled' ) ) {
+				$this->deny();
+				return;
+			}
+			if ( ! $this->ip_allowed( $ip ) ) {
+				$this->deny(); // Reveal nothing — looks like any missing page.
+				return;
+			}
+			if ( $this->rate_limited( $ip ) ) {
+				$this->send( 429, __( 'Too many requests. Please wait and try again.', 'acps-sitemap' ) );
+			}
 		}
 
 		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : 'GET';
@@ -145,11 +152,19 @@ class ACPS_Sitemap_Remote {
 		}
 
 		// Gate 3: authentication. A valid session cookie authenticates a browser;
-		// a correct password on the request authenticates a script (headless).
-		$authed         = $this->check_session( $ip );
-		$authed_via_pw  = false;
+		// a correct password on the request authenticates a script (headless);
+		// a logged-in admin is authenticated by WordPress itself.
+		$authed        = $this->check_session( $ip );
+		$authed_via_pw = false;
 
-		if ( isset( $_POST['acps_password'] ) && '' !== (string) $_POST['acps_password'] ) {
+		if ( $is_admin && ! $authed ) {
+			// Give the admin a session so state-changing POSTs still carry a CSRF
+			// token (protects the logged-in admin from cross-site requests).
+			$this->issue_session( $ip );
+			$authed = true;
+		}
+
+		if ( ! $authed && isset( $_POST['acps_password'] ) && '' !== (string) $_POST['acps_password'] ) {
 			$result = $this->attempt_login( $ip );
 			if ( 'locked' === $result ) {
 				$this->send( 429, __( 'Too many failed attempts. Locked out temporarily.', 'acps-sitemap' ) );
@@ -640,14 +655,23 @@ class ACPS_Sitemap_Remote {
 		$start   = isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : microtime( true );
 		$elapsed = number_format( ( microtime( true ) - $start ) * 1000, 1 ) . ' ms';
 
+		$remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : 'n/a';
+		$xff         = ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) : '';
+		$used_ip     = $this->client_ip();
+		$ip_pass     = ( '' !== $used_ip && $this->ip_allowed( $used_ip ) ) ? __( 'passes filter', 'acps-sitemap' ) : __( 'BLOCKED by filter', 'acps-sitemap' );
+
 		$rows = array(
-			__( 'Plugin version', 'acps-sitemap' )   => ACPS_SITEMAP_VERSION,
-			__( 'PHP version', 'acps-sitemap' )       => PHP_VERSION,
-			__( 'WordPress', 'acps-sitemap' )         => function_exists( 'get_bloginfo' ) ? get_bloginfo( 'version' ) : 'n/a',
-			__( 'Peak memory', 'acps-sitemap' )       => $mem . ' / ' . $limit,
-			__( 'This request', 'acps-sitemap' )      => $elapsed,
-			__( 'Safe mode', 'acps-sitemap' )         => $safe ? __( 'ON (plugin parked)', 'acps-sitemap' ) : __( 'off', 'acps-sitemap' ),
-			__( 'Files present', 'acps-sitemap' )     => empty( $missing ) ? __( 'all present', 'acps-sitemap' ) : ( count( $missing ) . ' ' . __( 'missing', 'acps-sitemap' ) . ': ' . implode( ', ', $missing ) ),
+			__( 'Plugin version', 'acps-sitemap' )    => ACPS_SITEMAP_VERSION,
+			__( 'PHP version', 'acps-sitemap' )        => PHP_VERSION,
+			__( 'WordPress', 'acps-sitemap' )          => function_exists( 'get_bloginfo' ) ? get_bloginfo( 'version' ) : 'n/a',
+			__( 'Peak memory', 'acps-sitemap' )        => $mem . ' / ' . $limit,
+			__( 'This request', 'acps-sitemap' )       => $elapsed,
+			__( 'Your IP (used)', 'acps-sitemap' )     => ( '' !== $used_ip ? $used_ip : 'n/a' ) . ' — ' . $ip_pass,
+			__( 'IP source', 'acps-sitemap' )          => (string) ACPS_Sitemap::get_setting( 'remote_ip_source', 'remote_addr' ),
+			__( 'REMOTE_ADDR', 'acps-sitemap' )        => $remote_addr,
+			__( 'X-Forwarded-For', 'acps-sitemap' )    => '' !== $xff ? $xff : '(none)',
+			__( 'Safe mode', 'acps-sitemap' )          => $safe ? __( 'ON (plugin parked)', 'acps-sitemap' ) : __( 'off', 'acps-sitemap' ),
+			__( 'Files present', 'acps-sitemap' )      => empty( $missing ) ? __( 'all present', 'acps-sitemap' ) : ( count( $missing ) . ' ' . __( 'missing', 'acps-sitemap' ) . ': ' . implode( ', ', $missing ) ),
 		);
 
 		// Update status.
@@ -929,15 +953,38 @@ class ACPS_Sitemap_Remote {
 	}
 
 	/**
-	 * Behave like the URL does not exist.
+	 * Whether the current visitor is a logged-in administrator.
+	 *
+	 * @return bool
 	 */
-	private function not_found() {
+	private function is_trusted_admin() {
+		return function_exists( 'is_user_logged_in' ) && function_exists( 'current_user_can' )
+			&& is_user_logged_in() && current_user_can( 'manage_options' );
+	}
+
+	/**
+	 * Deny access without revealing the endpoint: hand off to WordPress so it
+	 * serves the site's OWN themed 404, rather than a bare generic one. The
+	 * caller returns after this so normal WordPress rendering proceeds.
+	 */
+	private function deny() {
+		if ( ! has_action( 'template_redirect', array( $this, 'force_404' ) ) ) {
+			add_action( 'template_redirect', array( $this, 'force_404' ), 0 );
+		}
+	}
+
+	/**
+	 * Force the main query to a 404 so the active theme renders its 404 template.
+	 */
+	public function force_404() {
+		global $wp_query;
+		if ( isset( $wp_query ) && is_object( $wp_query ) ) {
+			$wp_query->set_404();
+		}
 		if ( ! headers_sent() ) {
 			status_header( 404 );
-			header( 'Content-Type: text/plain; charset=UTF-8' );
+			nocache_headers();
 		}
-		echo 'Not found.';
-		$this->done();
 	}
 
 	/**
