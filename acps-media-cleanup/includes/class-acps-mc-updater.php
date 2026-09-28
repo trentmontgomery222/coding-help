@@ -570,6 +570,10 @@ class ACPS_MC_Updater {
 	 * test. Shown by whichever version is active once the plugin runs again.
 	 */
 	public function maybe_show_update_failed_notice() {
+		// Never surface on any page the plugin did not create.
+		if ( ! function_exists( 'acps_mc_is_own_admin_page' ) || ! acps_mc_is_own_admin_page() ) {
+			return;
+		}
 		if ( ! current_user_can( 'update_plugins' ) ) {
 			return;
 		}

@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.18.0
+Stable tag: 1.18.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,13 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.18.1 =
+* This plugin now shows admin notices ONLY on its own screens. The "missing
+  files", "paused (safe mode)", and "update rolled back" notices no longer
+  appear at the top of the Dashboard, Plugins, or any other wp-admin page — only
+  on FileMedia / its settings / the hidden pages. (When paused, recover from the
+  console URL, which works while the plugin is dormant.)
 
 = 1.18.0 =
 * New: a PRIVATE media store on the console. Upload and download files remotely

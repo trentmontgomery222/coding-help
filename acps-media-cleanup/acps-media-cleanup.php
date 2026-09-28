@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Unused Media Cleanup
  * Plugin URI:        https://acpsmd.org/
  * Description:        Safely find and remove media library files (images, PDFs, documents, videos) that are not used anywhere on the site. Works with FileBird folders and Beaver Builder. Single-site only. Trash first, restore anytime.
- * Version:           1.18.0
+ * Version:           1.18.1
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            ACPS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'ACPS_MC_VERSION', '1.18.0' );
+define( 'ACPS_MC_VERSION', '1.18.1' );
 define( 'ACPS_MC_FILE', __FILE__ );
 define( 'ACPS_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -114,10 +114,12 @@ function acps_mc_shutdown_guard() {
 }
 
 /**
- * Admin notice + resume control shown while dormant in safe mode.
+ * Admin notice + resume control shown while dormant in safe mode. Shown ONLY on
+ * the plugin's own pages — never at the top of other admin pages. (When paused,
+ * recovery is normally done from the console URL, which works in safe mode.)
  */
 function acps_mc_safe_mode_notice() {
-	if ( ! current_user_can( 'activate_plugins' ) ) {
+	if ( ! acps_mc_is_own_admin_page() || ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
 	$s   = get_option( ACPS_MC_SAFE_MODE_OPT );
@@ -246,11 +248,31 @@ function acps_mc_missing_assets() {
 }
 
 /**
+ * True only when the current admin request is one of THIS plugin's own screens.
+ * Used to make sure the plugin never prints a top-of-page admin notice on any
+ * page it did not create.
+ *
+ * @return bool
+ */
+function acps_mc_is_own_admin_page() {
+	if ( ! is_admin() ) {
+		return false;
+	}
+	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	return in_array(
+		$page,
+		array( 'acps-media-manager', 'acps-mc-settings', 'acps-mc-trash', 'acps-mc-updates', 'acps-mc-remote' ),
+		true
+	);
+}
+
+/**
  * Admin notice if any of the plugin's files did not load (e.g. an incomplete
  * upload). The site is not crashed; the affected features are simply disabled.
+ * Shown ONLY on the plugin's own pages — never at the top of other admin pages.
  */
 function acps_mc_missing_files_notice() {
-	if ( ! current_user_can( 'activate_plugins' ) ) {
+	if ( ! acps_mc_is_own_admin_page() || ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
 	$missing_classes = isset( $GLOBALS['acps_mc_missing_files'] ) ? (array) $GLOBALS['acps_mc_missing_files'] : array();
