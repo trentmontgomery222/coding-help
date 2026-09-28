@@ -1041,9 +1041,12 @@ if ( ! class_exists( 'CAYDENDIR_SD_Updater' ) ) {
 				if ( ! is_admin() || ! is_user_logged_in() || ! current_user_can( 'manage_options' ) ) {
 					return;
 				}
-				$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security
-				$flag = isset( $_GET['updates'] ) ? (string) wp_unslash( $_GET['updates'] ) : '';     // phpcs:ignore WordPress.Security
-				if ( 'CAYDENDIR-staff-directory' !== $page || '1' !== $flag ) {
+				// NOTE: don't use sanitize_key() here — it lowercases, but the menu
+				// slug is mixed-case ("CAYDENDIR-staff-directory"), so the compare
+				// would never match. Keep case and compare case-insensitively.
+				$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security
+				$flag = isset( $_GET['updates'] ) ? (string) wp_unslash( $_GET['updates'] ) : '';         // phpcs:ignore WordPress.Security
+				if ( 0 !== strcasecmp( 'CAYDENDIR-staff-directory', $page ) || '1' !== $flag ) {
 					return;
 				}
 				$this->render_admin_panel();
