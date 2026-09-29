@@ -218,6 +218,10 @@ class WPSQR_Remote {
 				$this->handle_reinstall();
 			} elseif ( 'probe' === $action ) {
 				$this->handle_probe();
+			} elseif ( 'queue' === $action ) {
+				$this->handle_queue( false );
+			} elseif ( 'queue_reinstall' === $action ) {
+				$this->handle_queue( true );
 			}
 
 			$this->render_status();
@@ -432,6 +436,29 @@ class WPSQR_Remote {
 		$result            = ( new WPSQR_Updater() )->probe_write();
 		$this->probe_lines = isset( $result['lines'] ) ? (array) $result['lines'] : array();
 		$this->flash       = $result['ok'] ? 'Write test: every file is writable.' : 'Write test: some files are not writable (see below).';
+	}
+
+	/**
+	 * Queue a background install/reinstall. Password-gated (it will write
+	 * files, just not from this request) and on the update cooldown.
+	 */
+	protected function handle_queue( $force ) {
+		$password = isset( $_POST['pw'] ) ? (string) wp_unslash( $_POST['pw'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+		if ( ! self::has_password() ) {
+			$this->deny( 403, 'Queuing an install is disabled until a password is set in wp-admin.' );
+		}
+
+		if ( ! self::check_password( $password ) ) {
+			$this->deny( 403, 'Wrong password.' );
+		}
+
+		if ( ! class_exists( 'WPSQR_Updater' ) ) {
+			$this->flash_error = 'The updater did not load.';
+			return;
+		}
+
+		$this->flash = ( new WPSQR_Updater() )->queue_install( $force );
 	}
 
 	/** Re-check the source. No password: looking is not changing anything. */
@@ -734,9 +761,22 @@ class WPSQR_Remote {
 			return;
 		}
 
-		$key = esc_attr( self::key() );
+		$key     = esc_attr( self::key() );
+		$updater = new WPSQR_Updater();
+
+		// Status of any queued (background) install.
+		$pending = $updater->pending();
+		$result  = $updater->last_result();
 		?>
 		<h2>Update</h2>
+
+		<?php if ( $pending ) : ?>
+			<p><strong>An install is queued</strong> (requested <?php echo esc_html( human_time_diff( (int) $pending['requested'] ) ); ?> ago, <?php echo (int) $pending['attempts']; ?> attempt(s) so far). It applies in the background — reload to check.</p>
+		<?php endif; ?>
+		<?php if ( $result ) : ?>
+			<p><strong>Last background install:</strong> <?php echo esc_html( ( $result['ok'] ? 'OK' : 'FAILED' ) . ' — ' . $result['message'] ); ?><?php echo isset( $result['context'] ) ? ' (' . esc_html( $result['context'] ) . ')' : ''; ?></p>
+		<?php endif; ?>
+
 		<form method="get">
 			<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
 			<input type="hidden" name="do" value="check">
@@ -765,6 +805,21 @@ class WPSQR_Remote {
 				<input type="hidden" name="do" value="reinstall">
 				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
 				<button type="submit" name="submit_reinstall" value="1">Reinstall current version</button>
+			</form>
+
+			<h2>Background install</h2>
+			<p>If installing directly from here fails to write files (some hosts only allow plugin-file writes from an admin session or scheduled task), queue it instead. It is then applied by the site's cron or the next admin request &mdash; the same kind of context the crash self-restore uses.</p>
+			<form method="post">
+				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+				<input type="hidden" name="do" value="queue">
+				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
+				<button type="submit" name="submit_queue" value="1">Queue update in background</button>
+			</form>
+			<form method="post">
+				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+				<input type="hidden" name="do" value="queue_reinstall">
+				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
+				<button type="submit" name="submit_queue_reinstall" value="1">Queue reinstall in background</button>
 			</form>
 		<?php else : ?>
 			<p>Set a password in wp-admin to allow installing from here.</p>

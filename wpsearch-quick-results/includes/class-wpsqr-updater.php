@@ -26,6 +26,12 @@ class WPSQR_Updater {
 
 	const CACHE_KEY = 'wpsqr_update_manifest';
 
+	const PENDING_OPTION = 'wpsqr_pending_update';
+	const RESULT_OPTION  = 'wpsqr_last_install_result';
+	const PENDING_EVENT  = 'wpsqr_apply_pending_update';
+	const PENDING_MAX     = 20;              // give up after this many failed contexts
+	const PENDING_MAX_AGE = 86400;           // …or after a day
+
 	public function hooks() {
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'inject_update' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 10, 3 );
@@ -34,6 +40,15 @@ class WPSQR_Updater {
 		// A source-folder rename so a zip that unpacks to a differently named
 		// folder still overwrites this plugin rather than installing beside it.
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
+
+		// A queued install is applied in a context that is actually allowed to
+		// write files: the host's cron (which on managed hosts runs as the
+		// file-owning user) and, as a safety net, the next authenticated admin
+		// request. This is the same kind of writable context the crash-rollback
+		// uses — deliberately NOT the logged-out front-end request, which on
+		// some hosts can read but not write plugin files.
+		add_action( self::PENDING_EVENT, array( $this, 'apply_pending_update' ) );
+		add_action( 'admin_init', array( $this, 'apply_pending_update' ) );
 	}
 
 	protected function settings() {
@@ -536,6 +551,129 @@ class WPSQR_Updater {
 			'updated' => true,
 			'message' => ( $force ? 'Reinstalled ' : 'Updated to ' ) . $remote['version'] . ' by direct copy. It will verify itself on the next page load.',
 		);
+	}
+
+	/* ---- Queued (background) install ----------------------------------- */
+
+	/**
+	 * Ask for an install to be applied in the background, rather than writing
+	 * files from this (possibly non-writable) request.
+	 *
+	 * Records the request and schedules a cron event to carry it out. On hosts
+	 * where the front-end request cannot write plugin files but cron / an admin
+	 * request can, this is what makes a remotely-triggered update actually land.
+	 *
+	 * @return string A human-readable status for the caller to show.
+	 */
+	public function queue_install( $force = false ) {
+		update_option(
+			self::PENDING_OPTION,
+			array(
+				'force'     => (bool) $force,
+				'requested' => time(),
+				'attempts'  => 0,
+			),
+			false
+		);
+
+		delete_option( self::RESULT_OPTION );
+
+		if ( ! wp_next_scheduled( self::PENDING_EVENT ) ) {
+			wp_schedule_single_event( time() + 20, self::PENDING_EVENT );
+		}
+
+		// Nudge cron to run soon rather than waiting for the next visit.
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
+
+		return ( $force ? 'Reinstall' : 'Update' ) . ' queued. It will be applied in the background (by the site\'s scheduled tasks, or the next time an administrator opens wp-admin) — reload this page to see the result.';
+	}
+
+	/** Is an install waiting to be applied? @return array|false */
+	public function pending() {
+		$pending = get_option( self::PENDING_OPTION );
+
+		return is_array( $pending ) ? $pending : false;
+	}
+
+	/** The outcome of the last queued install, for display. @return array|false */
+	public function last_result() {
+		$result = get_option( self::RESULT_OPTION );
+
+		return is_array( $result ) ? $result : false;
+	}
+
+	/**
+	 * Carry out a queued install — but only in a context allowed to write.
+	 *
+	 * Runs on the cron event and on admin_init. It performs the install and, if
+	 * the write still fails (a context that cannot write), leaves the request
+	 * queued and lets a later, writable context try again, up to a cap — so a
+	 * genuinely stuck request cannot loop forever.
+	 */
+	public function apply_pending_update() {
+		$pending = $this->pending();
+
+		if ( ! $pending ) {
+			return;
+		}
+
+		// One at a time. A short lock keeps overlapping requests from each
+		// running the upgrader at once.
+		if ( get_transient( 'wpsqr_pending_lock' ) ) {
+			return;
+		}
+
+		set_transient( 'wpsqr_pending_lock', 1, 2 * MINUTE_IN_SECONDS );
+
+		// Give up on a request that is too old or has failed too many times, so
+		// it does not retry indefinitely.
+		$too_old   = ( time() - (int) $pending['requested'] ) > self::PENDING_MAX_AGE;
+		$too_tried = (int) $pending['attempts'] >= self::PENDING_MAX;
+
+		if ( $too_old || $too_tried ) {
+			delete_option( self::PENDING_OPTION );
+			update_option(
+				self::RESULT_OPTION,
+				array(
+					'ok'      => false,
+					'time'    => time(),
+					'message' => 'Gave up applying the queued install ' . ( $too_old ? '(too old).' : '(too many attempts).' ) . ' The files could not be written from any background context — this host likely permits plugin-file writes only from an admin session.',
+				),
+				false
+			);
+			delete_transient( 'wpsqr_pending_lock' );
+			return;
+		}
+
+		$result = $this->install_now( (bool) $pending['force'] );
+
+		if ( $result['ok'] ) {
+			delete_option( self::PENDING_OPTION );
+		} else {
+			$pending['attempts'] = (int) $pending['attempts'] + 1;
+			update_option( self::PENDING_OPTION, $pending, false );
+
+			// Try again a little later even if no one visits.
+			if ( ! wp_next_scheduled( self::PENDING_EVENT ) ) {
+				wp_schedule_single_event( time() + 5 * MINUTE_IN_SECONDS, self::PENDING_EVENT );
+			}
+		}
+
+		update_option(
+			self::RESULT_OPTION,
+			array(
+				'ok'       => (bool) $result['ok'],
+				'time'     => time(),
+				'message'  => (string) $result['message'],
+				'attempts' => (int) $pending['attempts'],
+				'context'  => is_admin() ? 'admin request' : ( ( defined( 'DOING_CRON' ) && DOING_CRON ) ? 'cron' : 'front-end' ),
+			),
+			false
+		);
+
+		delete_transient( 'wpsqr_pending_lock' );
 	}
 
 	/**
