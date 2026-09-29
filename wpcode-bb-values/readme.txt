@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.7.1
+Stable tag: 7.7.2
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -191,6 +191,25 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.7.2 =
+* The acpsupdater parameter is a shared convention, and other plugins
+  answer on it with keys of their own. This plugin now compares the key
+  before it does anything else at all, and a key that is not its own
+  means it does nothing whatever: no refusal, no 404, no rate-limit
+  hit, no log entry - the request carries on to whichever plugin it
+  belongs to. Previously the address check ran first and answered 404,
+  which took another plugin's request away from it.
+* The address rules and the rate limit therefore apply only to requests
+  carrying this plugin's key. Another plugin's traffic can no longer
+  use up this plugin's rate-limit budget, or be locked out by this
+  plugin's address rules.
+* A failure inside the panel before the key has matched is now silent
+  for the same reason: answering with a 500 would have taken over a
+  request that was never this plugin's.
+* The control panel key is stored lower-case and URL-safe, so the
+  settings screen now says to use the address it prints rather than
+  what was typed.
 
 = 7.7.1 =
 * This plugin no longer puts a message at the top of any screen it does

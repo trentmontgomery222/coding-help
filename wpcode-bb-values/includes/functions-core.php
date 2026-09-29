@@ -1349,6 +1349,10 @@ function wpcodebbv_render_update_settings() {
 					<p class="description">
 						<?php esc_html_e( 'The value after acpsupdater= in the panel address. Leave it blank to keep using the update secret. Saving a blank box never clears it, so the panel cannot be locked away by accident.', 'wpcode-bb-values' ); ?>
 					</p>
+					<p class="description">
+						<?php esc_html_e( 'It is stored lower-case with anything URL-unsafe replaced, so type it and then use whatever the address below shows rather than what you typed.', 'wpcode-bb-values' ); ?>
+						<?php esc_html_e( 'Other plugins answer on this same acpsupdater parameter, each with its own key. Nothing here reacts to a key that is not this one: the request is left alone for whichever plugin it belongs to, and the address rules and rate limit apply only to traffic carrying this key.', 'wpcode-bb-values' ); ?>
+					</p>
 				</td>
 			</tr>
 			<tr>

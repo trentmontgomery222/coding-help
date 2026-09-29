@@ -62,6 +62,9 @@ class WPCodeBBV_Panel {
 	 * the update secret, so an install that predates panel_key keeps
 	 * working without anyone having to go and set it.
 	 *
+	 * It is stored slugified, so what comes back here is lower-case and
+	 * URL-safe whatever was typed into the settings box.
+	 *
 	 * @return string
 	 */
 	public static function key() {
@@ -437,6 +440,10 @@ class WPCodeBBV_Panel {
 	 * -------------------------------------------------------------- */
 
 	public function maybe_handle() {
+		// Only flipped once the key has proved this request is for this
+		// plugin. Until then a failure must stay silent - see the catch.
+		$ours = false;
+
 		try {
 			if ( ! isset( $_GET[ self::QUERY_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				return;
@@ -444,16 +451,44 @@ class WPCodeBBV_Panel {
 
 			$given = sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$key   = self::key();
-			$ip    = self::client_ip();
 
-			// Gate 1. Anyone not on the list gets the same 404 an unknown
-			// URL would give, so this address does not advertise itself.
+			/*
+			 * Gate 0: is this request ours at all?
+			 *
+			 * This parameter is a shared convention - other plugins on
+			 * the same site answer on it too, each with its own key. So
+			 * the key is compared before anything else happens, and a
+			 * key that is not ours means this plugin does absolutely
+			 * nothing: it returns, and the request carries on to
+			 * whichever plugin the key does belong to.
+			 *
+			 * Nothing above this line may refuse, redirect, exit, count
+			 * a rate-limit hit or write a log entry, because none of
+			 * that would be about this plugin. Every gate below is
+			 * reached only once the key has matched, so the address
+			 * rules and the rate limit apply to our own traffic alone.
+			 *
+			 * hash_equals() is used rather than === so the comparison
+			 * takes the same time whatever the key is; it is safe with
+			 * strings of different lengths, returning false.
+			 */
+			if ( '' === $key || ! hash_equals( $key, $given ) ) {
+				return;
+			}
+
+			$ours = true;
+			$ip   = self::client_ip();
+
+			// Gate 1. Past here the key was ours, so this really is a
+			// caller for this plugin. One not on the list gets the same
+			// 404 an unknown URL would give, so the address does not
+			// advertise itself.
 			if ( ! self::ip_allowed( $ip, (string) WPCodeBBV_Settings::get( 'panel_ip_rules' ) ) ) {
 				self::record_issue( 'panel refused: address ' . ( '' !== $ip ? $ip : 'unknown' ) . ' is not allowed' );
 				$this->not_found();
 			}
 
-			// Gate 2.
+			// Gate 2. Only our own callers are counted.
 			$rate = self::rate_check( $ip );
 
 			if ( ! $rate['ok'] ) {
@@ -467,16 +502,21 @@ class WPCodeBBV_Panel {
 				exit;
 			}
 
-			// Gate 3. Timing-safe, and a wrong key is a 404 as well.
-			if ( '' === $key || ! hash_equals( $key, $given ) ) {
-				self::record_issue( 'panel refused: wrong key from ' . $ip );
-				$this->not_found();
-			}
-
 			$this->serve();
 		} catch ( \Throwable $e ) {
 			if ( function_exists( 'wpcodebbv_log' ) ) {
 				wpcodebbv_log( 'panel failed: ' . $e->getMessage() );
+			}
+
+			/*
+			 * If it broke before the key matched, this request was
+			 * never ours - it may well belong to another plugin
+			 * answering on the same parameter. Answering it with a 500
+			 * would take that plugin's request away from it, so step
+			 * aside instead and let the page load as it would have.
+			 */
+			if ( ! $ours ) {
+				return;
 			}
 
 			// Never leave a half-rendered page behind.
