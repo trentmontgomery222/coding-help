@@ -542,6 +542,13 @@ class WPSQR_Updater {
 			);
 		}
 
+		// New files on disk, but opcache may still hold the old bytecode — clear
+		// it so the new code loads cleanly instead of fataling (which is what
+		// makes WordPress pause/deactivate the plugin).
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		}
+
 		$this->flush();
 		update_option( 'wpsqr_should_be_active', 1, false );
 		update_option( 'wpsqr_post_update_check', time(), false );
@@ -735,6 +742,13 @@ class WPSQR_Updater {
 
 		if ( $result['ok'] ) {
 			delete_option( self::PENDING_OPTION );
+
+			// If the install (via the WordPress upgrader) deactivated the plugin,
+			// re-enable it now, in this same request — the plugin is still loaded
+			// here, so it can act. Waiting for the next request would be too late:
+			// a deactivated plugin does not run, so it could never switch itself
+			// back on. Never leave it disabled after an update.
+			$this->ensure_active();
 		} else {
 			$pending['attempts'] = (int) $pending['attempts'] + 1;
 			update_option( self::PENDING_OPTION, $pending, false );
@@ -1113,6 +1127,12 @@ class WPSQR_Updater {
 
 		delete_option( 'wpsqr_post_update_check' );
 
+		// Make sure this verification runs the new bytecode, not a stale cached
+		// copy left in opcache from before the files were replaced.
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		}
+
 		// The activation helpers are admin-only includes.
 		if ( ! function_exists( 'is_plugin_active' ) && is_readable( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -1146,12 +1166,12 @@ class WPSQR_Updater {
 		}
 
 		// Never leave the plugin disabled after an update. If the update left
-		// it deactivated (the upgrader can, on some hosts), switch it back on.
-		// This only runs because the new code loaded, i.e. the update itself
-		// is sound — a crashing update is handled by rollback in the guard.
-		if ( get_option( 'wpsqr_should_be_active' ) && function_exists( 'is_plugin_active' ) && ! is_plugin_active( $this->basename() ) ) {
-			activate_plugin( $this->basename() );
-			$problems[] = 'plugin had been deactivated by the update; re-enabled';
+		// it deactivated (the upgrader can, on some hosts) or WordPress paused
+		// it after a one-off fatal, switch it back on. This only runs because
+		// the new code loaded, i.e. the update itself is sound — a crashing
+		// update is handled by rollback in the guard.
+		if ( get_option( 'wpsqr_should_be_active' ) && $this->ensure_active() ) {
+			$problems[] = 'plugin had been deactivated/paused by the update; re-enabled';
 		}
 
 		delete_option( 'wpsqr_should_be_active' );
@@ -1165,5 +1185,47 @@ class WPSQR_Updater {
 			),
 			false
 		);
+	}
+
+	/**
+	 * Make sure the plugin is active and not left paused after an install.
+	 *
+	 * Handles both ways WordPress can sideline a plugin around an update:
+	 * deactivation (removed from active_plugins) and the "recovery mode" pause
+	 * that WordPress applies after a fatal during load. Called in the same
+	 * request as the install, while the plugin is still running and can act.
+	 *
+	 * @return bool Whether it had to re-enable or un-pause anything.
+	 */
+	public function ensure_active() {
+		$acted = false;
+
+		if ( ! function_exists( 'is_plugin_active' ) && is_readable( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		if ( function_exists( 'is_plugin_active' ) && function_exists( 'activate_plugin' ) && ! is_plugin_active( $this->basename() ) ) {
+			activate_plugin( $this->basename() );
+			$acted = true;
+		}
+
+		// Clear a WordPress recovery-mode pause, if one was set for this plugin
+		// after a transient fatal (e.g. stale opcache during the swap). Without
+		// this the plugin can stay "paused" for visitors even though it is
+		// active. Best-effort: the API varies by WordPress version.
+		if ( function_exists( 'wp_paused_plugins' ) ) {
+			$paused = wp_paused_plugins();
+
+			if ( is_object( $paused ) && method_exists( $paused, 'delete' ) ) {
+				foreach ( array( $this->basename(), $this->slug() ) as $key ) {
+					if ( ! method_exists( $paused, 'get' ) || $paused->get( $key ) ) {
+						$paused->delete( $key );
+						$acted = true;
+					}
+				}
+			}
+		}
+
+		return $acted;
 	}
 }

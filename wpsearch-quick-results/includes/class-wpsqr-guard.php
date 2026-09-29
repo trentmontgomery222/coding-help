@@ -279,6 +279,14 @@ class WPSQR_Guard {
 		);
 
 		if ( $applied ) {
+			// The files on disk are new but opcache may still hold the OLD
+			// compiled bytecode for some of them — a mismatch that fatals on
+			// load, which is exactly what makes WordPress pause/deactivate a
+			// plugin. Clear it so this very request loads the new code cleanly.
+			if ( function_exists( 'opcache_reset' ) ) {
+				@opcache_reset(); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			}
+
 			// Confirm the new code and re-enable if the copy toggled anything.
 			update_option( 'wpsqr_should_be_active', 1, false );
 			update_option( 'wpsqr_post_update_check', time(), false );
