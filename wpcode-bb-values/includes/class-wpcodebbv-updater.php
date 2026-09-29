@@ -106,6 +106,18 @@ class WPCodeBBV_Updater {
 			add_filter( 'auto_update_plugin', $this->guarded( array( $this, 'maybe_auto_update' ) ), 10, 2 );
 		}
 
+		/*
+		 * A queued install is applied by whichever context turns up
+		 * first and is allowed to write: cron if the host runs a real
+		 * one, otherwise the next wp-admin request, which can often
+		 * write where a front-end request cannot.
+		 */
+		add_action( 'wpcodebbv_apply_pending', $this->guarded( array( $this, 'apply_pending_update' ) ) );
+
+		if ( is_admin() ) {
+			add_action( 'admin_init', $this->guarded( array( $this, 'apply_pending_update' ) ) );
+		}
+
 		// Needed by the force-update path too (a private download has to be
 		// resolved however the install was started), so it is not gated.
 		add_filter( 'upgrader_pre_download', $this->guarded( array( $this, 'maybe_resolve_private_download' ) ), 10, 3 );
@@ -1045,6 +1057,550 @@ class WPCodeBBV_Updater {
 			return '';
 		}
 		return add_query_arg( self::QUERY_VAR, $trigger, home_url( '/' ) );
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * Installing when the host will not let PHP overwrite PHP.
+	 *
+	 * Some hosts refuse to overwrite a .php file that is currently
+	 * loaded, while happily writing a new .php, a .css or a .txt in the
+	 * same folder. is_writable() says yes; the copy() still fails. That
+	 * is why there are three ways to install here rather than one:
+	 *
+	 *   direct  - the ordinary WordPress upgrader. Works where allowed.
+	 *   staged  - unpack now (new files: allowed), swap in the early
+	 *             bootstrap window before the plugin's own PHP loads.
+	 *   queued  - apply from a context that is allowed to write, i.e.
+	 *             system cron as the site user, or an admin request.
+	 *
+	 * probe() says which case this host is, so none of this has to be
+	 * guessed at.
+	 * ------------------------------------------------------------------ */
+
+	/** A queued install waiting for a context that can write. */
+	const PENDING_OPT = 'wpcodebbv_pending_update';
+
+	/** Stops two contexts applying the same queued install at once. */
+	const LOCK_KEY = 'wpcodebbv_install_lock';
+
+	/** How many times a queued install may fail before it gives up. */
+	const MAX_ATTEMPTS = 5;
+
+	/**
+	 * Brings up WP_Filesystem without asking anyone for credentials.
+	 *
+	 * Off a front-end request there is no admin page on which to show
+	 * the FTP form, so the upgrader would ask, get nothing, and bail.
+	 * Forcing the direct method for the duration of this call is what
+	 * lets an install run from a request nobody is logged into.
+	 *
+	 * @return bool
+	 */
+	private function filesystem_ready() {
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			if ( ! file_exists( ABSPATH . 'wp-admin/includes/file.php' ) ) {
+				return false;
+			}
+
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		$force_direct = static function () {
+			return 'direct';
+		};
+
+		add_filter( 'filesystem_method', $force_direct, 99 );
+		$ready = WP_Filesystem();
+		remove_filter( 'filesystem_method', $force_direct, 99 );
+
+		return (bool) $ready;
+	}
+
+	/**
+	 * Builds this plugin's entry in WordPress' update transient directly,
+	 * rather than going through the pre_set_site_transient filter.
+	 *
+	 * Two reasons. The filter is deliberately off unless somebody opts
+	 * in, because nothing about updates is meant to appear in wp-admin -
+	 * but an install still has to be able to find its package. And with
+	 * $force, the same version has to be installable over itself, which
+	 * the filter's newer-than test would refuse.
+	 *
+	 * @param object $transient
+	 * @param bool   $force
+	 * @return object
+	 */
+	private function inject_update_entry( $transient, $force = false ) {
+		$remote = $this->remote( true );
+
+		if ( ! $remote ) {
+			return $transient;
+		}
+
+		if ( ! is_object( $transient ) ) {
+			$transient = new \stdClass();
+		}
+
+		if ( ! $force && ! version_compare( $remote['version'], WPCODEBBV_VERSION, '>' ) ) {
+			return $transient;
+		}
+
+		$entry              = new \stdClass();
+		$entry->slug        = $this->slug();
+		$entry->plugin      = WPCODEBBV_BASENAME;
+		$entry->new_version = $remote['version'];
+		$entry->package     = $remote['package'];
+		$entry->url         = ! empty( $remote['html_url'] ) ? $remote['html_url'] : '';
+		$entry->tested      = ! empty( $remote['requires_wp'] ) ? $remote['requires_wp'] : '';
+
+		if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+			$transient->response = array();
+		}
+
+		$transient->response[ WPCODEBBV_BASENAME ] = $entry;
+
+		unset( $transient->no_update[ WPCODEBBV_BASENAME ] );
+
+		/*
+		 * Plugin_Upgrader compares against ->checked to decide whether
+		 * there is anything to do. Removing our entry makes the
+		 * installed version look unknown, so a reinstall of the same
+		 * version goes ahead instead of being short-circuited.
+		 */
+		if ( $force && isset( $transient->checked[ WPCODEBBV_BASENAME ] ) ) {
+			unset( $transient->checked[ WPCODEBBV_BASENAME ] );
+		}
+
+		return $transient;
+	}
+
+	/**
+	 * Installs the newest release now, in this request.
+	 *
+	 * @param bool $force Reinstall even when the versions match.
+	 * @return array{ok:bool, message:string}
+	 */
+	public function install_now( $force = false ) {
+		try {
+			$remote = $this->remote( true );
+
+			if ( ! $remote ) {
+				return array( 'ok' => false, 'message' => 'could not reach the update source' );
+			}
+
+			if ( ! $force && ! version_compare( $remote['version'], WPCODEBBV_VERSION, '>' ) ) {
+				return array( 'ok' => true, 'message' => 'already at ' . WPCODEBBV_VERSION . ' - nothing to install' );
+			}
+
+			if ( ! $this->filesystem_ready() ) {
+				return array( 'ok' => false, 'message' => 'WordPress could not get write access to the filesystem' );
+			}
+
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			require_once ABSPATH . 'wp-admin/includes/misc.php';
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+			set_site_transient( 'update_plugins', $this->inject_update_entry( get_site_transient( 'update_plugins' ), $force ) );
+
+			// A backup first: everything past this line can leave the
+			// plugin in a state somebody has to be able to undo.
+			if ( function_exists( 'wpcodebbv_arm_rollback' ) ) {
+				wpcodebbv_arm_rollback( WPCODEBBV_VERSION );
+			}
+
+			$skin     = new \Automatic_Upgrader_Skin();
+			$upgrader = new \Plugin_Upgrader( $skin );
+			$result   = $upgrader->upgrade( WPCODEBBV_BASENAME );
+
+			if ( ! is_wp_error( $result ) && $result ) {
+				$this->after_install();
+
+				return array( 'ok' => true, 'message' => 'installed ' . $remote['version'] );
+			}
+
+			/*
+			 * copy_dir() gives up on the first file it cannot place, and
+			 * takes the whole install with it. When the probe says the
+			 * files really are writable, copying them one at a time and
+			 * carrying on past a failure gets further - and names the
+			 * files that would not write.
+			 */
+			$manual = $this->manual_install( $remote );
+
+			if ( $manual['ok'] ) {
+				return $manual;
+			}
+
+			if ( function_exists( 'wpcodebbv_disarm_rollback' ) ) {
+				wpcodebbv_disarm_rollback();
+			}
+
+			$said = is_wp_error( $result ) ? $result->get_error_message() : 'the upgrader declined';
+
+			return array( 'ok' => false, 'message' => $said . '; ' . $manual['message'] );
+		} catch ( \Throwable $e ) {
+			self::log_error( 'install_now: ' . $e->getMessage() );
+
+			return array( 'ok' => false, 'message' => 'install threw: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Downloads and unpacks a release, then copies it over the live
+	 * files one at a time, continuing past anything that will not write.
+	 *
+	 * @param array $remote
+	 * @return array{ok:bool, message:string}
+	 */
+	private function manual_install( $remote ) {
+		$source = $this->fetch_and_unpack( $remote );
+
+		if ( is_string( $source ) ) {
+			return array( 'ok' => false, 'message' => $source );
+		}
+
+		$failed = array();
+		$ok     = wpcodebbv_copy_tree( $source['dir'], untrailingslashit( WPCODEBBV_DIR ), $failed );
+
+		wpcodebbv_remove_tree( $source['base'] );
+
+		if ( $ok ) {
+			$this->after_install();
+
+			return array( 'ok' => true, 'message' => 'installed ' . $remote['version'] . ' file by file' );
+		}
+
+		return array(
+			'ok'      => false,
+			'message' => 'could not write ' . count( $failed ) . ' file(s): '
+				. implode( ', ', array_map( 'basename', array_slice( $failed, 0, 8 ) ) ),
+		);
+	}
+
+	/**
+	 * Everything that has to happen once new files are in place.
+	 */
+	private function after_install() {
+		self::flush_cache();
+
+		if ( function_exists( 'wpcodebbv_reset_opcache' ) ) {
+			wpcodebbv_reset_opcache();
+		}
+
+		if ( function_exists( 'wpcodebbv_ensure_active' ) ) {
+			wpcodebbv_ensure_active();
+		}
+
+		update_option( WPCODEBBV_POSTCHECK_OPT, time(), false );
+	}
+
+	/**
+	 * Downloads the release and unpacks it into a folder of its own.
+	 *
+	 * @param array $remote
+	 * @return array{base:string, dir:string}|string The paths, or why not.
+	 */
+	private function fetch_and_unpack( $remote ) {
+		if ( ! $this->filesystem_ready() ) {
+			return 'WordPress could not get write access to the filesystem';
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+
+		$package = download_url( $remote['package'] );
+
+		if ( is_wp_error( $package ) ) {
+			return 'could not download the release: ' . $package->get_error_message();
+		}
+
+		$base = WPCODEBBV_WORK_DIR . '/stage-' . wp_generate_password( 8, false, false );
+
+		if ( ! wp_mkdir_p( $base ) ) {
+			@unlink( $package );
+
+			return 'could not create a staging folder at ' . $base;
+		}
+
+		$unzipped = unzip_file( $package, $base );
+		@unlink( $package );
+
+		if ( is_wp_error( $unzipped ) ) {
+			wpcodebbv_remove_tree( $base );
+
+			return 'could not unpack the release: ' . $unzipped->get_error_message();
+		}
+
+		$dir = $this->locate_plugin_dir( $base );
+
+		if ( '' === $dir ) {
+			wpcodebbv_remove_tree( $base );
+
+			return 'the release does not contain this plugin';
+		}
+
+		return array( 'base' => $base, 'dir' => $dir );
+	}
+
+	/**
+	 * Finds the folder holding the main plugin file, however the zip is
+	 * nested.
+	 *
+	 * @param string $base
+	 * @return string '' when it is not in there.
+	 */
+	private function locate_plugin_dir( $base ) {
+		$name = basename( WPCODEBBV_FILE );
+
+		if ( file_exists( $base . '/' . $name ) ) {
+			return $base;
+		}
+
+		foreach ( (array) glob( $base . '/*', GLOB_ONLYDIR ) as $child ) {
+			if ( file_exists( $child . '/' . $name ) ) {
+				return $child;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Unpacks a release and leaves it for the early bootstrap window to
+	 * copy into place.
+	 *
+	 * This is the one that works where overwriting in-use PHP is
+	 * refused: unpacking only creates new files, which is allowed, and
+	 * the swap then happens before this plugin's PHP is loaded.
+	 *
+	 * @param bool $force
+	 * @return array{ok:bool, message:string}
+	 */
+	public function stage_install( $force = false ) {
+		try {
+			$remote = $this->remote( true );
+
+			if ( ! $remote ) {
+				return array( 'ok' => false, 'message' => 'could not reach the update source' );
+			}
+
+			if ( ! $force && ! version_compare( $remote['version'], WPCODEBBV_VERSION, '>' ) ) {
+				return array( 'ok' => true, 'message' => 'already at ' . WPCODEBBV_VERSION . ' - nothing to stage' );
+			}
+
+			// Anything staged earlier and never applied is stale now.
+			$previous = get_option( WPCODEBBV_STAGED_OPT );
+
+			if ( is_array( $previous ) && ! empty( $previous['base'] ) ) {
+				wpcodebbv_remove_tree( $previous['base'] );
+			}
+
+			$source = $this->fetch_and_unpack( $remote );
+
+			if ( is_string( $source ) ) {
+				return array( 'ok' => false, 'message' => $source );
+			}
+
+			update_option(
+				WPCODEBBV_STAGED_OPT,
+				array(
+					'dir'     => $source['dir'],
+					'base'    => $source['base'],
+					'version' => $remote['version'],
+					'time'    => time(),
+				),
+				false
+			);
+
+			return array(
+				'ok'      => true,
+				'message' => 'staged ' . $remote['version'] . ' - load any page on this site once and it will be applied',
+			);
+		} catch ( \Throwable $e ) {
+			self::log_error( 'stage_install: ' . $e->getMessage() );
+
+			return array( 'ok' => false, 'message' => 'staging threw: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Leaves a marker for a context that is allowed to write.
+	 *
+	 * WordPress' own cron runs on a web visit as the web user, so it is
+	 * blocked by exactly the same thing as the request that queued this.
+	 * Only a scheduler the host runs as the owning user - real system
+	 * cron, or wp cron event run over SSH - escapes that, and an admin
+	 * request often can write where a front-end one cannot. This queues
+	 * the work for whichever of those turns up first; a process cannot
+	 * promote itself to another user.
+	 *
+	 * @param bool $force
+	 * @return array{ok:bool, message:string}
+	 */
+	public function queue_install( $force = false ) {
+		update_option(
+			self::PENDING_OPT,
+			array(
+				'force'     => (bool) $force,
+				'requested' => time(),
+				'attempts'  => 0,
+			),
+			false
+		);
+
+		if ( ! wp_next_scheduled( 'wpcodebbv_apply_pending' ) ) {
+			wp_schedule_single_event( time() + 20, 'wpcodebbv_apply_pending' );
+		}
+
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
+
+		return array(
+			'ok'      => true,
+			'message' => 'queued - it will be applied by cron, or by the next wp-admin request',
+		);
+	}
+
+	/**
+	 * Applies a queued install, if there is one and this context can.
+	 */
+	public function apply_pending_update() {
+		$pending = get_option( self::PENDING_OPT );
+
+		if ( ! is_array( $pending ) ) {
+			return;
+		}
+
+		// Two contexts can arrive at once - cron and an admin request.
+		if ( get_transient( self::LOCK_KEY ) ) {
+			return;
+		}
+
+		set_transient( self::LOCK_KEY, 1, 5 * MINUTE_IN_SECONDS );
+
+		$attempts = isset( $pending['attempts'] ) ? (int) $pending['attempts'] : 0;
+		$age      = time() - ( isset( $pending['requested'] ) ? (int) $pending['requested'] : time() );
+
+		if ( $attempts >= self::MAX_ATTEMPTS || $age > DAY_IN_SECONDS ) {
+			delete_option( self::PENDING_OPT );
+			delete_transient( self::LOCK_KEY );
+
+			update_option(
+				'wpcodebbv_queued_result',
+				array( 'ok' => false, 'message' => 'gave up after ' . $attempts . ' attempts', 'when' => time() ),
+				false
+			);
+
+			return;
+		}
+
+		$result = $this->install_now( ! empty( $pending['force'] ) );
+
+		if ( $result['ok'] ) {
+			delete_option( self::PENDING_OPT );
+		} else {
+			$pending['attempts'] = $attempts + 1;
+			update_option( self::PENDING_OPT, $pending, false );
+
+			if ( ! wp_next_scheduled( 'wpcodebbv_apply_pending' ) ) {
+				wp_schedule_single_event( time() + 300, 'wpcodebbv_apply_pending' );
+			}
+		}
+
+		update_option(
+			'wpcodebbv_queued_result',
+			array( 'ok' => $result['ok'], 'message' => $result['message'], 'when' => time() ),
+			false
+		);
+
+		delete_transient( self::LOCK_KEY );
+	}
+
+	/**
+	 * Finds out what this host actually allows, rather than guessing.
+	 *
+	 * The decisive line is "new .php". If a brand-new .php can be
+	 * created, the host only objects to replacing PHP that is in use,
+	 * and staging will work. If it cannot, nothing web-side can update
+	 * this plugin and it has to be done over SFTP, or by cron running as
+	 * the owning user.
+	 *
+	 * @return array<string, string>
+	 */
+	public function probe() {
+		$out = array();
+		$dir = untrailingslashit( WPCODEBBV_DIR );
+		$tag = wp_generate_password( 6, false, false );
+
+		$out['Plugin folder'] = $dir;
+		$out['Folder writable per PHP'] = is_writable( $dir ) ? 'yes' : 'no';
+
+		foreach ( array( 'md', 'txt', 'js', 'css', 'php' ) as $ext ) {
+			$file = $dir . '/wpcodebbv-writetest-' . $tag . '.' . $ext;
+			$ok   = ( false !== @file_put_contents( $file, "test\n" ) );
+
+			if ( $ok ) {
+				@unlink( $file );
+			}
+
+			$out[ 'Create a new .' . $ext ] = $ok ? 'OK' : 'FAILED';
+		}
+
+		/*
+		 * The one that matters: replacing a .php that is loaded right
+		 * now. Done on a throwaway file that this probe creates and
+		 * then includes, never on the plugin's own files - rewriting
+		 * the live entry file would test the same thing, but a write
+		 * that failed half way would truncate it and take the site
+		 * down, which is a lot to risk for a diagnostic.
+		 */
+		$probe_file = $dir . '/wpcodebbv-inuse-' . $tag . '.php';
+		$rewrote    = false;
+
+		if ( false !== @file_put_contents( $probe_file, "<?php\n// probe\n" ) ) {
+			include $probe_file; // Now loaded, so it counts as in use.
+
+			$rewrote = ( false !== @file_put_contents( $probe_file, "<?php\n// probe 2\n" ) );
+
+			@unlink( $probe_file );
+		}
+
+		$out['Overwrite an in-use .php'] = $rewrote ? 'OK' : 'FAILED';
+
+		if ( $rewrote ) {
+			$out['Verdict'] = 'Direct installs should work here.';
+		} elseif ( 'OK' === $out['Create a new .php'] ) {
+			$out['Verdict'] = 'This host refuses to overwrite PHP that is in use, but allows new PHP. Use Stage: it unpacks now and swaps on the next page load, before this plugin is loaded.';
+		} else {
+			$out['Verdict'] = 'This host will not let the web user write PHP at all. Nothing here can update the plugin - use SFTP, or cron running as the site owner. Try Queue, which waits for such a context.';
+		}
+
+		$out['Work folder'] = WPCODEBBV_WORK_DIR
+			. ( is_dir( WPCODEBBV_WORK_DIR ) ? ' (exists)' : ' (not created yet)' );
+
+		$staged = get_option( WPCODEBBV_STAGED_OPT );
+		$out['Staged and waiting'] = is_array( $staged ) && ! empty( $staged['version'] )
+			? $staged['version'] . ', staged ' . gmdate( 'Y-m-d H:i', (int) $staged['time'] ) . 'Z'
+			: 'nothing';
+
+		$pending = get_option( self::PENDING_OPT );
+		$out['Queued'] = is_array( $pending )
+			? 'yes, ' . (int) $pending['attempts'] . ' attempt(s) so far'
+			: 'nothing';
+
+		$queued = get_option( 'wpcodebbv_queued_result' );
+		if ( is_array( $queued ) ) {
+			$out['Last queued result'] = ( $queued['ok'] ? 'OK: ' : 'FAILED: ' ) . $queued['message'];
+		}
+
+		$rollback = get_option( WPCODEBBV_ROLLBACK_OPT );
+		$out['Rollback backup'] = is_array( $rollback ) && ! empty( $rollback['version'] )
+			? 'holding ' . $rollback['version']
+			: 'none';
+
+		$out['opcache'] = function_exists( 'opcache_reset' ) ? 'present, reset after every swap' : 'not present';
+
+		return $out;
 	}
 
 	/**

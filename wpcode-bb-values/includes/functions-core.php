@@ -1188,6 +1188,52 @@ function wpcodebbv_handle_update_settings() {
 		return;
 	}
 
+	// The install buttons. wp-admin is often a context that can write
+	// where a front-end request cannot, so these are worth having here
+	// as well as on the control panel.
+	$install = isset( $_POST['wpcodebbv_install'] ) ? sanitize_key( wp_unslash( $_POST['wpcodebbv_install'] ) ) : '';
+
+	if ( '' !== $install && class_exists( 'WPCodeBBV_Updater' ) ) {
+		$updater = new WPCodeBBV_Updater();
+
+		try {
+			switch ( $install ) {
+				case 'probe':
+					foreach ( $updater->probe() as $label => $value ) {
+						wpcodebbv_notice( $label . ': ' . $value );
+					}
+
+					return;
+
+				case 'stage':
+					$done = $updater->stage_install( false );
+					break;
+
+				case 'stage_force':
+					$done = $updater->stage_install( true );
+					break;
+
+				case 'queue':
+					$done = $updater->queue_install( false );
+					break;
+
+				case 'reinstall':
+					$done = $updater->install_now( true );
+					break;
+
+				default:
+					$done = $updater->install_now( false );
+					break;
+			}
+
+			wpcodebbv_notice( $done['message'], $done['ok'] ? 'updated' : 'error' );
+		} catch ( \Throwable $e ) {
+			wpcodebbv_notice( 'That could not be done: ' . $e->getMessage(), 'error' );
+		}
+
+		return;
+	}
+
 	$posted = isset( $_POST['wpcodebbv_settings'] ) && is_array( $_POST['wpcodebbv_settings'] )
 		? wp_unslash( $_POST['wpcodebbv_settings'] )
 		: array();
@@ -1383,6 +1429,27 @@ function wpcodebbv_render_update_settings() {
 			</tr>
 		</table>
 		<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Save update settings', 'wpcode-bb-values' ); ?></button></p>
+	</form>
+
+	<h3><?php esc_html_e( 'Installing', 'wpcode-bb-values' ); ?></h3>
+	<p class="description">
+		<?php esc_html_e( 'Some hosts refuse to overwrite a PHP file that is currently loaded, even though the folder is writable and a .txt in it writes fine. That is why there is more than one way to install here. Start with Check the host: it says which of these will work, instead of leaving you to guess.', 'wpcode-bb-values' ); ?>
+	</p>
+	<form method="post">
+		<?php wp_nonce_field( 'wpcodebbv_updates', 'wpcodebbv_updates_nonce' ); ?>
+		<p>
+			<button type="submit" class="button" name="wpcodebbv_install" value="probe"><?php esc_html_e( 'Check the host', 'wpcode-bb-values' ); ?></button>
+			<button type="submit" class="button" name="wpcodebbv_install" value="update"><?php esc_html_e( 'Install now', 'wpcode-bb-values' ); ?></button>
+			<button type="submit" class="button" name="wpcodebbv_install" value="stage"><?php esc_html_e( 'Stage', 'wpcode-bb-values' ); ?></button>
+			<button type="submit" class="button" name="wpcodebbv_install" value="queue"><?php esc_html_e( 'Queue', 'wpcode-bb-values' ); ?></button>
+			<button type="submit" class="button" name="wpcodebbv_install" value="reinstall"><?php esc_html_e( 'Reinstall this version', 'wpcode-bb-values' ); ?></button>
+		</p>
+		<p class="description">
+			<?php esc_html_e( 'Install now uses the ordinary WordPress upgrader, and falls back to copying the files one at a time if that gives up part way. Stage unpacks the release now - creating new files, which hosts allow - and swaps it into place on the next page load, before this plugin\'s own PHP has been loaded and is therefore locked. Queue leaves it for cron or the next wp-admin request, in case one of those is allowed to write where this one is not.', 'wpcode-bb-values' ); ?>
+		</p>
+		<p class="description">
+			<?php esc_html_e( 'Whichever route is used, the current files are backed up first, opcache is cleared afterwards so the new code is what actually runs, and the plugin is switched back on if the install left it disabled. If the new version will not load, the next request puts the old files back.', 'wpcode-bb-values' ); ?>
+		</p>
 	</form>
 	<?php
 }

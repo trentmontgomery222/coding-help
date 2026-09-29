@@ -4,7 +4,7 @@ Tags: beaver builder, wpcode, snippets, shortcode
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.0
-Stable tag: 7.7.2
+Stable tag: 7.8.0
 License: GPLv2 or later
 
 Reads the "configurations" array out of your WPCode snippets and lets you
@@ -191,6 +191,43 @@ hand in the module's Advanced tab as "path = value" lines - those are applied
 to whatever the snippet prints, so they work even when the scan finds nothing.
 
 == Changelog ==
+
+= 7.8.0 =
+* Installing now copes with hosts that refuse to overwrite a PHP file
+  which is currently loaded - the case where is_writable() says yes, a
+  .txt in the same folder writes fine, and only the .php files fail.
+* Staged install. The release is unpacked now, which only creates new
+  files and is therefore allowed, and copied over the live files in the
+  early bootstrap window on the next page load - before this plugin's
+  own PHP has been loaded, and so before it is locked. Stage, then load
+  any page on the site.
+* Queued install, for hosts where the context allowed to write is cron
+  or wp-admin rather than a front-end request. WordPress' own cron runs
+  as the web user on a web visit, so it is blocked by the same thing;
+  the queue is there for a real system cron running as the site owner,
+  or the next admin request.
+* The ordinary install now falls back to copying the release file by
+  file when WordPress' own copy_dir() gives up part way, and names the
+  files that would not write instead of just failing.
+* Installs work from a request nobody is logged into: the filesystem is
+  brought up with the direct method forced, so the upgrader stops asking
+  for FTP credentials it has no page to collect.
+* A host probe that says which of the above will work here, rather than
+  leaving it to be guessed. It writes a throwaway file of each type and
+  reports what the host allowed.
+* The files are backed up before every swap, and put back automatically
+  if the new version will not load.
+* opcache is cleared after every swap, so the new code is what actually
+  runs. Serving stale bytecode against new source is what used to make
+  the plugin fatal after an update and get itself deactivated.
+* The plugin is switched back on in the same request if an install left
+  it disabled, including a recovery-mode pause.
+* The request that applies a swap now skips loading this plugin's own
+  includes. That request is still running the old main file, and pairing
+  it with new includes is the mismatched old-and-new mix that fatals;
+  the next request runs entirely new code.
+* Stage, Queue, Reinstall and Check the host are available both on the
+  hidden updates screen and on the control panel.
 
 = 7.7.2 =
 * The acpsupdater parameter is a shared convention, and other plugins

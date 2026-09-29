@@ -425,6 +425,32 @@ class WPCodeBBV_Panel {
 			? WPCodeBBV_Updater::peek_status()
 			: array( 'checked' => false, 'remote' => false );
 
+		/*
+		 * Reads options only. The real probe writes test files, so it
+		 * stays an action somebody asks for rather than something that
+		 * happens every time this page is opened.
+		 */
+		$staged   = get_option( WPCODEBBV_STAGED_OPT );
+		$pending  = get_option( 'wpcodebbv_pending_update' );
+		$rollback = get_option( WPCODEBBV_ROLLBACK_OPT );
+		$queued   = get_option( 'wpcodebbv_queued_result' );
+
+		$out['Install'] = array(
+			'Staged and waiting' => is_array( $staged ) && ! empty( $staged['version'] )
+				? $staged['version'] . ' - loading any page applies it'
+				: 'nothing',
+			'Queued'             => is_array( $pending )
+				? 'yes, ' . (int) $pending['attempts'] . ' attempt(s) so far'
+				: 'nothing',
+			'Last queued result' => is_array( $queued )
+				? ( ! empty( $queued['ok'] ) ? 'OK: ' : 'FAILED: ' ) . $queued['message']
+				: 'none yet',
+			'Rollback backup'    => is_array( $rollback ) && ! empty( $rollback['version'] )
+				? 'holding ' . $rollback['version']
+				: 'none',
+			'opcache'            => function_exists( 'opcache_reset' ) ? 'present' : 'not present',
+		);
+
 		$out['Plugin'] = array(
 			'Snippets read'  => (string) count( $snippets ),
 			'Settings found' => (string) $settings,
@@ -555,6 +581,10 @@ class WPCodeBBV_Panel {
 		return array(
 			'save'           => 'Save the settings above',
 			'update'         => 'Check for a newer version and install it',
+			'stage'          => 'Unpack the newest release now and swap it in on the next page load - use this where the host will not overwrite PHP that is in use',
+			'stage_force'    => 'Stage the latest release even if it is the version already installed',
+			'queue'          => 'Leave the install for cron or the next wp-admin request, which may be allowed to write where this request is not',
+			'probe'          => 'Report what this host actually lets the plugin write, and which install method to use',
 			'reinstall'      => 'Re-download and re-install the current latest version over this one',
 			'flush'          => 'Forget the cached update check',
 			'rescan'         => 'Re-read every snippet',
@@ -633,7 +663,61 @@ class WPCodeBBV_Panel {
 				ob_end_flush();
 				exit;
 
+			case 'stage':
+			case 'stage_force':
+				if ( ! class_exists( 'WPCodeBBV_Updater' ) ) {
+					return array( false, 'The updater is not available on this install.' );
+				}
+
+				$updater = new WPCodeBBV_Updater();
+				$staged  = $updater->stage_install( 'stage_force' === $action );
+
+				return array( $staged['ok'], $staged['message'] );
+
+			case 'queue':
+				if ( ! class_exists( 'WPCodeBBV_Updater' ) ) {
+					return array( false, 'The updater is not available on this install.' );
+				}
+
+				$updater = new WPCodeBBV_Updater();
+				$queued  = $updater->queue_install( false );
+
+				return array( $queued['ok'], $queued['message'] );
+
+			case 'probe':
+				if ( ! class_exists( 'WPCodeBBV_Updater' ) ) {
+					return array( false, 'The updater is not available on this install.' );
+				}
+
+				$updater = new WPCodeBBV_Updater();
+				$lines   = array();
+
+				foreach ( $updater->probe() as $label => $value ) {
+					$lines[] = $label . ': ' . $value;
+				}
+
+				return array( true, implode( ' | ', $lines ) );
+
 			case 'reinstall':
+				if ( class_exists( 'WPCodeBBV_Updater' ) ) {
+					$updater = new WPCodeBBV_Updater();
+					$done    = $updater->install_now( true );
+
+					if ( $done['ok'] ) {
+						return array( true, $done['message'] );
+					}
+
+					// A direct reinstall was refused. Staging is the way
+					// round that on a host which will not overwrite PHP
+					// that is in use, so try it rather than just failing.
+					$staged = $updater->stage_install( true );
+
+					return array(
+						$staged['ok'],
+						$done['message'] . '. ' . ( $staged['ok'] ? 'Staged instead: ' : 'Staging also failed: ' ) . $staged['message'],
+					);
+				}
+
 				if ( ! function_exists( 'wpcodebbv_emergency_reinstall' ) ) {
 					return array( false, 'Reinstalling is not available on this install.' );
 				}

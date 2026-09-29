@@ -3,7 +3,7 @@
  * Plugin Name:       WPCode Values for Beaver Builder
  * Plugin URI:        https://acpsmd.org
  * Description:       Reads the settings out of your WPCode snippets - configurations arrays and anything marked // Configurable - and puts them on a Beaver Builder module, so a page editor can change them per page.
- * Version:           7.7.2
+ * Version:           7.8.0
  * Requires at least: 5.8
  * Requires PHP:      7.0
  * Author:            ACPS
@@ -66,7 +66,7 @@ if ( defined( 'WPCODEBBV_VERSION' ) ) {
 	return;
 }
 
-define( 'WPCODEBBV_VERSION', '7.7.2' );
+define( 'WPCODEBBV_VERSION', '7.8.0' );
 
 /** When this request reached the plugin, for the panel's timings. */
 define( 'WPCODEBBV_START', microtime( true ) );
@@ -91,6 +91,30 @@ define( 'WPCODEBBV_OPT_SETTINGS', 'wpcodebbv_settings' );
 
 /** Option holding "safe mode" state after a fatal was caught in our own code. */
 define( 'WPCODEBBV_SAFE_MODE_OPT', 'wpcodebbv_safe_mode' );
+
+/** A staged release waiting to be copied over the live files. */
+define( 'WPCODEBBV_STAGED_OPT', 'wpcodebbv_staged_install' );
+
+/** A backup of the files as they were before the last swap. */
+define( 'WPCODEBBV_ROLLBACK_OPT', 'wpcodebbv_rollback' );
+
+/** Set when an install finishes, so the next request checks the result. */
+define( 'WPCODEBBV_POSTCHECK_OPT', 'wpcodebbv_post_update_check' );
+
+/*
+ * Where backups and staged releases are put.
+ *
+ * WP_CONTENT_DIR is normally there by the time a plugin loads, but this
+ * file must not fatal if it is not - that would be this plugin taking
+ * the site down, which is the one thing it may never do. Falling back
+ * to the folder above the plugin's own gets the same place on a normal
+ * install without assuming anything.
+ */
+if ( defined( 'WP_CONTENT_DIR' ) ) {
+	define( 'WPCODEBBV_WORK_DIR', WP_CONTENT_DIR . '/wpcodebbv-work' );
+} else {
+	define( 'WPCODEBBV_WORK_DIR', dirname( dirname( rtrim( WPCODEBBV_DIR, '/\\' ) ) ) . '/wpcodebbv-work' );
+}
 
 /**
  * Problems found while loading, surfaced as one admin notice instead of
@@ -253,6 +277,389 @@ function wpcodebbv_missing_files() {
 	}
 
 	return $missing;
+}
+
+/* ---------------------------------------------------------------------
+ * The early window.
+ *
+ * Everything in this block runs before the plugin loads a single one of
+ * its own includes, and it exists because of one host behaviour:
+ *
+ *   On some hosts a PHP file that is CURRENTLY LOADED cannot be
+ *   overwritten, even though is_writable() says yes and a .txt in the
+ *   same folder writes fine. New .php files can be created; in-use ones
+ *   cannot be replaced.
+ *
+ * At this point in the request none of this plugin's includes have been
+ * loaded yet, so they are not in use, so they CAN be written. That is
+ * the whole trick. A release downloaded from anywhere is unpacked into
+ * a staging folder (new files - always allowed), and the swap happens
+ * here, in the one instant of the request when it is permitted.
+ *
+ * So: no classes, no WP_Filesystem, no plugin includes. Plain PHP and
+ * whatever WordPress core has already loaded, because the less this
+ * depends on, the more reliably it runs when something is broken.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Recursively copies a directory. Plain @copy, deliberately.
+ *
+ * @param string $from
+ * @param string $to
+ * @param string[] $failed Filled with the relative paths that would not write.
+ * @return bool True when every file arrived.
+ */
+function wpcodebbv_copy_tree( $from, $to, &$failed = array() ) {
+	$from = rtrim( (string) $from, '/\\' );
+	$to   = rtrim( (string) $to, '/\\' );
+
+	if ( ! is_dir( $from ) ) {
+		return false;
+	}
+
+	if ( ! is_dir( $to ) && ! @mkdir( $to, 0755, true ) && ! is_dir( $to ) ) {
+		return false;
+	}
+
+	$handle = @opendir( $from );
+
+	if ( ! $handle ) {
+		return false;
+	}
+
+	$ok = true;
+
+	while ( false !== ( $entry = readdir( $handle ) ) ) {
+		if ( '.' === $entry || '..' === $entry ) {
+			continue;
+		}
+
+		$src = $from . '/' . $entry;
+		$dst = $to . '/' . $entry;
+
+		if ( is_dir( $src ) ) {
+			if ( ! wpcodebbv_copy_tree( $src, $dst, $failed ) ) {
+				$ok = false;
+			}
+
+			continue;
+		}
+
+		if ( @copy( $src, $dst ) ) {
+			continue;
+		}
+
+		// One retry after loosening the mode - some hosts leave files
+		// read-only rather than refusing outright.
+		@chmod( $dst, 0644 );
+
+		if ( ! @copy( $src, $dst ) ) {
+			$failed[] = $dst;
+			$ok       = false;
+		}
+	}
+
+	closedir( $handle );
+
+	return $ok;
+}
+
+/**
+ * Recursively deletes a directory. Used for staging and backup folders,
+ * both of which this plugin created itself.
+ *
+ * @param string $dir
+ * @return bool
+ */
+function wpcodebbv_remove_tree( $dir ) {
+	$dir = rtrim( (string) $dir, '/\\' );
+
+	if ( '' === $dir || ! is_dir( $dir ) ) {
+		return false;
+	}
+
+	// Never walk out of the folder this plugin owns.
+	if ( 0 !== strpos( $dir, rtrim( WPCODEBBV_WORK_DIR, '/\\' ) ) ) {
+		return false;
+	}
+
+	$handle = @opendir( $dir );
+
+	if ( ! $handle ) {
+		return false;
+	}
+
+	while ( false !== ( $entry = readdir( $handle ) ) ) {
+		if ( '.' === $entry || '..' === $entry ) {
+			continue;
+		}
+
+		$path = $dir . '/' . $entry;
+
+		if ( is_dir( $path ) ) {
+			wpcodebbv_remove_tree( $path );
+		} else {
+			@unlink( $path );
+		}
+	}
+
+	closedir( $handle );
+
+	return @rmdir( $dir );
+}
+
+/**
+ * Throws away whatever opcache is holding, so the files just written are
+ * the ones that actually run.
+ *
+ * Without this the next request can compile a mix of old cached bytecode
+ * and new source, which fatals - and a fatal right after an update is
+ * what makes WordPress pause the plugin. This is the fix for "it
+ * disabled itself after updating".
+ */
+function wpcodebbv_reset_opcache() {
+	if ( function_exists( 'opcache_reset' ) ) {
+		@opcache_reset();
+	}
+}
+
+/**
+ * Copies the live files to a backup, so a bad release can be undone.
+ *
+ * @param string $version The version being backed up.
+ * @return bool
+ */
+function wpcodebbv_arm_rollback( $version ) {
+	$dir = WPCODEBBV_WORK_DIR . '/backup';
+
+	wpcodebbv_remove_tree( $dir );
+
+	if ( ! wpcodebbv_copy_tree( rtrim( WPCODEBBV_DIR, '/\\' ), $dir ) ) {
+		wpcodebbv_remove_tree( $dir );
+
+		return false;
+	}
+
+	update_option(
+		WPCODEBBV_ROLLBACK_OPT,
+		array(
+			'dir'     => $dir,
+			'version' => (string) $version,
+			'time'    => time(),
+		),
+		false
+	);
+
+	return true;
+}
+
+/**
+ * Drops the backup once the new code has loaded without incident.
+ */
+function wpcodebbv_disarm_rollback() {
+	$state = get_option( WPCODEBBV_ROLLBACK_OPT );
+
+	if ( is_array( $state ) && ! empty( $state['dir'] ) ) {
+		wpcodebbv_remove_tree( $state['dir'] );
+	}
+
+	delete_option( WPCODEBBV_ROLLBACK_OPT );
+}
+
+/**
+ * If the last update left the plugin fatal, put the old files back.
+ *
+ * Runs in the early window for the same reason the staged copy does:
+ * the files being restored are this plugin's own, and they are not in
+ * use yet at this point in the request.
+ *
+ * @return bool True when something was restored.
+ */
+function wpcodebbv_maybe_rollback() {
+	$state = get_option( WPCODEBBV_ROLLBACK_OPT );
+
+	if ( ! is_array( $state ) || empty( $state['dir'] ) || ! is_dir( $state['dir'] ) ) {
+		return false;
+	}
+
+	// Only roll back if the new code actually fell over. A backup on its
+	// own just means an update happened and has not been cleared yet.
+	if ( ! wpcodebbv_is_safe_mode() ) {
+		return false;
+	}
+
+	$restored = wpcodebbv_copy_tree( $state['dir'], rtrim( WPCODEBBV_DIR, '/\\' ) );
+
+	if ( ! $restored ) {
+		return false;
+	}
+
+	wpcodebbv_reset_opcache();
+	wpcodebbv_remove_tree( $state['dir'] );
+	delete_option( WPCODEBBV_ROLLBACK_OPT );
+
+	// The old code is back and is known to work, so there is nothing
+	// left to stay dormant about.
+	delete_option( WPCODEBBV_SAFE_MODE_OPT );
+
+	update_option(
+		'wpcodebbv_update_failed',
+		array(
+			'when'    => gmdate( 'Y-m-d H:i:s' ) . ' UTC',
+			'version' => isset( $state['version'] ) ? $state['version'] : '',
+			'note'    => 'rolled back to the previous files after a fatal',
+		),
+		false
+	);
+
+	return true;
+}
+
+/**
+ * Applies a staged release, if one is waiting.
+ *
+ * This is the piece that beats "you may not overwrite a PHP file that is
+ * in use": it runs before this plugin's includes are loaded, so they are
+ * not in use, so they can be replaced.
+ *
+ * @return bool True when a release was applied.
+ */
+function wpcodebbv_maybe_apply_staged() {
+	$stage = get_option( WPCODEBBV_STAGED_OPT );
+
+	if ( ! is_array( $stage ) || empty( $stage['dir'] ) || ! is_dir( $stage['dir'] ) ) {
+		// A marker pointing at nothing is just litter.
+		if ( false !== $stage ) {
+			delete_option( WPCODEBBV_STAGED_OPT );
+		}
+
+		return false;
+	}
+
+	// Back up what is there before overwriting any of it.
+	wpcodebbv_arm_rollback( WPCODEBBV_VERSION );
+
+	$failed = array();
+	$ok     = wpcodebbv_copy_tree( $stage['dir'], rtrim( WPCODEBBV_DIR, '/\\' ), $failed );
+
+	wpcodebbv_remove_tree( $stage['dir'] );
+	delete_option( WPCODEBBV_STAGED_OPT );
+
+	if ( ! $ok ) {
+		// Nothing half-written should be left running: put the backup
+		// straight back, and keep it out of the way of the next boot.
+		$state = get_option( WPCODEBBV_ROLLBACK_OPT );
+
+		if ( is_array( $state ) && ! empty( $state['dir'] ) ) {
+			wpcodebbv_copy_tree( $state['dir'], rtrim( WPCODEBBV_DIR, '/\\' ) );
+		}
+
+		wpcodebbv_disarm_rollback();
+		wpcodebbv_reset_opcache();
+
+		update_option(
+			'wpcodebbv_update_failed',
+			array(
+				'when'   => gmdate( 'Y-m-d H:i:s' ) . ' UTC',
+				'note'   => 'a staged release could not be copied over the live files',
+				'failed' => array_slice( $failed, 0, 20 ),
+			),
+			false
+		);
+
+		return false;
+	}
+
+	wpcodebbv_reset_opcache();
+
+	// Checked on the next request: if the new code loads, the backup is
+	// dropped; if it fataled, safe mode trips and the rollback above
+	// puts the old files back.
+	update_option(
+		WPCODEBBV_POSTCHECK_OPT,
+		array(
+			'time'   => time(),
+			// The version that should be running once this has taken.
+			'expect' => isset( $stage['version'] ) ? (string) $stage['version'] : '',
+		),
+		false
+	);
+
+	return true;
+}
+
+/**
+ * Makes sure WordPress still has the plugin switched on, and clears a
+ * recovery-mode pause if one was set.
+ *
+ * A deactivated plugin cannot switch itself back on next request - it
+ * does not run - so this has to happen in the same request as the
+ * install that might have deactivated it.
+ */
+function wpcodebbv_ensure_active() {
+	try {
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			if ( ! file_exists( ABSPATH . 'wp-admin/includes/plugin.php' ) ) {
+				return;
+			}
+
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		if ( ! is_plugin_active( WPCODEBBV_BASENAME ) ) {
+			activate_plugin( WPCODEBBV_BASENAME, '', false, true );
+		}
+
+		// A fatal during a previous request can leave the plugin in
+		// recovery mode, which keeps it switched off no matter what
+		// activate_plugin() says.
+		if ( function_exists( 'wp_paused_plugins' ) ) {
+			$paused = wp_paused_plugins();
+
+			foreach ( array( WPCODEBBV_BASENAME, dirname( WPCODEBBV_BASENAME ) ) as $key ) {
+				if ( ! method_exists( $paused, 'get' ) || $paused->get( $key ) ) {
+					$paused->delete( $key );
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		wpcodebbv_log( 'ensure_active failed: ' . $e->getMessage() );
+	}
+}
+
+/*
+ * The order matters. Roll back first - if the last swap left the plugin
+ * fatal, the old files have to go back before anything else is
+ * considered. Only then is a newly staged release applied.
+ */
+/*
+ * The early window needs the options table to know whether there is
+ * anything to do. If WordPress is far enough along to be loading
+ * plugins this is always true - but this file does not fatal on an
+ * assumption, whatever the assumption is, so it checks.
+ */
+$wpcodebbv_can_swap = function_exists( 'get_option' )
+	&& function_exists( 'update_option' )
+	&& function_exists( 'delete_option' );
+
+if ( $wpcodebbv_can_swap ) {
+	wpcodebbv_maybe_rollback();
+}
+
+/*
+ * If a release was just applied, THIS file is still the old one - PHP
+ * compiled it before any of that happened, and a file cannot replace
+ * itself mid-execution. The includes on disk are now the new ones.
+ *
+ * Loading them here would run new includes against an old main file:
+ * the mismatched old-and-new mix that fatals, trips safe mode, and
+ * rolls back a release that was in fact perfectly good. So this one
+ * request goes without them. The site is unaffected - it simply does
+ * not have this plugin's features for a single page load - and the
+ * next request runs entirely new code.
+ */
+if ( $wpcodebbv_can_swap && wpcodebbv_maybe_apply_staged() ) {
+	return;
 }
 
 wpcodebbv_safe_require( 'includes/class-wpcodebbv-scanner.php' );
@@ -592,6 +999,44 @@ function wpcodebbv_emergency_reinstall( $settings ) {
 function wpcodebbv_boot() {
 	// Resuming has to work even while dormant.
 	wpcodebbv_safe_hook( 'admin_post_wpcodebbv_resume', 'wpcodebbv_resume_from_safe_mode' );
+
+	/*
+	 * Getting this far means every include compiled and loaded, which
+	 * is the whole question a post-update check asks. So the answer is
+	 * yes: drop the backup, and make sure the plugin is actually
+	 * switched on - a swap can land while WordPress has it deactivated.
+	 */
+	$wpcodebbv_check = function_exists( 'get_option' ) ? get_option( WPCODEBBV_POSTCHECK_OPT ) : false;
+
+	if ( false !== $wpcodebbv_check ) {
+		// Whatever else is true, the plugin must not be left switched
+		// off by an install.
+		wpcodebbv_ensure_active();
+
+		$wpcodebbv_expect = is_array( $wpcodebbv_check ) && isset( $wpcodebbv_check['expect'] )
+			? (string) $wpcodebbv_check['expect']
+			: '';
+		$wpcodebbv_when   = is_array( $wpcodebbv_check ) && isset( $wpcodebbv_check['time'] )
+			? (int) $wpcodebbv_check['time']
+			: 0;
+
+		/*
+		 * The backup is only safe to drop once the new code is what is
+		 * actually running - which means the main file too, not just
+		 * the includes. Right after a swap this is still the old main
+		 * file, so the check waits for the request after that one.
+		 */
+		if ( '' === $wpcodebbv_expect || WPCODEBBV_VERSION === $wpcodebbv_expect ) {
+			delete_option( WPCODEBBV_POSTCHECK_OPT );
+			wpcodebbv_disarm_rollback();
+		} elseif ( $wpcodebbv_when > 0 && ( time() - $wpcodebbv_when ) > HOUR_IN_SECONDS ) {
+			// An hour of requests and the expected version never turned
+			// up. Something did not take; stop holding the backup open
+			// forever, but say so.
+			delete_option( WPCODEBBV_POSTCHECK_OPT );
+			wpcodebbv_log( 'after an install, version ' . $wpcodebbv_expect . ' never became the running version' );
+		}
+	}
 
 	if ( wpcodebbv_is_safe_mode() ) {
 		/*
