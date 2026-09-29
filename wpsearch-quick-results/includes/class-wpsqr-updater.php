@@ -391,32 +391,150 @@ class WPSQR_Updater {
 			WPSQR_Guard::arm_rollback( WPSQR_VERSION );
 		}
 
+		$upgrader_note = '';
+
 		try {
 			$skin     = new \Automatic_Upgrader_Skin();
 			$upgrader = new \Plugin_Upgrader( $skin );
 
 			$result = $upgrader->upgrade( $this->basename() );
 		} catch ( \Throwable $e ) {
-			return array( 'ok' => false, 'updated' => false, 'message' => 'Update failed: ' . $e->getMessage() );
+			$result        = false;
+			$upgrader_note = 'WordPress upgrader threw: ' . $e->getMessage() . '. ';
 		}
 
 		if ( is_wp_error( $result ) ) {
-			return array( 'ok' => false, 'updated' => false, 'message' => 'Update failed: ' . $result->get_error_message() );
+			$upgrader_note = 'WordPress upgrader: ' . $result->get_error_message() . '. ';
+			$result        = false;
 		}
 
-		if ( false === $result || null === $result ) {
-			// Almost always a filesystem-permissions problem — the front-end
-			// process cannot write to the plugins directory.
-			return array( 'ok' => false, 'updated' => false, 'message' => 'Update could not be written — the web server may not have permission to update files. ' . implode( ' ', (array) $skin->get_upgrade_messages() ) );
+		if ( false !== $result && null !== $result ) {
+			// after_update() has scheduled the post-update check; it runs on the
+			// next request, once the new code is loaded, and confirms the plugin
+			// and this very channel survived.
+			return array(
+				'ok'      => true,
+				'updated' => true,
+				'message' => ( $force ? 'Reinstalled ' : 'Updated to ' ) . $remote['version'] . '. It will verify itself on the next page load.',
+			);
 		}
 
-		// after_update() has scheduled the post-update check; it runs on the
-		// next request, once the new code is loaded, and confirms the plugin
-		// and this very channel survived.
+		// The WordPress upgrader failed (its copy step aborts on the first file
+		// it can't handle, even when every file is in fact writable). Since the
+		// write-probe shows the files ARE writable, copy the unpacked release
+		// into place ourselves — file by file, so one problem file cannot wedge
+		// the whole install — rather than trust the upgrader's all-or-nothing
+		// copy. This is the path that actually completes on hosts where the
+		// core upgrader quietly fails.
+		$manual = $this->manual_install( $remote, $force );
+
+		if ( ! $manual['ok'] ) {
+			$manual['message'] = $upgrader_note . $manual['message'];
+		}
+
+		return $manual;
+	}
+
+	/**
+	 * Install the release by copying its files ourselves.
+	 *
+	 * A fallback for when WordPress's Plugin_Upgrader fails its copy step even
+	 * though the destination is writable. Downloads and unpacks the package,
+	 * then copies every file into the plugin directory with the direct
+	 * filesystem, overwriting, and — crucially — continues past any single file
+	 * it cannot write instead of aborting, reporting exactly which ones failed.
+	 *
+	 * @return array { ok, updated, message }
+	 */
+	public function manual_install( $remote, $force = false ) {
+		foreach ( array( 'includes/plugin.php', 'includes/file.php', 'includes/misc.php' ) as $file ) {
+			$path = ABSPATH . 'wp-admin/' . $file;
+
+			if ( is_readable( $path ) ) {
+				require_once $path;
+			}
+		}
+
+		if ( ! function_exists( 'download_url' ) || ! function_exists( 'unzip_file' ) ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Direct copy: the WordPress download/unzip API is not available.' );
+		}
+
+		$this->prepare_filesystem();
+
+		$package = download_url( $remote['download_url'] );
+
+		if ( is_wp_error( $package ) ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Direct copy: download failed: ' . $package->get_error_message() );
+		}
+
+		$tmp   = trailingslashit( get_temp_dir() ) . 'wpsqr-install-' . wp_generate_password( 8, false, false );
+		$unzip = unzip_file( $package, $tmp );
+
+		@unlink( $package ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+		if ( is_wp_error( $unzip ) ) {
+			$this->rrmdir( $tmp );
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Direct copy: unpack failed: ' . $unzip->get_error_message() );
+		}
+
+		$source = $this->locate_main_dir( $tmp );
+
+		if ( '' === $source ) {
+			$this->rrmdir( $tmp );
+			return array( 'ok' => false, 'updated' => false, 'message' => 'Direct copy: the plugin main file was not found in the package.' );
+		}
+
+		$dest = trailingslashit( WP_PLUGIN_DIR ) . $this->slug();
+
+		if ( ! is_dir( $dest ) ) {
+			wp_mkdir_p( $dest );
+		}
+
+		$failed = array();
+
+		$iterator = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $source, \FilesystemIterator::SKIP_DOTS ),
+			\RecursiveIteratorIterator::SELF_FIRST
+		);
+
+		foreach ( $iterator as $item ) {
+			$rel    = ltrim( str_replace( $source, '', $item->getPathname() ), '/\\' );
+			$target = trailingslashit( $dest ) . $rel;
+
+			if ( $item->isDir() ) {
+				if ( ! is_dir( $target ) && ! wp_mkdir_p( $target ) ) {
+					$failed[] = $rel . '/ (mkdir)';
+				}
+				continue;
+			}
+
+			if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.WP.AlternativeFunctions
+				@chmod( $target, 0644 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.WP.AlternativeFunctions
+
+				if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors,WordPress.WP.AlternativeFunctions
+					$failed[] = $rel;
+				}
+			}
+		}
+
+		$this->rrmdir( $tmp );
+
+		if ( $failed ) {
+			return array(
+				'ok'      => false,
+				'updated' => false,
+				'message' => 'Direct copy could not write ' . count( $failed ) . ' file(s): ' . implode( ', ', array_slice( $failed, 0, 20 ) ) . ( count( $failed ) > 20 ? ' …' : '' ),
+			);
+		}
+
+		$this->flush();
+		update_option( 'wpsqr_should_be_active', 1, false );
+		update_option( 'wpsqr_post_update_check', time(), false );
+
 		return array(
 			'ok'      => true,
 			'updated' => true,
-			'message' => ( $force ? 'Reinstalled ' : 'Updated to ' ) . $remote['version'] . '. It will verify itself on the next page load.',
+			'message' => ( $force ? 'Reinstalled ' : 'Updated to ' ) . $remote['version'] . ' by direct copy. It will verify itself on the next page load.',
 		);
 	}
 
