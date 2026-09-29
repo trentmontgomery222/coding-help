@@ -35,8 +35,15 @@ delete_option( 'acps_ls_last_sync' );
 delete_option( 'acps_ls_safe_mode' );
 delete_option( 'acps_ls_update_failed' );
 delete_option( 'acps_ls_verified' );
+delete_option( 'acps_ls_staged_install' );
+delete_option( 'acps_ls_rollback' );
+delete_option( 'acps_ls_pending_update' );
+delete_option( 'acps_ls_pending_result' );
+delete_option( 'acps_ls_should_be_active' );
 delete_transient( 'acps_ls_update_remote' );
 delete_transient( 'acps_ls_devstatus' );
+delete_transient( 'acps_ls_pending_lock' );
+wp_clear_scheduled_hook( 'acps_ls_apply_pending' );
 
 // NOTE: API keys live inside the acps_ls_settings option (deleted above), so no
 // separate cleanup is needed for them.

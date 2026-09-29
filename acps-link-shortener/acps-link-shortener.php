@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Link Shortener
  * Plugin URI:        https://caydenriddle.com/
  * Description:       Self-hosted, branded URL shortener. Creates short-link redirects with click tracking, an accessible admin UI, and a password-gated front-end dashboard for staff.
- * Version:           1.22.0
+ * Version:           1.23.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Cayden
@@ -59,7 +59,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
  * Re-flush rewrite rules after changing this (Settings -> Permalinks -> Save,
  * or deactivate + reactivate the plugin).
  */
-define( 'ACPS_LS_VERSION', '1.22.0' );
+define( 'ACPS_LS_VERSION', '1.23.0' );
 define( 'ACPS_LS_DB_VERSION', '1.3.0' );
 define( 'ACPS_LS_SLUG_PREFIX', '' );
 define( 'ACPS_LS_QUERY_VAR', 'acps_ls_slug' );
@@ -72,6 +72,13 @@ define( 'ACPS_LS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_LS_OPT_DB_VERSION', 'acps_ls_db_version' );
 define( 'ACPS_LS_OPT_SETTINGS', 'acps_ls_settings' );
 define( 'ACPS_LS_OPT_SETUP_TOKENS', 'acps_ls_setup_tokens' );
+
+// Option keys used by staging / rollback / background install (must be defined
+// BEFORE the pristine-window staged-apply/rollback run below).
+define( 'ACPS_LS_OPT_STAGED', 'acps_ls_staged_install' );
+define( 'ACPS_LS_OPT_ROLLBACK', 'acps_ls_rollback' );
+define( 'ACPS_LS_OPT_PENDING', 'acps_ls_pending_update' );
+define( 'ACPS_LS_OPT_SHOULD_ACTIVE', 'acps_ls_should_be_active' );
 
 // REST namespace (used by the updater's staged-rollout status endpoint).
 define( 'ACPS_LS_REST_NAMESPACE', 'acps-ls/v1' );
@@ -150,6 +157,14 @@ function acps_ls_load_files() {
 
 	return true;
 }
+
+// PRISTINE WINDOW: before the plugin's own includes are loaded, roll back a bad
+// update if one is armed and the last request tripped safe mode, then apply any
+// staged install. This is the one instant when the plugin's in-use .php files
+// are not yet loaded, so they can be overwritten even on hosts that block
+// overwriting in-use PHP from a normal request (see the update recipe).
+acps_ls_maybe_rollback();
+acps_ls_apply_staged();
 
 $acps_ls_loaded = acps_ls_load_files();
 
@@ -755,6 +770,32 @@ function acps_ls_boot_control() {
 add_action( 'plugins_loaded', 'acps_ls_boot_control', 5 );
 
 /**
+ * Post-update check: if a staged install marked "should be active" and THIS code
+ * is now running cleanly, the new version loaded fine — so disarm the rollback
+ * backup, make sure the plugin is active, and clear the marker.
+ */
+function acps_ls_post_update_check() {
+	if ( ! get_option( defined( 'ACPS_LS_OPT_SHOULD_ACTIVE' ) ? ACPS_LS_OPT_SHOULD_ACTIVE : 'acps_ls_should_be_active' ) ) {
+		return;
+	}
+	delete_option( defined( 'ACPS_LS_OPT_SHOULD_ACTIVE' ) ? ACPS_LS_OPT_SHOULD_ACTIVE : 'acps_ls_should_be_active' );
+	if ( function_exists( 'opcache_reset' ) ) {
+		@opcache_reset(); // phpcs:ignore
+	}
+	if ( function_exists( 'acps_ls_disarm_rollback' ) ) {
+		acps_ls_disarm_rollback();
+	}
+	if ( ! empty( $GLOBALS['acps_ls_loaded'] ) && class_exists( 'ACPS_LS_Updater' ) ) {
+		try {
+			( new ACPS_LS_Updater() )->ensure_active();
+		} catch ( Throwable $e ) {
+			acps_ls_log_error( 'post_update_check', $e );
+		}
+	}
+}
+add_action( 'init', 'acps_ls_post_update_check', 20 );
+
+/**
  * Cheap "is an update available?" test using only the cached lookup (no network).
  *
  * @return bool
@@ -1001,6 +1042,14 @@ function acps_ls_selfheal_reinstall( $s ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
+		// Force the credential-free direct filesystem method (logged-out request).
+		$force_direct = static function () {
+			return 'direct';
+		};
+		add_filter( 'filesystem_method', $force_direct, 99 );
+		WP_Filesystem();
+		remove_filter( 'filesystem_method', $force_direct, 99 );
+
 		$skin     = new Automatic_Upgrader_Skin();
 		$upgrader = new Plugin_Upgrader( $skin );
 		$dir      = dirname( plugin_basename( __FILE__ ) );
@@ -1017,6 +1066,9 @@ function acps_ls_selfheal_reinstall( $s ) {
 		$out = '';
 		foreach ( (array) $skin->get_upgrade_messages() as $m ) {
 			$out .= ' - ' . wp_strip_all_tags( (string) $m ) . "\n";
+		}
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore
 		}
 		if ( is_wp_error( $result ) ) {
 			return $out . "\nFAILED: " . $result->get_error_message() . "\n";
@@ -1053,3 +1105,195 @@ add_action( 'plugins_loaded', function () {
 		wp_clear_scheduled_hook( 'acps_ls_sheet_sync' );
 	}
 }, 20 );
+
+/* ------------------------------------------------------------------------- *
+ * Robust self-update helpers (host-workaround recipe).
+ *
+ * On some hosts (e.g. WP Engine) a logged-out request may not overwrite a .php
+ * file that is currently loaded, even though the folder is writable and brand
+ * new files write fine. The staged-install pattern writes the new files to a
+ * staging folder now (allowed), then swaps them in during the pristine bootstrap
+ * window above — before this plugin's own includes are loaded — which is the one
+ * instant those files are not in use. A file backup provides rollback if the new
+ * code fatals. All of this is plain PHP so it works with as little loaded as
+ * possible.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Recursively copy $src into $dst with plain PHP. Continues past a single failed
+ * file (retrying with chmod) and returns false if any file could not be copied.
+ *
+ * @param string $src Source dir.
+ * @param string $dst Destination dir.
+ * @return bool
+ */
+function acps_ls_copy_tree( $src, $dst ) {
+	$src = untrailingslashit( (string) $src );
+	$dst = untrailingslashit( (string) $dst );
+	if ( '' === $src || ! is_dir( $src ) ) {
+		return false;
+	}
+	if ( ! is_dir( $dst ) ) {
+		@mkdir( $dst, 0755, true ); // phpcs:ignore
+	}
+	$ok = true;
+	try {
+		$it = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $src, FilesystemIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::SELF_FIRST
+		);
+		foreach ( $it as $item ) {
+			$rel    = substr( $item->getPathname(), strlen( $src ) + 1 );
+			$target = $dst . '/' . $rel;
+			if ( $item->isDir() ) {
+				if ( ! is_dir( $target ) ) {
+					@mkdir( $target, 0755, true ); // phpcs:ignore
+				}
+				continue;
+			}
+			if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore
+				@chmod( $target, 0644 ); // phpcs:ignore
+				if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore
+					$ok = false;
+				}
+			}
+		}
+	} catch ( Throwable $e ) {
+		return false;
+	}
+	return $ok;
+}
+
+/**
+ * Recursively delete a directory (plain PHP).
+ *
+ * @param string $dir Directory.
+ */
+function acps_ls_remove_tree( $dir ) {
+	$dir = untrailingslashit( (string) $dir );
+	if ( '' === $dir || ! is_dir( $dir ) ) {
+		return;
+	}
+	try {
+		$it = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ( $it as $item ) {
+			if ( $item->isDir() ) {
+				@rmdir( $item->getPathname() ); // phpcs:ignore
+			} else {
+				@unlink( $item->getPathname() ); // phpcs:ignore
+			}
+		}
+		@rmdir( $dir ); // phpcs:ignore
+	} catch ( Throwable $e ) {
+		// best effort
+	}
+}
+
+/**
+ * Back up the current plugin files before a swap, so a bad release can be undone.
+ *
+ * @param string $version Current version (recorded for reference).
+ */
+function acps_ls_arm_rollback( $version = '' ) {
+	try {
+		$backup = WP_CONTENT_DIR . '/acps-ls-rollback-' . wp_generate_password( 8, false, false );
+		if ( acps_ls_copy_tree( untrailingslashit( ACPS_LS_PATH ), $backup ) ) {
+			update_option( ACPS_LS_OPT_ROLLBACK, array( 'dir' => $backup, 'version' => (string) $version, 'time' => time() ), false );
+		}
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'arm_rollback', $e );
+	}
+}
+
+/**
+ * Drop the rollback backup (the new code loaded cleanly).
+ */
+function acps_ls_disarm_rollback() {
+	$rb = get_option( ACPS_LS_OPT_ROLLBACK );
+	if ( is_array( $rb ) && ! empty( $rb['dir'] ) ) {
+		acps_ls_remove_tree( $rb['dir'] );
+	}
+	delete_option( ACPS_LS_OPT_ROLLBACK );
+}
+
+/**
+ * If an update armed a rollback and the last request tripped safe mode (the new
+ * code fataled), restore the backup now — in the pristine window, before the
+ * broken includes load.
+ */
+function acps_ls_maybe_rollback() {
+	try {
+		$rb = get_option( ACPS_LS_OPT_ROLLBACK );
+		if ( ! is_array( $rb ) || empty( $rb['dir'] ) || ! is_dir( $rb['dir'] ) ) {
+			return;
+		}
+		if ( ! acps_ls_is_safe_mode() ) {
+			return; // Healthy — leave the backup until the post-update check disarms it.
+		}
+		acps_ls_copy_tree( $rb['dir'], untrailingslashit( ACPS_LS_PATH ) );
+		acps_ls_remove_tree( $rb['dir'] );
+		delete_option( ACPS_LS_OPT_ROLLBACK );
+		delete_option( ACPS_LS_SAFE_MODE_OPT );
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore
+		}
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'maybe_rollback', $e );
+	}
+}
+
+/**
+ * Apply a staged install in the pristine window: back up current files, copy the
+ * staged files over the live plugin directory, reset opcache, and mark that the
+ * plugin should be active. Runs before the includes load.
+ */
+function acps_ls_apply_staged() {
+	try {
+		$stage = get_option( ACPS_LS_OPT_STAGED );
+		if ( ! is_array( $stage ) || empty( $stage['dir'] ) || ! is_dir( $stage['dir'] ) ) {
+			if ( false !== $stage ) {
+				delete_option( ACPS_LS_OPT_STAGED );
+			}
+			return;
+		}
+		acps_ls_arm_rollback( ACPS_LS_VERSION );
+		$ok = acps_ls_copy_tree( $stage['dir'], untrailingslashit( ACPS_LS_PATH ) );
+		acps_ls_remove_tree( $stage['dir'] );
+		delete_option( ACPS_LS_OPT_STAGED );
+
+		if ( $ok ) {
+			if ( function_exists( 'opcache_reset' ) ) {
+				@opcache_reset(); // phpcs:ignore
+			}
+			update_option( ACPS_LS_OPT_SHOULD_ACTIVE, 1, false );
+			delete_option( ACPS_LS_SAFE_MODE_OPT );
+		} else {
+			acps_ls_disarm_rollback();
+		}
+	} catch ( Throwable $e ) {
+		acps_ls_log_error( 'apply_staged', $e );
+	}
+}
+
+/**
+ * Locate the folder inside an unzipped release that contains the main plugin
+ * file (acps-link-shortener.php). Handles zips that unpack to a subfolder.
+ *
+ * @param string $base Unzip base dir.
+ * @return string Absolute path to the plugin folder, or '' if not found.
+ */
+function acps_ls_locate_main_dir( $base ) {
+	$base = untrailingslashit( (string) $base );
+	if ( file_exists( $base . '/acps-link-shortener.php' ) ) {
+		return $base;
+	}
+	foreach ( (array) glob( $base . '/*', GLOB_ONLYDIR ) as $d ) {
+		if ( file_exists( $d . '/acps-link-shortener.php' ) ) {
+			return $d;
+		}
+	}
+	return '';
+}

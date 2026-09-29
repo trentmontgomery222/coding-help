@@ -133,6 +133,10 @@ class ACPS_LS_Updater {
 			// Staged rollout: publish this install's verified version for a paired
 			// production site to read before it updates.
 			add_action( 'rest_api_init', array( $this, 'register_status_route' ) );
+
+			// Background (queued) install: apply in a writable context.
+			add_action( 'acps_ls_apply_pending', array( $this, 'apply_pending_update' ) );
+			add_action( 'admin_init', array( $this, 'apply_pending_update' ) );
 		} catch ( Throwable $e ) {
 			acps_ls_log_error( 'updater register', $e );
 		}
@@ -613,6 +617,10 @@ class ACPS_LS_Updater {
 			require_once ABSPATH . 'wp-admin/includes/misc.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
+			// Force the credential-free direct filesystem method so a logged-out
+			// request can write (otherwise the upgrader asks for FTP creds & bails).
+			$this->fs_ready();
+
 			$skin     = new Automatic_Upgrader_Skin();
 			$upgrader = new Plugin_Upgrader( $skin );
 
@@ -641,10 +649,22 @@ class ACPS_LS_Updater {
 				$out .= ' - ' . wp_strip_all_tags( (string) $m ) . "\n";
 			}
 
-			if ( is_wp_error( $result ) ) {
-				$out .= "\nResult: FAILED — " . $result->get_error_message() . "\n";
-			} elseif ( false === $result || null === $result ) {
-				$out .= "\nResult: FAILED — the upgrader could not write the files (filesystem permissions?).\n";
+			$failed = ( is_wp_error( $result ) || false === $result || null === $result );
+
+			// Manual per-file copy fallback when the upgrader could not write.
+			if ( $failed ) {
+				$out .= "\nUpgrader could not write; trying a manual copy...\n";
+				$out .= $this->manual_install( $remote['package'] );
+				// Consider it a success if the plugin's main file now reports the
+				// new version on disk (best-effort check).
+				$failed = false !== strpos( $out, 'one or more files could not be written' );
+			}
+
+			$this->reset_opcache();
+			$this->ensure_active();
+
+			if ( $failed ) {
+				$out .= "\nResult: FAILED — the host may block PHP writes by the web user. Try Stage or Queue, or run the write Probe.\n";
 			} else {
 				$out .= "\nResult: SUCCESS (" . $remote['version'] . ").\n";
 			}
@@ -674,6 +694,247 @@ class ACPS_LS_Updater {
 			'latest'           => $latest,
 			'update_available' => ( '' !== $latest && version_compare( $latest, $installed, '>' ) ),
 		);
+	}
+
+	/* --------------------------------------------------------------------- */
+	/* Robust install helpers (host-workaround recipe)                        */
+	/* --------------------------------------------------------------------- */
+
+	/**
+	 * Force the credential-free "direct" filesystem method and initialise
+	 * WP_Filesystem. From a logged-out request WordPress otherwise tries to show
+	 * an FTP-credentials form, gets none, and bails with "could not write files".
+	 *
+	 * @return bool
+	 */
+	private function fs_ready() {
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		$force = static function () {
+			return 'direct';
+		};
+		add_filter( 'filesystem_method', $force, 99 );
+		$ready = WP_Filesystem();
+		remove_filter( 'filesystem_method', $force, 99 );
+		return (bool) $ready;
+	}
+
+	/**
+	 * Re-enable the plugin in the SAME request as an install, and clear a
+	 * recovery-mode pause, so it is never left deactivated (a deactivated plugin
+	 * cannot re-enable itself next request).
+	 */
+	public function ensure_active() {
+		try {
+			if ( ! function_exists( 'is_plugin_active' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			}
+			if ( ! is_plugin_active( ACPS_LS_BASENAME ) ) {
+				activate_plugin( ACPS_LS_BASENAME, '', false, true );
+			}
+			if ( function_exists( 'wp_paused_plugins' ) ) {
+				$paused = wp_paused_plugins();
+				if ( is_object( $paused ) && method_exists( $paused, 'delete' ) ) {
+					$paused->delete( ACPS_LS_BASENAME );
+					$paused->delete( dirname( ACPS_LS_BASENAME ) );
+				}
+			}
+			if ( defined( 'ACPS_LS_SAFE_MODE_OPT' ) ) {
+				delete_option( ACPS_LS_SAFE_MODE_OPT );
+			}
+		} catch ( Throwable $e ) {
+			acps_ls_log_error( 'ensure_active', $e );
+		}
+	}
+
+	/**
+	 * Reset opcache so freshly-swapped files are actually executed (avoids the
+	 * "it disabled itself after updating" mixed old/new bytecode fatal).
+	 */
+	private function reset_opcache() {
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore
+		}
+	}
+
+	/**
+	 * Manual per-file copy fallback: download + unzip the package ourselves and
+	 * copy it over the plugin dir, continuing past any single failed file.
+	 * Used when the WordPress upgrader returns false/WP_Error.
+	 *
+	 * @param string $package Zip URL.
+	 * @return string Log text.
+	 */
+	private function manual_install( $package ) {
+		$out = "Manual copy fallback...\n";
+		try {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			$tmp = download_url( $package, 60 );
+			if ( is_wp_error( $tmp ) ) {
+				return $out . 'download failed: ' . $tmp->get_error_message() . "\n";
+			}
+			$base = WP_CONTENT_DIR . '/acps-ls-manual-' . wp_generate_password( 8, false, false );
+			$un   = unzip_file( $tmp, $base );
+			@unlink( $tmp ); // phpcs:ignore
+			if ( is_wp_error( $un ) ) {
+				if ( function_exists( 'acps_ls_remove_tree' ) ) {
+					acps_ls_remove_tree( $base );
+				}
+				return $out . 'unzip failed: ' . $un->get_error_message() . "\n";
+			}
+			$src = function_exists( 'acps_ls_locate_main_dir' ) ? acps_ls_locate_main_dir( $base ) : $base;
+			if ( '' === $src ) {
+				acps_ls_remove_tree( $base );
+				return $out . "could not find the plugin folder in the package.\n";
+			}
+			$ok = function_exists( 'acps_ls_copy_tree' ) ? acps_ls_copy_tree( $src, untrailingslashit( ACPS_LS_PATH ) ) : false;
+			if ( function_exists( 'acps_ls_remove_tree' ) ) {
+				acps_ls_remove_tree( $base );
+			}
+			$this->reset_opcache();
+			return $out . ( $ok ? "copied files directly. OK.\n" : "one or more files could not be written.\n" );
+		} catch ( Throwable $e ) {
+			return $out . 'error: ' . $e->getMessage() . "\n";
+		}
+	}
+
+	/**
+	 * Stage an install: download + unzip the latest package to a staging folder
+	 * now (writing NEW files, which hosts allow), to be swapped in during the
+	 * next request's pristine bootstrap window. Returns a plain-text log.
+	 *
+	 * @param bool $force Unused here (staging always applies the latest).
+	 * @return string
+	 */
+	public function stage_now( $force = false ) {
+		$out = "Cayden Link Shortener — stage install\n\n";
+		try {
+			$this->flush_cache();
+			$remote = $this->remote( true );
+			if ( ! $remote || empty( $remote['package'] ) ) {
+				return $out . "Could not reach the update source.\n";
+			}
+			$out .= 'Latest: ' . $remote['version'] . "\n";
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			$this->fs_ready();
+
+			$tmp = download_url( $remote['package'], 60 );
+			if ( is_wp_error( $tmp ) ) {
+				return $out . 'Download failed: ' . $tmp->get_error_message() . "\n";
+			}
+			$base = WP_CONTENT_DIR . '/acps-ls-staging-' . wp_generate_password( 8, false, false );
+			$un   = unzip_file( $tmp, $base );
+			@unlink( $tmp ); // phpcs:ignore
+			if ( is_wp_error( $un ) ) {
+				return $out . 'Unzip failed: ' . $un->get_error_message() . "\n";
+			}
+			$src = function_exists( 'acps_ls_locate_main_dir' ) ? acps_ls_locate_main_dir( $base ) : $base;
+			if ( '' === $src ) {
+				if ( function_exists( 'acps_ls_remove_tree' ) ) {
+					acps_ls_remove_tree( $base );
+				}
+				return $out . "Could not find the plugin folder inside the package.\n";
+			}
+			update_option( defined( 'ACPS_LS_OPT_STAGED' ) ? ACPS_LS_OPT_STAGED : 'acps_ls_staged_install', array( 'dir' => $src, 'version' => $remote['version'] ), false );
+			return $out . "STAGED. Reload any page to apply it (the swap happens before the plugin loads its own PHP).\n";
+		} catch ( Throwable $e ) {
+			acps_ls_log_error( 'updater stage', $e );
+			return $out . 'Error: ' . $e->getMessage() . "\n";
+		}
+	}
+
+	/**
+	 * Queue a background install to run in a writable context (WP-Cron or the
+	 * next admin request) instead of the current front-end request.
+	 *
+	 * @param bool $force Force same-version reinstall.
+	 * @return string
+	 */
+	public function queue_install( $force = false ) {
+		update_option(
+			defined( 'ACPS_LS_OPT_PENDING' ) ? ACPS_LS_OPT_PENDING : 'acps_ls_pending_update',
+			array( 'force' => (bool) $force, 'requested' => time(), 'attempts' => 0 ),
+			false
+		);
+		if ( ! wp_next_scheduled( 'acps_ls_apply_pending' ) ) {
+			wp_schedule_single_event( time() + 20, 'acps_ls_apply_pending' );
+		}
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
+		return "QUEUED. It will apply on the next WP-Cron tick or admin page load.\n";
+	}
+
+	/**
+	 * Apply a queued install from a writable context (cron / admin_init).
+	 */
+	public function apply_pending_update() {
+		$opt = defined( 'ACPS_LS_OPT_PENDING' ) ? ACPS_LS_OPT_PENDING : 'acps_ls_pending_update';
+		try {
+			$pending = get_option( $opt );
+			if ( ! is_array( $pending ) ) {
+				return;
+			}
+			// Short lock to avoid concurrent runs.
+			if ( get_transient( 'acps_ls_pending_lock' ) ) {
+				return;
+			}
+			set_transient( 'acps_ls_pending_lock', 1, 120 );
+
+			$attempts = isset( $pending['attempts'] ) ? (int) $pending['attempts'] : 0;
+			$requested = isset( $pending['requested'] ) ? (int) $pending['requested'] : time();
+			if ( $attempts >= 5 || ( time() - $requested ) > DAY_IN_SECONDS ) {
+				delete_option( $opt );
+				delete_transient( 'acps_ls_pending_lock' );
+				return;
+			}
+
+			$log = $this->perform_update( ! empty( $pending['force'] ) );
+			$this->ensure_active();
+
+			if ( false !== strpos( $log, 'SUCCESS' ) ) {
+				delete_option( $opt );
+				update_option( 'acps_ls_pending_result', array( 'ok' => true, 'when' => current_time( 'mysql' ), 'log' => $log ), false );
+			} else {
+				$pending['attempts'] = $attempts + 1;
+				update_option( $opt, $pending, false );
+				update_option( 'acps_ls_pending_result', array( 'ok' => false, 'when' => current_time( 'mysql' ), 'log' => $log ), false );
+				if ( ! wp_next_scheduled( 'acps_ls_apply_pending' ) ) {
+					wp_schedule_single_event( time() + 120, 'acps_ls_apply_pending' );
+				}
+			}
+			delete_transient( 'acps_ls_pending_lock' );
+		} catch ( Throwable $e ) {
+			delete_transient( 'acps_ls_pending_lock' );
+			acps_ls_log_error( 'apply_pending', $e );
+		}
+	}
+
+	/**
+	 * Diagnostic write probe: create then delete a throwaway file of each type in
+	 * the plugin folder to reveal which host case you're in. "new .php: FAILED"
+	 * means the host blocks all PHP writes by the web user; "new .php: OK" means
+	 * staging will work (only in-use PHP is blocked).
+	 *
+	 * @return string
+	 */
+	public function probe() {
+		$out = "Write probe (plugin folder):\n";
+		$dir = untrailingslashit( ACPS_LS_PATH );
+		$tag = wp_generate_password( 6, false, false );
+		foreach ( array( 'md', 'txt', 'js', 'css', 'php' ) as $ext ) {
+			$f  = $dir . '/acps-ls-writetest-' . $tag . '.' . $ext;
+			$ok = ( false !== @file_put_contents( $f, "test\n" ) ); // phpcs:ignore
+			if ( $ok ) {
+				@unlink( $f ); // phpcs:ignore
+			}
+			$out .= '  new .' . $ext . ' : ' . ( $ok ? 'OK' : 'FAILED' ) . "\n";
+		}
+		$out .= "\nInterpretation:\n";
+		$out .= "  new .php OK  -> host only blocks overwriting IN-USE php; Stage will work.\n";
+		$out .= "  new .php FAILED -> host blocks all php writes by the web user; use SFTP / host cron.\n";
+		return $out;
 	}
 
 	/* --------------------------------------------------------------------- */

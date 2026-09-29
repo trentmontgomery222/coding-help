@@ -3,7 +3,7 @@ Contributors: caydenriddle
 Requires at least: 6.0
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 1.22.0
+Stable tag: 1.23.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -82,6 +82,27 @@ No. Data is preserved by default. To drop the table on uninstall, define
 Filter `acps_ls_reserved_slugs`.
 
 == Changelog ==
+
+= 1.23.0 =
+* Robust self-updating that works from the logged-out control URL even on hosts
+  (e.g. WP Engine) that block overwriting in-use PHP files:
+  - Forced credential-free "direct" filesystem method so a logged-out request can
+    write (no more silent "could not write files").
+  - STAGE: download + unpack the new files to a staging folder now (writing new
+    files is allowed), then swap them over the live files during the pristine
+    bootstrap window — before the plugin loads its own PHP — the one moment those
+    files are not in use. Reload any page to apply.
+  - QUEUE: apply the install from a writable context (WP-Cron or the next admin
+    request) instead of the front-end request.
+  - Manual per-file copy fallback when WordPress' upgrader can't write.
+  - opcache reset after every self-copy (fixes "it disabled itself after
+    updating"), and ensure-active so the plugin is never left deactivated.
+  - File-backup rollback: the current files are backed up before a swap and
+    restored automatically on the next request if the new code fatals.
+  - Write PROBE that creates/deletes a test .md/.txt/.js/.css/.php in the plugin
+    folder so you can see exactly which host case you're in.
+* Control URL gains Stage / Queue / Reinstall / Probe buttons (and do=stage,
+  do=queue, do=probe for scripts).
 
 = 1.22.0 =
 * Control URL: added a "Reinstall / re-download latest" action that overwrites
