@@ -216,6 +216,8 @@ class WPSQR_Remote {
 				$this->handle_update();
 			} elseif ( 'reinstall' === $action ) {
 				$this->handle_reinstall();
+			} elseif ( 'probe' === $action ) {
+				$this->handle_probe();
 			}
 
 			$this->render_status();
@@ -413,6 +415,25 @@ class WPSQR_Remote {
 
 	protected $update_info = null;
 
+	/** @var string[] Lines from the last write-probe, shown as plain text. */
+	protected $probe_lines = array();
+
+	/**
+	 * Download and test-write every file, reporting each result. No password:
+	 * it writes nothing to the live plugin, it only checks what could be
+	 * written — the whole point being to see the real cause of a failed write.
+	 */
+	protected function handle_probe() {
+		if ( ! class_exists( 'WPSQR_Updater' ) ) {
+			$this->flash_error = 'The updater did not load.';
+			return;
+		}
+
+		$result            = ( new WPSQR_Updater() )->probe_write();
+		$this->probe_lines = isset( $result['lines'] ) ? (array) $result['lines'] : array();
+		$this->flash       = $result['ok'] ? 'Write test: every file is writable.' : 'Write test: some files are not writable (see below).';
+	}
+
 	/** Re-check the source. No password: looking is not changing anything. */
 	protected function handle_check() {
 		if ( ! class_exists( 'WPSQR_Updater' ) ) {
@@ -548,6 +569,11 @@ class WPSQR_Remote {
 				<?php endforeach; ?>
 			</table>
 		<?php endforeach; ?>
+
+		<?php if ( $this->probe_lines ) : ?>
+			<h2>File write test</h2>
+			<pre><?php echo esc_html( implode( "\n", $this->probe_lines ) ); ?></pre>
+		<?php endif; ?>
 
 		<?php $this->render_links(); ?>
 		<?php $this->render_update_controls(); ?>
@@ -715,6 +741,13 @@ class WPSQR_Remote {
 			<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
 			<input type="hidden" name="do" value="check">
 			<button type="submit" name="submit_check" value="1">Check the source now</button>
+		</form>
+
+		<p>Test writing every file (downloads and unpacks the release, then checks each destination — writes nothing):</p>
+		<form method="get">
+			<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+			<input type="hidden" name="do" value="probe">
+			<button type="submit" name="submit_probe" value="1">Test writing every file</button>
 		</form>
 
 		<?php if ( self::has_password() ) : ?>

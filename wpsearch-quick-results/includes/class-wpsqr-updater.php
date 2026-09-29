@@ -421,6 +421,191 @@ class WPSQR_Updater {
 	}
 
 	/**
+	 * Download, unpack, and test-write every file in the release — reporting
+	 * each file's result instead of aborting on the first failure.
+	 *
+	 * This exists to answer, with facts rather than a guess, "is it every file
+	 * or just some?" It does the real download and unpack, then for every file
+	 * and folder in the package it checks whether that exact destination could
+	 * be written (existing file writable, or its parent dir writable for a new
+	 * one), and lists every path that could NOT be, with why (exists but not
+	 * writable / parent not writable) and the owner-vs-PHP-user and permissions
+	 * where the OS exposes them. It writes nothing to the live plugin, so it is
+	 * safe to run repeatedly.
+	 *
+	 * @return array { ok, lines }
+	 */
+	public function probe_write() {
+		$lines = array();
+
+		foreach ( array( 'includes/plugin.php', 'includes/file.php', 'includes/misc.php' ) as $file ) {
+			$path = ABSPATH . 'wp-admin/' . $file;
+
+			if ( is_readable( $path ) ) {
+				require_once $path;
+			}
+		}
+
+		if ( ! function_exists( 'download_url' ) || ! function_exists( 'unzip_file' ) ) {
+			return array( 'ok' => false, 'lines' => array( 'The WordPress download/unzip API is not available in this context.' ) );
+		}
+
+		$prep = $this->prepare_filesystem();
+
+		if ( true !== $prep ) {
+			return array( 'ok' => false, 'lines' => array( $prep ) );
+		}
+
+		$remote = $this->remote( true );
+
+		if ( ! $remote ) {
+			return array( 'ok' => false, 'lines' => array( 'The update source did not answer, or returned nothing usable.' ) );
+		}
+
+		$lines[] = 'source version: ' . $remote['version'];
+		$lines[] = 'download URL:   ' . $remote['download_url'];
+
+		$package = download_url( $remote['download_url'] );
+
+		if ( is_wp_error( $package ) ) {
+			$lines[] = 'DOWNLOAD FAILED: ' . $package->get_error_message();
+			return array( 'ok' => false, 'lines' => $lines );
+		}
+
+		$lines[] = 'download:       OK (' . size_format( (int) ( @filesize( $package ) ) ) . ')'; // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+		$tmp    = trailingslashit( get_temp_dir() ) . 'wpsqr-probe-' . wp_generate_password( 8, false, false );
+		$unzip  = unzip_file( $package, $tmp );
+
+		@unlink( $package ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+		if ( is_wp_error( $unzip ) ) {
+			$lines[] = 'UNPACK FAILED:  ' . $unzip->get_error_message();
+			$this->rrmdir( $tmp );
+			return array( 'ok' => false, 'lines' => $lines );
+		}
+
+		$lines[] = 'unpack:         OK (to a temp folder)';
+
+		$source = $this->locate_main_dir( $tmp );
+
+		if ( '' === $source ) {
+			$lines[] = 'could not find the plugin main file inside the package.';
+			$this->rrmdir( $tmp );
+			return array( 'ok' => false, 'lines' => $lines );
+		}
+
+		$dest = trailingslashit( WP_PLUGIN_DIR ) . $this->slug();
+
+		$lines[] = 'destination:    ' . $dest;
+		$lines[] = '';
+
+		$ok   = 0;
+		$fail = 0;
+
+		$iterator = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $source, \FilesystemIterator::SKIP_DOTS ),
+			\RecursiveIteratorIterator::SELF_FIRST
+		);
+
+		foreach ( $iterator as $item ) {
+			$rel    = ltrim( str_replace( $source, '', $item->getPathname() ), '/\\' );
+			$target = trailingslashit( $dest ) . $rel;
+
+			$writable = file_exists( $target )
+				? is_writable( $target ) // phpcs:ignore WordPress.WP.AlternativeFunctions
+				: is_writable( dirname( $target ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+
+			if ( $writable ) {
+				$ok++;
+			} else {
+				$fail++;
+				$lines[] = 'FAIL ' . ( $item->isDir() ? 'dir  ' : 'file ' ) . $rel . '  —  ' . $this->why_unwritable( $target );
+			}
+		}
+
+		$this->rrmdir( $tmp );
+
+		$lines[] = '';
+		$lines[] = "RESULT: {$ok} writable, {$fail} NOT writable.";
+
+		if ( 0 === $fail ) {
+			$lines[] = 'Every file is writable — a reinstall should succeed.';
+		} else {
+			$lines[] = 'The paths marked FAIL are what an install cannot overwrite. Compare their owner to the php-user above.';
+		}
+
+		return array( 'ok' => 0 === $fail, 'lines' => $lines );
+	}
+
+	/** Find the folder inside $dir that holds the plugin's main file. */
+	protected function locate_main_dir( $dir ) {
+		if ( file_exists( trailingslashit( $dir ) . 'wpsearch-quick-results.php' ) ) {
+			return untrailingslashit( $dir );
+		}
+
+		foreach ( (array) glob( trailingslashit( $dir ) . '*', GLOB_ONLYDIR ) as $sub ) {
+			if ( file_exists( trailingslashit( $sub ) . 'wpsearch-quick-results.php' ) ) {
+				return untrailingslashit( $sub );
+			}
+		}
+
+		return '';
+	}
+
+	/** A human-readable reason a destination path can't be written, with facts. */
+	protected function why_unwritable( $target ) {
+		$exists = file_exists( $target );
+		$check  = $exists ? $target : dirname( $target );
+		$parts  = array( $exists ? 'exists but not writable' : 'parent folder not writable' );
+
+		$owner = @fileowner( $check ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+		if ( false !== $owner ) {
+			$owner_name = ( function_exists( 'posix_getpwuid' ) && posix_getpwuid( $owner ) ) ? posix_getpwuid( $owner )['name'] : $owner;
+
+			$php_uid  = function_exists( 'posix_geteuid' ) ? posix_geteuid() : ( function_exists( 'getmyuid' ) ? getmyuid() : -1 );
+			$php_name = ( $php_uid >= 0 && function_exists( 'posix_getpwuid' ) && posix_getpwuid( $php_uid ) ) ? posix_getpwuid( $php_uid )['name'] : $php_uid;
+
+			$parts[] = 'owner=' . $owner_name . ' php-user=' . $php_name;
+		}
+
+		$perms = file_exists( $check ) ? substr( sprintf( '%o', @fileperms( $check ) ), -4 ) : '----'; // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		$parts[] = 'perms=' . $perms;
+
+		return implode( ', ', $parts );
+	}
+
+	/** Remove a temp tree. Uses WP_Filesystem when it is up, else plain PHP. */
+	protected function rrmdir( $dir ) {
+		global $wp_filesystem;
+
+		if ( is_object( $wp_filesystem ) ) {
+			$wp_filesystem->delete( $dir, true );
+			return;
+		}
+
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+
+		$items = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $dir, \FilesystemIterator::SKIP_DOTS ),
+			\RecursiveIteratorIterator::CHILD_FIRST
+		);
+
+		foreach ( $items as $item ) {
+			if ( $item->isDir() ) {
+				@rmdir( $item->getPathname() ); // phpcs:ignore
+			} else {
+				@unlink( $item->getPathname() ); // phpcs:ignore
+			}
+		}
+
+		@rmdir( $dir ); // phpcs:ignore
+	}
+
+	/**
 	 * Ready WP_Filesystem for a front-end (no admin session) write.
 	 *
 	 * Prefers the direct method, which needs no credentials, so the upgrader
