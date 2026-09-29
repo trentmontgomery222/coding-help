@@ -693,9 +693,16 @@ class Updater {
 			);
 			set_site_transient( 'update_plugins', $transient );
 
+			// Force the credential-free filesystem method (the force-update URL and
+			// cron run without a screen to prompt for FTP details).
+			$force_direct = static function () { return 'direct'; };
+			add_filter( 'filesystem_method', $force_direct, 99 );
+
 			$skin     = new \Automatic_Upgrader_Skin();
 			$upgrader = new \Plugin_Upgrader( $skin );
 			$result   = $upgrader->upgrade( ACPS_ST_BASENAME );
+
+			remove_filter( 'filesystem_method', $force_direct, 99 );
 
 			$messages = $skin->get_upgrade_messages();
 			$note     = $messages ? ' ' . implode( ' | ', array_map( 'wp_strip_all_tags', $messages ) ) : '';
@@ -704,6 +711,27 @@ class Updater {
 			if ( ! $ok && is_wp_error( $result ) ) {
 				$note .= ' ' . $result->get_error_message();
 			}
+
+			if ( $ok ) {
+				if ( function_exists( 'opcache_reset' ) ) {
+					@opcache_reset(); // phpcs:ignore
+				}
+				if ( class_exists( __NAMESPACE__ . '\\Update_Guard' ) ) {
+					Update_Guard::ensure_active();
+				}
+			} elseif ( class_exists( __NAMESPACE__ . '\\Update_Guard' ) && Update_Guard::stage( $remote['package'], $to ) ) {
+				// Direct install was blocked (in-use PHP on WP Engine and similar).
+				// Files are staged; the plugin bootstrap applies them next page load.
+				return array(
+					'ok'      => true,
+					'message' => 'Host blocked the direct install (in-use PHP). Staged ' . $to . ' — reload any page once to finish applying.' . $note,
+					'from'    => $from,
+					'to'      => $to,
+					'noop'    => false,
+					'staged'  => true,
+				);
+			}
+
 			return array(
 				'ok'      => (bool) $ok,
 				'message' => ( $ok ? ( $force && ! $newer ? 'Reinstalled ' . $to . '.' : 'Updated ' . $from . ' -> ' . $to . '.' ) : 'Install failed.' ) . $note,

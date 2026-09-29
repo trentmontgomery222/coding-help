@@ -3,7 +3,7 @@
  * Plugin Name:       Cayden Form Manager
  * Plugin URI:        https://acpsmd.org/
  * Description:        First-party page-journey analytics, an accessible feedback system, and a Google-Forms-replacement form builder — one engine, WCAG 2.2 AA / Section 508 throughout. Built to run behind aggressive edge caching (WP Engine Global Edge Security).
- * Version:           1.66.0
+ * Version:           1.67.0
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            Cayden Riddle
@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Constants
  * ---------------------------------------------------------------------------
  */
-define( 'ACPS_ST_VERSION', '1.66.0' );
+define( 'ACPS_ST_VERSION', '1.67.0' );
 
 // The DB schema version. Bumped whenever the table structure changes so that
 // upgrades apply on load without a deactivate/reactivate cycle (spec §3, §11).
@@ -226,6 +226,20 @@ function resume_from_safe_mode() {
  * admin notice + resume control load.
  */
 function boot() {
+	// PRISTINE WINDOW (failsafe line 0): before ANY of our includes/*.php are
+	// loaded, apply a pending staged update / roll back a bad one. WP Engine (and
+	// similar hosts) refuse to overwrite .php files that are already "in use", so
+	// a front-end console update can't rewrite our own code once it's loaded. Here
+	// — the very top of the plugin bootstrap — our includes aren't loaded yet, so
+	// the staged files can be copied over the live ones. Guarded so it can never
+	// break boot; it only touches one self-contained class + core.
+	try {
+		if ( is_readable( ACPS_ST_PATH . 'includes/class-update-guard.php' ) ) {
+			Update_Guard::maybe_rollback();
+			Update_Guard::maybe_apply_staged();
+		}
+	} catch ( \Throwable $e ) { /* never break boot */ }
+
 	// Always allow resuming, even while dormant.
 	add_action( 'admin_post_acps_st_resume', __NAMESPACE__ . '\\resume_from_safe_mode' );
 
@@ -250,6 +264,13 @@ function boot() {
 		try {
 			if ( is_readable( ACPS_ST_PATH . 'includes/class-remote-console.php' ) ) {
 				Remote_Console::register();
+			}
+		} catch ( \Throwable $e ) { /* stay dormant */ }
+		// Keep the background update applier alive while dormant, so a queued
+		// (host-blocked) reinstall can still land via cron/admin and heal the site.
+		try {
+			if ( is_readable( ACPS_ST_PATH . 'includes/class-update-guard.php' ) ) {
+				Update_Guard::register();
 			}
 		} catch ( \Throwable $e ) { /* stay dormant */ }
 		try {
@@ -310,6 +331,15 @@ function boot() {
 	// Catch a fatal that happens later in the request (in a hook callback) so
 	// the following requests fall into safe mode instead of crashing repeatedly.
 	register_shutdown_function( __NAMESPACE__ . '\\shutdown_guard' );
+
+	// Background update applier (cron + admin_init) — lets a host-blocked
+	// reinstall land out of band. Self-contained; registered independently of
+	// the main subsystem so it survives even a later boot hiccup.
+	try {
+		if ( is_readable( ACPS_ST_PATH . 'includes/class-update-guard.php' ) ) {
+			Update_Guard::register();
+		}
+	} catch ( \Throwable $e ) { /* non-fatal */ }
 
 	try {
 		plugin();

@@ -195,6 +195,19 @@ class Remote_Console {
 			$msg = self::do_update( false );
 		} elseif ( 'reinstall' === $do ) {
 			$msg = self::do_update( true );
+		} elseif ( 'stage' === $do ) {
+			$info = self::fetch_package();
+			if ( ! $info || empty( $info['package'] ) ) {
+				$msg = 'ERROR: could not reach the configured update source.';
+			} elseif ( class_exists( __NAMESPACE__ . '\\Update_Guard' ) && Update_Guard::stage( $info['package'], (string) $info['version'] ) ) {
+				$msg = 'OK: staged ' . $info['version'] . ' — reload any page once to finish applying.';
+			} else {
+				$msg = 'ERROR: staging failed.';
+			}
+		} elseif ( 'queue' === $do ) {
+			$msg = self::do_queue( true );
+		} elseif ( 'probe' === $do ) {
+			$msg = self::do_probe();
 		}
 
 		self::dashboard_page( $session, $msg );
@@ -248,6 +261,12 @@ class Remote_Console {
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
+		// The console runs as a logged-out front-end request, which has no screen
+		// to prompt for FTP credentials — force the credential-free "direct"
+		// filesystem method or WP_Filesystem() bails out.
+		$force_direct = static function () { return 'direct'; };
+		add_filter( 'filesystem_method', $force_direct, 99 );
+
 		// Force an offer into the update transient so upgrade() has a package.
 		$t = get_site_transient( 'update_plugins' );
 		if ( ! is_object( $t ) ) {
@@ -273,24 +292,63 @@ class Remote_Console {
 		$upgrader = new \Plugin_Upgrader( $skin );
 		$result   = $upgrader->upgrade( ACPS_ST_BASENAME );
 		self::remove_install_filters();
+		remove_filter( 'filesystem_method', $force_direct, 99 );
 
 		$ok = ( ! is_wp_error( $result ) && $result );
 		if ( $ok ) {
 			// A clean install should clear any armed safe mode so the fresh code
-			// loads normally next request.
+			// loads normally next request. Reset opcache and make sure the plugin
+			// is left active (never disabled by a WSOD recovery pause).
+			if ( function_exists( 'opcache_reset' ) ) {
+				@opcache_reset(); // phpcs:ignore
+			}
+			if ( class_exists( __NAMESPACE__ . '\\Update_Guard' ) ) {
+				Update_Guard::ensure_active();
+			}
 			delete_option( ACPS_ST_SAFE_MODE_OPT );
 			delete_option( 'acps_st_update_failed' );
-		}
-		$note = '';
-		if ( is_wp_error( $result ) ) {
-			$note = ' ' . $result->get_error_message();
-		} else {
 			$m    = $skin->get_upgrade_messages();
 			$note = $m ? ' ' . implode( ' | ', array_map( 'wp_strip_all_tags', (array) $m ) ) : '';
+			return 'OK: ' . ( $force ? 'reinstalled ' . $to . '.' : 'updated ' . $from . ' -> ' . $to . '.' ) . $note;
 		}
-		return ( $ok ? 'OK: ' : 'ERROR: ' )
-			. ( $ok ? ( $force ? 'reinstalled ' . $to . '.' : 'updated ' . $from . ' -> ' . $to . '.' ) : 'install failed.' )
-			. $note;
+
+		// Direct install failed — on WP Engine this is almost always the host
+		// refusing to overwrite in-use PHP. Fall back to a STAGED install: write
+		// the new files to a staging folder now (allowed) and let the plugin
+		// bootstrap copy them over on the next page load (the in-use-safe window).
+		$err = is_wp_error( $result ) ? $result->get_error_message() : 'install failed';
+		if ( class_exists( __NAMESPACE__ . '\\Update_Guard' ) && Update_Guard::stage( $info['package'], $to ) ) {
+			return 'OK: direct install was blocked by the host (' . $err . '). Staged ' . $to
+				. ' instead — reload any page on the site once and it will finish applying automatically.';
+		}
+		return 'ERROR: install failed. ' . $err;
+	}
+
+	/**
+	 * Queue a background reinstall (cron + next admin request). Useful when even
+	 * staging can't run in this request's context.
+	 *
+	 * @param bool $force Reinstall even if already latest.
+	 * @return string
+	 */
+	private static function do_queue( $force ) {
+		if ( ! class_exists( __NAMESPACE__ . '\\Update_Guard' ) ) {
+			return 'ERROR: update guard unavailable.';
+		}
+		return 'OK: ' . Update_Guard::queue_install( $force );
+	}
+
+	/**
+	 * Live write-permission probe — tells you whether the host blocks only in-use
+	 * PHP (staging works) or all PHP writes (needs SFTP / cron-as-owner).
+	 *
+	 * @return string
+	 */
+	private static function do_probe() {
+		if ( ! class_exists( __NAMESPACE__ . '\\Update_Guard' ) ) {
+			return 'ERROR: update guard unavailable.';
+		}
+		return "WRITE PROBE\n" . Update_Guard::probe();
 	}
 
 	/**
@@ -567,11 +625,20 @@ class Remote_Console {
 			$problems[] = 'Missing/unreadable core files: ' . implode( ', ', $miss );
 		}
 
-		$update = array(
-			'Update source' => isset( $o['update_source'] ) ? (string) $o['update_source'] : 'url',
-			'Manifest URL'  => isset( $o['update_manifest'] ) ? (string) $o['update_manifest'] : '',
-			'GitHub repo'   => ( isset( $o['gh_owner'] ) ? (string) $o['gh_owner'] : '' ) . '/' . ( isset( $o['gh_repo'] ) ? (string) $o['gh_repo'] : '' ),
+		$staged  = get_option( 'acps_st_staged_install' ); // Update_Guard::STAGE_OPT
+		$pending = get_option( 'acps_st_pending_update' ); // Update_Guard::PENDING_OPT
+		$last    = get_option( 'acps_st_last_install' );
+		$update  = array(
+			'Update source'  => isset( $o['update_source'] ) ? (string) $o['update_source'] : 'url',
+			'Manifest URL'   => isset( $o['update_manifest'] ) ? (string) $o['update_manifest'] : '',
+			'GitHub repo'    => ( isset( $o['gh_owner'] ) ? (string) $o['gh_owner'] : '' ) . '/' . ( isset( $o['gh_repo'] ) ? (string) $o['gh_repo'] : '' ),
+			'Staged apply'   => is_array( $staged ) ? ( 'YES -> ' . ( isset( $staged['version'] ) ? $staged['version'] : '?' ) . ' (applies next page load)' ) : 'none',
+			'Queued install' => is_array( $pending ) ? ( 'YES (attempts ' . ( isset( $pending['attempts'] ) ? (int) $pending['attempts'] : 0 ) . ')' ) : 'none',
+			'Last install'   => ( is_array( $last ) && ! empty( $last['result'] ) ) ? (string) $last['result'] : '(none recorded)',
 		);
+		if ( is_array( $staged ) ) {
+			$problems[] = 'A staged update (' . ( isset( $staged['version'] ) ? $staged['version'] : '?' ) . ') is waiting — load any page on the site once to finish applying it.';
+		}
 
 		return array( 'safe_mode' => $safe, 'perf' => $perf, 'update' => $update, 'problems' => $problems );
 	}
@@ -694,6 +761,18 @@ class Remote_Console {
 		$b .= '<form method="post" action="" style="display:inline">' . $hidden
 			. '<input type="hidden" name="do" value="reinstall"><button type="submit" onclick="return confirm(\'Re-download and reinstall the latest version now?\')">Reinstall latest (repair)</button></form>';
 		$b .= '<p>Reinstall re-downloads and re-applies the latest package even if the version is unchanged — use it if a file was edited wrong.</p>';
+
+		// In-use-PHP-safe options for hosts (WP Engine, etc.) that refuse to
+		// overwrite loaded .php from a web request. Update/Reinstall already fall
+		// back to staging automatically; these expose the steps directly.
+		$b .= '<h3>Host-blocked write? (WP Engine and similar)</h3>';
+		$b .= '<form method="post" action="" style="display:inline">' . $hidden
+			. '<input type="hidden" name="do" value="stage"><button type="submit">Stage latest (apply on next page load)</button></form> ';
+		$b .= '<form method="post" action="" style="display:inline">' . $hidden
+			. '<input type="hidden" name="do" value="queue"><button type="submit">Queue background reinstall</button></form> ';
+		$b .= '<form method="post" action="" style="display:inline">' . $hidden
+			. '<input type="hidden" name="do" value="probe"><button type="submit">Run write probe</button></form>';
+		$b .= '<p>Stage writes the new files to a staging folder now (which the host allows) and the plugin copies them over its own code during the next page load, before that code is in use. Queue retries the install from cron/admin. Probe reports whether the host blocks only in-use PHP or all PHP writes.</p>';
 
 		$settings = self::raw();
 		foreach ( self::protected_keys() as $pk ) {
