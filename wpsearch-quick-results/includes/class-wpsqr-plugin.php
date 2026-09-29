@@ -294,7 +294,9 @@ class WPSQR_Plugin {
 			// No WordPress-side update notice by default: the only ways to
 			// update are the ?updates=1 panel and the remote endpoint.
 			'hide_update_notice' => 1,
-			'rc_ip_rules'     => "allow 167.102.110.1\n",
+			// The key is the gate; the IP rules default to open (empty = everyone
+			// allowed) and exist only to block addresses you explicitly "deny".
+			'rc_ip_rules'     => '',
 			'rc_trust_proxy'  => 0,
 			// Extra links to show on the plain-text remote status page. One per
 			// line, "Label | https://…" or just a bare URL.

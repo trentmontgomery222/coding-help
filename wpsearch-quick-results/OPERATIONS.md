@@ -92,19 +92,28 @@ there is skipped too. (Filter `wpsqr_remote_stealth` to `false` to disable
 this.) The crash guard, registered with `register_shutdown_function` rather
 than the shutdown hook, is unaffected.
 
-Four gates, all of which must pass:
+The gates, in order:
 
-1. **The key in the URL.** The full URL is the secret. Without the exact key
-   the request 404s like any bad URL — the endpoint does not announce itself.
-2. **The visitor's IP**, against allow/deny rules. Default: `allow
-   167.102.110.1`, everything else denied. Rules support full addresses,
-   prefixes (`196.168.`), and CIDR blocks (`10.0.0.0/8`); most specific wins,
-   deny wins a tie, and anything unmatched is denied. An empty box locks
-   everyone out, so saving one falls back to the default address.
-3. **A rate limit** — 20 requests per 5 minutes per IP — so the key and
-   password cannot be pounded on.
-4. **The password**, for anything that changes a setting. Reading the status
-   page needs only the first three; editing needs all four.
+1. **The key in the URL.** The full URL is the secret, and it must equal *this
+   plugin's* key exactly. Anything else — no key, a wrong key, or another
+   plugin using the same `?acpsupdater=` parameter with its own value — makes
+   the plugin return immediately and do nothing at all: no stealth, no IP
+   check, no rate-limit bookkeeping, no output. The endpoint acts only on a
+   request carrying its own key, so it can never interfere with another
+   plugin's use of the same parameter name.
+2. **The visitor's IP** — default **open**. The key is the gate, so any address
+   may reach the page by default; the rules exist only to *block* addresses you
+   name with `deny` (full addresses, prefixes like `196.168.`, or CIDR blocks
+   like `10.0.0.0/8`). An `allow` rule is only useful to carve an exception out
+   of a broader `deny`. Most specific wins, deny wins a tie, and an **empty box
+   means everyone is allowed**. A blocked address is quietly redirected to the
+   homepage.
+3. **A rate limit** — 20 requests per 5 minutes per IP. It is reached only on
+   requests that already matched this plugin's key, so it counts and throttles
+   nothing but traffic to this endpoint.
+4. **The password**, for anything that changes a setting or installs. Reading
+   the status page needs only the key (and not being on a deny list); editing
+   or updating also needs the password.
 
 The password is set **only in wp-admin**, on the `?updates=1` panel. And an
 edit through the remote page is allowed **once per day** — even a fully
@@ -156,7 +165,8 @@ still capped at one change per day. The IP rules are editable there too, once
 the password is entered.
 
 **A blocked address is redirected to the homepage**, not shown a refusal, so
-the endpoint gives no sign of existing to an address that is not allowed.
+the endpoint gives no sign of existing to an address you have explicitly
+denied. (Only `deny`-listed addresses are blocked; everything else is allowed.)
 
 ## Tests
 

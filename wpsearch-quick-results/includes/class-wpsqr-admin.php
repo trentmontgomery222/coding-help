@@ -951,11 +951,11 @@ class WPSQR_Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="wpsqr-iprules"><?php esc_html_e( 'Allowed addresses', 'wpsqr' ); ?></label></th>
+						<th scope="row"><label for="wpsqr-iprules"><?php esc_html_e( 'Blocked addresses', 'wpsqr' ); ?></label></th>
 						<td>
 							<textarea id="wpsqr-iprules" name="rc_ip_rules" rows="5" class="large-text code"><?php echo esc_textarea( $s['rc_ip_rules'] ); ?></textarea>
 							<p class="description">
-								<?php esc_html_e( 'One rule per line: "allow 167.102.110.1", "deny 10.0.0.5", or a prefix like "196.168." or a block like "10.0.0.0/8". A bare address means allow. Anything not matched is denied — so an empty box locks everyone out. Most specific rule wins; deny wins a tie.', 'wpsqr' ); ?>
+								<?php esc_html_e( 'The secret key is the gate, so by default any address may reach the page. Use this only to block specific addresses: one rule per line, e.g. "deny 10.0.0.5", a prefix like "deny 196.168." or a block like "deny 10.0.0.0/8". An empty box means everyone is allowed. Most specific rule wins; deny wins a tie. (An "allow" rule is only useful to carve an exception out of a broader deny.)', 'wpsqr' ); ?>
 							</p>
 							<p><label><input type="checkbox" name="rc_trust_proxy" value="1" <?php checked( $s['rc_trust_proxy'], 1 ); ?>>
 								<?php esc_html_e( 'Trust the X-Forwarded-For header (only if the site is genuinely behind a proxy — otherwise this lets visitors spoof their address)', 'wpsqr' ); ?></label></p>
@@ -995,11 +995,9 @@ class WPSQR_Admin {
 		$s['rc_trust_proxy']     = empty( $in['rc_trust_proxy'] ) ? 0 : 1;
 		$s['rc_links']           = WPSQR_Plugin::coerce( 'rc_links', $in['rc_links'] ?? '', $s['rc_links'] );
 
-		// An empty IP box would lock everyone out silently; fall back to the
-		// default address rather than saving a gate that admits no one.
-		$rules = trim( (string) ( $in['rc_ip_rules'] ?? '' ) );
-		$s['rc_ip_rules'] = '' === $rules ? "allow 167.102.110.1
-" : sanitize_textarea_field( $in['rc_ip_rules'] );
+		// The gate defaults open, so an empty box is fine — it means everyone is
+		// allowed (the key is the gate). Saved verbatim.
+		$s['rc_ip_rules'] = sanitize_textarea_field( $in['rc_ip_rules'] ?? '' );
 
 		WPSQR_Plugin::update( $s );
 

@@ -67,6 +67,52 @@ class WPSQR_NetGate {
 	}
 
 	/**
+	 * Decide whether an IP is allowed, defaulting to OPEN.
+	 *
+	 * Same most-specific-wins, deny-wins-a-tie logic as allows(), but an IP that
+	 * matches no rule is ALLOWED rather than refused. This is the mode the
+	 * remote endpoint uses: the secret key is the gate, so an unlisted address
+	 * gets in, and the rules exist only to block specific addresses you name
+	 * with "deny". An empty rule set therefore admits everyone.
+	 *
+	 * @param string  $ip
+	 * @param array[] $rules
+	 * @return bool
+	 */
+	public static function allows_open( $ip, $rules ) {
+		$ip = self::normalize( $ip );
+
+		if ( '' === $ip ) {
+			return true; // unparseable address: the key already matched, let it through
+		}
+
+		$best_score  = -1;
+		$best_action = 'allow'; // default OPEN — nothing matched means allowed
+
+		foreach ( (array) $rules as $rule ) {
+			$value  = isset( $rule['value'] ) ? trim( (string) $rule['value'] ) : '';
+			$action = ( isset( $rule['action'] ) && 'allow' === $rule['action'] ) ? 'allow' : 'deny';
+
+			if ( '' === $value ) {
+				continue;
+			}
+
+			$score = self::match_score( $ip, $value );
+
+			if ( $score < 0 ) {
+				continue;
+			}
+
+			if ( $score > $best_score || ( $score === $best_score && 'deny' === $action ) ) {
+				$best_score  = $score;
+				$best_action = $action;
+			}
+		}
+
+		return 'allow' === $best_action;
+	}
+
+	/**
 	 * How specifically a value matches an IP.
 	 *
 	 * Higher is more specific. -1 means no match. A full-address match is the

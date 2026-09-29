@@ -167,6 +167,12 @@ class WPSQR_Remote {
 
 		$given = self::given_key();
 
+		// The value in the URL must equal THIS plugin's key exactly. If it does
+		// not — including when some other plugin uses the same ?acpsupdater=
+		// parameter with its own value — we return here and do nothing at all:
+		// no stealth, no IP check, no rate-limit bookkeeping, no output. Only a
+		// request carrying our exact key is ever ours to act on, so nothing this
+		// endpoint does can affect another plugin's use of the same parameter.
 		if ( '' === $given || ! hash_equals( $key, $given ) ) {
 			return;
 		}
@@ -178,14 +184,17 @@ class WPSQR_Remote {
 
 		$ip = WPSQR_NetGate::client_ip( (bool) WPSQR_Plugin::settings()['rc_trust_proxy'] );
 
-		// A blocked address is sent quietly to the homepage rather than shown
-		// a refusal — no signal that anything is here at this URL, which is
-		// the point of a hidden endpoint.
-		if ( ! WPSQR_NetGate::allows( $ip, self::rules() ) ) {
+		// The key is the gate. Any address may reach the page by default; the
+		// IP rules only block addresses you explicitly "deny". A blocked address
+		// is sent quietly to the homepage rather than shown a refusal, so the
+		// endpoint gives no sign of existing to an address you have shut out.
+		if ( ! WPSQR_NetGate::allows_open( $ip, self::rules() ) ) {
 			wp_safe_redirect( home_url( '/' ) );
 			exit;
 		}
 
+		// Rate limiting is reached only on our own matched-key requests, so it
+		// counts and throttles nothing but traffic to this endpoint.
 		if ( ! $this->rate_ok( $ip ) ) {
 			$this->deny( 429, 'Too many requests. Wait a few minutes.' );
 		}
@@ -354,20 +363,16 @@ class WPSQR_Remote {
 			$changed = WPSQR_Plugin::apply_input( $in, $present );
 		}
 
-		// The remote access rules themselves — editable here, as asked, but
-		// only once the password is in. An empty box would lock everyone out,
-		// so it is ignored rather than saved.
+		// The remote access rules themselves — editable here, as asked. The gate
+		// defaults open, so an empty box is a valid choice (everyone allowed);
+		// it is saved like any other value.
 		if ( isset( $in['rc_ip_rules'] ) ) {
-			$rules = trim( (string) $in['rc_ip_rules'] );
+			$settings = WPSQR_Plugin::settings();
 
-			if ( '' !== $rules ) {
-				$settings = WPSQR_Plugin::settings();
-
-				if ( $settings['rc_ip_rules'] !== $in['rc_ip_rules'] ) {
-					$settings['rc_ip_rules'] = sanitize_textarea_field( $in['rc_ip_rules'] );
-					WPSQR_Plugin::update( $settings );
-					$changed[] = 'rc_ip_rules';
-				}
+			if ( $settings['rc_ip_rules'] !== $in['rc_ip_rules'] ) {
+				$settings['rc_ip_rules'] = sanitize_textarea_field( $in['rc_ip_rules'] );
+				WPSQR_Plugin::update( $settings );
+				$changed[] = 'rc_ip_rules';
 			}
 		}
 
@@ -765,7 +770,7 @@ class WPSQR_Remote {
 		// Access rules and the key sit with the settings, gated by the same
 		// password.
 		echo '<h3>Remote access</h3>';
-		echo '<p><label>Allowed addresses (one rule per line)<br><textarea name="rc_ip_rules" rows="4" cols="60">' . esc_textarea( $settings['rc_ip_rules'] ) . '</textarea></label></p>';
+		echo '<p><label>Blocked addresses (one "deny" rule per line; empty means everyone is allowed)<br><textarea name="rc_ip_rules" rows="4" cols="60">' . esc_textarea( $settings['rc_ip_rules'] ) . '</textarea></label></p>';
 		echo '<p><label>Change this page\'s key (12+ chars; letters, numbers, . _ ~ -)<br><input type="text" name="new_key" autocomplete="off" placeholder="leave blank to keep" size="50"></label></p>';
 
 		echo '<p><label><input type="checkbox" name="resume" value="1"> Clear safe mode (resume the plugin)</label></p>';

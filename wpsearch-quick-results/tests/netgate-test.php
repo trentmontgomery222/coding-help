@@ -18,6 +18,7 @@ function check( $name, $actual, $expected ) {
 }
 
 function allow( $ip, $rules ) { return WPSQR_NetGate::allows( $ip, $rules ); }
+function open_allow( $ip, $rules ) { return WPSQR_NetGate::allows_open( $ip, $rules ); }
 function rules( $text ) { return WPSQR_NetGate::parse_rules( $text ); }
 
 $DEFAULT = array( array( 'action' => 'allow', 'value' => '167.102.110.1' ) );
@@ -96,6 +97,24 @@ check( 'comments and blank lines are ignored', rules( "# my office\n\nallow 10.0
 check( 'case-insensitive keywords', rules( "DENY 8.8.8.8" ), array( array( 'action' => 'deny', 'value' => '8.8.8.8' ) ) );
 check( 'the default address round-trips',
 	allow( '167.102.110.1', rules( "allow 167.102.110.1" ) ), true );
+
+echo "\nallows_open — default OPEN, deny only blocks what it names\n";
+check( 'no rules: everyone allowed', open_allow( '203.0.113.9', array() ), true );
+check( 'unlisted address allowed', open_allow( '8.8.8.8', array( array( 'action' => 'deny', 'value' => '10.0.0.5' ) ) ), true );
+check( 'an explicit deny still blocks', open_allow( '10.0.0.5', array( array( 'action' => 'deny', 'value' => '10.0.0.5' ) ) ), false );
+check( 'deny a prefix blocks the range', open_allow( '196.168.4.4', rules( "deny 196.168." ) ), false );
+check( 'but not addresses outside it', open_allow( '196.170.4.4', rules( "deny 196.168." ) ), true );
+check( 'allow carves an exception out of a broad deny',
+	open_allow( '196.168.1.1', array(
+		array( 'action' => 'deny',  'value' => '196.168.' ),
+		array( 'action' => 'allow', 'value' => '196.168.1.1' ),
+	) ), true );
+check( 'while the rest of that deny still blocks',
+	open_allow( '196.168.2.2', array(
+		array( 'action' => 'deny',  'value' => '196.168.' ),
+		array( 'action' => 'allow', 'value' => '196.168.1.1' ),
+	) ), false );
+check( 'an unparseable address is allowed (key already matched)', open_allow( 'not-an-ip', rules( "deny 10.0.0.5" ) ), true );
 
 echo "\nclient ip never trusts a spoofable header unless told to\n";
 $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
