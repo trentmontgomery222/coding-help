@@ -96,6 +96,26 @@ WPSQR_Guard::disarm_rollback();
 check( 'the backup is removed', is_dir( $backup2 ), false );
 check( 'and the option cleared', isset( $GLOBALS['options']['wpsqr_rollback'] ), false );
 
+echo "\nmaybe_apply_staged copies a staged folder over the live plugin\n";
+check( 'no marker: nothing to do', WPSQR_Guard::maybe_apply_staged(), false );
+
+$stage = WP_CONTENT_DIR . '/wpsqr-staging-test/wpsearch-quick-results';
+@mkdir( $stage . '/includes', 0777, true );
+file_put_contents( $stage . '/wpsearch-quick-results.php', "<?php // staged main\n" );
+file_put_contents( $stage . '/includes/new-file.php', "<?php // brand new\n" );
+$GLOBALS['options']['wpsqr_staged_install'] = array( 'dir' => $stage, 'version' => '9.9.9' );
+
+check( 'apply reports success', WPSQR_Guard::maybe_apply_staged(), true );
+check( 'a new file landed in the live plugin', file_exists( $dir . '/includes/new-file.php' ), true );
+check( 'the staged main overwrote the live main', trim( file_get_contents( $dir . '/wpsearch-quick-results.php' ) ), '<?php // staged main' );
+check( 'the marker is cleared', isset( $GLOBALS['options']['wpsqr_staged_install'] ), false );
+check( 'the staging folder is removed', is_dir( $stage ), false );
+check( 'the result is recorded ok', $GLOBALS['options']['wpsqr_last_install_result']['ok'], true );
+
+@unlink( $dir . '/includes/new-file.php' );
+@unlink( $dir . '/wpsearch-quick-results.php' );
+WPSQR_Guard::disarm_rollback(); // drop the backup the staged apply armed
+
 // Clean up.
 @unlink( $dir . '/marker.txt' );
 foreach ( glob( WP_CONTENT_DIR . '/wpsqr-rollback/*' ) as $g ) { is_dir( $g ) && array_map( 'unlink', glob( $g . '/*' ) ) && rmdir( $g ); }

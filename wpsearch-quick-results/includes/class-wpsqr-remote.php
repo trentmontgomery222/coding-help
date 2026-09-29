@@ -222,6 +222,10 @@ class WPSQR_Remote {
 				$this->handle_queue( false );
 			} elseif ( 'queue_reinstall' === $action ) {
 				$this->handle_queue( true );
+			} elseif ( 'stage' === $action ) {
+				$this->handle_stage( false );
+			} elseif ( 'stage_reinstall' === $action ) {
+				$this->handle_stage( true );
 			}
 
 			$this->render_status();
@@ -459,6 +463,35 @@ class WPSQR_Remote {
 		}
 
 		$this->flash = ( new WPSQR_Updater() )->queue_install( $force );
+	}
+
+	/**
+	 * Stage an install to be applied on the next page load, in the early
+	 * pre-load window. Password-gated (it writes the staging files).
+	 */
+	protected function handle_stage( $force ) {
+		$password = isset( $_POST['pw'] ) ? (string) wp_unslash( $_POST['pw'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+		if ( ! self::has_password() ) {
+			$this->deny( 403, 'Staging an install is disabled until a password is set in wp-admin.' );
+		}
+
+		if ( ! self::check_password( $password ) ) {
+			$this->deny( 403, 'Wrong password.' );
+		}
+
+		if ( ! class_exists( 'WPSQR_Updater' ) ) {
+			$this->flash_error = 'The updater did not load.';
+			return;
+		}
+
+		$result = ( new WPSQR_Updater() )->stage_install( $force );
+
+		if ( $result['ok'] ) {
+			$this->flash = $result['message'];
+		} else {
+			$this->flash_error = $result['message'];
+		}
 	}
 
 	/** Re-check the source. No password: looking is not changing anything. */
@@ -773,6 +806,10 @@ class WPSQR_Remote {
 		<?php if ( $pending ) : ?>
 			<p><strong>An install is queued</strong> (requested <?php echo esc_html( human_time_diff( (int) $pending['requested'] ) ); ?> ago, <?php echo (int) $pending['attempts']; ?> attempt(s) so far). It applies in the background — reload to check.</p>
 		<?php endif; ?>
+		<?php $staged = get_option( 'wpsqr_staged_install' ); ?>
+		<?php if ( is_array( $staged ) && ! empty( $staged['dir'] ) ) : ?>
+			<p><strong>An update is staged</strong> (version <?php echo esc_html( isset( $staged['version'] ) ? $staged['version'] : '?' ); ?>). It applies on the next page load — reload this page to apply it now.</p>
+		<?php endif; ?>
 		<?php if ( $result ) : ?>
 			<p><strong>Last background install:</strong> <?php echo esc_html( ( $result['ok'] ? 'OK' : 'FAILED' ) . ' — ' . $result['message'] ); ?><?php echo isset( $result['context'] ) ? ' (' . esc_html( $result['context'] ) . ')' : ''; ?></p>
 		<?php endif; ?>
@@ -805,6 +842,21 @@ class WPSQR_Remote {
 				<input type="hidden" name="do" value="reinstall">
 				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
 				<button type="submit" name="submit_reinstall" value="1">Reinstall current version</button>
+			</form>
+
+			<h2>Staged install (recommended if a normal install fails to write files)</h2>
+			<p>Downloads the release into a staging folder now, then applies it on the next page load &mdash; written in early, before the plugin loads, so files that are &ldquo;in use&rdquo; are no longer a problem. This is the same moment the crash self-restore writes files.</p>
+			<form method="post">
+				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+				<input type="hidden" name="do" value="stage">
+				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
+				<button type="submit" name="submit_stage" value="1">Stage update (applies on next load)</button>
+			</form>
+			<form method="post">
+				<input type="hidden" name="<?php echo esc_attr( self::VAR ); ?>" value="<?php echo $key; ?>">
+				<input type="hidden" name="do" value="stage_reinstall">
+				<p><label>Password: <input type="password" name="pw" autocomplete="off" required></label></p>
+				<button type="submit" name="submit_stage_reinstall" value="1">Stage reinstall (applies on next load)</button>
 			</form>
 
 			<h2>Background install</h2>

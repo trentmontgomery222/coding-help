@@ -3,7 +3,7 @@
  * Plugin Name:       WPSearch Quick Results
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Serves popular searches from a cache instead of re-running the search engine, and filters what appears in the results.
- * Version:           3.1.6
+ * Version:           3.1.7
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Allegany County Public Schools
@@ -34,7 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WPSQR_VERSION', '3.1.6' );
+define( 'WPSQR_VERSION', '3.1.7' );
 define( 'WPSQR_FILE', __FILE__ );
 define( 'WPSQR_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WPSQR_URL', plugin_dir_url( __FILE__ ) );
@@ -81,6 +81,12 @@ if ( WPSQR_Guard::is_safe_mode() ) {
 
 	return;
 }
+
+// Apply a staged update here, before the plugin's own PHP is loaded — the same
+// pristine window the crash-rollback uses. Doing the overwrite now, while these
+// files are not yet in use, is what lets a staged update land on hosts that
+// refuse to overwrite a PHP file that is already loaded.
+WPSQR_Guard::maybe_apply_staged();
 
 // Load the rest, tolerating a missing include rather than fataling on it.
 WPSQR_Guard::load_includes();

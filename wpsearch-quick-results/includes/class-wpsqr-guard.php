@@ -225,6 +225,71 @@ class WPSQR_Guard {
 		delete_option( self::ROLLBACK_OPTION );
 	}
 
+	const STAGE_OPTION = 'wpsqr_staged_install';
+
+	/**
+	 * Apply a staged update, in the bootstrap's pristine early window.
+	 *
+	 * The updater unpacks a new release into a staging folder (writing new,
+	 * not-yet-loaded files, which a host that only blocks overwriting *in-use*
+	 * PHP still allows). This then copies those files over the live plugin at
+	 * the same early point the crash-rollback runs — before the plugin's own
+	 * includes are loaded, so they are not in use and can be overwritten. This
+	 * is the whole reason it can succeed where an install from a normal request
+	 * (with everything already loaded) cannot.
+	 *
+	 * It uses the same plain-filesystem copy the rollback uses, and arms a
+	 * rollback first, so a bad staged version is still undone by the crash
+	 * guard rather than left broken.
+	 *
+	 * @return bool Whether a staged update was applied.
+	 */
+	public static function maybe_apply_staged() {
+		$stage = get_option( self::STAGE_OPTION );
+
+		if ( ! is_array( $stage ) || empty( $stage['dir'] ) || ! is_dir( $stage['dir'] ) ) {
+			// Stale or malformed marker: clear it so it cannot loop.
+			if ( false !== $stage ) {
+				delete_option( self::STAGE_OPTION );
+			}
+
+			return false;
+		}
+
+		// Back up the current files first, so a bad staged version can be undone
+		// by the crash guard on the next request.
+		self::arm_rollback( defined( 'WPSQR_VERSION' ) ? WPSQR_VERSION : '' );
+
+		$applied = self::copy_tree( $stage['dir'], untrailingslashit( WPSQR_PATH ) );
+
+		self::remove_tree( $stage['dir'] );
+		delete_option( self::STAGE_OPTION );
+
+		update_option(
+			'wpsqr_last_install_result',
+			array(
+				'ok'      => (bool) $applied,
+				'time'    => time(),
+				'message' => $applied
+					? 'Applied staged version ' . ( isset( $stage['version'] ) ? $stage['version'] : '' ) . ' during page load.'
+					: 'Staged apply could not copy all files — some may still be locked. The previous version is intact.',
+				'context' => 'early bootstrap',
+			),
+			false
+		);
+
+		if ( $applied ) {
+			// Confirm the new code and re-enable if the copy toggled anything.
+			update_option( 'wpsqr_should_be_active', 1, false );
+			update_option( 'wpsqr_post_update_check', time(), false );
+		} else {
+			// Nothing usable changed; drop the backup we just armed.
+			self::disarm_rollback();
+		}
+
+		return $applied;
+	}
+
 	/**
 	 * If a bad update tripped safe mode, restore the previous version.
 	 *

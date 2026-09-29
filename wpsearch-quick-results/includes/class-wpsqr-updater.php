@@ -553,6 +553,90 @@ class WPSQR_Updater {
 		);
 	}
 
+	/**
+	 * Stage a release for the early-boot apply.
+	 *
+	 * Downloads and unpacks the new version into a staging folder — writing new
+	 * files, not overwriting loaded ones — and drops a marker the bootstrap
+	 * reads on the next request to copy them into place before the plugin's PHP
+	 * is loaded. This is the path that lands on hosts which refuse to overwrite
+	 * an in-use PHP file. If the host blocks *all* PHP writes by the web user,
+	 * the unpack itself fails here and says so plainly.
+	 *
+	 * @return array { ok, message }
+	 */
+	public function stage_install( $force = false ) {
+		foreach ( array( 'includes/plugin.php', 'includes/file.php', 'includes/misc.php' ) as $file ) {
+			$path = ABSPATH . 'wp-admin/' . $file;
+
+			if ( is_readable( $path ) ) {
+				require_once $path;
+			}
+		}
+
+		if ( ! function_exists( 'download_url' ) || ! function_exists( 'unzip_file' ) ) {
+			return array( 'ok' => false, 'message' => 'Staging: the WordPress download/unzip API is not available.' );
+		}
+
+		$this->prepare_filesystem();
+
+		$remote = $this->remote( true );
+
+		if ( ! $remote ) {
+			return array( 'ok' => false, 'message' => 'Staging: the update source did not answer.' );
+		}
+
+		if ( ! $force && version_compare( $remote['version'], WPSQR_VERSION, '<=' ) ) {
+			return array( 'ok' => true, 'message' => 'Already up to date (' . WPSQR_VERSION . ').' );
+		}
+
+		$package = download_url( $remote['download_url'] );
+
+		if ( is_wp_error( $package ) ) {
+			return array( 'ok' => false, 'message' => 'Staging: download failed: ' . $package->get_error_message() );
+		}
+
+		$base  = trailingslashit( WP_CONTENT_DIR ) . 'wpsqr-staging-' . wp_generate_password( 8, false, false );
+		$unzip = unzip_file( $package, $base );
+
+		@unlink( $package ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+
+		if ( is_wp_error( $unzip ) ) {
+			$this->rrmdir( $base );
+			return array( 'ok' => false, 'message' => 'Staging: unpack failed (the host may be blocking PHP-file writes entirely): ' . $unzip->get_error_message() );
+		}
+
+		$source = $this->locate_main_dir( $base );
+
+		if ( '' === $source ) {
+			$this->rrmdir( $base );
+			return array( 'ok' => false, 'message' => 'Staging: the plugin main file was not found in the package.' );
+		}
+
+		// Clear any older staging marker (and its folder) before setting a new one.
+		$old = get_option( WPSQR_Guard::STAGE_OPTION );
+		if ( is_array( $old ) && ! empty( $old['dir'] ) && $old['dir'] !== $source && is_dir( dirname( $old['dir'] ) ) ) {
+			$this->rrmdir( dirname( $old['dir'] ) );
+		}
+
+		update_option(
+			WPSQR_Guard::STAGE_OPTION,
+			array(
+				'dir'       => $source,
+				'version'   => $remote['version'],
+				'requested' => time(),
+			),
+			false
+		);
+
+		delete_option( self::RESULT_OPTION );
+
+		return array(
+			'ok'      => true,
+			'message' => 'Update ' . $remote['version'] . ' staged. Reload this page (or open any page) to apply it — it is written in early, before the plugin loads, so in-use files are no longer a problem.',
+		);
+	}
+
 	/* ---- Queued (background) install ----------------------------------- */
 
 	/**
@@ -712,10 +796,23 @@ class WPSQR_Updater {
 			return array( 'ok' => false, 'lines' => array( $prep ) );
 		}
 
+		// Decisive test first: actually create a brand-new file of each type in
+		// the plugin folder. If a new .php fails while .md/.txt/.js succeed, the
+		// host is blocking PHP writes by extension (only host/cron/SSH can help).
+		// If the new .php SUCCEEDS, then any failure to overwrite existing .php
+		// is about those files being in use/locked — which is fixable in code.
+		$lines[] = 'live write test (new files in the plugin folder):';
+
+		foreach ( $this->live_write_test() as $line ) {
+			$lines[] = '  ' . $line;
+		}
+
+		$lines[] = '';
+
 		$remote = $this->remote( true );
 
 		if ( ! $remote ) {
-			return array( 'ok' => false, 'lines' => array( 'The update source did not answer, or returned nothing usable.' ) );
+			return array( 'ok' => false, 'lines' => array_merge( $lines, array( 'The update source did not answer, or returned nothing usable.' ) ) );
 		}
 
 		$lines[] = 'source version: ' . $remote['version'];
@@ -792,6 +889,37 @@ class WPSQR_Updater {
 		}
 
 		return array( 'ok' => 0 === $fail, 'lines' => $lines );
+	}
+
+	/**
+	 * Actually create, then delete, a throwaway file of several extensions in
+	 * the live plugin folder — to see whether a write is refused by file type.
+	 *
+	 * This is the test that separates "host blocks writing PHP" from "existing
+	 * PHP files are locked because they're in use": a brand-new .php that
+	 * cannot be created proves the former.
+	 *
+	 * @return string[]
+	 */
+	protected function live_write_test() {
+		$lines = array();
+		$dir   = untrailingslashit( defined( 'WPSQR_PATH' ) && WPSQR_PATH ? WPSQR_PATH : dirname( WPSQR_FILE ) );
+		$tag   = wp_generate_password( 8, false, false );
+
+		foreach ( array( 'md', 'txt', 'js', 'css', 'php' ) as $ext ) {
+			$file    = $dir . '/wpsqr-writetest-' . $tag . '.' . $ext;
+			$written = @file_put_contents( $file, "wpsqr write test\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions,WordPress.PHP.NoSilencedErrors
+
+			if ( false !== $written ) {
+				$lines[] = 'new .' . $ext . ' : OK';
+				@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			} else {
+				$err     = error_get_last();
+				$lines[] = 'new .' . $ext . ' : FAILED' . ( isset( $err['message'] ) ? ' — ' . $err['message'] : '' );
+			}
+		}
+
+		return $lines;
 	}
 
 	/** Find the folder inside $dir that holds the plugin's main file. */
