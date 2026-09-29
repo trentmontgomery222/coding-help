@@ -682,6 +682,18 @@ class WPSQR_Remote {
 					'warn'
 				);
 			}
+
+			// Why an install would or would not be able to write files — so a
+			// "could not be written" is explained rather than guessed at.
+			$diag = ( new WPSQR_Updater() )->filesystem_diagnostics();
+			$rows = array();
+
+			foreach ( $diag as $label => $value ) {
+				$bad          = ( false !== stripos( $value, 'not writable' ) || false !== stripos( $value, 'blocked' ) );
+				$rows[ $label ] = $this->row( $value, $bad ? 'bad' : 'ok' );
+			}
+
+			$out['File writing'] = $rows;
 		}
 
 		return $out;

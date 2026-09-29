@@ -346,6 +346,22 @@ class WPSQR_Updater {
 			return array( 'ok' => false, 'updated' => false, 'message' => 'The WordPress upgrader is not available in this context.' );
 		}
 
+		// Initialise the filesystem the way wp-admin does, but without an admin
+		// session. From the front end there is no page on which WordPress could
+		// show its FTP/SSH credentials form, so left to itself the upgrader asks
+		// for credentials, gets none, and bails out with "could not be written"
+		// — even when the files are perfectly writable (which a working update
+		// from a logged-in browser proves). Forcing the direct method and
+		// initialising WP_Filesystem() here makes the remote install write files
+		// exactly as a logged-in update does. If the host genuinely needs FTP
+		// creds (files not owned by the PHP user), this filter is ignored and
+		// the normal failure message still stands.
+		$prep = $this->prepare_filesystem();
+
+		if ( true !== $prep ) {
+			return array( 'ok' => false, 'updated' => false, 'message' => $prep );
+		}
+
 		// Put our own entry into the update transient so the upgrader finds
 		// the package, without the network sweep wp_update_plugins() would do.
 		$transient = get_site_transient( 'update_plugins' );
@@ -402,6 +418,72 @@ class WPSQR_Updater {
 			'updated' => true,
 			'message' => ( $force ? 'Reinstalled ' : 'Updated to ' ) . $remote['version'] . '. It will verify itself on the next page load.',
 		);
+	}
+
+	/**
+	 * Ready WP_Filesystem for a front-end (no admin session) write.
+	 *
+	 * Prefers the direct method, which needs no credentials, so the upgrader
+	 * does not try to render an FTP form to a page that cannot show one. Returns
+	 * true on success, or a human-readable reason string on failure.
+	 *
+	 * @return true|string
+	 */
+	protected function prepare_filesystem() {
+		global $wp_filesystem;
+
+		if ( ! function_exists( 'WP_Filesystem' ) && is_readable( ABSPATH . 'wp-admin/includes/file.php' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			return 'The WordPress filesystem API is not available in this context.';
+		}
+
+		// Prefer the credential-free direct method for this request only.
+		$force_direct = static function () {
+			return 'direct';
+		};
+		add_filter( 'filesystem_method', $force_direct, 99 );
+
+		$ready = WP_Filesystem();
+
+		remove_filter( 'filesystem_method', $force_direct, 99 );
+
+		if ( ! $ready || ! is_object( $wp_filesystem ) ) {
+			return 'Could not initialise the filesystem for writing. This host may require SFTP/Git deploys for plugin files rather than in-WordPress updates.';
+		}
+
+		return true;
+	}
+
+	/**
+	 * What the file writer can see, for the status page — so a failed update
+	 * reports why rather than just "could not be written".
+	 *
+	 * @return array<string,string>
+	 */
+	public function filesystem_diagnostics() {
+		$plugins_dir = defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : ( defined( 'WPMU_PLUGIN_DIR' ) ? WPMU_PLUGIN_DIR : ABSPATH . 'wp-content/plugins' );
+
+		$out = array(
+			'plugins dir'         => is_writable( $plugins_dir ) ? 'writable' : 'NOT writable', // phpcs:ignore WordPress.WP.AlternativeFunctions
+			'this plugin dir'     => is_writable( dirname( WPSQR_FILE ) ) ? 'writable' : 'NOT writable', // phpcs:ignore WordPress.WP.AlternativeFunctions
+			'FS_METHOD constant'  => defined( 'FS_METHOD' ) ? (string) FS_METHOD : 'not set',
+			'file mods'           => ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ) ? 'BLOCKED (DISALLOW_FILE_MODS)' : 'allowed',
+		);
+
+		if ( function_exists( 'get_filesystem_method' ) || is_readable( ABSPATH . 'wp-admin/includes/file.php' ) ) {
+			if ( ! function_exists( 'get_filesystem_method' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+			}
+
+			if ( function_exists( 'get_filesystem_method' ) ) {
+				$out['detected method'] = (string) get_filesystem_method();
+			}
+		}
+
+		return $out;
 	}
 
 	/**
