@@ -205,6 +205,47 @@ to negate); plus `plugin_active="basename"` / `plugin_inactive="basename"` for
 any plugin. (While THIS plugin is itself in safe mode its shortcodes don't run,
 so use a builder-level fallback for the "totally down" case.)
 
+## Installing on hosts that block overwriting in-use PHP (WP Engine)
+
+Some hosts refuse to let the web user overwrite a `.php` file that is already
+loaded in the current request (writing brand-new files is fine). A direct
+upgrader install then fails with "could not write files" from any request that
+isn't the logged-in Plugins screen. Ported fixes, exposed as buttons on both the
+hidden admin panel and the control-panel URL:
+
+- **Direct install** (`run_install`) — normal upgrader, forced to the
+  credential-free `direct` filesystem method (`fs_init_direct`) so a logged-out
+  request doesn't stall on an FTP form. On failure it falls back to a **manual
+  per-file copy** (`manual_install` + `acps_sitemap_copy_tree`) that continues
+  past any single unwritable file instead of aborting like `copy_dir`.
+- **Staged install** (`stage_install` + `acps_sitemap_maybe_apply_staged`) — the
+  reliable fix. Downloads + unzips the new version to
+  `wp-content/acps-sitemap-staging-*` now (new files are allowed), records it in
+  `acps_sitemap_staged_install`, and the **bootstrap copies those files over the
+  live plugin before any include loads** — the one instant the in-use `.php` can
+  be overwritten. Then it resets opcache and marks the plugin active. Flow:
+  Stage → reload any page → applied.
+- **Queued install** (`queue_install` / `apply_pending_update`) — for hosts where
+  only cron-as-owner or an admin request can write. Drops a marker
+  (`acps_sitemap_pending_update`), schedules `acps_sitemap_apply_pending`, and
+  applies from `admin_init`/cron under a transient lock, capped at 5 attempts.
+- **Reinstall (force)** — same paths with `$force`, which primes the update
+  transient so the upgrader installs even when the version matches (repairs a
+  mis-edited file).
+- **opcache reset** after every self-copy (`acps_sitemap_opcache_reset`) so the
+  new bytecode actually runs (this is the "it disabled itself after updating"
+  fix).
+- **ensure_active** re-enables the plugin and clears any WSOD/recovery pause in
+  the same request, so an update never leaves it disabled.
+- **Real rollback** — `acps_sitemap_arm_rollback` backs up the current files
+  before any swap; if the new code fatals, the bootstrap runs
+  `acps_sitemap_maybe_rollback` from safe mode to restore the previous version;
+  `acps_sitemap_disarm_rollback` drops the backup once new code loads cleanly.
+- **Write probe** (`probe`) — creates then deletes a throwaway file of each type
+  in the plugin folder. If **new .php : OK**, staging will work; if **FAILED**,
+  the host blocks all web-user PHP writes and only SFTP / cron-as-owner can
+  update.
+
 ## Failsafe auto-heal
 
 If the plugin ends up broken — safe mode or missing files — it tries to

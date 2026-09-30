@@ -27,6 +27,7 @@ class ACPS_Sitemap_Admin {
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_action( 'admin_post_acps_sitemap_create_page', array( $this, 'handle_create_page' ) );
 		add_action( 'admin_post_acps_sitemap_check_updates', array( $this, 'handle_check_updates' ) );
+		add_action( 'admin_post_acps_sitemap_run_update', array( $this, 'handle_run_update' ) );
 		add_action( 'admin_post_acps_sitemap_set_remote_pw', array( $this, 'handle_set_remote_pw' ) );
 		add_filter(
 			'plugin_action_links_' . plugin_basename( ACPS_SITEMAP_FILE ),
@@ -210,11 +211,63 @@ class ACPS_Sitemap_Admin {
 	}
 
 	/**
+	 * Install / stage / probe from wp-admin (the native "Update now" row is
+	 * suppressed, so these are how an admin updates). Result shown via a
+	 * one-shot transient on the hidden panel.
+	 */
+	public function handle_run_update() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do that.', 'acps-sitemap' ) );
+		}
+		check_admin_referer( 'acps_sitemap_run_update' );
+
+		$mode    = isset( $_GET['mode'] ) ? sanitize_key( wp_unslash( $_GET['mode'] ) ) : 'install';
+		$updater = new ACPS_Sitemap_Updater();
+
+		if ( 'stage' === $mode ) {
+			$res = $updater->stage_install( false );
+			$msg = implode( ' ', (array) $res['messages'] );
+		} elseif ( 'stage_force' === $mode ) {
+			$res = $updater->stage_install( true );
+			$msg = implode( ' ', (array) $res['messages'] );
+		} elseif ( 'probe' === $mode ) {
+			$msg = implode( ' | ', (array) $updater->probe() );
+		} elseif ( 'reinstall' === $mode ) {
+			$res = $updater->run_install( true );
+			$msg = ( ! empty( $res['ok'] ) ? __( 'Reinstalled.', 'acps-sitemap' ) . ' ' : '' ) . implode( ' ', (array) $res['messages'] );
+		} else {
+			$res = $updater->run_install( false );
+			$msg = ( ! empty( $res['ok'] ) ? __( 'Done.', 'acps-sitemap' ) . ' ' : '' ) . implode( ' ', (array) $res['messages'] );
+		}
+
+		set_transient( 'acps_sitemap_admin_msg', $msg, 60 );
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'    => self::PAGE,
+					'updates' => '1',
+					'acps_ran' => '1',
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
 	 * Notices after the create-page / check-updates actions.
 	 */
 	public function maybe_notice() {
 		if ( empty( $_GET['page'] ) || self::PAGE !== $_GET['page'] ) {
 			return;
+		}
+
+		if ( ! empty( $_GET['acps_ran'] ) ) {
+			$msg = get_transient( 'acps_sitemap_admin_msg' );
+			delete_transient( 'acps_sitemap_admin_msg' );
+			if ( $msg ) {
+				echo '<div class="notice notice-info is-dismissible"><p>' . esc_html( $msg ) . '</p></div>';
+			}
 		}
 
 		if ( ! empty( $_GET['acps_page_result'] ) ) {
@@ -521,7 +574,21 @@ class ACPS_Sitemap_Admin {
 							?>
 						</p>
 					<?php endif; ?>
-					<a href="<?php echo esc_url( $check_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Check for updates now', 'acps-sitemap' ); ?></a>
+					<?php
+					$run = function ( $mode ) {
+						return wp_nonce_url( admin_url( 'admin-post.php?action=acps_sitemap_run_update&mode=' . $mode ), 'acps_sitemap_run_update' );
+					};
+					?>
+					<p style="margin:8px 0 0;">
+						<a href="<?php echo esc_url( $check_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Check for updates now', 'acps-sitemap' ); ?></a>
+						<a href="<?php echo esc_url( $run( 'probe' ) ); ?>" class="button button-secondary"><?php esc_html_e( 'Run write probe', 'acps-sitemap' ); ?></a>
+					</p>
+					<p style="margin:8px 0 0;">
+						<a href="<?php echo esc_url( $run( 'install' ) ); ?>" class="button button-primary"><?php esc_html_e( 'Install update now', 'acps-sitemap' ); ?></a>
+						<a href="<?php echo esc_url( $run( 'reinstall' ) ); ?>" class="button button-secondary"><?php esc_html_e( 'Reinstall (force)', 'acps-sitemap' ); ?></a>
+						<a href="<?php echo esc_url( $run( 'stage' ) ); ?>" class="button button-secondary"><?php esc_html_e( 'Stage update (apply on reload)', 'acps-sitemap' ); ?></a>
+					</p>
+					<p class="description"><?php esc_html_e( 'Direct install works when logged in. If your host blocks overwriting in-use PHP, use Stage (then reload any page).', 'acps-sitemap' ); ?></p>
 				</td>
 			</tr>
 			</tbody>

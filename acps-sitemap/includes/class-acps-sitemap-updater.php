@@ -73,6 +73,10 @@ class ACPS_Sitemap_Updater {
 		// After our plugin updates: crash-test the new code and roll back a bad one.
 		add_action( 'upgrader_process_complete', array( $this, 'verify_after_upgrade' ), 20, 2 );
 
+		// Apply a queued install from a writable context (cron or admin request).
+		add_action( 'acps_sitemap_apply_pending', array( $this, 'apply_pending_update' ) );
+		add_action( 'admin_init', array( $this, 'apply_pending_update' ) );
+
 		// Failsafe self-heal: if the plugin is broken (safe mode / missing files),
 		// re-download and reapply the latest version automatically (rate-limited).
 		add_action( 'admin_init', array( __CLASS__, 'maybe_self_heal' ) );
@@ -668,6 +672,10 @@ class ACPS_Sitemap_Updater {
 			require_once ABSPATH . 'wp-admin/includes/misc.php';
 			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
+			// From a logged-out request WordPress has no page to show its FTP
+			// form, so force the credential-free direct filesystem method.
+			$this->fs_init_direct();
+
 			// Temporarily prime the update transient with our entry so the core
 			// upgrader has a package to install (and so it stays over the same
 			// directory). Restored/cleared immediately after.
@@ -684,8 +692,23 @@ class ACPS_Sitemap_Updater {
 				$out['messages'][] = wp_strip_all_tags( $m );
 			}
 			$out['ok'] = ( ! is_wp_error( $result ) && $result );
-			if ( is_wp_error( $result ) ) {
-				$out['messages'][] = $result->get_error_message();
+
+			// copy_dir aborts on the first file it can't write; if the upgrader
+			// failed, try a manual per-file copy that continues past failures.
+			if ( ! $out['ok'] ) {
+				if ( is_wp_error( $result ) ) {
+					$out['messages'][] = $result->get_error_message();
+				}
+				$manual = $this->manual_install( $remote );
+				$out['messages'] = array_merge( $out['messages'], $manual['messages'] );
+				$out['ok']       = $manual['ok'];
+			}
+
+			if ( $out['ok'] ) {
+				if ( function_exists( 'acps_sitemap_opcache_reset' ) ) {
+					acps_sitemap_opcache_reset();
+				}
+				$this->ensure_active();
 			}
 		} catch ( \Throwable $e ) {
 			self::log_error( 'run_install: ' . $e->getMessage() );
@@ -727,7 +750,317 @@ class ACPS_Sitemap_Updater {
 		if ( isset( $current->no_update[ ACPS_SITEMAP_BASENAME ] ) ) {
 			unset( $current->no_update[ ACPS_SITEMAP_BASENAME ] );
 		}
+		// For a forced reinstall, also drop our entry from `checked` so core
+		// sees the package as different from what is installed and proceeds.
+		if ( $force && isset( $current->checked[ ACPS_SITEMAP_BASENAME ] ) ) {
+			unset( $current->checked[ ACPS_SITEMAP_BASENAME ] );
+		}
 		set_site_transient( 'update_plugins', $current );
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * Staged / queued / manual install + filesystem helpers.
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Force WordPress's credential-free "direct" filesystem method for this
+	 * request (works from a logged-out context that has no FTP form to show).
+	 *
+	 * @return bool
+	 */
+	private function fs_init_direct() {
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		$force = static function () {
+			return 'direct';
+		};
+		add_filter( 'filesystem_method', $force, 99 );
+		$ready = WP_Filesystem();
+		remove_filter( 'filesystem_method', $force, 99 );
+		return (bool) $ready;
+	}
+
+	/**
+	 * Find the directory inside an unpacked release that holds the plugin's main
+	 * file.
+	 *
+	 * @param string $base Unpacked root.
+	 * @return string|false
+	 */
+	private function locate_main_dir( $base ) {
+		$main = basename( ACPS_SITEMAP_BASENAME ); // acps-sitemap.php
+		$slug = dirname( ACPS_SITEMAP_BASENAME );  // acps-sitemap
+		$base = rtrim( $base, '/\\' );
+
+		if ( is_file( $base . '/' . $slug . '/' . $main ) ) {
+			return $base . '/' . $slug;
+		}
+		if ( is_file( $base . '/' . $main ) ) {
+			return $base;
+		}
+		// Fall back to scanning one level down.
+		foreach ( (array) glob( $base . '/*', GLOB_ONLYDIR ) as $dir ) {
+			if ( is_file( $dir . '/' . $main ) ) {
+				return $dir;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * STAGE an install: download + unzip the new version to a staging folder now
+	 * (writing new files is allowed even where overwriting in-use .php is not).
+	 * The bootstrap's acps_sitemap_maybe_apply_staged() applies it on the next
+	 * request. This is the reliable path on hosts that block in-use PHP writes.
+	 *
+	 * @param bool $force Stage even if not newer (repair).
+	 * @return array { @type bool $ok; @type string $version; @type string[] $messages }
+	 */
+	public function stage_install( $force = false ) {
+		$out = array(
+			'ok'       => false,
+			'version'  => '',
+			'messages' => array(),
+		);
+		try {
+			self::flush_cache();
+			$remote = $this->remote( true );
+			if ( ! $remote || empty( $remote['package'] ) ) {
+				$out['messages'][] = 'Could not reach the configured update source.';
+				return $out;
+			}
+			$out['version'] = $remote['version'];
+			if ( ! $force && ! version_compare( $remote['version'], ACPS_SITEMAP_VERSION, '>' ) ) {
+				$out['ok']         = true;
+				$out['messages'][] = 'Already up to date. Use force to stage a re-download.';
+				return $out;
+			}
+
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			$this->fs_init_direct();
+
+			$package = download_url( $remote['package'] );
+			if ( is_wp_error( $package ) ) {
+				$out['messages'][] = 'Download failed: ' . $package->get_error_message();
+				return $out;
+			}
+
+			$base  = WP_CONTENT_DIR . '/acps-sitemap-staging-' . wp_generate_password( 8, false, false );
+			$unzip = unzip_file( $package, $base );
+			@unlink( $package ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( is_wp_error( $unzip ) ) {
+				$out['messages'][] = 'Unzip failed: ' . $unzip->get_error_message();
+				if ( function_exists( 'acps_sitemap_remove_tree' ) ) {
+					acps_sitemap_remove_tree( $base );
+				}
+				return $out;
+			}
+
+			$source = $this->locate_main_dir( $base );
+			if ( ! $source ) {
+				$out['messages'][] = 'Could not find the plugin folder in the package.';
+				if ( function_exists( 'acps_sitemap_remove_tree' ) ) {
+					acps_sitemap_remove_tree( $base );
+				}
+				return $out;
+			}
+
+			update_option(
+				ACPS_SITEMAP_STAGE_OPT,
+				array(
+					'dir'     => $source,
+					'version' => $remote['version'],
+					'time'    => time(),
+				),
+				false
+			);
+			$out['ok']         = true;
+			$out['messages'][] = 'Staged version ' . $remote['version'] . '. Reload any page to apply it.';
+		} catch ( \Throwable $e ) {
+			self::log_error( 'stage_install: ' . $e->getMessage() );
+			$out['messages'][] = 'Staging error: ' . $e->getMessage();
+		}
+		return $out;
+	}
+
+	/**
+	 * Manual per-file copy fallback: download + unzip, then copy each file over
+	 * the live plugin, continuing past any single failure.
+	 *
+	 * @param array $remote Normalized remote info.
+	 * @return array { @type bool $ok; @type string[] $messages }
+	 */
+	private function manual_install( $remote ) {
+		$out = array(
+			'ok'       => false,
+			'messages' => array(),
+		);
+		if ( ! function_exists( 'acps_sitemap_copy_tree' ) ) {
+			return $out;
+		}
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		$this->fs_init_direct();
+
+		$package = download_url( $remote['package'] );
+		if ( is_wp_error( $package ) ) {
+			$out['messages'][] = 'Manual download failed: ' . $package->get_error_message();
+			return $out;
+		}
+		$base  = WP_CONTENT_DIR . '/acps-sitemap-manual-' . wp_generate_password( 8, false, false );
+		$unzip = unzip_file( $package, $base );
+		@unlink( $package ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_wp_error( $unzip ) ) {
+			$out['messages'][] = 'Manual unzip failed: ' . $unzip->get_error_message();
+			acps_sitemap_remove_tree( $base );
+			return $out;
+		}
+		$source = $this->locate_main_dir( $base );
+		if ( ! $source ) {
+			acps_sitemap_remove_tree( $base );
+			$out['messages'][] = 'Manual install could not locate the plugin folder.';
+			return $out;
+		}
+		$res = acps_sitemap_copy_tree( $source, untrailingslashit( ACPS_SITEMAP_DIR ) );
+		acps_sitemap_remove_tree( $base );
+		$out['ok'] = ! empty( $res['ok'] );
+		if ( ! empty( $res['failed'] ) ) {
+			$out['messages'][] = 'Manual copy could not write: ' . implode( ', ', $res['failed'] );
+		} else {
+			$out['messages'][] = 'Installed via manual per-file copy.';
+		}
+		return $out;
+	}
+
+	/**
+	 * Queue an install to run in a writable context (system cron as the site
+	 * user, or the next admin request) rather than the front-end request.
+	 *
+	 * @param bool $force Force reinstall.
+	 */
+	public function queue_install( $force = false ) {
+		update_option(
+			'acps_sitemap_pending_update',
+			array(
+				'force'     => (bool) $force,
+				'requested' => time(),
+				'attempts'  => 0,
+			),
+			false
+		);
+		if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( 'acps_sitemap_apply_pending' ) ) {
+			wp_schedule_single_event( time() + 20, 'acps_sitemap_apply_pending' );
+		}
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
+	}
+
+	/**
+	 * Apply a queued install from a writable context (cron / admin_init).
+	 */
+	public function apply_pending_update() {
+		try {
+			$pending = get_option( 'acps_sitemap_pending_update' );
+			if ( ! is_array( $pending ) ) {
+				return;
+			}
+			if ( get_transient( 'acps_sitemap_pending_lock' ) ) {
+				return; // Another context is already applying it.
+			}
+			set_transient( 'acps_sitemap_pending_lock', 1, 120 );
+
+			$attempts  = isset( $pending['attempts'] ) ? (int) $pending['attempts'] : 0;
+			$requested = isset( $pending['requested'] ) ? (int) $pending['requested'] : time();
+			if ( $attempts >= 5 || ( time() - $requested ) > DAY_IN_SECONDS ) {
+				delete_option( 'acps_sitemap_pending_update' );
+				delete_transient( 'acps_sitemap_pending_lock' );
+				return;
+			}
+
+			$result = $this->run_install( ! empty( $pending['force'] ) );
+
+			if ( ! empty( $result['ok'] ) ) {
+				delete_option( 'acps_sitemap_pending_update' );
+				$this->ensure_active();
+			} else {
+				$pending['attempts'] = $attempts + 1;
+				update_option( 'acps_sitemap_pending_update', $pending, false );
+				if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( 'acps_sitemap_apply_pending' ) ) {
+					wp_schedule_single_event( time() + 60, 'acps_sitemap_apply_pending' );
+				}
+			}
+			update_option(
+				'acps_sitemap_pending_result',
+				array(
+					'time'     => time(),
+					'ok'       => ! empty( $result['ok'] ),
+					'messages' => isset( $result['messages'] ) ? $result['messages'] : array(),
+				),
+				false
+			);
+			delete_transient( 'acps_sitemap_pending_lock' );
+		} catch ( \Throwable $e ) {
+			self::log_error( 'apply_pending_update: ' . $e->getMessage() );
+			delete_transient( 'acps_sitemap_pending_lock' );
+		}
+	}
+
+	/**
+	 * Ensure the plugin is active and not stuck in WordPress recovery pause, so
+	 * an update never leaves it disabled.
+	 */
+	public function ensure_active() {
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		if ( ! is_plugin_active( ACPS_SITEMAP_BASENAME ) ) {
+			activate_plugin( ACPS_SITEMAP_BASENAME );
+		}
+		if ( function_exists( 'wp_paused_plugins' ) ) {
+			$paused = wp_paused_plugins();
+			if ( is_object( $paused ) && method_exists( $paused, 'delete' ) ) {
+				foreach ( array( ACPS_SITEMAP_BASENAME, dirname( ACPS_SITEMAP_BASENAME ) ) as $key ) {
+					if ( ! method_exists( $paused, 'get' ) || $paused->get( $key ) ) {
+						$paused->delete( $key );
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Write probe: report whether the web user can create new files of each type
+	 * in the plugin folder. The decisive signal is new .php — if that is OK the
+	 * host only blocks overwriting in-use PHP (staging works); if it FAILS the
+	 * host blocks all web-user PHP writes (use SFTP / cron-as-owner).
+	 *
+	 * @return string[] Report lines.
+	 */
+	public function probe() {
+		$lines = array();
+		$dir   = untrailingslashit( ACPS_SITEMAP_DIR );
+		$lines[] = 'Plugin dir: ' . $dir;
+		$lines[] = 'is_writable(dir): ' . ( is_writable( $dir ) ? 'yes' : 'no' );
+
+		$tag     = function_exists( 'wp_generate_password' ) ? wp_generate_password( 6, false, false ) : (string) wp_rand( 1000, 9999 );
+		$new_php = false;
+		foreach ( array( 'md', 'txt', 'js', 'css', 'php' ) as $ext ) {
+			$f  = $dir . '/acps-writetest-' . $tag . '.' . $ext;
+			$ok = ( false !== @file_put_contents( $f, "test\n" ) ); // phpcs:ignore
+			if ( $ok ) {
+				@unlink( $f ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			}
+			if ( 'php' === $ext ) {
+				$new_php = $ok;
+			}
+			$lines[] = 'new .' . $ext . ' : ' . ( $ok ? 'OK' : 'FAILED' );
+		}
+		$lines[] = 'opcache_reset available: ' . ( function_exists( 'opcache_reset' ) ? 'yes' : 'no' );
+		$lines[] = $new_php
+			? 'Verdict: new .php writes OK -> the STAGED install will work here.'
+			: 'Verdict: new .php BLOCKED -> web updates are impossible; use SFTP or cron-as-owner.';
+		return $lines;
 	}
 
 	/* ------------------------------------------------------------------ *
@@ -766,7 +1099,7 @@ class ACPS_Sitemap_Updater {
 			update_option( 'acps_sitemap_selfheal', $state, false );
 
 			$updater = new self();
-			$result  = $updater->run_install( true ); // Force re-download + overwrite.
+			$result  = $updater->run_install( true ); // Force re-download + overwrite (direct).
 
 			// If the reinstall restored all files, clear safe mode so the plugin
 			// comes back on the next request.
@@ -776,7 +1109,11 @@ class ACPS_Sitemap_Updater {
 				update_option( 'acps_sitemap_selfheal', $state, false );
 				self::log_error( 'self-heal: reinstalled latest and cleared safe mode.' );
 			} else {
-				self::log_error( 'self-heal: reinstall attempt ' . $state['attempts'] . ' did not fully recover.' );
+				// Direct write failed (typical of the in-use-PHP host). Fall back
+				// to STAGING: write the new files now; the bootstrap applies them
+				// in the pristine window on the next request.
+				$updater->stage_install( true );
+				self::log_error( 'self-heal: direct reinstall attempt ' . $state['attempts'] . ' failed; staged a copy to apply next request.' );
 			}
 		} catch ( \Throwable $e ) {
 			self::log_error( 'maybe_self_heal: ' . $e->getMessage() );

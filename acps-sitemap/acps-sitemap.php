@@ -26,6 +26,8 @@ define( 'ACPS_SITEMAP_URL', plugin_dir_url( __FILE__ ) );
 define( 'ACPS_SITEMAP_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_SITEMAP_REST_NAMESPACE', 'acps-sitemap/v1' );
 define( 'ACPS_SITEMAP_SAFE_MODE_OPT', 'acps_sitemap_safe_mode' );
+define( 'ACPS_SITEMAP_STAGE_OPT', 'acps_sitemap_staged_install' );
+define( 'ACPS_SITEMAP_ROLLBACK_OPT', 'acps_sitemap_rollback' );
 
 /* =========================================================================
  * FAILSAFE LAYER
@@ -142,6 +144,212 @@ function acps_sitemap_shutdown_guard() {
 // Defense #1: register the guard before ANY plugin file is loaded.
 register_shutdown_function( 'acps_sitemap_shutdown_guard' );
 
+/* =========================================================================
+ * SELF-UPDATE FILE MACHINERY (works around "can't overwrite in-use PHP")
+ *
+ * Some hosts refuse to let the web user overwrite a .php file that is already
+ * loaded in the current request, even though writing brand-new files is fine.
+ * The reliable fix is a STAGED install: download + unzip the new version to a
+ * staging folder now (new files are allowed), then copy those files over the
+ * live plugin here in the bootstrap — before this plugin's own includes are
+ * loaded, the one instant they are not yet "in use".
+ *
+ * These helpers are plain top-level functions using bare PHP filesystem calls
+ * (no WP_Filesystem, no plugin classes) so they run with as little loaded as
+ * possible. They must never fatal — everything is guarded.
+ * ========================================================================= */
+
+/**
+ * Reset the opcode cache so freshly-copied .php is actually executed on the
+ * next load (otherwise a stale-bytecode + new-source mix can fatal).
+ */
+function acps_sitemap_opcache_reset() {
+	if ( function_exists( 'opcache_reset' ) ) {
+		@opcache_reset(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	}
+}
+
+/**
+ * Recursively copy a directory tree with bare PHP. Continues past any single
+ * failure (unlike copy_dir) and reports which relative paths could not be
+ * written.
+ *
+ * @param string $src Source directory.
+ * @param string $dst Destination directory.
+ * @return array { @type bool $ok; @type string[] $failed }
+ */
+function acps_sitemap_copy_tree( $src, $dst ) {
+	$failed = array();
+	$src    = rtrim( $src, '/\\' );
+	$dst    = rtrim( $dst, '/\\' );
+	if ( ! is_dir( $src ) ) {
+		return array(
+			'ok'     => false,
+			'failed' => array( '(source missing)' ),
+		);
+	}
+	if ( ! is_dir( $dst ) ) {
+		@mkdir( $dst, 0755, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	}
+	$items = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $src, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::SELF_FIRST
+	);
+	foreach ( $items as $item ) {
+		$rel    = substr( $item->getPathname(), strlen( $src ) + 1 );
+		$target = $dst . '/' . $rel;
+		if ( $item->isDir() ) {
+			if ( ! is_dir( $target ) ) {
+				@mkdir( $target, 0755, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			}
+			continue;
+		}
+		if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			@chmod( $target, 0644 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				$failed[] = $rel;
+			}
+		}
+	}
+	return array(
+		'ok'     => empty( $failed ),
+		'failed' => $failed,
+	);
+}
+
+/**
+ * Recursively delete a directory tree with bare PHP.
+ *
+ * @param string $dir Directory.
+ */
+function acps_sitemap_remove_tree( $dir ) {
+	if ( '' === $dir || ! is_dir( $dir ) ) {
+		return;
+	}
+	$items = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::CHILD_FIRST
+	);
+	foreach ( $items as $item ) {
+		if ( $item->isDir() ) {
+			@rmdir( $item->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		} else {
+			@unlink( $item->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+	}
+	@rmdir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+}
+
+/**
+ * Directory where a pre-swap backup of the current plugin is kept.
+ *
+ * @return string
+ */
+function acps_sitemap_backup_dir() {
+	$base = defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : dirname( dirname( ACPS_SITEMAP_DIR ) );
+	return rtrim( $base, '/\\' ) . '/acps-sitemap-rollback';
+}
+
+/**
+ * Back up the current plugin files before an in-place swap, so a bad version
+ * can be restored.
+ *
+ * @param string $version Version being replaced.
+ */
+function acps_sitemap_arm_rollback( $version ) {
+	$backup = acps_sitemap_backup_dir();
+	acps_sitemap_remove_tree( $backup );
+	$res = acps_sitemap_copy_tree( untrailingslashit( ACPS_SITEMAP_DIR ), $backup );
+	if ( ! empty( $res['ok'] ) || is_dir( $backup ) ) {
+		update_option(
+			ACPS_SITEMAP_ROLLBACK_OPT,
+			array(
+				'dir'     => $backup,
+				'version' => $version,
+				'time'    => time(),
+			),
+			false
+		);
+	}
+}
+
+/**
+ * Restore the pre-swap backup (called from safe mode when a bad update armed
+ * one). Returns true if a restore ran.
+ *
+ * @return bool
+ */
+function acps_sitemap_maybe_rollback() {
+	$state = get_option( ACPS_SITEMAP_ROLLBACK_OPT );
+	if ( ! is_array( $state ) || empty( $state['dir'] ) || ! is_dir( $state['dir'] ) ) {
+		return false;
+	}
+	$res = acps_sitemap_copy_tree( $state['dir'], untrailingslashit( ACPS_SITEMAP_DIR ) );
+	acps_sitemap_opcache_reset();
+	acps_sitemap_remove_tree( $state['dir'] );
+	delete_option( ACPS_SITEMAP_ROLLBACK_OPT );
+	if ( ! empty( $res['ok'] ) ) {
+		delete_option( ACPS_SITEMAP_SAFE_MODE_OPT ); // Restored good code — un-park.
+		update_option( 'acps_sitemap_rollback_done', array( 'time' => time(), 'version' => isset( $state['version'] ) ? $state['version'] : '' ), false );
+	}
+	return true;
+}
+
+/**
+ * Drop the rollback backup once the new code has loaded cleanly.
+ */
+function acps_sitemap_disarm_rollback() {
+	$state = get_option( ACPS_SITEMAP_ROLLBACK_OPT );
+	if ( is_array( $state ) && ! empty( $state['dir'] ) ) {
+		acps_sitemap_remove_tree( $state['dir'] );
+	}
+	if ( false !== $state ) {
+		delete_option( ACPS_SITEMAP_ROLLBACK_OPT );
+	}
+}
+
+/**
+ * Apply a staged install, if one is pending. Runs in the pristine bootstrap
+ * window (before this plugin's includes load), which is the one instant the
+ * in-use .php files can be overwritten. Fully guarded.
+ *
+ * @return bool Whether an install was applied.
+ */
+function acps_sitemap_maybe_apply_staged() {
+	try {
+		$stage = get_option( ACPS_SITEMAP_STAGE_OPT );
+		if ( ! is_array( $stage ) || empty( $stage['dir'] ) || ! is_dir( $stage['dir'] ) ) {
+			if ( false !== $stage ) {
+				delete_option( ACPS_SITEMAP_STAGE_OPT );
+			}
+			return false;
+		}
+
+		acps_sitemap_arm_rollback( ACPS_SITEMAP_VERSION );          // Back up current first.
+		$res = acps_sitemap_copy_tree( $stage['dir'], untrailingslashit( ACPS_SITEMAP_DIR ) );
+		acps_sitemap_remove_tree( $stage['dir'] );
+		delete_option( ACPS_SITEMAP_STAGE_OPT );
+
+		if ( ! empty( $res['ok'] ) ) {
+			acps_sitemap_opcache_reset();
+			update_option( 'acps_sitemap_should_be_active', 1, false );
+			update_option( 'acps_sitemap_post_update_check', time(), false );
+			update_option( 'acps_sitemap_staged_result', array( 'time' => time(), 'ok' => true, 'version' => isset( $stage['version'] ) ? $stage['version'] : '' ), false );
+		} else {
+			// Partial swap is dangerous (mixed old/new). Restore the consistent
+			// previous version instead of leaving a mismatch.
+			acps_sitemap_maybe_rollback();
+			update_option( 'acps_sitemap_staged_result', array( 'time' => time(), 'ok' => false, 'failed' => $res['failed'] ), false );
+		}
+		return ! empty( $res['ok'] );
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+// Apply any staged install NOW — the pristine window, before includes load.
+acps_sitemap_maybe_apply_staged();
+
 /**
  * Load and construct the plugin, guarded at every step.
  */
@@ -150,6 +358,10 @@ function acps_sitemap_boot() {
 	// (never as a notice floating on top of other admin pages), plus the secret
 	// recovery URL — so a bad release can't lock you out of recovery.
 	if ( acps_sitemap_is_safe_mode() ) {
+		// If a recent update armed a rollback, restore the previous version
+		// automatically (this clears safe mode; the next request runs the
+		// restored, known-good code).
+		acps_sitemap_maybe_rollback();
 		add_action( 'admin_menu', 'acps_sitemap_recovery_menu' );
 		acps_sitemap_load_recovery();
 		return;
@@ -178,6 +390,17 @@ function acps_sitemap_boot() {
 			throw new \RuntimeException( 'Core class ACPS_Sitemap not found after loading.' );
 		}
 		acps_sitemap();
+
+		// New code loaded cleanly: drop any rollback backup, and finish a
+		// just-applied update (re-enable + opcache) exactly once.
+		acps_sitemap_disarm_rollback();
+		if ( get_option( 'acps_sitemap_post_update_check' ) ) {
+			delete_option( 'acps_sitemap_post_update_check' );
+			acps_sitemap_opcache_reset();
+			if ( class_exists( 'ACPS_Sitemap_Updater' ) ) {
+				( new ACPS_Sitemap_Updater() )->ensure_active();
+			}
+		}
 	} catch ( \Throwable $e ) {
 		acps_sitemap_arm_safe_mode(
 			array(

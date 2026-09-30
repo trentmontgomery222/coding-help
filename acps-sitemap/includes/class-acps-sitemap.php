@@ -445,6 +445,7 @@ class ACPS_Sitemap {
 		flush_rewrite_rules();
 		if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
 			wp_clear_scheduled_hook( 'acps_sitemap_selfheal_cron' );
+			wp_clear_scheduled_hook( 'acps_sitemap_apply_pending' );
 		}
 	}
 }

@@ -213,7 +213,7 @@ class ACPS_Sitemap_Remote {
 		// which is what lets a Python script drive the page without a token.
 		$changing = in_array(
 			$action,
-			array( 'save_settings', 'force_update', 'reinstall', 'check_update', 'resume', 'clear_issues', 'create_page' ),
+			array( 'save_settings', 'force_update', 'reinstall', 'stage', 'stage_force', 'queue', 'queue_force', 'probe', 'check_update', 'resume', 'clear_issues', 'create_page' ),
 			true
 		);
 		if ( 'POST' === $method && $changing && ! $authed_via_pw && ! $this->valid_form_token() ) {
@@ -233,6 +233,22 @@ class ACPS_Sitemap_Remote {
 					break;
 				case 'reinstall':
 					$this->handle_update( 'reinstall' );
+					$this->done();
+					break;
+				case 'stage':
+					$this->handle_stage( false );
+					break;
+				case 'stage_force':
+					$this->handle_stage( true );
+					break;
+				case 'queue':
+					$this->handle_queue( false );
+					break;
+				case 'queue_force':
+					$this->handle_queue( true );
+					break;
+				case 'probe':
+					$this->handle_probe();
 					$this->done();
 					break;
 				case 'check_update':
@@ -569,6 +585,42 @@ class ACPS_Sitemap_Remote {
 	}
 
 	/**
+	 * Stage an install (writes new files now; applied on the next page load).
+	 *
+	 * @param bool $force Force even if not newer.
+	 */
+	private function handle_stage( $force ) {
+		if ( ! class_exists( 'ACPS_Sitemap_Updater' ) ) {
+			$this->flash = __( 'Updater unavailable.', 'acps-sitemap' );
+			return;
+		}
+		$res         = ( new ACPS_Sitemap_Updater() )->stage_install( $force );
+		$this->flash = implode( ' ', (array) $res['messages'] );
+	}
+
+	/**
+	 * Queue an install to run in a writable context (cron / next admin request).
+	 *
+	 * @param bool $force Force even if not newer.
+	 */
+	private function handle_queue( $force ) {
+		if ( ! class_exists( 'ACPS_Sitemap_Updater' ) ) {
+			$this->flash = __( 'Updater unavailable.', 'acps-sitemap' );
+			return;
+		}
+		( new ACPS_Sitemap_Updater() )->queue_install( $force );
+		$this->flash = __( 'Update queued. It will apply from cron or the next admin visit.', 'acps-sitemap' );
+	}
+
+	/**
+	 * Run the write probe and show the report.
+	 */
+	private function handle_probe() {
+		$lines = class_exists( 'ACPS_Sitemap_Updater' ) ? ( new ACPS_Sitemap_Updater() )->probe() : array( 'Updater unavailable.' );
+		$this->page( __( 'Write probe', 'acps-sitemap' ), '<pre>' . esc_html( implode( "\n", $lines ) ) . '</pre>' . $this->back_link() );
+	}
+
+	/**
 	 * Create (or reuse) the visitor-facing HTML sitemap page.
 	 */
 	private function handle_create_page() {
@@ -755,10 +807,18 @@ class ACPS_Sitemap_Remote {
 		$out = '<h2>' . esc_html__( 'Actions', 'acps-sitemap' ) . '</h2>';
 
 		$out .= $this->action_button( 'check_update', __( 'Check for updates', 'acps-sitemap' ), $t );
-		$out .= $this->action_button( 'force_update', __( 'Install latest update', 'acps-sitemap' ), $t );
-		$out .= $this->action_button( 'reinstall', __( 'Reinstall / reupload latest (repair)', 'acps-sitemap' ), $t );
+		$out .= $this->action_button( 'probe', __( 'Run write probe (diagnose)', 'acps-sitemap' ), $t );
+		$out .= '<p>' . esc_html__( 'Install directly (works where the host allows it):', 'acps-sitemap' ) . '</p>';
+		$out .= $this->action_button( 'force_update', __( 'Install latest (direct)', 'acps-sitemap' ), $t );
+		$out .= $this->action_button( 'reinstall', __( 'Reinstall latest, force (direct)', 'acps-sitemap' ), $t );
+		$out .= '<p>' . esc_html__( 'Staged install (reliable when the host blocks overwriting in-use PHP — reload any page after):', 'acps-sitemap' ) . '</p>';
+		$out .= $this->action_button( 'stage', __( 'Stage latest (apply on reload)', 'acps-sitemap' ), $t );
+		$out .= $this->action_button( 'stage_force', __( 'Stage reinstall, force', 'acps-sitemap' ), $t );
+		$out .= '<p>' . esc_html__( 'Queued install (applies from system cron or the next admin visit):', 'acps-sitemap' ) . '</p>';
+		$out .= $this->action_button( 'queue', __( 'Queue latest', 'acps-sitemap' ), $t );
+		$out .= $this->action_button( 'queue_force', __( 'Queue reinstall, force', 'acps-sitemap' ), $t );
 		if ( ! $this->recovery ) {
-			$out .= $this->action_button( 'create_page', __( 'Create HTML sitemap page', 'acps-sitemap' ), $t );
+			$out .= '<p></p>' . $this->action_button( 'create_page', __( 'Create HTML sitemap page', 'acps-sitemap' ), $t );
 		}
 		if ( function_exists( 'acps_sitemap_is_safe_mode' ) && acps_sitemap_is_safe_mode() ) {
 			$out .= $this->action_button( 'resume', __( 'Clear safe mode', 'acps-sitemap' ), $t );
