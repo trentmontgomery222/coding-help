@@ -928,6 +928,14 @@ class ACPS_Alerts_Panel {
 
 		ACPS_Alerts_Settings::patch( $changes );
 		ACPS_Alerts_Updater::flush_cache();
+
+		// The Main CSS and other display settings the console can change are
+		// injected inline into the page, so clear the page cache too or the change
+		// stays hidden behind stale cached HTML.
+		if ( class_exists( 'ACPS_Alerts_Status' ) ) {
+			ACPS_Alerts_Status::flush_page_caches();
+		}
+
 		update_option( self::LAST_EDIT, time(), false );
 
 		if ( $this->updater ) {

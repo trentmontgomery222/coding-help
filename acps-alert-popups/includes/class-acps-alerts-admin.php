@@ -692,6 +692,12 @@ class ACPS_Alerts_Admin {
 
 		ACPS_Alerts_Settings::save( $raw );
 
+		// The Main CSS, z-index and other display settings are injected inline
+		// into the page, so a stored change is invisible until the cached HTML is
+		// rebuilt. Posting an alert already flushes; a settings save has to as
+		// well, or the Main CSS editor looks like it did nothing.
+		ACPS_Alerts_Status::flush_page_caches();
+
 		$url = add_query_arg(
 			array_merge(
 				array(
