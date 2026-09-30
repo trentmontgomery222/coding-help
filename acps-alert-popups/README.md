@@ -273,6 +273,50 @@ needs the console to load and a password — so the `acps_alerts_resume` /
 when the console just returns the home page. "Reinstall from source" is also the
 way to repair a damaged file on a running site, without a version bump.
 
+### Updating on a locked-down host
+
+Some managed hosts refuse to let the web user overwrite a PHP file that is
+currently in use. The symptom is specific: updating from the Plugins screen while
+logged in works, but updating from anywhere else fails with "could not write
+files" — and only the `.php` files fail, while `.md`/`.css`/`.js` write fine. It
+is not ordinary permissions (a brand-new file writes fine); the host is refusing
+to overwrite an **in-use** PHP file. The plugin handles this with three install
+routes, each more robust than the last, and you rarely have to choose — it falls
+back on its own:
+
+1. **Direct install.** The normal WordPress upgrader, now forcing the
+   credential-free "direct" filesystem method so it also works from the no-login
+   update and console URLs (which have no page to show an FTP-credentials form).
+   Works wherever the host allows it.
+2. **Staged install** (the automatic fallback, and the **Stage update** console
+   button). It writes the new files into a staging folder now — writing *new*
+   files is allowed even on these hosts — and records them. On the next page load,
+   in the earliest bootstrap window (before the plugin loads its own PHP, the one
+   instant those files are not in use), it copies the staged files over the live
+   ones, resets opcache, and lifts any pause. So: Stage → load any page → done, no
+   login needed.
+3. **Queued install** (the **Queue update** console button). For hosts where even
+   that is blocked and only a context like system cron (run as the site owner) or
+   an admin request may write. It records a marker and a writable context applies
+   it. (WordPress's own WP-Cron is triggered by a web visit and runs as the web
+   user, so it faces the same block — only a scheduler the host runs as the site
+   owner, or an admin page load, escapes it.)
+
+Two safety nets sit under all three. Every install **resets opcache** afterwards,
+so the new code actually runs instead of stale compiled bytecode (the cause of an
+update that "succeeds" and then disables itself), and **re-enables** the plugin so
+an install can never leave it switched off. Before a staged swap the current files
+are **backed up**; if the new version crashes on load, the backup is **restored by
+itself** on the next request.
+
+To see which case a host is in, use the **Write probe** console button (or
+`https://yoursite/?acps_ap_probe=<update secret>`). It actually creates and
+deletes a throwaway file of each type in the plugin folder — don't guess at
+permissions, measure. If a new `.php` writes but a normal update still fails, it
+is the in-use-PHP block and staging will beat it. If a new `.php` will not write
+at all, the host blocks every PHP write by the web user, and only SFTP or
+cron-run-as-owner can update — no web-side route will help.
+
 ### Targeting notes
 
 - URL paths are one per line, matched against the request path. `*` is a wildcard, so `/news/*` matches everything below `/news` and `/news*` also matches `/news` itself. Full URLs may be pasted in; only the path is compared.

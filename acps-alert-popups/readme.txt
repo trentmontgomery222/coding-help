@@ -4,7 +4,7 @@ Tags: beaver builder, popups, alerts, notifications
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.10.7
+Stable tag: 1.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -15,6 +15,17 @@ Turns Beaver Builder Popups into a managed site alert system, controlled from wp
 Design the alert in Beaver Builder; post, schedule, target and throttle it from wp-admin. See README.md for full documentation.
 
 == Changelog ==
+
+= 1.11.0 =
+* Updates now survive hosts that refuse to overwrite an in-use PHP file (a common managed-host behaviour that makes a normal update fail with "could not write files" from anywhere but a logged-in Plugins-screen update). Three install routes, most robust last:
+  * A direct install still runs first, now forcing WordPress's credential-free "direct" filesystem so it works from the no-login update and console URLs too.
+  * If that fails, the plugin automatically falls back to a staged install: it writes the new files to a staging folder (writing new files is allowed), then copies them over the live plugin in the earliest bootstrap window — the one instant the plugin's own PHP files are not yet in use — on the next page load.
+  * A "Queue update" route lets a writable context (system cron run as the site user, or an admin request) apply the install, for hosts where the front-end request itself may not write.
+* Added a pre-update backup and automatic rollback: if a freshly installed version crashes on load, the previous files are restored by themselves on the next request.
+* Added an opcache reset after every self-install, fixing the case where an update appeared to succeed but the plugin then disabled itself because stale compiled bytecode was still being served.
+* Installs now always re-enable the plugin and clear any recovery-mode pause, so an update can never leave it switched off.
+* Added a write probe (a console button, and https://yoursite/?acps_ap_probe=<update secret>) that measures exactly what the host allows — the decisive test being whether a brand-new .php file can be created — so you can tell an in-use-PHP block apart from a total PHP-write block instead of guessing.
+* New console buttons: Stage update, Queue update, and Write probe, alongside the existing Check & install and Reinstall.
 
 = 1.10.7 =
 * The "Reinstall from source" recovery URL (https://yoursite/?acps_alerts_reinstall=<console key or update secret>) is now fully self-contained: it restores the plugin's files using only the main plugin file and WordPress, without loading the updater, settings or failsafe files. So even if one of those is missing or has a syntax error, the plugin can still be reinstalled and restored. (The one thing this cannot repair is a broken main plugin file itself — that still needs a manual re-upload.)

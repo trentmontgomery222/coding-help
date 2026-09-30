@@ -21,6 +21,7 @@ php tests/shortcode-test.php
 php tests/updater-test.php
 php tests/safe-mode-test.php
 php tests/resume-test.php
+php tests/staging-test.php
 php tests/settings-test.php
 php tests/wiring-test.php
 node tests/admin-fields-test.js
@@ -144,7 +145,27 @@ basename the upgrader keys on, tolerating a not-yet-built transient; and
 `reinstall_now()` bails with "could not reach the source" before touching the
 upgrader when no source is configured. Verified non-vacuous: gate the entry on a
 newer version and it fails; skip the no-source bail and it fatals reaching for
-the upgrader.
+the upgrader. It also covers the locked-down-host install plumbing: `stage_now()`
+bails before touching the filesystem when the source is unreachable or not newer
+(and not forced); `write_probe()` runs its live per-type write test, reports the
+decisive `.php` case, finds the real plugin files writable, and explains how to
+read the result; `queue_install()` records a pending marker with the force flag
+and schedules an apply event; and `apply_pending_update()` drops the marker after
+the attempt ceiling (recording an error) or once it is over a day old, and
+otherwise counts a failed attempt and reschedules a retry.
+
+`staging-test.php` — the self-contained install plumbing in the main plugin file,
+which runs in the earliest bootstrap window (before any include loads) and so must
+depend on nothing but the main file and core. It points the plugin's
+`ACPS_ALERTS_DIR` / `WP_CONTENT_DIR` at throwaway temp dirs (via a stubbed
+`plugin_dir_path`) and drives the functions directly: `copy_tree()` copies a whole
+nested tree (`.php` included) and `remove_tree()` deletes it; `maybe_apply_staged()`
+copies staged files over the live plugin, adds brand-new files, arms a rollback
+holding the OLD files before the swap, clears safe mode, cleans up the staging
+dir, and returns true so boot stops; with nothing staged it is a no-op returning
+false; `maybe_rollback()` restores the backup and lifts the pause when a crash was
+armed after the backup was taken, and otherwise leaves a healthy install alone,
+disarming the backup once the new version is the one running.
 
 `idempotency-test.php` — pins the "everything is twice everywhere" bug.
 WordPress de-duplicates hook callbacks by a unique id, which is stable for

@@ -35,6 +35,9 @@ class ACPS_Alerts_Updater {
 	const HEALTH_OPTION  = 'acps_alerts_health';
 	const QUERY_VAR      = 'acps_ap_run';
 	const SELFTEST_VAR   = 'acps_ap_st';
+	const PROBE_VAR      = 'acps_ap_probe';
+	const PENDING_LOCK   = 'acps_alerts_applying_pending';
+	const PENDING_MAX    = 5;
 
 	/**
 	 * Registers the update hooks. A no-op when the channel is switched off.
@@ -51,6 +54,14 @@ class ACPS_Alerts_Updater {
 		// a filter hands WordPress back its own value unchanged.
 		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'maybe_handle_selftest' ), 'updater/selftest', 1 );
 		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'maybe_handle_force_update' ), 'updater/force', 2 );
+		ACPS_Alerts_Failsafe::action( 'init', array( $this, 'maybe_handle_probe' ), 'updater/probe', 2 );
+
+		// A queued install is applied from a writable context — system cron, or an
+		// admin request — not the (possibly non-writable) front-end request that
+		// asked for it. Both are wired unconditionally, so a job queued before the
+		// enabled flag was toggled still gets applied.
+		ACPS_Alerts_Failsafe::action( ACPS_ALERTS_APPLY_PENDING_HOOK, array( $this, 'apply_pending_update' ), 'updater/apply-pending' );
+		ACPS_Alerts_Failsafe::action( 'admin_init', array( $this, 'apply_pending_update' ), 'updater/apply-pending-admin' );
 
 		if ( ! ACPS_Alerts_Settings::get( 'update_enabled' ) ) {
 			return;
@@ -784,13 +795,17 @@ class ACPS_Alerts_Updater {
 				return;
 			}
 
-			if ( ! function_exists( 'is_plugin_active' ) ) {
-				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			// The files were just swapped; clear any stale bytecode so the load
+			// test runs the new code, not an old+new mix that would fatal.
+			if ( function_exists( 'acps_alerts_reset_opcache' ) ) {
+				acps_alerts_reset_opcache();
+			} elseif ( function_exists( 'opcache_reset' ) ) {
+				@opcache_reset(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			}
 
-			if ( ! is_plugin_active( ACPS_ALERTS_BASENAME ) ) {
-				activate_plugin( ACPS_ALERTS_BASENAME, '', false, true );
-			}
+			// Never leave it deactivated (the upgrader deactivates before replacing)
+			// or paused by recovery mode.
+			$this->ensure_active();
 
 			$result = $this->self_test_result();
 
@@ -1006,6 +1021,10 @@ class ACPS_Alerts_Updater {
 		require_once ABSPATH . 'wp-admin/includes/misc.php';
 		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
+		// From a non-admin request there is no page to show an FTP-credentials
+		// form, so force the credential-free direct method or the upgrader bails.
+		$this->prime_filesystem();
+
 		delete_site_transient( 'update_plugins' );
 		wp_update_plugins();
 
@@ -1019,7 +1038,22 @@ class ACPS_Alerts_Updater {
 			$out .= "\n" . implode( "\n", array_map( 'wp_strip_all_tags', $messages ) ) . "\n";
 		}
 
-		return $out . "\n" . ( ( ! is_wp_error( $result ) && $result ) ? 'SUCCESS' : 'FAILED' ) . "\n";
+		$ok = ( ! is_wp_error( $result ) && $result );
+
+		if ( $ok ) {
+			$this->after_install_success();
+
+			return $out . "\nSUCCESS\n";
+		}
+
+		// The direct install failed — most often because the host will not let
+		// the web user overwrite an in-use PHP file. Fall back to staging: write
+		// the new files now (writing new files IS allowed) and let the early
+		// bootstrap window copy them over the live ones on the next request.
+		$out .= "\nDirect install failed; falling back to a staged install.\n";
+		$out .= $this->stage_now();
+
+		return $out;
 	}
 
 	/**
@@ -1058,6 +1092,10 @@ class ACPS_Alerts_Updater {
 		ACPS_Alerts_Failsafe::filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 'updater/source-dir', 10, 4 );
 		ACPS_Alerts_Failsafe::filter( 'upgrader_pre_download', array( $this, 'maybe_resolve_private_download' ), 'updater/download', 10, 3 );
 
+		// From a non-admin request there is no page to show an FTP-credentials
+		// form, so force the credential-free direct method or the upgrader bails.
+		$this->prime_filesystem();
+
 		// Force an update entry for this plugin — the SAME version counts — so the
 		// upgrader reinstalls the package and restores every file, rather than
 		// reporting "up to date" and doing nothing. Written straight into the
@@ -1081,19 +1119,374 @@ class ACPS_Alerts_Updater {
 		$ok = ( ! is_wp_error( $result ) && $result );
 
 		if ( $ok ) {
-			// The upgrader deactivates a plugin before replacing it; put it back.
+			$this->after_install_success();
+
+			return $out . "\nSUCCESS — files restored from the source.\n";
+		}
+
+		// The direct reinstall failed — most often because the host will not let
+		// the web user overwrite an in-use PHP file, which is exactly what a
+		// repair needs to do. Fall back to staging (forced, since a reinstall is
+		// not a version bump): the new files are written now and copied over the
+		// live ones in the next request's early bootstrap window.
+		$out .= "\nDirect reinstall failed; falling back to a staged install.\n";
+		$out .= $this->stage_now( true );
+
+		return $out;
+	}
+
+	/**
+	 * Shared tidy-up after a successful direct install: reset opcache so the new
+	 * code actually runs, put the plugin back to active/unpaused, and flush the
+	 * cached lookup.
+	 *
+	 * @return void
+	 */
+	private function after_install_success() {
+		if ( function_exists( 'acps_alerts_reset_opcache' ) ) {
+			acps_alerts_reset_opcache();
+		} elseif ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+
+		$this->ensure_active();
+		self::flush_cache();
+	}
+
+	/* ------------------------------------------------------------------ *
+	 * Filesystem, staging, queueing, probing.
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Forces WordPress's credential-free "direct" filesystem method for this
+	 * request, so the upgrader can write without an FTP form — which a non-admin
+	 * request has no page to show, so it would otherwise fail "could not write
+	 * files." Delegates to the main file's helper, which owns the raw transient
+	 * filter this needs.
+	 *
+	 * @return bool Whether the filesystem initialised.
+	 */
+	private function prime_filesystem() {
+		if ( function_exists( 'acps_alerts_prime_filesystem' ) ) {
+			return acps_alerts_prime_filesystem();
+		}
+
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		return (bool) WP_Filesystem();
+	}
+
+	/**
+	 * Reactivates the plugin and clears any recovery-mode pause, so an install
+	 * can never leave it disabled. The upgrader deactivates a plugin before
+	 * replacing it; a queued or background install must undo that in the same
+	 * request, since a deactivated plugin cannot re-enable itself next time.
+	 *
+	 * @return void
+	 */
+	public function ensure_active() {
+		try {
 			if ( ! function_exists( 'is_plugin_active' ) ) {
 				require_once ABSPATH . 'wp-admin/includes/plugin.php';
 			}
 
-			if ( ! is_plugin_active( ACPS_ALERTS_BASENAME ) ) {
+			if ( function_exists( 'is_plugin_active' ) && ! is_plugin_active( ACPS_ALERTS_BASENAME ) && function_exists( 'activate_plugin' ) ) {
 				activate_plugin( ACPS_ALERTS_BASENAME, '', false, true );
 			}
 
-			self::flush_cache();
+			if ( function_exists( 'wp_paused_plugins' ) ) {
+				$paused = wp_paused_plugins();
+
+				foreach ( array( ACPS_ALERTS_BASENAME, $this->slug() ) as $key ) {
+					if ( ! method_exists( $paused, 'get' ) || $paused->get( $key ) ) {
+						$paused->delete( $key );
+					}
+				}
+			}
+		} catch ( \Throwable $e ) {
+			self::log( 'ensure_active: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Stages an install: downloads and unzips the source package into a staging
+	 * folder now — writing NEW files, which hosts allow even when they refuse to
+	 * overwrite an in-use PHP file — and records it so the early bootstrap window
+	 * copies it over the live plugin on the next request. This is the step that
+	 * beats "can't overwrite in-use PHP." Returns a plain-text log.
+	 *
+	 * @param bool $force Stage even when the source is not a newer version (a repair).
+	 * @return string
+	 */
+	public function stage_now( $force = false ) {
+		self::flush_cache();
+		$remote = $this->remote( true );
+
+		if ( ! $remote || empty( $remote['package'] ) ) {
+			return "Could not reach the configured update source.\n";
 		}
 
-		return $out . "\n" . ( $ok ? 'SUCCESS — files restored from the source.' : 'FAILED' ) . "\n";
+		if ( ! $force && ! version_compare( $remote['version'], ACPS_ALERTS_VERSION, '>' ) ) {
+			return 'Nothing to stage: already at ' . ACPS_ALERTS_VERSION . ".\n";
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		$this->prime_filesystem(); // unzip_file needs an initialised filesystem.
+
+		// A private GitHub asset has to be resolved to its signed link first
+		// (download_url cannot forward the auth header GitHub then rejects);
+		// everything else downloads straight from its url.
+		$resolved = $this->maybe_resolve_private_download( false, $remote['package'], null );
+		$package  = ( is_string( $resolved ) && '' !== $resolved ) ? $resolved : download_url( $remote['package'] );
+
+		if ( is_wp_error( $package ) ) {
+			return 'Could not download the package: ' . $package->get_error_message() . "\n";
+		}
+
+		$base = trailingslashit( WP_CONTENT_DIR ) . 'acps-alerts-staging-' . wp_generate_password( 8, false, false );
+
+		$unzipped = unzip_file( $package, $base );
+		@unlink( $package ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_unlink
+
+		if ( is_wp_error( $unzipped ) ) {
+			$this->cleanup_dir( $base );
+
+			return 'Could not unpack the package: ' . $unzipped->get_error_message() . "\n";
+		}
+
+		$source = $this->locate_main_dir( $base );
+
+		if ( '' === $source ) {
+			$this->cleanup_dir( $base );
+
+			return "The downloaded package did not contain the plugin.\n";
+		}
+
+		update_option(
+			ACPS_ALERTS_STAGED_OPT,
+			array(
+				'dir'     => $source,
+				'base'    => $base,
+				'version' => (string) $remote['version'],
+			),
+			false
+		);
+
+		self::flush_cache();
+
+		return sprintf(
+			"Staged version %s. It will be applied automatically on the next page load.\n",
+			$remote['version']
+		);
+	}
+
+	/**
+	 * Finds the folder inside an unpacked package that holds the main plugin file.
+	 *
+	 * @param string $root Unpacked package root.
+	 * @return string The plugin folder, or '' if not found.
+	 */
+	private function locate_main_dir( $root ) {
+		$main = basename( ACPS_ALERTS_FILE );
+		$root = untrailingslashit( (string) $root );
+
+		if ( is_file( $root . '/' . $main ) ) {
+			return $root;
+		}
+
+		foreach ( (array) glob( $root . '/*', GLOB_ONLYDIR ) as $dir ) {
+			if ( is_file( $dir . '/' . $main ) ) {
+				return $dir;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Removes a staging/temp directory, preferring the plugin's self-contained
+	 * remover so it needs no WP_Filesystem.
+	 *
+	 * @param string $dir Directory.
+	 * @return void
+	 */
+	private function cleanup_dir( $dir ) {
+		if ( function_exists( 'acps_alerts_remove_tree' ) ) {
+			acps_alerts_remove_tree( $dir );
+		}
+	}
+
+	/**
+	 * Queues an install for a writable context to apply. On hosts where the
+	 * front-end request itself cannot write PHP, the write has to happen in a
+	 * context that can — system cron run as the site user, or an admin request —
+	 * so this records a marker and nudges cron to run.
+	 *
+	 * @param bool $force Reinstall (same version) rather than update.
+	 * @return string
+	 */
+	public function queue_install( $force = false ) {
+		update_option(
+			ACPS_ALERTS_PENDING_OPT,
+			array(
+				'force'     => (bool) $force,
+				'requested' => time(),
+				'attempts'  => 0,
+			),
+			false
+		);
+
+		if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( ACPS_ALERTS_APPLY_PENDING_HOOK ) ) {
+			wp_schedule_single_event( time() + 20, ACPS_ALERTS_APPLY_PENDING_HOOK );
+		}
+
+		if ( function_exists( 'spawn_cron' ) ) {
+			spawn_cron();
+		}
+
+		return "Queued. A writable context (system cron, or the next admin page load) will apply it shortly.\n";
+	}
+
+	/**
+	 * Applies a queued install, from cron or an admin request. Takes a short lock
+	 * so cron and admin_init cannot both run it, gives up after a day or too many
+	 * tries, and on success clears the marker and re-enables the plugin.
+	 *
+	 * @return void
+	 */
+	public function apply_pending_update() {
+		try {
+			$pending = get_option( ACPS_ALERTS_PENDING_OPT );
+
+			if ( ! is_array( $pending ) ) {
+				return;
+			}
+
+			$requested = isset( $pending['requested'] ) ? (int) $pending['requested'] : 0;
+			$attempts  = isset( $pending['attempts'] ) ? (int) $pending['attempts'] : 0;
+
+			if ( ( $requested && ( time() - $requested ) > DAY_IN_SECONDS ) || $attempts >= self::PENDING_MAX ) {
+				delete_option( ACPS_ALERTS_PENDING_OPT );
+				$this->record_health( 'error', 'Gave up applying a queued install after repeated failures.' );
+
+				return;
+			}
+
+			if ( get_transient( self::PENDING_LOCK ) ) {
+				return; // Another context is already on it.
+			}
+
+			set_transient( self::PENDING_LOCK, 1, 2 * MINUTE_IN_SECONDS );
+
+			$force = ! empty( $pending['force'] );
+			$log   = $force ? $this->reinstall_now() : $this->install_now();
+
+			// "SUCCESS" (direct), "Already up to date" (nothing to do), or "Staged"
+			// (the early-bootstrap window will finish it) all mean this marker's
+			// job is done.
+			$done = ( false !== strpos( $log, 'SUCCESS' ) )
+				|| ( false !== strpos( $log, 'Already up to date' ) )
+				|| ( false !== strpos( $log, 'Staged version' ) );
+
+			if ( $done ) {
+				delete_option( ACPS_ALERTS_PENDING_OPT );
+				$this->ensure_active();
+				$this->record_health( 'ok', 'Applied a queued install.' );
+			} else {
+				$pending['attempts'] = $attempts + 1;
+				update_option( ACPS_ALERTS_PENDING_OPT, $pending, false );
+
+				if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( ACPS_ALERTS_APPLY_PENDING_HOOK ) ) {
+					wp_schedule_single_event( time() + 120, ACPS_ALERTS_APPLY_PENDING_HOOK );
+				}
+
+				$this->record_health( 'warn', 'A queued install did not apply; will retry.' );
+			}
+
+			delete_transient( self::PENDING_LOCK );
+		} catch ( \Throwable $e ) {
+			delete_transient( self::PENDING_LOCK );
+			self::log( 'apply_pending_update: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Diagnoses the host's write behaviour: the decisive test is whether a brand
+	 * new file of each type can be created in the plugin folder. Returns a
+	 * plain-text report — do not guess at "permissions," measure.
+	 *
+	 * @return string
+	 */
+	public function write_probe() {
+		$dir = untrailingslashit( ACPS_ALERTS_DIR );
+		$out = 'Write probe for: ' . $dir . "\n\n";
+
+		$out .= "Live write test (create, then delete, a throwaway file of each type):\n";
+		$tag  = substr( md5( uniqid( '', true ) ), 0, 8 );
+
+		foreach ( array( 'md', 'txt', 'js', 'css', 'php' ) as $ext ) {
+			$file = $dir . '/acps-writetest-' . $tag . '.' . $ext;
+			$ok   = ( false !== @file_put_contents( $file, "test\n" ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+
+			if ( $ok ) {
+				@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_unlink
+			}
+
+			$out .= sprintf( "  new .%-4s : %s\n", $ext, $ok ? 'OK' : 'FAILED' );
+		}
+
+		$out .= "\nPer-file writability of the installed plugin files:\n";
+		$not_writable = 0;
+
+		foreach ( ACPS_Alerts_Failsafe::required_files() as $rel ) {
+			$path     = $dir . '/' . $rel;
+			$writable = is_writable( $path ) || ( ! file_exists( $path ) && is_writable( dirname( $path ) ) );
+
+			if ( ! $writable ) {
+				++$not_writable;
+				$out .= '  NOT writable: ' . $rel . "\n";
+			}
+		}
+
+		$out .= $not_writable
+			? '  ' . $not_writable . " required file(s) not writable.\n"
+			: "  all required files writable.\n";
+
+		$out .= "\nReading:\n";
+		$out .= "  new .php OK, but a normal update still fails  -> the host blocks overwriting IN-USE PHP; use Stage (it applies in the early bootstrap window).\n";
+		$out .= "  new .php FAILED                               -> the host blocks ALL PHP writes by the web user; update via SFTP, or system cron run as the site owner.\n";
+
+		return $out;
+	}
+
+	/**
+	 * The secret write-probe URL responder: prints the probe and exits.
+	 *
+	 * @return void
+	 */
+	public function maybe_handle_probe() {
+		if ( ! isset( $_GET[ self::PROBE_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
+		$secret = trim( (string) ACPS_Alerts_Settings::get( 'update_secret' ) );
+		$given  = sanitize_text_field( wp_unslash( $_GET[ self::PROBE_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( '' === $secret || ! hash_equals( $secret, $given ) ) {
+			return;
+		}
+
+		if ( ! headers_sent() ) {
+			nocache_headers();
+			status_header( 200 );
+			header( 'Content-Type: text/plain; charset=utf-8' );
+			header( 'X-Robots-Tag: noindex, nofollow', true );
+		}
+
+		echo $this->write_probe(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Plain text, sent as text/plain.
+		exit;
 	}
 
 	/**

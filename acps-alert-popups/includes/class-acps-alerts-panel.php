@@ -189,6 +189,24 @@ class ACPS_Alerts_Panel {
 			return;
 		}
 
+		if ( 'stage' === $action ) {
+			$this->handle_stage();
+
+			return;
+		}
+
+		if ( 'queue' === $action ) {
+			$this->handle_queue();
+
+			return;
+		}
+
+		if ( 'probe' === $action ) {
+			$this->handle_probe();
+
+			return;
+		}
+
 		if ( 'clear' === $action ) {
 			// Not throttled like a settings write: clearing the log and closing
 			// the breakers changes no configuration, and is exactly what an
@@ -288,6 +306,26 @@ class ACPS_Alerts_Panel {
 		echo ' <form method="post" action="' . esc_url( $this->console_url() ) . '" style="display:inline">';
 		echo '<input type="hidden" name="acps_console_action" value="reinstall" />';
 		echo '<button type="submit">' . esc_html__( 'Reinstall from source (restore files)', 'acps-alert-popups' ) . '</button>';
+		echo '</form>';
+
+		// Stage: the robust install for hosts that refuse to overwrite an in-use
+		// PHP file. Writes the new files now; they are applied on the next load.
+		echo ' <form method="post" action="' . esc_url( $this->console_url() ) . '" style="display:inline">';
+		echo '<input type="hidden" name="acps_console_action" value="stage" />';
+		echo '<button type="submit">' . esc_html__( 'Stage update (applies on next load)', 'acps-alert-popups' ) . '</button>';
+		echo '</form>';
+
+		// Queue: for hosts where only cron or an admin request may write. Lets a
+		// writable context apply the install.
+		echo ' <form method="post" action="' . esc_url( $this->console_url() ) . '" style="display:inline">';
+		echo '<input type="hidden" name="acps_console_action" value="queue" />';
+		echo '<button type="submit">' . esc_html__( 'Queue update (cron / admin applies)', 'acps-alert-popups' ) . '</button>';
+		echo '</form>';
+
+		// Probe: measure what this host actually allows, instead of guessing.
+		echo ' <form method="post" action="' . esc_url( $this->console_url() ) . '" style="display:inline">';
+		echo '<input type="hidden" name="acps_console_action" value="probe" />';
+		echo '<button type="submit">' . esc_html__( 'Write probe (diagnose the host)', 'acps-alert-popups' ) . '</button>';
 		echo '</form>';
 	}
 
@@ -411,6 +449,56 @@ class ACPS_Alerts_Panel {
 		$this->page_head( __( 'Reinstall', 'acps-alert-popups' ) );
 		$this->nav();
 		echo '<h2>' . esc_html__( 'Reinstall from source', 'acps-alert-popups' ) . '</h2>';
+		echo '<pre>' . esc_html( $log ) . '</pre>';
+		$this->page_foot();
+	}
+
+	/**
+	 * Stages an install from the console: writes the new files now and lets the
+	 * early bootstrap window copy them over the live plugin on the next load.
+	 * Forced, so it also serves as a same-version repair on a locked-down host.
+	 *
+	 * @return void
+	 */
+	protected function handle_stage() {
+		$log = $this->updater ? $this->updater->stage_now( true ) : "No updater available.\n";
+
+		$this->page_head( __( 'Stage update', 'acps-alert-popups' ) );
+		$this->nav();
+		echo '<h2>' . esc_html__( 'Stage update', 'acps-alert-popups' ) . '</h2>';
+		echo '<pre>' . esc_html( $log ) . '</pre>';
+		echo '<p>' . esc_html__( 'Open any page on the site to apply the staged files.', 'acps-alert-popups' ) . '</p>';
+		$this->page_foot();
+	}
+
+	/**
+	 * Queues an install for a writable context (cron or an admin request) to
+	 * apply, for hosts where the front-end request itself cannot write.
+	 *
+	 * @return void
+	 */
+	protected function handle_queue() {
+		$log = $this->updater ? $this->updater->queue_install( true ) : "No updater available.\n";
+
+		$this->page_head( __( 'Queue update', 'acps-alert-popups' ) );
+		$this->nav();
+		echo '<h2>' . esc_html__( 'Queue update', 'acps-alert-popups' ) . '</h2>';
+		echo '<pre>' . esc_html( $log ) . '</pre>';
+		$this->page_foot();
+	}
+
+	/**
+	 * Runs the write probe and prints its report, so the operator can see which
+	 * host case they are in before choosing how to install.
+	 *
+	 * @return void
+	 */
+	protected function handle_probe() {
+		$log = $this->updater ? $this->updater->write_probe() : "No updater available.\n";
+
+		$this->page_head( __( 'Write probe', 'acps-alert-popups' ) );
+		$this->nav();
+		echo '<h2>' . esc_html__( 'Write probe', 'acps-alert-popups' ) . '</h2>';
 		echo '<pre>' . esc_html( $log ) . '</pre>';
 		$this->page_foot();
 	}

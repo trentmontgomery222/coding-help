@@ -72,6 +72,33 @@ class ACPS_Alerts_Settings {
 	}
 }
 
+// Minimal failsafe: write_probe() lists the required files through it.
+class ACPS_Alerts_Failsafe {
+	public static function required_files() {
+		return array(
+			'includes/class-acps-alerts-settings.php',
+			'includes/class-acps-alerts-updater.php',
+		);
+	}
+	public static function log() {}
+	public static function filter() {}
+	public static function action() {}
+}
+
+// Constants the install plumbing reads, normally defined in the main file.
+define( 'ACPS_ALERTS_FILE', ACPS_ALERTS_DIR . 'acps-alert-popups.php' );
+define( 'ACPS_ALERTS_STAGED_OPT', 'acps_alerts_staged_install' );
+define( 'ACPS_ALERTS_PENDING_OPT', 'acps_alerts_pending_update' );
+define( 'ACPS_ALERTS_APPLY_PENDING_HOOK', 'acps_alerts_apply_pending' );
+define( 'DAY_IN_SECONDS', 86400 );
+
+// Cron surface for queue_install()/apply_pending_update().
+$GLOBALS['scheduled'] = array();
+function wp_next_scheduled( $h ) { return isset( $GLOBALS['next_scheduled'] ) ? $GLOBALS['next_scheduled'] : false; }
+function wp_schedule_single_event( $ts, $h ) { $GLOBALS['scheduled'][] = array( $ts, $h ); return true; }
+function untrailingslashit( $s ) { return rtrim( (string) $s, '/\\' ); }
+function trailingslashit( $s ) { return rtrim( (string) $s, '/\\' ) . '/'; }
+
 require ACPS_ALERTS_DIR . 'includes/class-acps-alerts-updater.php';
 
 $fails = 0;
@@ -253,6 +280,73 @@ $GLOBALS['settings'] = array( 'update_source' => 'manifest', 'update_base' => ''
 $GLOBALS['transients'] = array();
 $log = $u->reinstall_now();
 ok( 'reinstall reports it cannot reach an unconfigured source', false !== strpos( $log, 'Could not reach the configured update source' ) );
+
+/* ---- stage_now bails cleanly before touching the filesystem ---- */
+
+// No source configured: reports it cannot reach the source (no require of the
+// wp-admin upgrader includes, which do not exist in the test).
+$GLOBALS['settings']   = array( 'update_source' => 'manifest', 'update_base' => '' );
+$GLOBALS['transients'] = array();
+$log = $u->stage_now();
+ok( 'stage reports it cannot reach an unconfigured source', false !== strpos( $log, 'Could not reach the configured update source' ) );
+
+// Source reachable but not newer, and not forced: nothing to stage (returns
+// before the filesystem work).
+$GLOBALS['settings'] = array( 'update_source' => 'github', 'gh_owner' => 'acme', 'gh_repo' => 'widget', 'gh_asset' => 'acps-alert-popups.zip', 'gh_token' => '' );
+stub_source_version( ACPS_ALERTS_VERSION ); // same version as installed
+$log = $u->stage_now( false );
+ok( 'stage declines when the source is not newer and not forced', false !== strpos( $log, 'Nothing to stage' ) );
+
+/* ---- the write probe reports each file type and reads writable files ---- */
+
+$report = $u->write_probe();
+ok( 'the probe runs a live write test', false !== strpos( $report, 'Live write test' ) );
+ok( 'the probe reports the decisive .php case', false !== strpos( $report, 'new .php' ) );
+ok( 'the probe finds the real plugin files writable', false === strpos( $report, 'NOT writable' ) );
+ok( 'the probe explains how to read the result', false !== stripos( $report, 'in-use PHP' ) );
+
+/* ---- queue_install records a marker and schedules a job ---- */
+
+$GLOBALS['options']        = array();
+$GLOBALS['scheduled']      = array();
+$GLOBALS['next_scheduled'] = false;
+$u->queue_install( true );
+$pending = get_option( ACPS_ALERTS_PENDING_OPT );
+ok( 'queue records a pending marker', is_array( $pending ) );
+check( 'the marker keeps the force flag', $pending['force'], true );
+check( 'the marker starts at zero attempts', $pending['attempts'], 0 );
+ok( 'a single apply event was scheduled', ! empty( $GLOBALS['scheduled'] ) );
+check( 'scheduled on the apply-pending hook', $GLOBALS['scheduled'][0][1], ACPS_ALERTS_APPLY_PENDING_HOOK );
+
+/* ---- apply_pending gives up after too many attempts ---- */
+
+$GLOBALS['options']    = array( ACPS_ALERTS_PENDING_OPT => array( 'force' => true, 'requested' => time(), 'attempts' => 5 ) );
+$GLOBALS['transients'] = array();
+$u->apply_pending_update();
+ok( 'a marker at the attempt ceiling is dropped', null === get_option( ACPS_ALERTS_PENDING_OPT, null ) );
+$health = get_option( 'acps_alerts_health', array() );
+$last   = is_array( $health ) && $health ? end( $health ) : array();
+check( 'and giving up is recorded as an error', isset( $last['status'] ) ? $last['status'] : '', 'error' );
+
+/* ---- apply_pending gives up once the request is over a day old ---- */
+
+$GLOBALS['options']    = array( ACPS_ALERTS_PENDING_OPT => array( 'force' => true, 'requested' => time() - DAY_IN_SECONDS - 100, 'attempts' => 0 ) );
+$GLOBALS['transients'] = array();
+$u->apply_pending_update();
+ok( 'a stale marker (older than a day) is dropped', null === get_option( ACPS_ALERTS_PENDING_OPT, null ) );
+
+/* ---- apply_pending counts a failed attempt and retries ---- */
+
+$GLOBALS['settings']       = array( 'update_source' => 'manifest', 'update_base' => '' ); // unreachable -> install fails
+$GLOBALS['options']        = array( ACPS_ALERTS_PENDING_OPT => array( 'force' => false, 'requested' => time(), 'attempts' => 0 ) );
+$GLOBALS['transients']     = array();
+$GLOBALS['scheduled']      = array();
+$GLOBALS['next_scheduled'] = false;
+$u->apply_pending_update();
+$still = get_option( ACPS_ALERTS_PENDING_OPT );
+ok( 'a failed apply keeps the marker', is_array( $still ) );
+check( 'and counts the attempt', $still['attempts'], 1 );
+ok( 'and reschedules a retry', ! empty( $GLOBALS['scheduled'] ) );
 
 echo $fails ? "\n$fails failing case(s)\n" : "All updater cases passed\n";
 exit( $fails ? 1 : 0 );

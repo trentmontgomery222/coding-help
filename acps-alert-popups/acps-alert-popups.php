@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Alert Popups
  * Plugin URI:        https://github.com/trentmontgomery222/coding-help
  * Description:       Turns Beaver Builder Popups into a managed site alert system. Design the alert in Beaver Builder, then enable, schedule, target and throttle it from the WordPress admin.
- * Version:           1.10.7
+ * Version:           1.11.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            ACPS
@@ -31,7 +31,7 @@ if ( defined( 'ACPS_ALERTS_VERSION' ) ) {
 	return;
 }
 
-define( 'ACPS_ALERTS_VERSION', '1.10.7' );
+define( 'ACPS_ALERTS_VERSION', '1.11.0' );
 define( 'ACPS_ALERTS_FILE', __FILE__ );
 define( 'ACPS_ALERTS_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ACPS_ALERTS_DIR', plugin_dir_path( __FILE__ ) );
@@ -39,6 +39,20 @@ define( 'ACPS_ALERTS_URL', plugin_dir_url( __FILE__ ) );
 
 // Holds "safe mode" state after a fatal was caught in this plugin's own code.
 define( 'ACPS_ALERTS_SAFE_MODE_OPT', 'acps_alerts_safe_mode' );
+
+// A staged install waiting to be copied over the live files in the early
+// bootstrap window (the only instant the plugin's own .php are not in use).
+define( 'ACPS_ALERTS_STAGED_OPT', 'acps_alerts_staged_install' );
+
+// A queued install for a writable context (system cron, or an admin request) to
+// apply, on hosts where the front-end request itself may not write PHP.
+define( 'ACPS_ALERTS_PENDING_OPT', 'acps_alerts_pending_update' );
+
+// A pre-update backup of the plugin's files, so a bad release can be undone.
+define( 'ACPS_ALERTS_ROLLBACK_OPT', 'acps_alerts_rollback' );
+
+// The cron hook a queued install is applied on.
+define( 'ACPS_ALERTS_APPLY_PENDING_HOOK', 'acps_alerts_apply_pending' );
 
 // The minimum PHP this plugin's code is written against.
 define( 'ACPS_ALERTS_MIN_PHP', '7.4' );
@@ -835,6 +849,403 @@ function acps_alerts_recovery_reinstall() {
 	return $out . "\n" . ( $ok ? 'SUCCESS — files restored from the source.' : 'FAILED' ) . "\n";
 }
 
+/* ---------------------------------------------------------------------- *
+ * Self-contained install plumbing.
+ *
+ * These run in the earliest bootstrap window — before any of the plugin's
+ * own includes load — so they must depend on nothing but this file and
+ * WordPress core. That window is the one instant the plugin's own .php files
+ * are not yet in use, which is why a staged install (and a rollback) can
+ * overwrite them here when the host refuses to overwrite an in-use PHP file.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Resets the PHP opcode cache, so freshly copied files are actually run instead
+ * of the old compiled bytecode still held for them. Without this, a swap can
+ * leave a mismatched old+new mix that fatals and pauses the plugin.
+ *
+ * @return void
+ */
+function acps_alerts_reset_opcache() {
+	if ( function_exists( 'opcache_reset' ) ) {
+		@opcache_reset(); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- A disabled/locked opcache is not worth a warning.
+	}
+}
+
+/**
+ * Recursively copies a directory tree with plain PHP (no WP_Filesystem, so it
+ * works with as little loaded as possible). Continues past a file it cannot
+ * write — WordPress's own copy_dir() aborts the whole copy on the first
+ * failure — and collects the ones that failed.
+ *
+ * @param string $src    Source directory.
+ * @param string $dest   Destination directory.
+ * @param array  $failed Filled with the relative paths that could not be written.
+ * @return bool True when every file copied.
+ */
+function acps_alerts_copy_tree( $src, $dest, array &$failed = array() ) {
+	$src = rtrim( (string) $src, '/\\' );
+
+	if ( '' === $src || ! is_dir( $src ) ) {
+		return false;
+	}
+
+	if ( ! is_dir( $dest ) ) {
+		if ( function_exists( 'wp_mkdir_p' ) ) {
+			wp_mkdir_p( $dest );
+		} else {
+			@mkdir( $dest, 0755, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
+		}
+	}
+
+	$items = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $src, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::SELF_FIRST
+	);
+
+	foreach ( $items as $item ) {
+		$rel    = ltrim( substr( $item->getPathname(), strlen( $src ) ), '/\\' );
+		$target = $dest . '/' . str_replace( '\\', '/', $rel );
+
+		if ( $item->isDir() ) {
+			if ( ! is_dir( $target ) ) {
+				if ( function_exists( 'wp_mkdir_p' ) ) {
+					wp_mkdir_p( $target );
+				} else {
+					@mkdir( $target, 0755, true ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir
+				}
+			}
+
+			continue;
+		}
+
+		// Two attempts: a failed first copy is often just a stale mode on the
+		// existing file, which a chmod then clears.
+		if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_copy
+			@chmod( $target, 0644 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod
+
+			if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_copy
+				$failed[] = $rel;
+			}
+		}
+	}
+
+	return empty( $failed );
+}
+
+/**
+ * Recursively deletes a directory tree with plain PHP.
+ *
+ * @param string $dir Directory to remove.
+ * @return void
+ */
+function acps_alerts_remove_tree( $dir ) {
+	$dir = rtrim( (string) $dir, '/\\' );
+
+	if ( '' === $dir || ! is_dir( $dir ) ) {
+		return;
+	}
+
+	$items = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::CHILD_FIRST
+	);
+
+	foreach ( $items as $item ) {
+		if ( $item->isDir() ) {
+			@rmdir( $item->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
+		} else {
+			@unlink( $item->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_unlink
+		}
+	}
+
+	@rmdir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir
+}
+
+/**
+ * Reactivates the plugin and clears any recovery-mode pause, so an install can
+ * never leave the plugin disabled or paused. Self-contained: needs only core.
+ *
+ * @return void
+ */
+function acps_alerts_ensure_active_min() {
+	try {
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		if ( function_exists( 'is_plugin_active' ) && ! is_plugin_active( ACPS_ALERTS_BASENAME ) && function_exists( 'activate_plugin' ) ) {
+			activate_plugin( ACPS_ALERTS_BASENAME, '', false, true );
+		}
+
+		// Clear a white-screen/recovery-mode pause too, or the plugin stays
+		// switched off until an admin clicks through wp-admin's recovery email.
+		if ( function_exists( 'wp_paused_plugins' ) ) {
+			$paused = wp_paused_plugins();
+
+			foreach ( array( ACPS_ALERTS_BASENAME, dirname( ACPS_ALERTS_BASENAME ) ) as $key ) {
+				if ( ! method_exists( $paused, 'get' ) || $paused->get( $key ) ) {
+					$paused->delete( $key );
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		return; // Never let re-enabling become the thing that fatals.
+	}
+}
+
+/**
+ * Forces WordPress's credential-free "direct" filesystem method for this
+ * request, so the upgrader (and unzip_file) can write without an FTP-credentials
+ * form — which a non-admin request has no page to show, so the write would
+ * otherwise fail "could not write files."
+ *
+ * Kept here, in the main file, because the raw transient filter it needs is not
+ * something to route through the failsafe wrapper (it must return a constant and
+ * be removed again by reference), and the main file is where the plugin's other
+ * low-level install plumbing lives.
+ *
+ * @return bool Whether the filesystem initialised.
+ */
+function acps_alerts_prime_filesystem() {
+	try {
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		$force = static function () {
+			return 'direct';
+		};
+
+		add_filter( 'filesystem_method', $force, 99 );
+		$ready = WP_Filesystem();
+		remove_filter( 'filesystem_method', $force, 99 );
+
+		return (bool) $ready;
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+/**
+ * The directory a pre-update backup is kept in.
+ *
+ * @return string
+ */
+function acps_alerts_rollback_dir() {
+	$base = defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : dirname( ACPS_ALERTS_DIR );
+
+	return rtrim( $base, '/\\' ) . '/acps-alerts-rollback';
+}
+
+/**
+ * Backs up the plugin's current files before a swap, and records what the swap
+ * is taking us from and to, so a bad release can be undone.
+ *
+ * @param string $to_version The version being installed.
+ * @return bool
+ */
+function acps_alerts_arm_rollback( $to_version ) {
+	try {
+		$dir = acps_alerts_rollback_dir();
+
+		acps_alerts_remove_tree( $dir );
+
+		if ( ! acps_alerts_copy_tree( untrailingslashit( ACPS_ALERTS_DIR ), $dir ) ) {
+			// A partial backup is worse than none; drop it.
+			acps_alerts_remove_tree( $dir );
+
+			return false;
+		}
+
+		if ( function_exists( 'update_option' ) ) {
+			update_option(
+				ACPS_ALERTS_ROLLBACK_OPT,
+				array(
+					'dir'          => $dir,
+					'from_version' => (string) ACPS_ALERTS_VERSION,
+					'to_version'   => (string) $to_version,
+					'time'         => time(),
+				),
+				false
+			);
+		}
+
+		return true;
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+/**
+ * Drops the pre-update backup once the new code has proven it loads.
+ *
+ * @return void
+ */
+function acps_alerts_disarm_rollback() {
+	$record = function_exists( 'get_option' ) ? get_option( ACPS_ALERTS_ROLLBACK_OPT ) : false;
+
+	if ( is_array( $record ) && ! empty( $record['dir'] ) ) {
+		acps_alerts_remove_tree( (string) $record['dir'] );
+	}
+
+	if ( function_exists( 'delete_option' ) ) {
+		delete_option( ACPS_ALERTS_ROLLBACK_OPT );
+	}
+}
+
+/**
+ * Undoes a bad staged update. Runs in the early window, before the includes
+ * load, so it can overwrite the very files a failed update left broken.
+ *
+ * If a backup is armed and the plugin fell into safe mode AFTER that backup was
+ * taken, the update we just applied is what crashed: restore the backup, reset
+ * opcache, lift the pause and stop this request so the next one loads a clean,
+ * consistent tree. If instead the new code is running fine, drop the backup.
+ *
+ * @return bool True when a rollback was performed (the caller should then stop).
+ */
+function acps_alerts_maybe_rollback() {
+	try {
+		if ( ! function_exists( 'get_option' ) ) {
+			return false;
+		}
+
+		$record = get_option( ACPS_ALERTS_ROLLBACK_OPT );
+
+		if ( ! is_array( $record ) || empty( $record['dir'] ) || ! is_dir( (string) $record['dir'] ) ) {
+			if ( false !== $record ) {
+				delete_option( ACPS_ALERTS_ROLLBACK_OPT );
+			}
+
+			return false;
+		}
+
+		$safe = get_option( ACPS_ALERTS_SAFE_MODE_OPT );
+		$armed_at = isset( $record['time'] ) ? (int) $record['time'] : 0;
+
+		// The applied update crashed: safe mode was armed at or after the backup.
+		if ( is_array( $safe ) && ! empty( $safe['time'] ) && (int) $safe['time'] >= $armed_at ) {
+			$failed = array();
+			acps_alerts_copy_tree( (string) $record['dir'], untrailingslashit( ACPS_ALERTS_DIR ), $failed );
+			acps_alerts_reset_opcache();
+
+			delete_option( ACPS_ALERTS_SAFE_MODE_OPT );
+			delete_option( 'acps_alerts_update_failed' );
+			acps_alerts_ensure_active_min();
+			acps_alerts_disarm_rollback();
+
+			if ( function_exists( 'error_log' ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[ACPS Alert Popups] Rolled a failed update back to ' . ( isset( $record['from_version'] ) ? $record['from_version'] : '?' ) ); // phpcs:ignore
+			}
+
+			return true;
+		}
+
+		// The new code is running (its version is on disk) and nothing crashed:
+		// the update stuck. Drop the backup.
+		if ( ! is_array( $safe ) && isset( $record['to_version'] ) && ACPS_ALERTS_VERSION === (string) $record['to_version'] ) {
+			acps_alerts_disarm_rollback();
+		}
+
+		return false;
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+/**
+ * Applies a staged install in the early bootstrap window.
+ *
+ * The staging half (downloading and unzipping the new files into a staging
+ * folder) is done from any request — writing new files is allowed even on hosts
+ * that refuse to overwrite an in-use PHP file. This half copies those staged
+ * files over the live plugin here, before the includes load, which is the one
+ * moment they are not in use. It backs the current files up first, resets
+ * opcache after, lifts any pause, and stops this request so the next one loads
+ * the new, consistent tree.
+ *
+ * @return bool True when a staged install was applied (the caller should stop).
+ */
+function acps_alerts_maybe_apply_staged() {
+	try {
+		if ( ! function_exists( 'get_option' ) ) {
+			return false;
+		}
+
+		$stage = get_option( ACPS_ALERTS_STAGED_OPT );
+
+		if ( ! is_array( $stage ) || empty( $stage['dir'] ) || ! is_dir( (string) $stage['dir'] ) ) {
+			if ( false !== $stage ) {
+				delete_option( ACPS_ALERTS_STAGED_OPT );
+			}
+
+			return false;
+		}
+
+		$version = isset( $stage['version'] ) ? (string) $stage['version'] : ACPS_ALERTS_VERSION;
+
+		// Back the current files up first, so a bad staged release is undoable.
+		acps_alerts_arm_rollback( $version );
+
+		$failed = array();
+		$ok     = acps_alerts_copy_tree( (string) $stage['dir'], untrailingslashit( ACPS_ALERTS_DIR ), $failed );
+
+		// Remove the whole staging area — the located plugin dir may be a
+		// subfolder of the downloaded package (a GitHub zipball wraps it in a
+		// tag-named folder), so prefer the recorded base.
+		$cleanup = ! empty( $stage['base'] ) ? (string) $stage['base'] : (string) $stage['dir'];
+		acps_alerts_remove_tree( $cleanup );
+		delete_option( ACPS_ALERTS_STAGED_OPT );
+
+		if ( $ok ) {
+			acps_alerts_reset_opcache();
+
+			// The fix (or the update) is in: lift a pause and re-enable.
+			delete_option( ACPS_ALERTS_SAFE_MODE_OPT );
+			delete_option( 'acps_alerts_update_failed' );
+			delete_option( 'acps_alerts_missing_notified' );
+			acps_alerts_ensure_active_min();
+
+			if ( function_exists( 'error_log' ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[ACPS Alert Popups] Applied a staged install (' . $version . ').' ); // phpcs:ignore
+			}
+
+			return true;
+		}
+
+		// The copy could not complete — most likely the host blocks overwriting
+		// even these files right now. Undo the half-applied swap so we are not
+		// left with a mismatched tree, and leave the plugin as it was.
+		acps_alerts_maybe_rollback_now();
+
+		if ( function_exists( 'error_log' ) && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( '[ACPS Alert Popups] Staged install could not overwrite: ' . implode( ', ', $failed ) ); // phpcs:ignore
+		}
+
+		return false;
+	} catch ( \Throwable $e ) {
+		return false;
+	}
+}
+
+/**
+ * Forces the armed backup to be restored immediately (used when a staged copy
+ * fails partway and the tree must be put back this instant, not next request).
+ *
+ * @return void
+ */
+function acps_alerts_maybe_rollback_now() {
+	$record = function_exists( 'get_option' ) ? get_option( ACPS_ALERTS_ROLLBACK_OPT ) : false;
+
+	if ( is_array( $record ) && ! empty( $record['dir'] ) && is_dir( (string) $record['dir'] ) ) {
+		$failed = array();
+		acps_alerts_copy_tree( (string) $record['dir'], untrailingslashit( ACPS_ALERTS_DIR ), $failed );
+		acps_alerts_reset_opcache();
+		acps_alerts_disarm_rollback();
+	}
+}
+
 /**
  * Loads the plugin's files, guarding against a missing one.
  *
@@ -931,6 +1342,18 @@ function acps_alerts_boot() {
 
 	if ( is_admin() ) {
 		add_action( 'admin_notices', 'acps_alerts_duplicate_notice' );
+	}
+
+	// Undo a bad staged update, then apply a pending one. Both run before the
+	// safe-mode gate and before the includes load: a staged install is the way a
+	// broken release is repaired, so it has to reach here even while paused, and
+	// the early window is the one moment the plugin's own .php can be overwritten.
+	if ( acps_alerts_maybe_rollback() ) {
+		return; // Files were restored; next request loads the clean tree.
+	}
+
+	if ( acps_alerts_maybe_apply_staged() ) {
+		return; // New files are in; next request loads them.
 	}
 
 	if ( acps_alerts_is_safe_mode() ) {
