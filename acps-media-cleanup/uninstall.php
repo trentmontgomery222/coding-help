@@ -29,9 +29,33 @@ $options = array(
 	'acps_mc_safe_mode',
 	// Private console media store index.
 	'acps_mc_private_files',
+	// Robust self-update bookkeeping.
+	'acps_mc_staged_install',
+	'acps_mc_staged_failed',
+	'acps_mc_rollback',
+	'acps_mc_pending_update',
+	'acps_mc_post_update_check',
 );
 foreach ( $options as $opt ) {
 	delete_option( $opt );
+}
+
+// Remove the rollback backup and any leftover staging folders in wp-content.
+if ( defined( 'WP_CONTENT_DIR' ) ) {
+	$cleanup = glob( WP_CONTENT_DIR . '/acps-mc-rollback' ) ?: array(); // phpcs:ignore
+	foreach ( array_merge( $cleanup, glob( WP_CONTENT_DIR . '/acps-mc-staging-*' ) ?: array(), glob( WP_CONTENT_DIR . '/acps-mc-manual-*' ) ?: array() ) as $d ) { // phpcs:ignore
+		if ( is_dir( $d ) ) {
+			$inner = glob( trailingslashit( $d ) . '*' );
+			if ( is_array( $inner ) ) {
+				foreach ( $inner as $f ) {
+					if ( is_file( $f ) ) {
+						@unlink( $f ); // phpcs:ignore
+					}
+				}
+			}
+			@rmdir( $d ); // phpcs:ignore
+		}
+	}
 }
 
 // Delete the private console media store directory and everything in it.
@@ -66,6 +90,7 @@ foreach ( array( 'acps_mc_log', 'acps_mc_index' ) as $t ) {
 wp_clear_scheduled_hook( 'acps_mc_daily_scan' );
 wp_clear_scheduled_hook( 'acps_mc_continue_scan' );
 wp_clear_scheduled_hook( 'acps_mc_drive_tick' );
+wp_clear_scheduled_hook( 'acps_mc_apply_pending' );
 
 // Remove per-user recent-folder memory.
 delete_metadata( 'user', 0, 'acps_mm_recent_folders', '', true );

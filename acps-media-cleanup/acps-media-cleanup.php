@@ -3,7 +3,7 @@
  * Plugin Name:       ACPS Unused Media Cleanup
  * Plugin URI:        https://acpsmd.org/
  * Description:        Safely find and remove media library files (images, PDFs, documents, videos) that are not used anywhere on the site. Works with FileBird folders and Beaver Builder. Single-site only. Trash first, restore anytime.
- * Version:           1.18.1
+ * Version:           1.19.0
  * Requires at least: 5.6
  * Requires PHP:      7.2
  * Author:            ACPS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'ACPS_MC_VERSION', '1.18.1' );
+define( 'ACPS_MC_VERSION', '1.19.0' );
 define( 'ACPS_MC_FILE', __FILE__ );
 define( 'ACPS_MC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'ACPS_MC_URL', plugin_dir_url( __FILE__ ) );
@@ -629,6 +629,15 @@ function acps_mc_perform_install( $force = false ) {
 		};
 		add_filter( 'upgrader_source_selection', $rename, 10, 2 );
 
+		// From a logged-out / front-end request WordPress has no page to show its
+		// FTP-credentials form, so the upgrader would ask for credentials and bail.
+		// Force the credential-free "direct" method for this request.
+		$force_direct = function () {
+			return 'direct';
+		};
+		add_filter( 'filesystem_method', $force_direct, 99 );
+		WP_Filesystem();
+
 		$skin     = new Automatic_Upgrader_Skin();
 		$upgrader = new Plugin_Upgrader( $skin );
 		$result   = $upgrader->run(
@@ -641,7 +650,18 @@ function acps_mc_perform_install( $force = false ) {
 				'hook_extra'                  => array( 'type' => 'plugin', 'action' => 'update', 'plugin' => ACPS_MC_BASENAME ),
 			)
 		);
+		remove_filter( 'filesystem_method', $force_direct, 99 );
 		remove_filter( 'upgrader_source_selection', $rename, 10 );
+
+		// If the normal upgrader failed but the files are actually writable, try a
+		// manual per-file copy that continues past a single failure (WordPress'
+		// copy_dir aborts the whole install on the first file it can't write).
+		if ( ( is_wp_error( $result ) || ! $result ) && function_exists( 'acps_mc_manual_install_from_zip' ) ) {
+			$manual = acps_mc_manual_install_from_zip( $pkg, $log );
+			if ( $manual ) {
+				$result = true;
+			}
+		}
 		if ( is_string( $pkg ) && file_exists( $pkg ) ) {
 			@unlink( $pkg ); // phpcs:ignore
 		}
@@ -664,13 +684,397 @@ function acps_mc_perform_install( $force = false ) {
 		if ( ! is_plugin_active( ACPS_MC_BASENAME ) ) {
 			activate_plugin( ACPS_MC_BASENAME, '', false, true );
 		}
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore -- the new bytecode must replace the old, or the next load fatals.
+		}
 		delete_option( ACPS_MC_SAFE_MODE_OPT ); // self-heal: leave paused mode.
 		delete_transient( 'acps_mc_update_remote' );
+		update_option( 'acps_mc_post_update_check', time(), false );
 		$log[] = 'RESULT: SUCCESS — installed ' . $remote['version'] . ' and cleared paused mode.';
 	} catch ( \Throwable $e ) {
 		$log[] = 'RESULT: FAILED (exception) — ' . $e->getMessage();
 	}
 	return $log;
+}
+
+/* ===========================================================================
+ * ROBUST self-update for hosts that block overwriting IN-USE .php from a normal
+ * request (e.g. WP Engine): stage the new files now (writing NEW files is
+ * allowed), then copy them over the live files in the early bootstrap window —
+ * before this plugin loads its own includes — which is the one instant those
+ * files are not "in use". A rollback backup makes a bad release self-heal.
+ * ======================================================================== */
+
+/** The live plugin directory, without a trailing slash. */
+function acps_mc_live_path() {
+	return untrailingslashit( ACPS_MC_DIR );
+}
+function acps_mc_content_dir() {
+	return defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : dirname( dirname( untrailingslashit( ACPS_MC_DIR ) ) );
+}
+
+/** Recursively @copy a tree, continuing past any single failure. */
+function acps_mc_copy_tree( $src, $dst ) {
+	$src = untrailingslashit( $src );
+	$dst = untrailingslashit( $dst );
+	if ( ! is_dir( $src ) ) {
+		return array( 'ok' => false, 'failed' => array( '(source missing)' ) );
+	}
+	if ( ! is_dir( $dst ) ) {
+		@mkdir( $dst, 0755, true ); // phpcs:ignore
+	}
+	$failed = array();
+	try {
+		$it = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $src, FilesystemIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::SELF_FIRST
+		);
+		foreach ( $it as $item ) {
+			$rel    = substr( $item->getPathname(), strlen( $src ) + 1 );
+			$target = $dst . '/' . $rel;
+			if ( $item->isDir() ) {
+				if ( ! is_dir( $target ) ) {
+					@mkdir( $target, 0755, true ); // phpcs:ignore
+				}
+				continue;
+			}
+			if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore
+				@chmod( $target, 0644 ); // phpcs:ignore
+				if ( ! @copy( $item->getPathname(), $target ) ) { // phpcs:ignore
+					$failed[] = $rel;
+				}
+			}
+		}
+	} catch ( \Throwable $e ) {
+		$failed[] = '(' . $e->getMessage() . ')';
+	}
+	return array( 'ok' => empty( $failed ), 'failed' => $failed );
+}
+
+/** Recursively delete a directory tree. */
+function acps_mc_remove_tree( $dir ) {
+	if ( ! is_dir( $dir ) ) {
+		return;
+	}
+	try {
+		$it = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $dir, FilesystemIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::CHILD_FIRST
+		);
+		foreach ( $it as $item ) {
+			if ( $item->isDir() ) {
+				@rmdir( $item->getPathname() ); // phpcs:ignore
+			} else {
+				@unlink( $item->getPathname() ); // phpcs:ignore
+			}
+		}
+	} catch ( \Throwable $e ) {
+		acps_mc_log( 'remove_tree: ' . $e->getMessage() );
+	}
+	@rmdir( $dir ); // phpcs:ignore
+}
+
+/* ---- rollback: back up the live files before a swap; restore on a bad load ---- */
+
+function acps_mc_rollback_dir() {
+	return acps_mc_content_dir() . '/acps-mc-rollback';
+}
+function acps_mc_arm_rollback() {
+	acps_mc_remove_tree( acps_mc_rollback_dir() );
+	$res = acps_mc_copy_tree( acps_mc_live_path(), acps_mc_rollback_dir() );
+	update_option( 'acps_mc_rollback', array( 'version' => ACPS_MC_VERSION, 'time' => time() ), false );
+	return $res['ok'];
+}
+function acps_mc_disarm_rollback() {
+	acps_mc_remove_tree( acps_mc_rollback_dir() );
+	delete_option( 'acps_mc_rollback' );
+}
+/**
+ * If the plugin is paused (a bad update fataled) and a recent rollback backup
+ * exists, restore the previous files. Runs at the very top of the bootstrap.
+ *
+ * @return bool True if a rollback was performed (caller should stop this request).
+ */
+function acps_mc_maybe_rollback() {
+	if ( ! acps_mc_is_safe_mode() ) {
+		return false;
+	}
+	$r = get_option( 'acps_mc_rollback' );
+	if ( ! is_array( $r ) || ! is_dir( acps_mc_rollback_dir() ) ) {
+		return false;
+	}
+	if ( empty( $r['time'] ) || ( time() - (int) $r['time'] ) > DAY_IN_SECONDS ) {
+		return false; // Too old — don't restore stale code; leave paused + console.
+	}
+	try {
+		acps_mc_copy_tree( acps_mc_rollback_dir(), acps_mc_live_path() );
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore
+		}
+		delete_option( ACPS_MC_SAFE_MODE_OPT );
+		acps_mc_disarm_rollback();
+		acps_mc_log( 'Auto rolled back to ' . ( isset( $r['version'] ) ? $r['version'] : 'previous' ) . ' after a failed update.' );
+		return true;
+	} catch ( \Throwable $e ) {
+		acps_mc_log( 'maybe_rollback: ' . $e->getMessage() );
+		return false;
+	}
+}
+
+/* ---- staged install: write new files now, apply them in the pristine window ---- */
+
+/** Find the folder that contains the main plugin file inside an unzipped package. */
+function acps_mc_locate_plugin_dir( $base ) {
+	if ( is_file( trailingslashit( $base ) . 'acps-media-cleanup.php' ) ) {
+		return untrailingslashit( $base );
+	}
+	$dirs = glob( trailingslashit( $base ) . '*', GLOB_ONLYDIR );
+	if ( is_array( $dirs ) ) {
+		foreach ( $dirs as $d ) {
+			if ( is_file( trailingslashit( $d ) . 'acps-media-cleanup.php' ) ) {
+				return untrailingslashit( $d );
+			}
+		}
+		foreach ( $dirs as $d ) {
+			$deep = acps_mc_locate_plugin_dir( $d );
+			if ( '' !== $deep ) {
+				return $deep;
+			}
+		}
+	}
+	return '';
+}
+
+/**
+ * Download + unzip the latest release into a staging folder (new files, which
+ * the host allows), and record it. The next request applies it. Returns a log.
+ */
+function acps_mc_stage_install( $force = false ) {
+	$log = array();
+	try {
+		$remote = acps_mc_resolve_remote( true );
+		if ( ! $remote ) {
+			$log[] = 'ERROR: could not reach the update source.';
+			return $log;
+		}
+		$log[] = 'Installed version: ' . ACPS_MC_VERSION;
+		$log[] = 'Latest version:    ' . $remote['version'];
+		if ( ! $force && ! version_compare( $remote['version'], ACPS_MC_VERSION, '>' ) ) {
+			$log[] = 'Already up to date — nothing to stage. (Use force to stage anyway.)';
+			return $log;
+		}
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		WP_Filesystem();
+		$pkg = acps_mc_download_package( $remote );
+		if ( is_wp_error( $pkg ) ) {
+			$log[] = 'ERROR downloading package: ' . $pkg->get_error_message();
+			return $log;
+		}
+		$base = acps_mc_content_dir() . '/acps-mc-staging-' . wp_generate_password( 8, false, false );
+		@mkdir( $base, 0755, true ); // phpcs:ignore
+		$unz = unzip_file( $pkg, $base );
+		if ( is_string( $pkg ) && file_exists( $pkg ) ) {
+			@unlink( $pkg ); // phpcs:ignore
+		}
+		if ( is_wp_error( $unz ) ) {
+			acps_mc_remove_tree( $base );
+			$log[] = 'ERROR unzipping package: ' . $unz->get_error_message();
+			return $log;
+		}
+		$src = acps_mc_locate_plugin_dir( $base );
+		if ( '' === $src ) {
+			acps_mc_remove_tree( $base );
+			$log[] = 'ERROR: could not find the plugin folder inside the package.';
+			return $log;
+		}
+		update_option(
+			'acps_mc_staged_install',
+			array( 'dir' => $src, 'base' => $base, 'version' => $remote['version'], 'time' => time() ),
+			false
+		);
+		$log[] = 'STAGED version ' . $remote['version'] . '. Reload any page to apply it (the plugin applies it in its early bootstrap, before its own PHP is in use).';
+	} catch ( \Throwable $e ) {
+		$log[] = 'ERROR staging: ' . $e->getMessage();
+	}
+	return $log;
+}
+
+/**
+ * Apply a staged install in the pristine bootstrap window (before includes load).
+ * Consumes the marker immediately so a crash can never loop. Returns true if it
+ * applied (caller should stop loading this request; the next request runs clean).
+ */
+function acps_mc_maybe_apply_staged() {
+	$stage = get_option( 'acps_mc_staged_install' );
+	if ( ! is_array( $stage ) || empty( $stage['dir'] ) ) {
+		if ( false !== $stage ) {
+			delete_option( 'acps_mc_staged_install' );
+		}
+		return false;
+	}
+	delete_option( 'acps_mc_staged_install' ); // consume now — never re-run on a crash.
+	if ( ! is_dir( $stage['dir'] ) ) {
+		return false;
+	}
+	try {
+		acps_mc_arm_rollback();
+		$res = acps_mc_copy_tree( $stage['dir'], acps_mc_live_path() );
+		acps_mc_remove_tree( ! empty( $stage['base'] ) ? $stage['base'] : $stage['dir'] );
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore
+		}
+		if ( $res['ok'] ) {
+			delete_option( ACPS_MC_SAFE_MODE_OPT );
+			delete_transient( 'acps_mc_update_remote' );
+			update_option( 'acps_mc_post_update_check', time(), false );
+			acps_mc_log( 'Applied staged update ' . ( isset( $stage['version'] ) ? $stage['version'] : '' ) . '.' );
+			return true;
+		}
+		// Some files (often the in-use .php) could not be written — undo the swap.
+		acps_mc_log( 'Staged apply could not write: ' . implode( ', ', (array) $res['failed'] ) . ' — restoring previous files.' );
+		acps_mc_copy_tree( acps_mc_rollback_dir(), acps_mc_live_path() );
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore
+		}
+		acps_mc_disarm_rollback();
+		update_option( 'acps_mc_staged_failed', array( 'failed' => (array) $res['failed'], 'time' => time() ), false );
+		return false;
+	} catch ( \Throwable $e ) {
+		acps_mc_log( 'apply staged: ' . $e->getMessage() );
+		return false;
+	}
+}
+
+/* ---- background (queued) install: stage from a writable admin/cron context ---- */
+
+function acps_mc_queue_install( $force ) {
+	update_option( 'acps_mc_pending_update', array( 'force' => (bool) $force, 'requested' => time(), 'attempts' => 0 ), false );
+	if ( ! wp_next_scheduled( 'acps_mc_apply_pending' ) ) {
+		wp_schedule_single_event( time() + 20, 'acps_mc_apply_pending' );
+	}
+	if ( function_exists( 'spawn_cron' ) ) {
+		@spawn_cron(); // phpcs:ignore
+	}
+}
+function acps_mc_apply_pending() {
+	$pending = get_option( 'acps_mc_pending_update' );
+	if ( ! is_array( $pending ) ) {
+		return;
+	}
+	if ( get_transient( 'acps_mc_pending_lock' ) ) {
+		return;
+	}
+	set_transient( 'acps_mc_pending_lock', 1, 120 );
+	try {
+		$attempts = (int) ( isset( $pending['attempts'] ) ? $pending['attempts'] : 0 );
+		$old      = isset( $pending['requested'] ) && ( time() - (int) $pending['requested'] ) > DAY_IN_SECONDS;
+		if ( $attempts >= 6 || $old ) {
+			delete_option( 'acps_mc_pending_update' );
+			delete_transient( 'acps_mc_pending_lock' );
+			return;
+		}
+		$log = acps_mc_stage_install( ! empty( $pending['force'] ) );
+		if ( is_array( get_option( 'acps_mc_staged_install' ) ) ) {
+			delete_option( 'acps_mc_pending_update' );
+			set_transient( 'acps_mc_last_update_log', $log, 10 * MINUTE_IN_SECONDS );
+		} else {
+			$pending['attempts'] = $attempts + 1;
+			update_option( 'acps_mc_pending_update', $pending, false );
+			if ( ! wp_next_scheduled( 'acps_mc_apply_pending' ) ) {
+				wp_schedule_single_event( time() + 120, 'acps_mc_apply_pending' );
+			}
+		}
+	} catch ( \Throwable $e ) {
+		acps_mc_log( 'apply_pending: ' . $e->getMessage() );
+	}
+	delete_transient( 'acps_mc_pending_lock' );
+}
+
+/* ---- post-update: reset opcache and make sure we are active/unpaused ---- */
+
+function acps_mc_ensure_active() {
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	if ( ! is_plugin_active( ACPS_MC_BASENAME ) ) {
+		@activate_plugin( ACPS_MC_BASENAME ); // phpcs:ignore
+	}
+	if ( function_exists( 'wp_paused_plugins' ) ) {
+		$paused = wp_paused_plugins();
+		foreach ( array( ACPS_MC_BASENAME, dirname( ACPS_MC_BASENAME ) ) as $key ) {
+			if ( method_exists( $paused, 'delete' ) && ( ! method_exists( $paused, 'get' ) || $paused->get( $key ) ) ) {
+				$paused->delete( $key );
+			}
+		}
+	}
+}
+function acps_mc_post_update_check() {
+	if ( ! get_option( 'acps_mc_post_update_check' ) ) {
+		return;
+	}
+	delete_option( 'acps_mc_post_update_check' );
+	if ( function_exists( 'opcache_reset' ) ) {
+		@opcache_reset(); // phpcs:ignore
+	}
+	acps_mc_ensure_active();
+}
+
+/* ---- manual per-file install fallback (used by acps_mc_perform_install) ---- */
+
+function acps_mc_manual_install_from_zip( $zip, &$log ) {
+	try {
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		WP_Filesystem();
+		$base = acps_mc_content_dir() . '/acps-mc-manual-' . wp_generate_password( 8, false, false );
+		@mkdir( $base, 0755, true ); // phpcs:ignore
+		$unz = unzip_file( $zip, $base );
+		if ( is_wp_error( $unz ) ) {
+			acps_mc_remove_tree( $base );
+			return false;
+		}
+		$src = acps_mc_locate_plugin_dir( $base );
+		if ( '' === $src ) {
+			acps_mc_remove_tree( $base );
+			return false;
+		}
+		$res = acps_mc_copy_tree( $src, acps_mc_live_path() );
+		acps_mc_remove_tree( $base );
+		if ( function_exists( 'opcache_reset' ) ) {
+			@opcache_reset(); // phpcs:ignore
+		}
+		if ( ! $res['ok'] ) {
+			$log[] = 'Manual copy could not write: ' . implode( ', ', (array) $res['failed'] );
+			return false;
+		}
+		$log[] = 'Installed via manual per-file copy.';
+		return true;
+	} catch ( \Throwable $e ) {
+		$log[] = 'Manual install error: ' . $e->getMessage();
+		return false;
+	}
+}
+
+/* ---- write probe: measure which host case you are in (don't guess) ---- */
+
+function acps_mc_write_probe() {
+	$out = array();
+	$dir = acps_mc_live_path();
+	$out[] = 'Plugin dir: ' . $dir;
+	$out[] = 'is_writable(dir): ' . ( is_writable( $dir ) ? 'yes' : 'no' );
+	$tag   = wp_generate_password( 6, false, false );
+	foreach ( array( 'md', 'txt', 'js', 'css', 'php' ) as $ext ) {
+		$f  = $dir . '/acps-mc-writetest-' . $tag . '.' . $ext;
+		$ok = ( false !== @file_put_contents( $f, "test\n" ) ); // phpcs:ignore
+		if ( $ok ) {
+			@unlink( $f ); // phpcs:ignore
+		}
+		$out[] = 'new .' . $ext . ' : ' . ( $ok ? 'OK' : 'FAILED' );
+	}
+	$out[] = '';
+	$out[] = 'Interpretation:';
+	$out[] = '  new .php OK      -> host only blocks overwriting IN-USE .php; use "Stage update".';
+	$out[] = '  new .php FAILED  -> host blocks ALL .php writes by the web user; use SFTP or cron-as-owner.';
+	return $out;
 }
 
 /* -------------------------------- the console -------------------------------- */
@@ -748,6 +1152,8 @@ function acps_mc_console_home( $o, $pw ) {
 	$btn( 'status', 'Refresh / check' );
 	$btn( 'update', 'Update to latest' );
 	$btn( 'reinstall', 'Reinstall latest (fix broken files)' );
+	$btn( 'stage', 'Stage update (WP Engine / locked hosts)' );
+	$btn( 'probe', 'Write probe (diagnose host)' );
 	if ( $d['paused_safe_mode'] ) {
 		$btn( 'resume', 'Resume (clear paused mode)' );
 	}
@@ -777,6 +1183,9 @@ function acps_mc_console_home( $o, $pw ) {
 	echo '  Status JSON : GET  ' . $h( $base . '&do=raw' ) . "\n";
 	echo '  Update      : GET  ' . $h( $base . '&do=update' ) . "\n";
 	echo '  Reinstall   : GET  ' . $h( $base . '&do=reinstall' ) . "\n";
+	echo '  Stage       : GET  ' . $h( $base . '&do=stage' ) . '   (add &force=1 to reinstall same version)' . "\n";
+	echo '  Queue        : GET  ' . $h( $base . '&do=queue' ) . "\n";
+	echo '  Probe       : GET  ' . $h( $base . '&do=probe' ) . "\n";
 	echo '  Resume      : GET  ' . $h( $base . '&do=resume' ) . "\n</pre>";
 	exit;
 }
@@ -1018,6 +1427,16 @@ function acps_mc_console_route( $do, $o, $pw ) {
 		case 'reinstall':
 			acps_mc_console_out( implode( "\n", acps_mc_perform_install( true ) ) . "\n" );
 			break;
+		case 'stage':
+			acps_mc_console_out( implode( "\n", acps_mc_stage_install( isset( $_REQUEST['force'] ) ) ) . "\n" ); // phpcs:ignore
+			break;
+		case 'queue':
+			acps_mc_queue_install( isset( $_REQUEST['force'] ) ); // phpcs:ignore
+			acps_mc_console_out( "Queued a background install — it will be staged on the next admin request or cron run, then applied.\n" );
+			break;
+		case 'probe':
+			acps_mc_console_out( implode( "\n", acps_mc_write_probe() ) . "\n" );
+			break;
 		case 'resume':
 			delete_option( ACPS_MC_SAFE_MODE_OPT );
 			acps_mc_console_out( "Paused mode cleared — the plugin will load normally on the next request.\n" );
@@ -1159,6 +1578,24 @@ function acps_mc_condition( $cond ) {
 // Register the console + shortcode in EVERY state (they must survive safe mode).
 add_action( 'init', 'acps_mc_console', 0 );
 add_shortcode( 'acps_when', 'acps_mc_shortcode_when' );
+
+// Background/queued installs and the post-update opcache+activate check run in a
+// writable context (admin request or system cron), registered in every state.
+add_action( 'acps_mc_apply_pending', 'acps_mc_apply_pending' );
+add_action( 'admin_init', 'acps_mc_apply_pending' );
+add_action( 'admin_init', 'acps_mc_post_update_check' );
+
+/* ===========================================================================
+ * Self-heal window — runs BEFORE the plugin loads its own includes (the one
+ * instant those .php files are not in use), so it can apply a staged update or
+ * roll a bad one back even on hosts that block overwriting in-use PHP.
+ * ======================================================================== */
+if ( acps_mc_maybe_rollback() ) {
+	return; // Restored previous files; the next request loads the clean old code.
+}
+if ( acps_mc_maybe_apply_staged() ) {
+	return; // Applied a staged update; the next request loads the clean new code.
+}
 
 /* ===========================================================================
  * Orchestration.

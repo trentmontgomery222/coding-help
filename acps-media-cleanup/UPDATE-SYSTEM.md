@@ -94,6 +94,36 @@ It is compared with a timing-safe `hash_equals()`.
 
 ---
 
+## 4a. Hosts that block overwriting in-use PHP (WP Engine, etc.)
+
+Some hosts let you write NEW `.php` files but refuse to overwrite the plugin's
+own `.php` while it's loaded — so a normal update from a logged-out/console
+request fails with "could not write files" (only `.php`; `.md`/`.css`/`.js`
+write fine). For those, use **Stage**:
+
+1. **Run the write probe first** (Updates page → "Write probe", or console
+   `?…&do=probe`). It creates and deletes a throwaway file of each type:
+   - `new .php : OK` → the host only blocks *in-use* PHP → **staging works**.
+   - `new .php : FAILED` → the host blocks *all* PHP writes by the web user →
+     staging can't help; update via SFTP or a cron/CLI that runs as the site
+     owner.
+2. **Stage update** (Updates page, or console `?…&do=stage`; add `&force=1` to
+   reinstall the same version). This downloads and unzips the new version into a
+   staging folder now (new files, which the host allows).
+3. **Reload any page.** The plugin applies the staged files in its early
+   bootstrap window — before it loads its own PHP, the one instant those files
+   are not in use — resets opcache, and re-activates itself.
+
+If the applied version fails to load, the **auto-rollback** restores the
+previous files on the next request (a backup is taken before every swap). And
+the console/force-update URL keeps working while paused, so you can always
+`&do=reinstall` or `&do=stage&force=1`.
+
+**Background queue:** console `?…&do=queue` (or the Updates-page button) stages
+the update on the next admin request or cron run instead of right now.
+
+---
+
 ## 5. Crash protection
 
 - **After every update** the plugin is re-activated and a fresh loopback request

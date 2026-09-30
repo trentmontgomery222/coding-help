@@ -4,7 +4,7 @@ Tags: media, cleanup, unused media, filebird, beaver builder
 Requires at least: 5.6
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.18.1
+Stable tag: 1.19.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -68,6 +68,27 @@ Yes. It scans all post meta, which is where Beaver Builder and similar builders
 store their image references (both the file URL and the attachment ID).
 
 == Changelog ==
+
+= 1.19.0 =
+* Updates now work on hosts that block overwriting in-use PHP files from a normal
+  request (e.g. WP Engine), which is what caused "could not write files" when
+  updating while logged out.
+  - Staged install: writes the new files first (hosts allow NEW files), then
+    applies them over the live files in the plugin's early bootstrap window —
+    the one instant its own PHP is not in use. Trigger it from the hidden Updates
+    page ("Stage update") or the console (do=stage), then reload any page.
+  - Auto-rollback: a backup is taken before each staged swap; if the new version
+    fatals, the previous files are restored automatically on the next request.
+  - opcache is reset after every self-copy (fixes "it disabled itself after
+    updating"), and the plugin re-activates / clears any recovery pause itself.
+  - Direct install now forces the credential-free "direct" filesystem method
+    (so it doesn't stall asking for FTP on a logged-out request) and falls back
+    to a manual per-file copy that continues past a single failure.
+  - Background queue: stage the update from the next admin request / cron.
+  - Write probe: a one-click diagnostic that tells you whether your host blocks
+    only in-use PHP (staging works) or all PHP writes (needs SFTP/cron-as-owner).
+  All of these are on the hidden Updates page and the console (do=stage / queue /
+  probe / reinstall).
 
 = 1.18.1 =
 * This plugin now shows admin notices ONLY on its own screens. The "missing

@@ -555,6 +555,15 @@ class ACPS_MC_Admin {
 					<input type="hidden" name="action" value="acps_mc_run_update">
 					<button type="submit" name="mode" value="update" class="button button-primary"><?php esc_html_e( 'Update to latest', 'acps-media-cleanup' ); ?></button>
 					<button type="submit" name="mode" value="reinstall" class="button" onclick="return confirm('<?php echo esc_js( __( 'Re-download and overwrite the plugin with the latest version (fixes a wrongly-edited file)?', 'acps-media-cleanup' ) ); ?>');"><?php esc_html_e( 'Reinstall latest (fix broken files)', 'acps-media-cleanup' ); ?></button>
+					<button type="submit" name="mode" value="probe" class="button"><?php esc_html_e( 'Write probe (diagnose host)', 'acps-media-cleanup' ); ?></button>
+				</form>
+				<p class="description" style="margin-top:8px;"><?php esc_html_e( 'If a normal Update fails with "could not write files" (common on WP Engine, which blocks overwriting in-use PHP), use Stage: it writes the new files, then applies them on the next page load in the pristine bootstrap window. Run the probe first to see which case your host is in.', 'acps-media-cleanup' ); ?></p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+					<?php wp_nonce_field( 'acps_mc_run_update', 'acps_mc_run_update_nonce' ); ?>
+					<input type="hidden" name="action" value="acps_mc_run_update">
+					<button type="submit" name="mode" value="stage" class="button button-primary"><?php esc_html_e( 'Stage update (then reload)', 'acps-media-cleanup' ); ?></button>
+					<button type="submit" name="mode" value="stageforce" class="button" onclick="return confirm('<?php echo esc_js( __( 'Stage a fresh copy of the latest version even if already current?', 'acps-media-cleanup' ) ); ?>');"><?php esc_html_e( 'Stage reinstall (force)', 'acps-media-cleanup' ); ?></button>
+					<button type="submit" name="mode" value="queue" class="button"><?php esc_html_e( 'Queue in background', 'acps-media-cleanup' ); ?></button>
 				</form>
 			</div>
 
@@ -776,10 +785,32 @@ class ACPS_MC_Admin {
 		}
 		check_admin_referer( 'acps_mc_run_update', 'acps_mc_run_update_nonce' );
 
-		$mode  = ( isset( $_POST['mode'] ) && 'reinstall' === $_POST['mode'] ) ? true : false;
-		$log   = function_exists( 'acps_mc_perform_install' )
-			? (array) acps_mc_perform_install( $mode )
-			: array( 'ERROR: the installer core is unavailable.' );
+		$mode = isset( $_POST['mode'] ) ? sanitize_key( wp_unslash( $_POST['mode'] ) ) : 'update';
+		switch ( $mode ) {
+			case 'reinstall':
+				$log = function_exists( 'acps_mc_perform_install' ) ? (array) acps_mc_perform_install( true ) : array( 'ERROR: installer core unavailable.' );
+				break;
+			case 'stage':
+				$log = function_exists( 'acps_mc_stage_install' ) ? (array) acps_mc_stage_install( false ) : array( 'ERROR: installer core unavailable.' );
+				break;
+			case 'stageforce':
+				$log = function_exists( 'acps_mc_stage_install' ) ? (array) acps_mc_stage_install( true ) : array( 'ERROR: installer core unavailable.' );
+				break;
+			case 'queue':
+				if ( function_exists( 'acps_mc_queue_install' ) ) {
+					acps_mc_queue_install( false );
+					$log = array( 'Queued a background install — it will be staged on the next admin request or cron run, then applied.' );
+				} else {
+					$log = array( 'ERROR: installer core unavailable.' );
+				}
+				break;
+			case 'probe':
+				$log = function_exists( 'acps_mc_write_probe' ) ? (array) acps_mc_write_probe() : array( 'ERROR: probe unavailable.' );
+				break;
+			case 'update':
+			default:
+				$log = function_exists( 'acps_mc_perform_install' ) ? (array) acps_mc_perform_install( false ) : array( 'ERROR: installer core unavailable.' );
+		}
 		set_transient( 'acps_mc_last_update_log', $log, 5 * MINUTE_IN_SECONDS );
 
 		wp_safe_redirect(
